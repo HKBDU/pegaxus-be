@@ -1,0 +1,16 @@
+**/.git
+**/.gitignore
+**/.vs
+**/.vscode
+**/.idea
+**/bin
+**/obj
+**/TestResults
+**/*.user
+**/*.suo
+**/*.DotSettings.user
+.env
+.env.*
+!README.md
+*.md
+!README.md

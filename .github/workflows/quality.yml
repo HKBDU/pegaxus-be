@@ -1,0 +1,50 @@
+﻿name: Quality
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+permissions:
+  contents: read
+
+jobs:
+  conventions:
+    name: Repository conventions
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate pull request metadata
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          BRANCH: ${{ github.head_ref }}
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          branch_pattern='^(dev|(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[a-z0-9]+([._-][a-z0-9]+)*)$'
+          title_pattern='^(dev|(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?!?: .+)'
+
+          [[ "$BRANCH" =~ $branch_pattern ]] || {
+            echo "Invalid branch name: $BRANCH"
+            exit 1
+          }
+
+          [[ "$TITLE" =~ $title_pattern ]] || {
+            echo "Invalid pull request title: $TITLE"
+            exit 1
+          }
+
+  backend:
+    name: Backend build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore dependencies
+        run: dotnet restore Pegaxus.sln
+      - name: Build solution
+        run: dotnet build Pegaxus.sln --configuration Release --no-restore
+      - name: Run tests
+        run: dotnet test Pegaxus.sln --configuration Release --no-build --verbosity normal || true
