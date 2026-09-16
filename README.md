@@ -1,4 +1,4 @@
-﻿# ðŸŽ Pegaxus Backend API (`pegaxus-be`)
+# 🐎 Pegaxus Backend API (`pegaxus-be`)
 
 > **Racehorse Cross-Border Transport & Quarantine Logistics Management System**  
 > *Course Project: SWP391 (Software Development Project)*
@@ -12,7 +12,7 @@
 
 ---
 
-## ðŸ“– 1. Project Overview
+## 📖 1. Project Overview
 
 **Pegaxus Backend** is the core RESTful Web API powering the international racehorse transportation, veterinary compliance, and tracking platform. Built on **.NET 8** and **Clean Architecture**, it manages the end-to-end lifecycle of high-value equine cross-border transit:
 
@@ -23,7 +23,7 @@
 
 ---
 
-## ðŸ› ï¸ 2. Technology Stack
+## 🛠️ 2. Technology Stack
 
 | Category | Technology / Library | Version | Purpose |
 | :--- | :--- | :--- | :--- |
@@ -38,46 +38,46 @@
 
 ---
 
-## ðŸ“‚ 3. Solution Structure
+## 📂 3. Solution Structure
 
 ```text
 pegaxus-be/
-â”œâ”€â”€ .github/
-â”‚   â”œâ”€â”€ workflows/
-â”‚   â”‚   â””â”€â”€ quality.yml             # CI Pipeline: validates PR metadata & solution build
-â”‚   â””â”€â”€ PULL_REQUEST_TEMPLATE.md    # Pull Request submission template
-â”œâ”€â”€ Pegaxus.API/                    # [Presentation Layer] Web API controllers & endpoints
-â”‚   â”œâ”€â”€ Constants/                  # System-wide constants & role definitions
-â”‚   â”œâ”€â”€ Controllers/                # RESTful API Controllers
-â”‚   â”œâ”€â”€ Extensions/                 # Service collection & middleware DI setup
-â”‚   â”œâ”€â”€ Filters/                    # Action and authorization filters
-â”‚   â”œâ”€â”€ Middleware/                 # Global exception handler, JWT, and logging
-â”‚   â”œâ”€â”€ appsettings.json            # Base configuration
-â”‚   â”œâ”€â”€ appsettings.Development.json# Local development configuration
-â”‚   â””â”€â”€ Program.cs                  # Application bootstrap entry point
-â”œâ”€â”€ Pegaxus.Service/                # [Business Logic Layer] Application use cases
-â”‚   â”œâ”€â”€ <Module>/                   # Feature-based folders (Booking, Transport, Dossier)
-â”‚   â”‚   â”œâ”€â”€ I<Module>Service.cs     # Service contract interface
-â”‚   â”‚   â”œâ”€â”€ <Module>Service.cs      # Core business logic implementation
-â”‚   â”‚   â”œâ”€â”€ Requests/               # Inbound DTO payloads
-â”‚   â”‚   â”œâ”€â”€ Responses/              # Outbound DTO models
-â”‚   â”‚   â””â”€â”€ Validations/            # FluentValidation rules
-â”œâ”€â”€ Pegaxus.Repository/             # [Data Access Layer] Persistence & database context
-â”‚   â”œâ”€â”€ Abstractions/               # Generic Repository and Unit of Work interfaces
-â”‚   â”œâ”€â”€ Configurations/             # EF Core Fluent API entity relationships
-â”‚   â”œâ”€â”€ Context/                    # ApplicationDbContext
-â”‚   â””â”€â”€ Entities/                   # Database POCO entities
-â”œâ”€â”€ .dockerignore                   # Docker build context exclusion rules
-â”œâ”€â”€ .env.example                    # Environment variables template
-â”œâ”€â”€ docker-compose.yml              # Local multi-container orchestration (API + PostgreSQL)
-â”œâ”€â”€ Dockerfile                      # Multi-stage production container build (.NET 8 + Alpine)
-â”œâ”€â”€ Pegaxus.sln                     # Visual Studio / .NET Solution manifest
-â””â”€â”€ RULESET.md                      # Branching strategy & GitHub branch protection rules
+├── .github/
+│   ├── workflows/
+│   │   └── quality.yml             # CI Pipeline: validates PR metadata & solution build
+│   └── PULL_REQUEST_TEMPLATE.md    # Pull Request submission template
+├── Pegaxus.API/                    # [Presentation Layer] Web API controllers & endpoints
+│   ├── Constants/                  # System-wide constants & role definitions
+│   ├── Controllers/                # RESTful API Controllers
+│   ├── Extensions/                 # Service collection & middleware DI setup
+│   ├── Filters/                    # Action and authorization filters
+│   ├── Middleware/                 # Global exception handler, JWT, and logging
+│   ├── appsettings.json            # Base configuration
+│   ├── appsettings.Development.json# Local development configuration
+│   └── Program.cs                  # Application bootstrap entry point
+├── Pegaxus.Service/                # [Business Logic Layer] Application use cases
+│   ├── <Module>/                   # Feature-based folders (Booking, Transport, Dossier)
+│   │   ├── I<Module>Service.cs     # Service contract interface
+│   │   ├── <Module>Service.cs      # Core business logic implementation
+│   │   ├── Requests/               # Inbound DTO payloads
+│   │   ├── Responses/              # Outbound DTO models
+│   │   └── Validations/            # FluentValidation rules
+├── Pegaxus.Repository/             # [Data Access Layer] Persistence & database context
+│   ├── Abstractions/               # Generic Repository and Unit of Work interfaces
+│   ├── Configurations/             # EF Core Fluent API entity relationships
+│   ├── Context/                    # ApplicationDbContext
+│   └── Entities/                   # Database POCO entities
+├── .dockerignore                   # Docker build context exclusion rules
+├── .env.example                    # Environment variables template
+├── docker-compose.yml              # Local multi-container orchestration (API + PostgreSQL)
+├── Dockerfile                      # Multi-stage production container build (.NET 8 + Alpine)
+├── Pegaxus.sln                     # Visual Studio / .NET Solution manifest
+└── RULESET.md                      # Branching strategy & GitHub branch protection rules
 ```
 
 ---
 
-## ðŸš€ 4. Getting Started
+## 🚀 4. Getting Started
 
 ### 4.1. Prerequisites
 - [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
@@ -122,7 +122,7 @@ pegaxus-be/
 
 ---
 
-## ðŸ³ 5. Running with Docker Compose
+## 🐳 5. Running with Docker Compose
 
 To launch both **Pegaxus API** and **PostgreSQL 16** together in isolated containers:
 
@@ -139,21 +139,21 @@ docker compose down
 
 ---
 
-## ðŸŒ¿ 6. Branching Strategy & CI Ruleset
+## 🌿 6. Branching Strategy & CI Ruleset
 
 To keep Git history clean and maintain software stability:
-- ðŸ›¡ï¸ **Branching Model & Ruleset**: Refer to [RULESET.md](./RULESET.md).
+- 🛡️ **Branching Model & Ruleset**: Refer to [RULESET.md](./RULESET.md).
   - Core branches: **`main`** (production) and **`dev`** (integration).
   - Feature branches: **`feat/<lowercase-name>`** (must use `feat/`, not `feature/`).
   - Strict CI validation via [.github/workflows/quality.yml](./.github/workflows/quality.yml):
     - **Branch regex**: `^(dev|(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[a-z0-9]+([._-][a-z0-9]+)*)$`
     - **PR Title regex**: `^(dev|(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?!?: .+)`
-- ðŸ¤ **Contributing Guidelines**: Refer to [CONTRIBUTING.md](./CONTRIBUTING.md).
-- ðŸ“‹ **Pull Request Template**: Use [.github/PULL_REQUEST_TEMPLATE.md](./.github/PULL_REQUEST_TEMPLATE.md).
+- 🤝 **Contributing Guidelines**: Refer to [CONTRIBUTING.md](./CONTRIBUTING.md).
+- 📋 **Pull Request Template**: Use [.github/PULL_REQUEST_TEMPLATE.md](./.github/PULL_REQUEST_TEMPLATE.md).
 
 ---
 
-## ðŸ” 7. Environment Variables
+## 🔐 7. Environment Variables
 
 | Variable Name | Default Value | Purpose |
 | :--- | :--- | :--- |
@@ -169,7 +169,7 @@ To keep Git history clean and maintain software stability:
 
 ---
 
-## ðŸ‘¥ 8. License & Academic Attribution
+## 👥 8. License & Academic Attribution
 
 Developed as a capstone software engineering project for **SWP391** (Software Development Project).  
 Distributed under the [Apache-2.0 License](./LICENSE).
