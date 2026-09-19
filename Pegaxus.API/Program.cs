@@ -1,4 +1,22 @@
+using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Npgsql.NameTranslation;
+using Pegaxus.Repository;
+using Pegaxus.Repository.Entities;
+
 var builder = WebApplication.CreateBuilder(args);
+
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required.");
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
+var snakeCase = new NpgsqlSnakeCaseNameTranslator();
+var exactNames = new NpgsqlNullNameTranslator();
+foreach (var enumType in typeof(AccountStatus).Assembly.GetTypes()
+             .Where(type => type.IsEnum && type.Namespace == typeof(AccountStatus).Namespace))
+    dataSourceBuilder.MapEnum(enumType, snakeCase.TranslateTypeName(enumType.Name), exactNames);
+builder.Services.AddSingleton(dataSourceBuilder.Build());
+builder.Services.AddDbContext<AppDbContext>((services, options) =>
+    options.UseNpgsql(services.GetRequiredService<NpgsqlDataSource>()));
 
 // Add services to the container.
 builder.Services.AddControllers();
