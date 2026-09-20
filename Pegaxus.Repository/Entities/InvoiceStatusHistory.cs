@@ -8,11 +8,11 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class InvoiceStatusHistory
 {
-    public long InvoiceStatusHistoryId { get; set; }
+    public Guid InvoiceStatusHistoryId { get; set; }
 
-    public long InvoiceId { get; set; }
+    public Guid InvoiceId { get; set; }
 
-    public long? ChangedByAccountId { get; set; }
+    public Guid? ChangedByAccountId { get; set; }
 
     public string? Reason { get; set; }
 

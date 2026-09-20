@@ -8,9 +8,9 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class AuthoritySubmission
 {
-    public long AuthoritySubmissionId { get; set; }
+    public Guid AuthoritySubmissionId { get; set; }
 
-    public long ComplianceDossierId { get; set; }
+    public Guid ComplianceDossierId { get; set; }
 
     public int SubmissionNo { get; set; }
 

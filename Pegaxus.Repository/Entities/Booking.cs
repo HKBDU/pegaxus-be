@@ -5,13 +5,13 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class Booking
 {
-    public long BookingId { get; set; }
+    public Guid BookingId { get; set; }
 
     public string BookingCode { get; set; } = null!;
 
-    public long CustomerId { get; set; }
+    public Guid CustomerId { get; set; }
 
-    public long? AssignedEmployeeId { get; set; }
+    public Guid? AssignedEmployeeId { get; set; }
 
     public string OriginAddress { get; set; } = null!;
 

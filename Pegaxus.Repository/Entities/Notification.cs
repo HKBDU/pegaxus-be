@@ -5,9 +5,9 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class Notification
 {
-    public long NotificationId { get; set; }
+    public Guid NotificationId { get; set; }
 
-    public long TransportId { get; set; }
+    public Guid TransportId { get; set; }
 
     public string Title { get; set; } = null!;
 
@@ -15,7 +15,7 @@ public partial class Notification
 
     public string? ReferenceType { get; set; }
 
-    public long? ReferenceId { get; set; }
+    public Guid? ReferenceId { get; set; }
 
     public string? ActionUrl { get; set; }
 

@@ -5,9 +5,9 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class Customer
 {
-    public long CustomerId { get; set; }
+    public Guid CustomerId { get; set; }
 
-    public long AccountId { get; set; }
+    public Guid AccountId { get; set; }
 
     public string FullName { get; set; } = null!;
 
@@ -25,7 +25,7 @@ public partial class Customer
 
     public DateTime? DeletedAt { get; set; }
 
-    public long? DeletedByAccountId { get; set; }
+    public Guid? DeletedByAccountId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

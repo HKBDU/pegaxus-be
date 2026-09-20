@@ -8,9 +8,9 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class DocumentVersion
 {
-    public long DocumentVersionId { get; set; }
+    public Guid DocumentVersionId { get; set; }
 
-    public long ComplianceDocumentId { get; set; }
+    public Guid ComplianceDocumentId { get; set; }
 
     public int VersionNo { get; set; }
 

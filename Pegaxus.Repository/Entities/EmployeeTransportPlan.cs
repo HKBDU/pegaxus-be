@@ -5,9 +5,9 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class EmployeeTransportPlan
 {
-    public long EmployeeId { get; set; }
+    public Guid EmployeeId { get; set; }
 
-    public long TransportPlanId { get; set; }
+    public Guid TransportPlanId { get; set; }
 
     public string? Responsibility { get; set; }
 

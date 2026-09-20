@@ -5,9 +5,9 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class BookingHorse
 {
-    public long BookingId { get; set; }
+    public Guid BookingId { get; set; }
 
-    public long HorseId { get; set; }
+    public Guid HorseId { get; set; }
 
     public string? SpecialHandlingNotes { get; set; }
 

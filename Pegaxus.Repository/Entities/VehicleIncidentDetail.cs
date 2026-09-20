@@ -5,11 +5,11 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class VehicleIncidentDetail
 {
-    public long VehicleIncidentDetailId { get; set; }
+    public Guid VehicleIncidentDetailId { get; set; }
 
-    public long IncidentReportId { get; set; }
+    public Guid IncidentReportId { get; set; }
 
-    public long VehicleId { get; set; }
+    public Guid VehicleId { get; set; }
 
     public string? VehicleCondition { get; set; }
 

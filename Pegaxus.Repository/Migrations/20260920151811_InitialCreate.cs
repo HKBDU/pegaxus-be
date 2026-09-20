@@ -1,7 +1,6 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
-using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
-using Pegaxus.Repository.Entities;
+using Pegaxus.Repository.Enum;
 
 #nullable disable
 
@@ -67,8 +66,7 @@ namespace Pegaxus.Repository.Migrations
                 name: "Account",
                 columns: table => new
                 {
-                    account_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    account_id = table.Column<Guid>(type: "uuid", nullable: false),
                     email = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     password_hash = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     last_login_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
@@ -76,7 +74,7 @@ namespace Pegaxus.Repository.Migrations
                     avatar_url = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    deleted_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    deleted_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     account_type = table.Column<AccountType>(type: "account_type", nullable: false),
@@ -96,8 +94,7 @@ namespace Pegaxus.Repository.Migrations
                 name: "ComplianceRequirement",
                 columns: table => new
                 {
-                    compliance_requirement_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    compliance_requirement_id = table.Column<Guid>(type: "uuid", nullable: false),
                     requirement_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     requirement_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     description = table.Column<string>(type: "text", nullable: true),
@@ -105,7 +102,7 @@ namespace Pegaxus.Repository.Migrations
                     validity_required = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    deleted_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    deleted_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     status = table.Column<ComplianceRequirementStatus>(type: "compliance_requirement_status", nullable: false, defaultValueSql: "'ACTIVE'::compliance_requirement_status")
@@ -125,9 +122,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "Customer",
                 columns: table => new
                 {
-                    customer_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    account_id = table.Column<long>(type: "bigint", nullable: false),
+                    customer_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    account_id = table.Column<Guid>(type: "uuid", nullable: false),
                     full_name = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false),
                     phone = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: true),
                     date_of_birth = table.Column<DateOnly>(type: "date", nullable: true),
@@ -136,7 +132,7 @@ namespace Pegaxus.Repository.Migrations
                     identity_number = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    deleted_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    deleted_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
                 },
@@ -159,8 +155,7 @@ namespace Pegaxus.Repository.Migrations
                 name: "DossierTemplate",
                 columns: table => new
                 {
-                    dossier_template_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    dossier_template_id = table.Column<Guid>(type: "uuid", nullable: false),
                     template_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     template_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     description = table.Column<string>(type: "text", nullable: true),
@@ -169,7 +164,7 @@ namespace Pegaxus.Repository.Migrations
                     effective_to = table.Column<DateOnly>(type: "date", nullable: true),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    deleted_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    deleted_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     status = table.Column<DossierTemplateStatus>(type: "dossier_template_status", nullable: false, defaultValueSql: "'DRAFT'::dossier_template_status")
@@ -189,16 +184,15 @@ namespace Pegaxus.Repository.Migrations
                 name: "Employee",
                 columns: table => new
                 {
-                    employee_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    account_id = table.Column<long>(type: "bigint", nullable: false),
+                    employee_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    account_id = table.Column<Guid>(type: "uuid", nullable: false),
                     employee_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     full_name = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false),
                     phone = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: true),
                     is_active = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    deleted_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    deleted_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     role = table.Column<EmployeeRole>(type: "employee_role", nullable: false)
@@ -222,8 +216,7 @@ namespace Pegaxus.Repository.Migrations
                 name: "Location",
                 columns: table => new
                 {
-                    location_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    location_id = table.Column<Guid>(type: "uuid", nullable: false),
                     location_type = table.Column<LocationType>(type: "location_type", nullable: true),
                     location_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     address = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true),
@@ -235,7 +228,7 @@ namespace Pegaxus.Repository.Migrations
                     location_note = table.Column<string>(type: "text", nullable: true),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    deleted_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    deleted_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
                 },
@@ -254,14 +247,13 @@ namespace Pegaxus.Repository.Migrations
                 name: "RefreshToken",
                 columns: table => new
                 {
-                    refresh_token_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    account_id = table.Column<long>(type: "bigint", nullable: false),
+                    refresh_token_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    account_id = table.Column<Guid>(type: "uuid", nullable: false),
                     token_hash = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     expires_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     revoked_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    replaced_by_token_id = table.Column<long>(type: "bigint", nullable: true),
+                    replaced_by_token_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_by_ip = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     revoked_by_ip = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: true),
                     device_info = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: true)
@@ -286,8 +278,7 @@ namespace Pegaxus.Repository.Migrations
                 name: "TransportProvider",
                 columns: table => new
                 {
-                    transport_provider_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    transport_provider_id = table.Column<Guid>(type: "uuid", nullable: false),
                     status = table.Column<ProviderStatus>(type: "provider_status", nullable: false, defaultValueSql: "'ACTIVE'::provider_status"),
                     provider_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     provider_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
@@ -301,7 +292,7 @@ namespace Pegaxus.Repository.Migrations
                     note = table.Column<string>(type: "text", nullable: true),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    deleted_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    deleted_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
                 },
@@ -319,8 +310,7 @@ namespace Pegaxus.Repository.Migrations
                 name: "Vehicle",
                 columns: table => new
                 {
-                    vehicle_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    vehicle_id = table.Column<Guid>(type: "uuid", nullable: false),
                     transport_mode = table.Column<TransportMode>(type: "transport_mode", nullable: false),
                     status = table.Column<VehicleStatus>(type: "vehicle_status", nullable: false, defaultValueSql: "'AVAILABLE'::vehicle_status"),
                     vehicle_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
@@ -337,7 +327,7 @@ namespace Pegaxus.Repository.Migrations
                     special_equipment = table.Column<string>(type: "text", nullable: true),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    deleted_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    deleted_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
                 },
@@ -356,10 +346,9 @@ namespace Pegaxus.Repository.Migrations
                 name: "Horse",
                 columns: table => new
                 {
-                    horse_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    horse_id = table.Column<Guid>(type: "uuid", nullable: false),
                     sex = table.Column<HorseSex>(type: "horse_sex", nullable: true),
-                    customer_id = table.Column<long>(type: "bigint", nullable: false),
+                    customer_id = table.Column<Guid>(type: "uuid", nullable: false),
                     horse_name = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: false),
                     passport_number = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     microchip_number = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
@@ -372,7 +361,7 @@ namespace Pegaxus.Repository.Migrations
                     identification_notes = table.Column<string>(type: "text", nullable: true),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    deleted_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    deleted_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
                 },
@@ -395,10 +384,9 @@ namespace Pegaxus.Repository.Migrations
                 name: "DossierTemplateItem",
                 columns: table => new
                 {
-                    dossier_template_item_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    dossier_template_id = table.Column<long>(type: "bigint", nullable: false),
-                    compliance_requirement_id = table.Column<long>(type: "bigint", nullable: false),
+                    dossier_template_item_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    dossier_template_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    compliance_requirement_id = table.Column<Guid>(type: "uuid", nullable: false),
                     sequence_no = table.Column<int>(type: "integer", nullable: false),
                     is_mandatory = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     instruction = table.Column<string>(type: "text", nullable: true),
@@ -425,11 +413,10 @@ namespace Pegaxus.Repository.Migrations
                 name: "Booking",
                 columns: table => new
                 {
-                    booking_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    booking_id = table.Column<Guid>(type: "uuid", nullable: false),
                     booking_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    customer_id = table.Column<long>(type: "bigint", nullable: false),
-                    assigned_employee_id = table.Column<long>(type: "bigint", nullable: true),
+                    customer_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    assigned_employee_id = table.Column<Guid>(type: "uuid", nullable: true),
                     origin_address = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     origin_country = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: false),
                     destination_address = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
@@ -467,14 +454,13 @@ namespace Pegaxus.Repository.Migrations
                 name: "IncidentReport",
                 columns: table => new
                 {
-                    incident_report_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    incident_report_id = table.Column<Guid>(type: "uuid", nullable: false),
                     category = table.Column<IncidentCategory>(type: "incident_category", nullable: false),
                     severity = table.Column<IncidentSeverity>(type: "incident_severity", nullable: false),
                     status = table.Column<IncidentStatus>(type: "incident_status", nullable: false, defaultValueSql: "'REPORTED'::incident_status"),
                     incident_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    employee_id = table.Column<long>(type: "bigint", nullable: false),
-                    location_id = table.Column<long>(type: "bigint", nullable: false),
+                    employee_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    location_id = table.Column<Guid>(type: "uuid", nullable: false),
                     title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     description = table.Column<string>(type: "text", nullable: false),
                     occurred_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
@@ -507,19 +493,18 @@ namespace Pegaxus.Repository.Migrations
                 name: "Route",
                 columns: table => new
                 {
-                    route_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    route_id = table.Column<Guid>(type: "uuid", nullable: false),
                     transport_mode = table.Column<TransportMode>(type: "transport_mode", nullable: false),
                     route_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    from_location_id = table.Column<long>(type: "bigint", nullable: false),
-                    to_location_id = table.Column<long>(type: "bigint", nullable: false),
+                    from_location_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    to_location_id = table.Column<Guid>(type: "uuid", nullable: false),
                     route_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     distance_km = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
                     estimated_duration_minutes = table.Column<int>(type: "integer", nullable: true),
                     route_note = table.Column<string>(type: "text", nullable: true),
                     is_deleted = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
                     deleted_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    deleted_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    deleted_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
                 },
@@ -548,8 +533,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "BookingHorse",
                 columns: table => new
                 {
-                    booking_id = table.Column<long>(type: "bigint", nullable: false),
-                    horse_id = table.Column<long>(type: "bigint", nullable: false),
+                    booking_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    horse_id = table.Column<Guid>(type: "uuid", nullable: false),
                     special_handling_notes = table.Column<string>(type: "text", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
                 },
@@ -572,10 +557,9 @@ namespace Pegaxus.Repository.Migrations
                 name: "BookingStatusHistory",
                 columns: table => new
                 {
-                    booking_status_history_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    booking_id = table.Column<long>(type: "bigint", nullable: false),
-                    changed_by_account_id = table.Column<long>(type: "bigint", nullable: false),
+                    booking_status_history_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    booking_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    changed_by_account_id = table.Column<Guid>(type: "uuid", nullable: false),
                     reason = table.Column<string>(type: "text", nullable: true),
                     changed_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     type = table.Column<BookingHistoryType>(type: "booking_history_type", nullable: false),
@@ -602,12 +586,11 @@ namespace Pegaxus.Repository.Migrations
                 name: "Invoice",
                 columns: table => new
                 {
-                    invoice_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    invoice_id = table.Column<Guid>(type: "uuid", nullable: false),
                     status = table.Column<InvoiceStatus>(type: "invoice_status", nullable: false, defaultValueSql: "'DRAFT'::invoice_status"),
                     invoice_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    booking_id = table.Column<long>(type: "bigint", nullable: false),
-                    employee_id = table.Column<long>(type: "bigint", nullable: false),
+                    booking_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    employee_id = table.Column<Guid>(type: "uuid", nullable: false),
                     currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: false),
                     subtotal = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
                     discount_amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
@@ -641,11 +624,10 @@ namespace Pegaxus.Repository.Migrations
                 name: "Transport",
                 columns: table => new
                 {
-                    transport_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    transport_id = table.Column<Guid>(type: "uuid", nullable: false),
                     status = table.Column<TransportStatus>(type: "transport_status", nullable: false, defaultValueSql: "'CREATED'::transport_status"),
                     transport_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    booking_id = table.Column<long>(type: "bigint", nullable: false),
+                    booking_id = table.Column<Guid>(type: "uuid", nullable: false),
                     actual_departure_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     actual_arrival_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     completed_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
@@ -668,9 +650,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "EmergencyCostRequest",
                 columns: table => new
                 {
-                    emergency_cost_request_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    incident_report_id = table.Column<long>(type: "bigint", nullable: false),
+                    emergency_cost_request_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    incident_report_id = table.Column<Guid>(type: "uuid", nullable: false),
                     request_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     description = table.Column<string>(type: "text", nullable: false),
                     requested_amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
@@ -699,11 +680,10 @@ namespace Pegaxus.Repository.Migrations
                 name: "HorseHealthIncidentDetail",
                 columns: table => new
                 {
-                    horse_health_incident_detail_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    horse_health_incident_detail_id = table.Column<Guid>(type: "uuid", nullable: false),
                     incident_type = table.Column<HorseIncidentType>(type: "horse_incident_type", nullable: false),
-                    incident_report_id = table.Column<long>(type: "bigint", nullable: false),
-                    horse_id = table.Column<long>(type: "bigint", nullable: false),
+                    incident_report_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    horse_id = table.Column<Guid>(type: "uuid", nullable: false),
                     condition_description = table.Column<string>(type: "text", nullable: false),
                     symptoms = table.Column<string>(type: "text", nullable: true),
                     body_temperature_celsius = table.Column<decimal>(type: "numeric(4,1)", precision: 4, scale: 1, nullable: true),
@@ -738,11 +718,10 @@ namespace Pegaxus.Repository.Migrations
                 name: "VehicleIncidentDetail",
                 columns: table => new
                 {
-                    vehicle_incident_detail_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    vehicle_incident_detail_id = table.Column<Guid>(type: "uuid", nullable: false),
                     incident_type = table.Column<VehicleIncidentType>(type: "vehicle_incident_type", nullable: false),
-                    incident_report_id = table.Column<long>(type: "bigint", nullable: false),
-                    vehicle_id = table.Column<long>(type: "bigint", nullable: false),
+                    incident_report_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    vehicle_id = table.Column<Guid>(type: "uuid", nullable: false),
                     vehicle_condition = table.Column<string>(type: "text", nullable: true),
                     damage_description = table.Column<string>(type: "text", nullable: true),
                     vehicle_operable = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
@@ -773,13 +752,12 @@ namespace Pegaxus.Repository.Migrations
                 name: "InvoiceStatusHistory",
                 columns: table => new
                 {
-                    invoice_status_history_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    invoice_status_history_id = table.Column<Guid>(type: "uuid", nullable: false),
                     type = table.Column<InvoiceHistoryType>(type: "invoice_history_type", nullable: false),
                     previous_status = table.Column<InvoiceStatus>(type: "invoice_status", nullable: true),
                     new_status = table.Column<InvoiceStatus>(type: "invoice_status", nullable: false),
-                    invoice_id = table.Column<long>(type: "bigint", nullable: false),
-                    changed_by_account_id = table.Column<long>(type: "bigint", nullable: true),
+                    invoice_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    changed_by_account_id = table.Column<Guid>(type: "uuid", nullable: true),
                     reason = table.Column<string>(type: "text", nullable: true),
                     changed_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
@@ -804,12 +782,11 @@ namespace Pegaxus.Repository.Migrations
                 name: "Receipt",
                 columns: table => new
                 {
-                    receipt_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    receipt_id = table.Column<Guid>(type: "uuid", nullable: false),
                     payment_method = table.Column<PaymentMethod>(type: "payment_method", nullable: false),
                     status = table.Column<ReceiptStatus>(type: "receipt_status", nullable: false, defaultValueSql: "'PENDING'::receipt_status"),
                     receipt_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    invoice_id = table.Column<long>(type: "bigint", nullable: false),
+                    invoice_id = table.Column<Guid>(type: "uuid", nullable: false),
                     amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
                     currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: false),
                     transaction_reference = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: true),
@@ -833,10 +810,9 @@ namespace Pegaxus.Repository.Migrations
                 name: "ComplianceDossier",
                 columns: table => new
                 {
-                    compliance_dossier_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    compliance_dossier_id = table.Column<Guid>(type: "uuid", nullable: false),
                     dossier_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    transport_id = table.Column<long>(type: "bigint", nullable: false),
+                    transport_id = table.Column<Guid>(type: "uuid", nullable: false),
                     opened_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     ready_for_submission_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     approved_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
@@ -863,10 +839,9 @@ namespace Pegaxus.Repository.Migrations
                 name: "FinancialReport",
                 columns: table => new
                 {
-                    financial_report_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    financial_report_id = table.Column<Guid>(type: "uuid", nullable: false),
                     report_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    transport_id = table.Column<long>(type: "bigint", nullable: false),
+                    transport_id = table.Column<Guid>(type: "uuid", nullable: false),
                     currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: false),
                     total_invoiced_amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
                     total_paid_amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
@@ -892,14 +867,13 @@ namespace Pegaxus.Repository.Migrations
                 name: "HorseHealthLog",
                 columns: table => new
                 {
-                    horse_health_log_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    horse_health_log_id = table.Column<Guid>(type: "uuid", nullable: false),
                     log_type = table.Column<HorseHealthLogType>(type: "horse_health_log_type", nullable: false),
                     health_status = table.Column<HorseHealthStatus>(type: "horse_health_status", nullable: false),
                     hydration_status = table.Column<HydrationStatus>(type: "hydration_status", nullable: true),
-                    transport_id = table.Column<long>(type: "bigint", nullable: false),
-                    horse_id = table.Column<long>(type: "bigint", nullable: false),
-                    employee_id = table.Column<long>(type: "bigint", nullable: false),
+                    transport_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    horse_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    employee_id = table.Column<Guid>(type: "uuid", nullable: false),
                     checked_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     temperature_celsius = table.Column<decimal>(type: "numeric(4,1)", precision: 4, scale: 1, nullable: true),
                     heart_rate_bpm = table.Column<int>(type: "integer", nullable: true),
@@ -943,15 +917,14 @@ namespace Pegaxus.Repository.Migrations
                 name: "Notification",
                 columns: table => new
                 {
-                    notification_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    notification_id = table.Column<Guid>(type: "uuid", nullable: false),
                     notification_type = table.Column<NotificationType>(type: "notification_type", nullable: false),
                     priority = table.Column<NotificationPriority>(type: "notification_priority", nullable: false, defaultValueSql: "'NORMAL'::notification_priority"),
-                    transport_id = table.Column<long>(type: "bigint", nullable: false),
+                    transport_id = table.Column<Guid>(type: "uuid", nullable: false),
                     title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     message = table.Column<string>(type: "text", nullable: false),
                     reference_type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
-                    reference_id = table.Column<long>(type: "bigint", nullable: true),
+                    reference_id = table.Column<Guid>(type: "uuid", nullable: true),
                     action_url = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     expires_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true)
@@ -970,17 +943,16 @@ namespace Pegaxus.Repository.Migrations
                 name: "TransportPlan",
                 columns: table => new
                 {
-                    transport_plan_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    transport_plan_id = table.Column<Guid>(type: "uuid", nullable: false),
                     status = table.Column<TransportPlanStatus>(type: "transport_plan_status", nullable: false, defaultValueSql: "'DRAFT'::transport_plan_status"),
-                    transport_id = table.Column<long>(type: "bigint", nullable: false),
+                    transport_id = table.Column<Guid>(type: "uuid", nullable: false),
                     plan_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     planned_start_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     planned_end_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     planning_note = table.Column<string>(type: "text", nullable: true),
                     estimated_duration_minutes = table.Column<int>(type: "integer", nullable: true),
                     estimated_distance_km = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
-                    approved_by_employee_id = table.Column<long>(type: "bigint", nullable: true),
+                    approved_by_employee_id = table.Column<Guid>(type: "uuid", nullable: true),
                     approved_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     updated_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false)
@@ -1004,10 +976,9 @@ namespace Pegaxus.Repository.Migrations
                 name: "CostApprovalDecision",
                 columns: table => new
                 {
-                    cost_approval_decision_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    emergency_cost_request_id = table.Column<long>(type: "bigint", nullable: false),
-                    employee_id = table.Column<long>(type: "bigint", nullable: false),
+                    cost_approval_decision_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    emergency_cost_request_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    employee_id = table.Column<Guid>(type: "uuid", nullable: false),
                     approved_amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: true),
                     decision_reason = table.Column<string>(type: "text", nullable: true),
                     decided_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
@@ -1033,12 +1004,11 @@ namespace Pegaxus.Repository.Migrations
                 name: "InvoiceItem",
                 columns: table => new
                 {
-                    invoice_item_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    invoice_item_id = table.Column<Guid>(type: "uuid", nullable: false),
                     item_type = table.Column<InvoiceItemType>(type: "invoice_item_type", nullable: false),
-                    invoice_id = table.Column<long>(type: "bigint", nullable: false),
-                    horse_id = table.Column<long>(type: "bigint", nullable: true),
-                    emergency_cost_request_id = table.Column<long>(type: "bigint", nullable: true),
+                    invoice_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    horse_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    emergency_cost_request_id = table.Column<Guid>(type: "uuid", nullable: true),
                     description = table.Column<string>(type: "character varying(500)", maxLength: 500, nullable: false),
                     quantity = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: false, defaultValueSql: "1"),
                     unit_price = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: false),
@@ -1071,9 +1041,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "AuthoritySubmission",
                 columns: table => new
                 {
-                    authority_submission_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    compliance_dossier_id = table.Column<long>(type: "bigint", nullable: false),
+                    authority_submission_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    compliance_dossier_id = table.Column<Guid>(type: "uuid", nullable: false),
                     submission_no = table.Column<int>(type: "integer", nullable: false),
                     authority_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     submission_reference = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: true),
@@ -1101,10 +1070,9 @@ namespace Pegaxus.Repository.Migrations
                 name: "DossierRequirement",
                 columns: table => new
                 {
-                    dossier_requirement_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    compliance_dossier_id = table.Column<long>(type: "bigint", nullable: false),
-                    compliance_requirement_id = table.Column<long>(type: "bigint", nullable: false),
+                    dossier_requirement_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    compliance_dossier_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    compliance_requirement_id = table.Column<Guid>(type: "uuid", nullable: false),
                     is_mandatory = table.Column<bool>(type: "boolean", nullable: false, defaultValue: true),
                     due_date = table.Column<DateOnly>(type: "date", nullable: true),
                     instruction = table.Column<string>(type: "text", nullable: true),
@@ -1135,8 +1103,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "AccountNotification",
                 columns: table => new
                 {
-                    account_id = table.Column<long>(type: "bigint", nullable: false),
-                    notification_id = table.Column<long>(type: "bigint", nullable: false),
+                    account_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    notification_id = table.Column<Guid>(type: "uuid", nullable: false),
                     delivered_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     read_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
@@ -1161,8 +1129,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "EmployeeTransportPlan",
                 columns: table => new
                 {
-                    employee_id = table.Column<long>(type: "bigint", nullable: false),
-                    transport_plan_id = table.Column<long>(type: "bigint", nullable: false),
+                    employee_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    transport_plan_id = table.Column<Guid>(type: "uuid", nullable: false),
                     responsibility = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: true),
                     assigned_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     is_primary = table.Column<bool>(type: "boolean", nullable: false, defaultValue: false),
@@ -1187,10 +1155,9 @@ namespace Pegaxus.Repository.Migrations
                 name: "RoutePlan",
                 columns: table => new
                 {
-                    route_plan_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    route_plan_id = table.Column<Guid>(type: "uuid", nullable: false),
                     status = table.Column<RoutePlanStatus>(type: "route_plan_status", nullable: false, defaultValueSql: "'DRAFT'::route_plan_status"),
-                    transport_plan_id = table.Column<long>(type: "bigint", nullable: false),
+                    transport_plan_id = table.Column<Guid>(type: "uuid", nullable: false),
                     route_plan_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     total_distance_km = table.Column<decimal>(type: "numeric(10,2)", precision: 10, scale: 2, nullable: true),
                     estimated_duration_minutes = table.Column<int>(type: "integer", nullable: true),
@@ -1213,8 +1180,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "TransportPlanProvider",
                 columns: table => new
                 {
-                    transport_plan_id = table.Column<long>(type: "bigint", nullable: false),
-                    transport_provider_id = table.Column<long>(type: "bigint", nullable: false),
+                    transport_plan_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    transport_provider_id = table.Column<Guid>(type: "uuid", nullable: false),
                     service_type = table.Column<string>(type: "character varying(100)", maxLength: 100, nullable: true),
                     assigned_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     note = table.Column<string>(type: "text", nullable: true)
@@ -1238,9 +1205,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "ComplianceDocument",
                 columns: table => new
                 {
-                    compliance_document_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    dossier_requirement_id = table.Column<long>(type: "bigint", nullable: false),
+                    compliance_document_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    dossier_requirement_id = table.Column<Guid>(type: "uuid", nullable: false),
                     document_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     document_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     document_number = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: true),
@@ -1267,9 +1233,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "DocumentRequest",
                 columns: table => new
                 {
-                    document_request_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    dossier_requirement_id = table.Column<long>(type: "bigint", nullable: false),
+                    document_request_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    dossier_requirement_id = table.Column<Guid>(type: "uuid", nullable: false),
                     request_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     message = table.Column<string>(type: "text", nullable: false),
                     requested_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
@@ -1297,13 +1262,12 @@ namespace Pegaxus.Repository.Migrations
                 name: "RoutePlanRoute",
                 columns: table => new
                 {
-                    route_plan_route_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    route_plan_route_id = table.Column<Guid>(type: "uuid", nullable: false),
                     route_type = table.Column<RouteType>(type: "route_type", nullable: false, defaultValueSql: "'PRIMARY'::route_type"),
-                    route_plan_id = table.Column<long>(type: "bigint", nullable: false),
-                    route_id = table.Column<long>(type: "bigint", nullable: false),
+                    route_plan_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    route_id = table.Column<Guid>(type: "uuid", nullable: false),
                     sequence_no = table.Column<int>(type: "integer", nullable: false),
-                    driver_employee_id = table.Column<long>(type: "bigint", nullable: true),
+                    driver_employee_id = table.Column<Guid>(type: "uuid", nullable: true),
                     planned_departure_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     planned_arrival_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     actual_departure_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
@@ -1337,9 +1301,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "DocumentVersion",
                 columns: table => new
                 {
-                    document_version_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    compliance_document_id = table.Column<long>(type: "bigint", nullable: false),
+                    document_version_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    compliance_document_id = table.Column<Guid>(type: "uuid", nullable: false),
                     version_no = table.Column<int>(type: "integer", nullable: false),
                     file_name = table.Column<string>(type: "character varying(255)", maxLength: 255, nullable: false),
                     file_url = table.Column<string>(type: "character varying(1000)", maxLength: 1000, nullable: false),
@@ -1364,23 +1327,22 @@ namespace Pegaxus.Repository.Migrations
                 name: "HandoverRecord",
                 columns: table => new
                 {
-                    handover_record_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    handover_record_id = table.Column<Guid>(type: "uuid", nullable: false),
                     handover_type = table.Column<HandoverType>(type: "handover_type", nullable: false),
                     status = table.Column<HandoverStatus>(type: "handover_status", nullable: false, defaultValueSql: "'PLANNED'::handover_status"),
                     from_type = table.Column<HandoverPartyType>(type: "handover_party_type", nullable: false),
                     to_type = table.Column<HandoverPartyType>(type: "handover_party_type", nullable: false),
-                    transport_id = table.Column<long>(type: "bigint", nullable: false),
+                    transport_id = table.Column<Guid>(type: "uuid", nullable: false),
                     handover_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
                     sequence_no = table.Column<int>(type: "integer", nullable: false),
                     planned_handover_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
                     actual_handover_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: true),
-                    from_customer_id = table.Column<long>(type: "bigint", nullable: true),
-                    from_employee_id = table.Column<long>(type: "bigint", nullable: true),
-                    to_customer_id = table.Column<long>(type: "bigint", nullable: true),
-                    to_employee_id = table.Column<long>(type: "bigint", nullable: true),
-                    from_route_plan_route_id = table.Column<long>(type: "bigint", nullable: true),
-                    to_route_plan_route_id = table.Column<long>(type: "bigint", nullable: true),
+                    from_customer_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    from_employee_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    to_customer_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    to_employee_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    from_route_plan_route_id = table.Column<Guid>(type: "uuid", nullable: true),
+                    to_route_plan_route_id = table.Column<Guid>(type: "uuid", nullable: true),
                     from_party_name = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: true),
                     from_contact_name = table.Column<string>(type: "character varying(150)", maxLength: 150, nullable: true),
                     from_contact_phone = table.Column<string>(type: "character varying(30)", maxLength: 30, nullable: true),
@@ -1447,8 +1409,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "RoutePlanRouteVehicle",
                 columns: table => new
                 {
-                    route_plan_route_id = table.Column<long>(type: "bigint", nullable: false),
-                    vehicle_id = table.Column<long>(type: "bigint", nullable: false),
+                    route_plan_route_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    vehicle_id = table.Column<Guid>(type: "uuid", nullable: false),
                     assigned_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     note = table.Column<string>(type: "text", nullable: true)
                 },
@@ -1472,9 +1434,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "DocumentReview",
                 columns: table => new
                 {
-                    document_review_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    document_version_id = table.Column<long>(type: "bigint", nullable: false),
+                    document_review_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    document_version_id = table.Column<Guid>(type: "uuid", nullable: false),
                     review_comment = table.Column<string>(type: "text", nullable: true),
                     reviewed_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
                     created_at = table.Column<DateTime>(type: "timestamp without time zone", nullable: false),
@@ -1495,11 +1456,10 @@ namespace Pegaxus.Repository.Migrations
                 name: "Claim",
                 columns: table => new
                 {
-                    claim_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    claim_id = table.Column<Guid>(type: "uuid", nullable: false),
                     claim_code = table.Column<string>(type: "character varying(50)", maxLength: 50, nullable: false),
-                    customer_id = table.Column<long>(type: "bigint", nullable: false),
-                    handover_record_id = table.Column<long>(type: "bigint", nullable: false),
+                    customer_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    handover_record_id = table.Column<Guid>(type: "uuid", nullable: false),
                     title = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
                     description = table.Column<string>(type: "text", nullable: false),
                     requested_compensation_amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: true),
@@ -1536,9 +1496,8 @@ namespace Pegaxus.Repository.Migrations
                 name: "ClaimResolution",
                 columns: table => new
                 {
-                    claim_resolution_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    claim_id = table.Column<long>(type: "bigint", nullable: false),
+                    claim_resolution_id = table.Column<Guid>(type: "uuid", nullable: false),
+                    claim_id = table.Column<Guid>(type: "uuid", nullable: false),
                     resolution_summary = table.Column<string>(type: "text", nullable: false),
                     approved_compensation_amount = table.Column<decimal>(type: "numeric(18,2)", precision: 18, scale: 2, nullable: true),
                     currency = table.Column<string>(type: "character varying(3)", maxLength: 3, nullable: true),

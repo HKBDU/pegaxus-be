@@ -5,9 +5,9 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class TransportPlan
 {
-    public long TransportPlanId { get; set; }
+    public Guid TransportPlanId { get; set; }
 
-    public long TransportId { get; set; }
+    public Guid TransportId { get; set; }
 
     public string PlanCode { get; set; } = null!;
 
@@ -21,7 +21,7 @@ public partial class TransportPlan
 
     public decimal? EstimatedDistanceKm { get; set; }
 
-    public long? ApprovedByEmployeeId { get; set; }
+    public Guid? ApprovedByEmployeeId { get; set; }
 
     public DateTime? ApprovedAt { get; set; }
 

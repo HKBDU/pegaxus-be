@@ -8,7 +8,7 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class Location
 {
-    public long LocationId { get; set; }
+    public Guid LocationId { get; set; }
 
     public string LocationName { get; set; } = null!;
 
@@ -30,7 +30,7 @@ public partial class Location
 
     public DateTime? DeletedAt { get; set; }
 
-    public long? DeletedByAccountId { get; set; }
+    public Guid? DeletedByAccountId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

@@ -8,9 +8,9 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class RefreshToken
 {
-    public long RefreshTokenId { get; set; }
+    public Guid RefreshTokenId { get; set; }
 
-    public long AccountId { get; set; }
+    public Guid AccountId { get; set; }
 
     public string TokenHash { get; set; } = null!;
 
@@ -20,7 +20,7 @@ public partial class RefreshToken
 
     public DateTime? RevokedAt { get; set; }
 
-    public long? ReplacedByTokenId { get; set; }
+    public Guid? ReplacedByTokenId { get; set; }
 
     public string? CreatedByIp { get; set; }
 

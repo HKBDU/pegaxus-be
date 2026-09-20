@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Npgsql.NameTranslation;
 using Pegaxus.Repository;
+using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Entities;
 
 var builder = WebApplication.CreateBuilder(args);

@@ -8,11 +8,11 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class DossierTemplateItem
 {
-    public long DossierTemplateItemId { get; set; }
+    public Guid DossierTemplateItemId { get; set; }
 
-    public long DossierTemplateId { get; set; }
+    public Guid DossierTemplateId { get; set; }
 
-    public long ComplianceRequirementId { get; set; }
+    public Guid ComplianceRequirementId { get; set; }
 
     public int SequenceNo { get; set; }
 

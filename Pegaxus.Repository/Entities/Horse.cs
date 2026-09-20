@@ -5,9 +5,9 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class Horse
 {
-    public long HorseId { get; set; }
+    public Guid HorseId { get; set; }
 
-    public long CustomerId { get; set; }
+    public Guid CustomerId { get; set; }
 
     public string HorseName { get; set; } = null!;
 
@@ -33,7 +33,7 @@ public partial class Horse
 
     public DateTime? DeletedAt { get; set; }
 
-    public long? DeletedByAccountId { get; set; }
+    public Guid? DeletedByAccountId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

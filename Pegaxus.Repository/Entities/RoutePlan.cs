@@ -8,9 +8,9 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class RoutePlan
 {
-    public long RoutePlanId { get; set; }
+    public Guid RoutePlanId { get; set; }
 
-    public long TransportPlanId { get; set; }
+    public Guid TransportPlanId { get; set; }
 
     public string RoutePlanCode { get; set; } = null!;
 

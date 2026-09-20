@@ -1,3 +1,5 @@
+using Pegaxus.Repository.Enum;
+
 namespace Pegaxus.Repository.Entities;
 
 public partial class Account

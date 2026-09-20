@@ -5,7 +5,7 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class TransportProvider
 {
-    public long TransportProviderId { get; set; }
+    public Guid TransportProviderId { get; set; }
 
     public string ProviderCode { get; set; } = null!;
 
@@ -31,7 +31,7 @@ public partial class TransportProvider
 
     public DateTime? DeletedAt { get; set; }
 
-    public long? DeletedByAccountId { get; set; }
+    public Guid? DeletedByAccountId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

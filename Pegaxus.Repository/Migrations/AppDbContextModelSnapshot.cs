@@ -2,22 +2,19 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pegaxus.Repository;
-using Pegaxus.Repository.Entities;
+using Pegaxus.Repository.Enum;
 
 #nullable disable
 
 namespace Pegaxus.Repository.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    [Migration("20260919191102_InitialCreate")]
-    partial class InitialCreate
+    partial class AppDbContextModelSnapshot : ModelSnapshot
     {
-        /// <inheritdoc />
-        protected override void BuildTargetModel(ModelBuilder modelBuilder)
+        protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -76,12 +73,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Account", b =>
                 {
-                    b.Property<long>("AccountId")
+                    b.Property<Guid>("AccountId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("account_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("AccountId"));
 
                     b.Property<AccountType>("AccountType")
                         .HasColumnType("account_type")
@@ -100,8 +95,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("DeletedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
 
                     b.Property<string>("Email")
@@ -161,12 +156,12 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.AccountNotification", b =>
                 {
-                    b.Property<long>("AccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
-                    b.Property<long>("NotificationId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("NotificationId")
+                        .HasColumnType("uuid")
                         .HasColumnName("notification_id");
 
                     b.Property<DateTime>("CreatedAt")
@@ -202,12 +197,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.AuthoritySubmission", b =>
                 {
-                    b.Property<long>("AuthoritySubmissionId")
+                    b.Property<Guid>("AuthoritySubmissionId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("authority_submission_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("AuthoritySubmissionId"));
 
                     b.Property<string>("AuthorityName")
                         .IsRequired()
@@ -215,8 +208,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("authority_name");
 
-                    b.Property<long>("ComplianceDossierId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("ComplianceDossierId")
+                        .HasColumnType("uuid")
                         .HasColumnName("compliance_dossier_id");
 
                     b.Property<DateTime>("CreatedAt")
@@ -284,19 +277,17 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Booking", b =>
                 {
-                    b.Property<long>("BookingId")
+                    b.Property<Guid>("BookingId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("booking_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("BookingId"));
 
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("approved_at");
 
-                    b.Property<long?>("AssignedEmployeeId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("AssignedEmployeeId")
+                        .HasColumnType("uuid")
                         .HasColumnName("assigned_employee_id");
 
                     b.Property<string>("BookingCode")
@@ -317,8 +308,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<long>("CustomerId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
                         .HasColumnName("customer_id");
 
                     b.Property<string>("CustomerNote")
@@ -403,12 +394,12 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.BookingHorse", b =>
                 {
-                    b.Property<long>("BookingId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid")
                         .HasColumnName("booking_id");
 
-                    b.Property<long>("HorseId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("HorseId")
+                        .HasColumnType("uuid")
                         .HasColumnName("horse_id");
 
                     b.Property<DateTime>("CreatedAt")
@@ -429,23 +420,21 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.BookingStatusHistory", b =>
                 {
-                    b.Property<long>("BookingStatusHistoryId")
+                    b.Property<Guid>("BookingStatusHistoryId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("booking_status_history_id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("BookingStatusHistoryId"));
-
-                    b.Property<long>("BookingId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid")
                         .HasColumnName("booking_id");
 
                     b.Property<DateTime>("ChangedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("changed_at");
 
-                    b.Property<long>("ChangedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("ChangedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("changed_by_account_id");
 
                     b.Property<BookingStatus>("NewStatus")
@@ -484,12 +473,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Claim", b =>
                 {
-                    b.Property<long>("ClaimId")
+                    b.Property<Guid>("ClaimId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("claim_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ClaimId"));
 
                     b.Property<string>("CancellationReason")
                         .HasColumnType("text")
@@ -518,8 +505,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(3)")
                         .HasColumnName("currency");
 
-                    b.Property<long>("CustomerId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
                         .HasColumnName("customer_id");
 
                     b.Property<string>("CustomerNote")
@@ -535,8 +522,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("evidence_note");
 
-                    b.Property<long>("HandoverRecordId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("HandoverRecordId")
+                        .HasColumnType("uuid")
                         .HasColumnName("handover_record_id");
 
                     b.Property<decimal?>("RequestedCompensationAmount")
@@ -598,20 +585,18 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.ClaimResolution", b =>
                 {
-                    b.Property<long>("ClaimResolutionId")
+                    b.Property<Guid>("ClaimResolutionId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("claim_resolution_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ClaimResolutionId"));
 
                     b.Property<decimal?>("ApprovedCompensationAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("approved_compensation_amount");
 
-                    b.Property<long>("ClaimId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("ClaimId")
+                        .HasColumnType("uuid")
                         .HasColumnName("claim_id");
 
                     b.Property<string>("CorrectiveAction")
@@ -667,12 +652,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.ComplianceDocument", b =>
                 {
-                    b.Property<long>("ComplianceDocumentId")
+                    b.Property<Guid>("ComplianceDocumentId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("compliance_document_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ComplianceDocumentId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
@@ -695,8 +678,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(150)")
                         .HasColumnName("document_number");
 
-                    b.Property<long>("DossierRequirementId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("DossierRequirementId")
+                        .HasColumnType("uuid")
                         .HasColumnName("dossier_requirement_id");
 
                     b.Property<DateOnly?>("ExpiryDate")
@@ -750,12 +733,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.ComplianceDossier", b =>
                 {
-                    b.Property<long>("ComplianceDossierId")
+                    b.Property<Guid>("ComplianceDossierId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("compliance_dossier_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ComplianceDossierId"));
 
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("timestamp without time zone")
@@ -801,8 +782,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("status")
                         .HasDefaultValueSql("'DRAFT'::compliance_dossier_status");
 
-                    b.Property<long>("TransportId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("TransportId")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_id");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -829,12 +810,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.ComplianceRequirement", b =>
                 {
-                    b.Property<long>("ComplianceRequirementId")
+                    b.Property<Guid>("ComplianceRequirementId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("compliance_requirement_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ComplianceRequirementId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
@@ -844,8 +823,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("DeletedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
 
                     b.Property<string>("Description")
@@ -914,12 +893,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.CostApprovalDecision", b =>
                 {
-                    b.Property<long>("CostApprovalDecisionId")
+                    b.Property<Guid>("CostApprovalDecisionId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("cost_approval_decision_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("CostApprovalDecisionId"));
 
                     b.Property<decimal?>("ApprovedAmount")
                         .HasPrecision(18, 2)
@@ -942,12 +919,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("decision_reason");
 
-                    b.Property<long>("EmergencyCostRequestId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("EmergencyCostRequestId")
+                        .HasColumnType("uuid")
                         .HasColumnName("emergency_cost_request_id");
 
-                    b.Property<long>("EmployeeId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
                         .HasColumnName("employee_id");
 
                     b.HasKey("CostApprovalDecisionId")
@@ -968,15 +945,13 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Customer", b =>
                 {
-                    b.Property<long>("CustomerId")
+                    b.Property<Guid>("CustomerId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("customer_id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("CustomerId"));
-
-                    b.Property<long>("AccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
                     b.Property<string>("Address")
@@ -1001,8 +976,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("DeletedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
 
                     b.Property<string>("FullName")
@@ -1048,12 +1023,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequest", b =>
                 {
-                    b.Property<long>("DocumentRequestId")
+                    b.Property<Guid>("DocumentRequestId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("document_request_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("DocumentRequestId"));
 
                     b.Property<string>("CancellationReason")
                         .HasColumnType("text")
@@ -1067,8 +1040,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<long>("DossierRequirementId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("DossierRequirementId")
+                        .HasColumnType("uuid")
                         .HasColumnName("dossier_requirement_id");
 
                     b.Property<DateOnly?>("DueDate")
@@ -1132,19 +1105,17 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentReview", b =>
                 {
-                    b.Property<long>("DocumentReviewId")
+                    b.Property<Guid>("DocumentReviewId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("document_review_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("DocumentReviewId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<long>("DocumentVersionId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("DocumentVersionId")
+                        .HasColumnType("uuid")
                         .HasColumnName("document_version_id");
 
                     b.Property<DocumentReviewResult>("Result")
@@ -1177,15 +1148,13 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentVersion", b =>
                 {
-                    b.Property<long>("DocumentVersionId")
+                    b.Property<Guid>("DocumentVersionId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("document_version_id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("DocumentVersionId"));
-
-                    b.Property<long>("ComplianceDocumentId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("ComplianceDocumentId")
+                        .HasColumnType("uuid")
                         .HasColumnName("compliance_document_id");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1241,19 +1210,17 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DossierRequirement", b =>
                 {
-                    b.Property<long>("DossierRequirementId")
+                    b.Property<Guid>("DossierRequirementId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("dossier_requirement_id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("DossierRequirementId"));
-
-                    b.Property<long>("ComplianceDossierId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("ComplianceDossierId")
+                        .HasColumnType("uuid")
                         .HasColumnName("compliance_dossier_id");
 
-                    b.Property<long>("ComplianceRequirementId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("ComplianceRequirementId")
+                        .HasColumnType("uuid")
                         .HasColumnName("compliance_requirement_id");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1317,12 +1284,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DossierTemplate", b =>
                 {
-                    b.Property<long>("DossierTemplateId")
+                    b.Property<Guid>("DossierTemplateId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("dossier_template_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("DossierTemplateId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
@@ -1332,8 +1297,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("DeletedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
 
                     b.Property<string>("Description")
@@ -1405,23 +1370,21 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DossierTemplateItem", b =>
                 {
-                    b.Property<long>("DossierTemplateItemId")
+                    b.Property<Guid>("DossierTemplateItemId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("dossier_template_item_id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("DossierTemplateItemId"));
-
-                    b.Property<long>("ComplianceRequirementId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("ComplianceRequirementId")
+                        .HasColumnType("uuid")
                         .HasColumnName("compliance_requirement_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<long>("DossierTemplateId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("DossierTemplateId")
+                        .HasColumnType("uuid")
                         .HasColumnName("dossier_template_id");
 
                     b.Property<string>("Instruction")
@@ -1463,12 +1426,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.EmergencyCostRequest", b =>
                 {
-                    b.Property<long>("EmergencyCostRequestId")
+                    b.Property<Guid>("EmergencyCostRequestId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("emergency_cost_request_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("EmergencyCostRequestId"));
 
                     b.Property<decimal?>("ApprovedAmount")
                         .HasPrecision(18, 2)
@@ -1502,8 +1463,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
-                    b.Property<long>("IncidentReportId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("IncidentReportId")
+                        .HasColumnType("uuid")
                         .HasColumnName("incident_report_id");
 
                     b.Property<string>("Justification")
@@ -1555,15 +1516,13 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Employee", b =>
                 {
-                    b.Property<long>("EmployeeId")
+                    b.Property<Guid>("EmployeeId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("employee_id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("EmployeeId"));
-
-                    b.Property<long>("AccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
                     b.Property<DateTime>("CreatedAt")
@@ -1574,8 +1533,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("DeletedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
 
                     b.Property<string>("EmployeeCode")
@@ -1638,12 +1597,12 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.EmployeeTransportPlan", b =>
                 {
-                    b.Property<long>("EmployeeId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
                         .HasColumnName("employee_id");
 
-                    b.Property<long>("TransportPlanId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("TransportPlanId")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_plan_id");
 
                     b.Property<DateTime>("AssignedAt")
@@ -1675,12 +1634,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.FinancialReport", b =>
                 {
-                    b.Property<long>("FinancialReportId")
+                    b.Property<Guid>("FinancialReportId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("financial_report_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("FinancialReportId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
@@ -1726,8 +1683,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("total_paid_amount");
 
-                    b.Property<long>("TransportId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("TransportId")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_id");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -1751,12 +1708,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.HandoverRecord", b =>
                 {
-                    b.Property<long>("HandoverRecordId")
+                    b.Property<Guid>("HandoverRecordId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("handover_record_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("HandoverRecordId"));
 
                     b.Property<DateTime?>("ActualHandoverAt")
                         .HasColumnType("timestamp without time zone")
@@ -1810,12 +1765,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("from_contact_phone");
 
-                    b.Property<long?>("FromCustomerId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("FromCustomerId")
+                        .HasColumnType("uuid")
                         .HasColumnName("from_customer_id");
 
-                    b.Property<long?>("FromEmployeeId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("FromEmployeeId")
+                        .HasColumnType("uuid")
                         .HasColumnName("from_employee_id");
 
                     b.Property<string>("FromPartyName")
@@ -1823,8 +1778,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("from_party_name");
 
-                    b.Property<long?>("FromRoutePlanRouteId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("FromRoutePlanRouteId")
+                        .HasColumnType("uuid")
                         .HasColumnName("from_route_plan_route_id");
 
                     b.Property<HandoverPartyType>("FromType")
@@ -1884,12 +1839,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("to_contact_phone");
 
-                    b.Property<long?>("ToCustomerId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("ToCustomerId")
+                        .HasColumnType("uuid")
                         .HasColumnName("to_customer_id");
 
-                    b.Property<long?>("ToEmployeeId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("ToEmployeeId")
+                        .HasColumnType("uuid")
                         .HasColumnName("to_employee_id");
 
                     b.Property<string>("ToPartyName")
@@ -1897,16 +1852,16 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("to_party_name");
 
-                    b.Property<long?>("ToRoutePlanRouteId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("ToRoutePlanRouteId")
+                        .HasColumnType("uuid")
                         .HasColumnName("to_route_plan_route_id");
 
                     b.Property<HandoverPartyType>("ToType")
                         .HasColumnType("handover_party_type")
                         .HasColumnName("to_type");
 
-                    b.Property<long>("TransportId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("TransportId")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_id");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -1955,12 +1910,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Horse", b =>
                 {
-                    b.Property<long>("HorseId")
+                    b.Property<Guid>("HorseId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("horse_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("HorseId"));
 
                     b.Property<string>("Breed")
                         .HasMaxLength(100)
@@ -1981,8 +1934,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<long>("CustomerId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("CustomerId")
+                        .HasColumnType("uuid")
                         .HasColumnName("customer_id");
 
                     b.Property<DateOnly?>("DateOfBirth")
@@ -1993,8 +1946,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("DeletedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
 
                     b.Property<decimal?>("HeightCm")
@@ -2063,12 +2016,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.HorseHealthIncidentDetail", b =>
                 {
-                    b.Property<long>("HorseHealthIncidentDetailId")
+                    b.Property<Guid>("HorseHealthIncidentDetailId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("horse_health_incident_detail_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("HorseHealthIncidentDetailId"));
 
                     b.Property<decimal?>("BodyTemperatureCelsius")
                         .HasPrecision(4, 1)
@@ -2092,16 +2043,16 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("heart_rate_bpm");
 
-                    b.Property<long>("HorseId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("HorseId")
+                        .HasColumnType("uuid")
                         .HasColumnName("horse_id");
 
                     b.Property<bool?>("HorseTransportable")
                         .HasColumnType("boolean")
                         .HasColumnName("horse_transportable");
 
-                    b.Property<long>("IncidentReportId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("IncidentReportId")
+                        .HasColumnType("uuid")
                         .HasColumnName("incident_report_id");
 
                     b.Property<HorseIncidentType>("IncidentType")
@@ -2159,12 +2110,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.HorseHealthLog", b =>
                 {
-                    b.Property<long>("HorseHealthLogId")
+                    b.Property<Guid>("HorseHealthLogId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("horse_health_log_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("HorseHealthLogId"));
 
                     b.Property<string>("BehaviorNote")
                         .HasColumnType("text")
@@ -2178,8 +2127,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<long>("EmployeeId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
                         .HasColumnName("employee_id");
 
                     b.Property<string>("FeedingNote")
@@ -2198,8 +2147,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("heart_rate_bpm");
 
-                    b.Property<long>("HorseId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("HorseId")
+                        .HasColumnType("uuid")
                         .HasColumnName("horse_id");
 
                     b.Property<string>("HydrationNote")
@@ -2245,8 +2194,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("numeric(4,1)")
                         .HasColumnName("temperature_celsius");
 
-                    b.Property<long>("TransportId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("TransportId")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_id");
 
                     b.Property<string>("TreatmentProvided")
@@ -2288,12 +2237,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.IncidentReport", b =>
                 {
-                    b.Property<long>("IncidentReportId")
+                    b.Property<Guid>("IncidentReportId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("incident_report_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("IncidentReportId"));
 
                     b.Property<string>("CancellationReason")
                         .HasColumnType("text")
@@ -2316,8 +2263,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
-                    b.Property<long>("EmployeeId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
                         .HasColumnName("employee_id");
 
                     b.Property<string>("ImmediateAction")
@@ -2330,8 +2277,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("incident_code");
 
-                    b.Property<long>("LocationId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("LocationId")
+                        .HasColumnType("uuid")
                         .HasColumnName("location_id");
 
                     b.Property<DateTime>("OccurredAt")
@@ -2399,19 +2346,17 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Invoice", b =>
                 {
-                    b.Property<long>("InvoiceId")
+                    b.Property<Guid>("InvoiceId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("invoice_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("InvoiceId"));
 
                     b.Property<string>("BillingNote")
                         .HasColumnType("text")
                         .HasColumnName("billing_note");
 
-                    b.Property<long>("BookingId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid")
                         .HasColumnName("booking_id");
 
                     b.Property<string>("CancellationReason")
@@ -2441,8 +2386,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("date")
                         .HasColumnName("due_date");
 
-                    b.Property<long>("EmployeeId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
                         .HasColumnName("employee_id");
 
                     b.Property<string>("InvoiceCode")
@@ -2504,12 +2449,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.InvoiceItem", b =>
                 {
-                    b.Property<long>("InvoiceItemId")
+                    b.Property<Guid>("InvoiceItemId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("invoice_item_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("InvoiceItemId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
@@ -2521,16 +2464,16 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("description");
 
-                    b.Property<long?>("EmergencyCostRequestId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("EmergencyCostRequestId")
+                        .HasColumnType("uuid")
                         .HasColumnName("emergency_cost_request_id");
 
-                    b.Property<long?>("HorseId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("HorseId")
+                        .HasColumnType("uuid")
                         .HasColumnName("horse_id");
 
-                    b.Property<long>("InvoiceId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid")
                         .HasColumnName("invoice_id");
 
                     b.Property<InvoiceItemType>("ItemType")
@@ -2580,27 +2523,25 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.InvoiceStatusHistory", b =>
                 {
-                    b.Property<long>("InvoiceStatusHistoryId")
+                    b.Property<Guid>("InvoiceStatusHistoryId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("invoice_status_history_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("InvoiceStatusHistoryId"));
 
                     b.Property<DateTime>("ChangedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("changed_at");
 
-                    b.Property<long?>("ChangedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("ChangedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("changed_by_account_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<long>("InvoiceId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid")
                         .HasColumnName("invoice_id");
 
                     b.Property<InvoiceStatus>("NewStatus")
@@ -2642,12 +2583,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Location", b =>
                 {
-                    b.Property<long>("LocationId")
+                    b.Property<Guid>("LocationId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("location_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("LocationId"));
 
                     b.Property<string>("Address")
                         .HasMaxLength(500)
@@ -2673,8 +2612,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("DeletedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
 
                     b.Property<bool>("IsDeleted")
@@ -2738,12 +2677,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Notification", b =>
                 {
-                    b.Property<long>("NotificationId")
+                    b.Property<Guid>("NotificationId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("notification_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("NotificationId"));
 
                     b.Property<string>("ActionUrl")
                         .HasMaxLength(1000)
@@ -2773,8 +2710,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("priority")
                         .HasDefaultValueSql("'NORMAL'::notification_priority");
 
-                    b.Property<long?>("ReferenceId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("ReferenceId")
+                        .HasColumnType("uuid")
                         .HasColumnName("reference_id");
 
                     b.Property<string>("ReferenceType")
@@ -2788,8 +2725,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("title");
 
-                    b.Property<long>("TransportId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("TransportId")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_id");
 
                     b.HasKey("NotificationId")
@@ -2812,12 +2749,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Receipt", b =>
                 {
-                    b.Property<long>("ReceiptId")
+                    b.Property<Guid>("ReceiptId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("receipt_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("ReceiptId"));
 
                     b.Property<decimal>("Amount")
                         .HasPrecision(18, 2)
@@ -2838,8 +2773,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(3)")
                         .HasColumnName("currency");
 
-                    b.Property<long>("InvoiceId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("InvoiceId")
+                        .HasColumnType("uuid")
                         .HasColumnName("invoice_id");
 
                     b.Property<string>("Note")
@@ -2895,15 +2830,13 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.RefreshToken", b =>
                 {
-                    b.Property<long>("RefreshTokenId")
+                    b.Property<Guid>("RefreshTokenId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("refresh_token_id");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("RefreshTokenId"));
-
-                    b.Property<long>("AccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
                     b.Property<DateTime>("CreatedAt")
@@ -2924,8 +2857,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("expires_at");
 
-                    b.Property<long?>("ReplacedByTokenId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("ReplacedByTokenId")
+                        .HasColumnType("uuid")
                         .HasColumnName("replaced_by_token_id");
 
                     b.Property<DateTime?>("RevokedAt")
@@ -2965,12 +2898,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Route", b =>
                 {
-                    b.Property<long>("RouteId")
+                    b.Property<Guid>("RouteId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("route_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("RouteId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
@@ -2980,8 +2911,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("DeletedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
 
                     b.Property<decimal?>("DistanceKm")
@@ -2993,8 +2924,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("estimated_duration_minutes");
 
-                    b.Property<long>("FromLocationId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("FromLocationId")
+                        .HasColumnType("uuid")
                         .HasColumnName("from_location_id");
 
                     b.Property<bool>("IsDeleted")
@@ -3018,8 +2949,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("route_note");
 
-                    b.Property<long>("ToLocationId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("ToLocationId")
+                        .HasColumnType("uuid")
                         .HasColumnName("to_location_id");
 
                     b.Property<TransportMode>("TransportMode")
@@ -3055,12 +2986,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.RoutePlan", b =>
                 {
-                    b.Property<long>("RoutePlanId")
+                    b.Property<Guid>("RoutePlanId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("route_plan_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("RoutePlanId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
@@ -3091,8 +3020,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("numeric(10,2)")
                         .HasColumnName("total_distance_km");
 
-                    b.Property<long>("TransportPlanId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("TransportPlanId")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_plan_id");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -3119,12 +3048,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.RoutePlanRoute", b =>
                 {
-                    b.Property<long>("RoutePlanRouteId")
+                    b.Property<Guid>("RoutePlanRouteId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("route_plan_route_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("RoutePlanRouteId"));
 
                     b.Property<DateTime?>("ActualArrivalAt")
                         .HasColumnType("timestamp without time zone")
@@ -3138,8 +3065,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<long?>("DriverEmployeeId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DriverEmployeeId")
+                        .HasColumnType("uuid")
                         .HasColumnName("driver_employee_id");
 
                     b.Property<string>("Note")
@@ -3154,12 +3081,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("planned_departure_at");
 
-                    b.Property<long>("RouteId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("RouteId")
+                        .HasColumnType("uuid")
                         .HasColumnName("route_id");
 
-                    b.Property<long>("RoutePlanId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("RoutePlanId")
+                        .HasColumnType("uuid")
                         .HasColumnName("route_plan_id");
 
                     b.Property<RouteType>("RouteType")
@@ -3199,12 +3126,12 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.RoutePlanRouteVehicle", b =>
                 {
-                    b.Property<long>("RoutePlanRouteId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("RoutePlanRouteId")
+                        .HasColumnType("uuid")
                         .HasColumnName("route_plan_route_id");
 
-                    b.Property<long>("VehicleId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("VehicleId")
+                        .HasColumnType("uuid")
                         .HasColumnName("vehicle_id");
 
                     b.Property<DateTime>("AssignedAt")
@@ -3228,12 +3155,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Transport", b =>
                 {
-                    b.Property<long>("TransportId")
+                    b.Property<Guid>("TransportId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("TransportId"));
 
                     b.Property<DateTime?>("ActualArrivalAt")
                         .HasColumnType("timestamp without time zone")
@@ -3243,8 +3168,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("actual_departure_at");
 
-                    b.Property<long>("BookingId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid")
                         .HasColumnName("booking_id");
 
                     b.Property<string>("CancellationReason")
@@ -3296,19 +3221,17 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.TransportPlan", b =>
                 {
-                    b.Property<long>("TransportPlanId")
+                    b.Property<Guid>("TransportPlanId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_plan_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("TransportPlanId"));
 
                     b.Property<DateTime?>("ApprovedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("approved_at");
 
-                    b.Property<long?>("ApprovedByEmployeeId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("ApprovedByEmployeeId")
+                        .HasColumnType("uuid")
                         .HasColumnName("approved_by_employee_id");
 
                     b.Property<DateTime>("CreatedAt")
@@ -3348,8 +3271,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("status")
                         .HasDefaultValueSql("'DRAFT'::transport_plan_status");
 
-                    b.Property<long>("TransportId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("TransportId")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_id");
 
                     b.Property<DateTime>("UpdatedAt")
@@ -3374,12 +3297,12 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.TransportPlanProvider", b =>
                 {
-                    b.Property<long>("TransportPlanId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("TransportPlanId")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_plan_id");
 
-                    b.Property<long>("TransportProviderId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("TransportProviderId")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_provider_id");
 
                     b.Property<DateTime>("AssignedAt")
@@ -3405,12 +3328,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.TransportProvider", b =>
                 {
-                    b.Property<long>("TransportProviderId")
+                    b.Property<Guid>("TransportProviderId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("transport_provider_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("TransportProviderId"));
 
                     b.Property<string>("Address")
                         .HasMaxLength(500)
@@ -3435,8 +3356,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("DeletedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
 
                     b.Property<string>("Email")
@@ -3511,12 +3432,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Vehicle", b =>
                 {
-                    b.Property<long>("VehicleId")
+                    b.Property<Guid>("VehicleId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("vehicle_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("VehicleId"));
 
                     b.Property<int?>("CapacityHorses")
                         .HasColumnType("integer")
@@ -3530,8 +3449,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
 
-                    b.Property<long?>("DeletedByAccountId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
 
                     b.Property<DateOnly?>("InsuranceExpiryDate")
@@ -3634,12 +3553,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.VehicleIncidentDetail", b =>
                 {
-                    b.Property<long>("VehicleIncidentDetailId")
+                    b.Property<Guid>("VehicleIncidentDetailId")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint")
+                        .HasColumnType("uuid")
                         .HasColumnName("vehicle_incident_detail_id");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("VehicleIncidentDetailId"));
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
@@ -3654,8 +3571,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("estimated_repair_cost");
 
-                    b.Property<long>("IncidentReportId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("IncidentReportId")
+                        .HasColumnType("uuid")
                         .HasColumnName("incident_report_id");
 
                     b.Property<VehicleIncidentType>("IncidentType")
@@ -3692,8 +3609,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("vehicle_condition");
 
-                    b.Property<long>("VehicleId")
-                        .HasColumnType("bigint")
+                    b.Property<Guid>("VehicleId")
+                        .HasColumnType("uuid")
                         .HasColumnName("vehicle_id");
 
                     b.Property<bool>("VehicleOperable")

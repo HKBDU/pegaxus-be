@@ -45,6 +45,8 @@ publish/
 .env
 .env.local
 .env.*.local
+Pegaxus.API/appsettings.json
+Pegaxus.API/appsettings.Development.json
 appsettings.Production.json
 appsettings.*.local.json
 secrets.json

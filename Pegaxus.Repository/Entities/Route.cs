@@ -8,13 +8,13 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class Route
 {
-    public long RouteId { get; set; }
+    public Guid RouteId { get; set; }
 
     public string RouteCode { get; set; } = null!;
 
-    public long FromLocationId { get; set; }
+    public Guid FromLocationId { get; set; }
 
-    public long ToLocationId { get; set; }
+    public Guid ToLocationId { get; set; }
 
     public string? RouteName { get; set; }
 
@@ -28,7 +28,7 @@ public partial class Route
 
     public DateTime? DeletedAt { get; set; }
 
-    public long? DeletedByAccountId { get; set; }
+    public Guid? DeletedByAccountId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

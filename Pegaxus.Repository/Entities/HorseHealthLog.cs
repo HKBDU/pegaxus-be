@@ -5,13 +5,13 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class HorseHealthLog
 {
-    public long HorseHealthLogId { get; set; }
+    public Guid HorseHealthLogId { get; set; }
 
-    public long TransportId { get; set; }
+    public Guid TransportId { get; set; }
 
-    public long HorseId { get; set; }
+    public Guid HorseId { get; set; }
 
-    public long EmployeeId { get; set; }
+    public Guid EmployeeId { get; set; }
 
     public DateTime CheckedAt { get; set; }
 

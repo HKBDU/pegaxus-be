@@ -5,11 +5,11 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class Transport
 {
-    public long TransportId { get; set; }
+    public Guid TransportId { get; set; }
 
     public string TransportCode { get; set; } = null!;
 
-    public long BookingId { get; set; }
+    public Guid BookingId { get; set; }
 
     public DateTime? ActualDepartureAt { get; set; }
 

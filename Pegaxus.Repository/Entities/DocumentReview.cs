@@ -8,9 +8,9 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class DocumentReview
 {
-    public long DocumentReviewId { get; set; }
+    public Guid DocumentReviewId { get; set; }
 
-    public long DocumentVersionId { get; set; }
+    public Guid DocumentVersionId { get; set; }
 
     public string? ReviewComment { get; set; }
 

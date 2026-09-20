@@ -8,7 +8,7 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class DossierTemplate
 {
-    public long DossierTemplateId { get; set; }
+    public Guid DossierTemplateId { get; set; }
 
     public string TemplateCode { get; set; } = null!;
 
@@ -26,7 +26,7 @@ public partial class DossierTemplate
 
     public DateTime? DeletedAt { get; set; }
 
-    public long? DeletedByAccountId { get; set; }
+    public Guid? DeletedByAccountId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

@@ -8,11 +8,11 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class FinancialReport
 {
-    public long FinancialReportId { get; set; }
+    public Guid FinancialReportId { get; set; }
 
     public string ReportCode { get; set; } = null!;
 
-    public long TransportId { get; set; }
+    public Guid TransportId { get; set; }
 
     public string Currency { get; set; } = null!;
 

@@ -8,15 +8,15 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class RoutePlanRoute
 {
-    public long RoutePlanRouteId { get; set; }
+    public Guid RoutePlanRouteId { get; set; }
 
-    public long RoutePlanId { get; set; }
+    public Guid RoutePlanId { get; set; }
 
-    public long RouteId { get; set; }
+    public Guid RouteId { get; set; }
 
     public int SequenceNo { get; set; }
 
-    public long? DriverEmployeeId { get; set; }
+    public Guid? DriverEmployeeId { get; set; }
 
     public DateTime? PlannedDepartureAt { get; set; }
 

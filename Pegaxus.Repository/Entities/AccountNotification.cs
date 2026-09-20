@@ -5,9 +5,9 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class AccountNotification
 {
-    public long AccountId { get; set; }
+    public Guid AccountId { get; set; }
 
-    public long NotificationId { get; set; }
+    public Guid NotificationId { get; set; }
 
     public DateTime? DeliveredAt { get; set; }
 

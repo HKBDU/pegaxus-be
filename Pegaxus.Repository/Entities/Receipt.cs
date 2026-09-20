@@ -5,11 +5,11 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class Receipt
 {
-    public long ReceiptId { get; set; }
+    public Guid ReceiptId { get; set; }
 
     public string ReceiptCode { get; set; } = null!;
 
-    public long InvoiceId { get; set; }
+    public Guid InvoiceId { get; set; }
 
     public decimal Amount { get; set; }
 

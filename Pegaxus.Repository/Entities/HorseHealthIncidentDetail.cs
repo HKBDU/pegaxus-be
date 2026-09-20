@@ -5,11 +5,11 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class HorseHealthIncidentDetail
 {
-    public long HorseHealthIncidentDetailId { get; set; }
+    public Guid HorseHealthIncidentDetailId { get; set; }
 
-    public long IncidentReportId { get; set; }
+    public Guid IncidentReportId { get; set; }
 
-    public long HorseId { get; set; }
+    public Guid HorseId { get; set; }
 
     public string ConditionDescription { get; set; } = null!;
 

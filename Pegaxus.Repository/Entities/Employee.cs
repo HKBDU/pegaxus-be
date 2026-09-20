@@ -5,9 +5,9 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class Employee
 {
-    public long EmployeeId { get; set; }
+    public Guid EmployeeId { get; set; }
 
-    public long AccountId { get; set; }
+    public Guid AccountId { get; set; }
 
     public string EmployeeCode { get; set; } = null!;
 
@@ -21,7 +21,7 @@ public partial class Employee
 
     public DateTime? DeletedAt { get; set; }
 
-    public long? DeletedByAccountId { get; set; }
+    public Guid? DeletedByAccountId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

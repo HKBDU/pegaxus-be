@@ -8,7 +8,7 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class ComplianceRequirement
 {
-    public long ComplianceRequirementId { get; set; }
+    public Guid ComplianceRequirementId { get; set; }
 
     public string RequirementCode { get; set; } = null!;
 
@@ -24,7 +24,7 @@ public partial class ComplianceRequirement
 
     public DateTime? DeletedAt { get; set; }
 
-    public long? DeletedByAccountId { get; set; }
+    public Guid? DeletedByAccountId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

@@ -8,9 +8,9 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class HandoverRecord
 {
-    public long HandoverRecordId { get; set; }
+    public Guid HandoverRecordId { get; set; }
 
-    public long TransportId { get; set; }
+    public Guid TransportId { get; set; }
 
     public string HandoverCode { get; set; } = null!;
 
@@ -20,17 +20,17 @@ public partial class HandoverRecord
 
     public DateTime? ActualHandoverAt { get; set; }
 
-    public long? FromCustomerId { get; set; }
+    public Guid? FromCustomerId { get; set; }
 
-    public long? FromEmployeeId { get; set; }
+    public Guid? FromEmployeeId { get; set; }
 
-    public long? ToCustomerId { get; set; }
+    public Guid? ToCustomerId { get; set; }
 
-    public long? ToEmployeeId { get; set; }
+    public Guid? ToEmployeeId { get; set; }
 
-    public long? FromRoutePlanRouteId { get; set; }
+    public Guid? FromRoutePlanRouteId { get; set; }
 
-    public long? ToRoutePlanRouteId { get; set; }
+    public Guid? ToRoutePlanRouteId { get; set; }
 
     public string? FromPartyName { get; set; }
 

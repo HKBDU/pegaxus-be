@@ -8,7 +8,7 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class Vehicle
 {
-    public long VehicleId { get; set; }
+    public Guid VehicleId { get; set; }
 
     public string VehicleCode { get; set; } = null!;
 
@@ -38,7 +38,7 @@ public partial class Vehicle
 
     public DateTime? DeletedAt { get; set; }
 
-    public long? DeletedByAccountId { get; set; }
+    public Guid? DeletedByAccountId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

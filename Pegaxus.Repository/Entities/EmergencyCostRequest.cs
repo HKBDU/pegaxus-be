@@ -5,9 +5,9 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class EmergencyCostRequest
 {
-    public long EmergencyCostRequestId { get; set; }
+    public Guid EmergencyCostRequestId { get; set; }
 
-    public long IncidentReportId { get; set; }
+    public Guid IncidentReportId { get; set; }
 
     public string RequestCode { get; set; } = null!;
 

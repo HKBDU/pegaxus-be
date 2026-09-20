@@ -8,9 +8,9 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class ClaimResolution
 {
-    public long ClaimResolutionId { get; set; }
+    public Guid ClaimResolutionId { get; set; }
 
-    public long ClaimId { get; set; }
+    public Guid ClaimId { get; set; }
 
     public string ResolutionSummary { get; set; } = null!;
 

@@ -8,13 +8,13 @@ namespace Pegaxus.Repository.Entities;
 /// </summary>
 public partial class Claim
 {
-    public long ClaimId { get; set; }
+    public Guid ClaimId { get; set; }
 
     public string ClaimCode { get; set; } = null!;
 
-    public long CustomerId { get; set; }
+    public Guid CustomerId { get; set; }
 
-    public long HandoverRecordId { get; set; }
+    public Guid HandoverRecordId { get; set; }
 
     public string Title { get; set; } = null!;
 

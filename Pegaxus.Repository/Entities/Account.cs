@@ -5,7 +5,7 @@ namespace Pegaxus.Repository.Entities;
 
 public partial class Account
 {
-    public long AccountId { get; set; }
+    public Guid AccountId { get; set; }
 
     public string Email { get; set; } = null!;
 
@@ -21,7 +21,7 @@ public partial class Account
 
     public DateTime? DeletedAt { get; set; }
 
-    public long? DeletedByAccountId { get; set; }
+    public Guid? DeletedByAccountId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 
