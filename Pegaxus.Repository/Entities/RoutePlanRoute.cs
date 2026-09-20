@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver phụ trách và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.
+/// RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, 
+/// gồm thứ tự đi, Driver phụ trách và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.
 /// </summary>
 public partial class RoutePlanRoute
 {
@@ -15,6 +17,8 @@ public partial class RoutePlanRoute
     public Guid RouteId { get; set; }
 
     public int SequenceNo { get; set; }
+
+    public RouteType RouteType { get; set; } = RouteType.PRIMARY;
 
     public Guid? DriverEmployeeId { get; set; }
 

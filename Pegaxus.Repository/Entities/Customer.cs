@@ -3,6 +3,10 @@ using System.Collections.Generic;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// Customer: Hồ sơ khách hàng gắn 1-1 với Account, 
+/// lưu thông tin cá nhân và sở hữu các Booking, Horse và Claim.
+/// </summary>
 public partial class Customer
 {
     public Guid CustomerId { get; set; }

@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// HandoverRecord: Một lần bàn giao trong Transport. from_type/to_type xác định bên giao/nhận là CUSTOMER hay EMPLOYEE; from/to_route_plan_route_id xác định chặng vừa kết thúc và chặng tiếp theo.
+/// HandoverRecord: Một lần bàn giao trong Transport. 
+/// from_type/to_type xác định bên giao/nhận là CUSTOMER hay EMPLOYEE; 
+/// from/to_route_plan_route_id xác định chặng vừa kết thúc và chặng tiếp theo.
 /// </summary>
 public partial class HandoverRecord
 {
@@ -16,13 +19,21 @@ public partial class HandoverRecord
 
     public int SequenceNo { get; set; }
 
+    public HandoverType HandoverType { get; set; }
+
+    public HandoverStatus Status { get; set; } = HandoverStatus.PLANNED;
+
     public DateTime? PlannedHandoverAt { get; set; }
 
     public DateTime? ActualHandoverAt { get; set; }
 
+    public HandoverPartyType FromType { get; set; }
+
     public Guid? FromCustomerId { get; set; }
 
     public Guid? FromEmployeeId { get; set; }
+
+    public HandoverPartyType ToType { get; set; }
 
     public Guid? ToCustomerId { get; set; }
 

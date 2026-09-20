@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// DocumentRequest: Yêu cầu gửi tới Customer để cung cấp, sửa, upload lại hoặc bổ sung thông tin cho một DossierRequirement.
+/// DocumentRequest: Yêu cầu gửi tới Customer để cung cấp, sửa, upload lại hoặc 
+/// bổ sung thông tin cho một DossierRequirement.
 /// </summary>
 public partial class DocumentRequest
 {
@@ -13,6 +15,10 @@ public partial class DocumentRequest
     public Guid DossierRequirementId { get; set; }
 
     public string RequestCode { get; set; } = null!;
+
+    public DocumentRequestType RequestType { get; set; }
+
+    public DocumentRequestStatus Status { get; set; } = DocumentRequestStatus.OPEN;
 
     public string Message { get; set; } = null!;
 

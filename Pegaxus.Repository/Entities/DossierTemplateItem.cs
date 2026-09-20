@@ -4,7 +4,9 @@ using System.Collections.Generic;
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// DossierTemplateItem: Một dòng yêu cầu nằm trong DossierTemplate, dùng để liên kết Template với ComplianceRequirement và đánh dấu yêu cầu bắt buộc hay không.
+/// DossierTemplateItem: Một dòng yêu cầu nằm trong DossierTemplate, 
+/// dùng để liên kết Template với ComplianceRequirement và 
+/// đánh dấu yêu cầu bắt buộc hay không.
 /// </summary>
 public partial class DossierTemplateItem
 {

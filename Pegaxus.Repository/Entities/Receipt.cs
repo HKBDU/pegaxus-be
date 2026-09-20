@@ -1,8 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// Receipt: Bản ghi một lần thanh toán cho Invoice, 
+/// lưu phương thức, trạng thái, số tiền, mã giao dịch và thời điểm xác nhận.
+/// </summary>
 public partial class Receipt
 {
     public Guid ReceiptId { get; set; }
@@ -10,6 +15,10 @@ public partial class Receipt
     public string ReceiptCode { get; set; } = null!;
 
     public Guid InvoiceId { get; set; }
+
+    public PaymentMethod PaymentMethod { get; set; }
+
+    public ReceiptStatus Status { get; set; } = ReceiptStatus.PENDING;
 
     public decimal Amount { get; set; }
 

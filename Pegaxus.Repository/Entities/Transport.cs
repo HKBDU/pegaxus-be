@@ -1,8 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// Transport: Chuyến vận chuyển thực tế được tạo từ Booking, 
+/// quản lý tiến độ thực hiện và liên kết các kế hoạch, bàn giao, hồ sơ pháp lý, sức khỏe và báo cáo tài chính.
+/// </summary>
 public partial class Transport
 {
     public Guid TransportId { get; set; }
@@ -10,6 +15,8 @@ public partial class Transport
     public string TransportCode { get; set; } = null!;
 
     public Guid BookingId { get; set; }
+
+    public TransportStatus Status { get; set; } = TransportStatus.CREATED;
 
     public DateTime? ActualDepartureAt { get; set; }
 

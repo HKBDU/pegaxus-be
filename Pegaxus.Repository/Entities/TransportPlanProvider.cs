@@ -3,6 +3,10 @@ using System.Collections.Generic;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// TransportPlanProvider: Bảng trung gian N-N gán TransportProvider vào TransportPlan, 
+/// lưu loại dịch vụ, thời điểm phân công và ghi chú hợp tác.
+/// </summary>
 public partial class TransportPlanProvider
 {
     public Guid TransportPlanId { get; set; }

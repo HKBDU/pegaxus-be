@@ -1,8 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// HorseHealthLog: Nhật ký kiểm tra sức khỏe của Horse trong Transport do Employee ghi nhận, 
+/// gồm chỉ số sinh tồn, tình trạng, chăm sóc và ghi chú hiện trường.
+/// </summary>
 public partial class HorseHealthLog
 {
     public Guid HorseHealthLogId { get; set; }
@@ -13,7 +18,13 @@ public partial class HorseHealthLog
 
     public Guid EmployeeId { get; set; }
 
+    public HorseHealthLogType LogType { get; set; }
+
     public DateTime CheckedAt { get; set; }
+
+    public HorseHealthStatus HealthStatus { get; set; }
+
+    public HydrationStatus? HydrationStatus { get; set; }
 
     public decimal? TemperatureCelsius { get; set; }
 

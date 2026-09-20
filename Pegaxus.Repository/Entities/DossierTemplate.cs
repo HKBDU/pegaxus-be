@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// DossierTemplate: Bộ hồ sơ pháp lý mẫu cho một kịch bản vận chuyển. Template xác định thông thường cần những loại yêu cầu nào.
+/// DossierTemplate: Bộ hồ sơ pháp lý mẫu cho một kịch bản vận chuyển. 
+/// Template xác định thông thường cần những loại yêu cầu nào.
 /// </summary>
 public partial class DossierTemplate
 {
@@ -13,6 +15,8 @@ public partial class DossierTemplate
     public string TemplateCode { get; set; } = null!;
 
     public string TemplateName { get; set; } = null!;
+
+    public DossierTemplateStatus Status { get; set; } = DossierTemplateStatus.DRAFT;
 
     public string? Description { get; set; }
 

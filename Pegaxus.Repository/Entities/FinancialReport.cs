@@ -4,7 +4,9 @@ using System.Collections.Generic;
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// FinancialReport: Báo cáo tài chính tổng hợp theo một Transport, được hệ thống sinh từ dữ liệu Invoice, InvoiceItem, Receipt và chi phí liên quan; không có trạng thái lưu nháp.
+/// FinancialReport: Báo cáo tài chính tổng hợp theo một Transport, 
+/// được hệ thống sinh từ dữ liệu Invoice, InvoiceItem, Receipt và 
+/// chi phí liên quan; không có trạng thái lưu nháp.
 /// </summary>
 public partial class FinancialReport
 {

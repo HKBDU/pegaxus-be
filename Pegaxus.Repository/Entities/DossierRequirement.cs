@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// DossierRequirement: Một yêu cầu pháp lý thực tế đã được sinh ra trong ComplianceDossier của chuyến đi cụ thể, dựa trên loại ComplianceRequirement.
+/// DossierRequirement: Một yêu cầu pháp lý thực tế đã được sinh ra trong ComplianceDossier 
+/// của chuyến đi cụ thể, dựa trên loại ComplianceRequirement.
 /// </summary>
 public partial class DossierRequirement
 {
@@ -13,6 +15,8 @@ public partial class DossierRequirement
     public Guid ComplianceDossierId { get; set; }
 
     public Guid ComplianceRequirementId { get; set; }
+
+    public DossierRequirementStatus Status { get; set; } = DossierRequirementStatus.PENDING;
 
     public bool IsMandatory { get; set; }
 

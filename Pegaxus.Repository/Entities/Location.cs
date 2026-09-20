@@ -1,16 +1,21 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// Location: Địa điểm master trên bản đồ. Một địa điểm chỉ tạo một lần và có thể được nhiều Route tái sử dụng, ví dụ Thành phố Hồ Chí Minh.
+/// Location: Địa điểm master trên bản đồ. 
+/// Một địa điểm chỉ tạo một lần và có thể được nhiều Route tái sử dụng, 
+/// ví dụ Thành phố Hồ Chí Minh.
 /// </summary>
 public partial class Location
 {
     public Guid LocationId { get; set; }
 
     public string LocationName { get; set; } = null!;
+
+    public LocationType? LocationType { get; set; }
 
     public string? Address { get; set; }
 

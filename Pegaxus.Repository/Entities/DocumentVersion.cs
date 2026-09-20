@@ -4,7 +4,8 @@ using System.Collections.Generic;
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// DocumentVersion: Một phiên bản file cụ thể của ComplianceDocument. Khi giấy tờ bị sửa hoặc upload lại thì tạo version mới, không tạo ComplianceDocument mới.
+/// DocumentVersion: Một phiên bản file cụ thể của ComplianceDocument. 
+/// Khi giấy tờ bị sửa hoặc upload lại thì tạo version mới, không tạo ComplianceDocument mới.
 /// </summary>
 public partial class DocumentVersion
 {

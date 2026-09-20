@@ -1,8 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// Booking: Yêu cầu vận chuyển ngựa do Customer tạo, gồm điểm đi/đến, 
+/// thời gian mong muốn, các Horse cần vận chuyển và Employee được phân công xử lý.
+/// </summary>
 public partial class Booking
 {
     public Guid BookingId { get; set; }
@@ -12,6 +17,8 @@ public partial class Booking
     public Guid CustomerId { get; set; }
 
     public Guid? AssignedEmployeeId { get; set; }
+
+    public BookingStatus Status { get; set; } = BookingStatus.PENDING;
 
     public string OriginAddress { get; set; } = null!;
 

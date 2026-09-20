@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// AuthoritySubmission: Một lần thực tế gửi ComplianceDossier tới cơ quan có thẩm quyền. Một dossier có thể được gửi nhiều lần nếu bị trả về hoặc từ chối.
+/// AuthoritySubmission: Một lần thực tế gửi ComplianceDossier tới cơ quan có thẩm quyền. 
+/// Một dossier có thể được gửi nhiều lần nếu bị trả về hoặc từ chối.
 /// </summary>
 public partial class AuthoritySubmission
 {
@@ -19,6 +21,8 @@ public partial class AuthoritySubmission
     public string? SubmissionReference { get; set; }
 
     public string? SubmissionMethod { get; set; }
+
+    public AuthoritySubmissionStatus Status { get; set; } = AuthoritySubmissionStatus.DRAFT;
 
     public DateTime? SubmittedAt { get; set; }
 

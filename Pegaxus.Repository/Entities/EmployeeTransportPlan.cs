@@ -3,6 +3,10 @@ using System.Collections.Generic;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// EmployeeTransportPlan: Bảng trung gian N-N gán Employee vào TransportPlan, 
+/// lưu trách nhiệm, thời điểm phân công và người phụ trách chính.
+/// </summary>
 public partial class EmployeeTransportPlan
 {
     public Guid EmployeeId { get; set; }

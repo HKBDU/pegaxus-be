@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// ComplianceDossier: Bộ hồ sơ pháp lý thực tế của một chuyến đi, tức của một Transport cụ thể.
+/// ComplianceDossier: Bộ hồ sơ pháp lý thực tế của một chuyến đi, 
+/// tức của một Transport cụ thể.
 /// </summary>
 public partial class ComplianceDossier
 {
@@ -13,6 +15,8 @@ public partial class ComplianceDossier
     public string DossierCode { get; set; } = null!;
 
     public Guid TransportId { get; set; }
+
+    public ComplianceDossierStatus Status { get; set; } = ComplianceDossierStatus.DRAFT;
 
     public DateTime OpenedAt { get; set; }
 

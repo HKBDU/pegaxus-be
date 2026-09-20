@@ -1,8 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// Invoice: Hóa đơn của một Booking do Employee lập, 
+/// tổng hợp các InvoiceItem, số tiền, thời hạn thanh toán, lịch sử trạng thái và 
+/// các Receipt liên quan.
+/// </summary>
 public partial class Invoice
 {
     public Guid InvoiceId { get; set; }
@@ -12,6 +18,8 @@ public partial class Invoice
     public Guid BookingId { get; set; }
 
     public Guid EmployeeId { get; set; }
+
+    public InvoiceStatus Status { get; set; } = InvoiceStatus.DRAFT;
 
     public string Currency { get; set; } = null!;
 

@@ -1,8 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// Horse: Hồ sơ ngựa thuộc sở hữu của Customer, 
+/// lưu thông tin nhận dạng, đặc điểm cơ thể và 
+/// dữ liệu phục vụ vận chuyển, sức khỏe, sự cố và tính phí.
+/// </summary>
 public partial class Horse
 {
     public Guid HorseId { get; set; }
@@ -10,6 +16,8 @@ public partial class Horse
     public Guid CustomerId { get; set; }
 
     public string HorseName { get; set; } = null!;
+
+    public HorseSex? Sex { get; set; }
 
     public string? PassportNumber { get; set; }
 

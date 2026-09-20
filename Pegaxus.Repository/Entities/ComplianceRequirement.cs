@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// ComplianceRequirement: Danh mục master các loại yêu cầu pháp lý hoặc loại giấy tờ mà hệ thống biết có thể cần trong hồ sơ.
+/// ComplianceRequirement: Danh mục master các loại yêu cầu pháp lý 
+/// hoặc loại giấy tờ mà hệ thống biết có thể cần trong hồ sơ.
 /// </summary>
 public partial class ComplianceRequirement
 {
@@ -13,6 +15,8 @@ public partial class ComplianceRequirement
     public string RequirementCode { get; set; } = null!;
 
     public string RequirementName { get; set; } = null!;
+
+    public ComplianceRequirementStatus Status { get; set; } = ComplianceRequirementStatus.ACTIVE;
 
     public string? Description { get; set; }
 

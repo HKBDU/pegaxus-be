@@ -3,6 +3,10 @@ using System.Collections.Generic;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// BookingHorse: Bảng trung gian N-N gán Horse vào Booking 
+/// và lưu yêu cầu xử lý riêng cho từng con ngựa trong chuyến đặt.
+/// </summary>
 public partial class BookingHorse
 {
     public Guid BookingId { get; set; }

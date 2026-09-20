@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// Claim: Khiếu nại do Customer gửi liên quan đến một lần bàn giao. Hệ thống chỉ lưu khiếu nại và kết quả; việc trao đổi/thương lượng giữa Customer và Manager diễn ra ngoài hệ thống.
+/// Claim: Khiếu nại do Customer gửi liên quan đến một lần bàn giao. 
+/// Hệ thống chỉ lưu khiếu nại và kết quả; 
+/// việc trao đổi/thương lượng giữa Customer và Manager diễn ra ngoài hệ thống.
 /// </summary>
 public partial class Claim
 {
@@ -15,6 +18,10 @@ public partial class Claim
     public Guid CustomerId { get; set; }
 
     public Guid HandoverRecordId { get; set; }
+
+    public ClaimType ClaimType { get; set; }
+
+    public ClaimStatus Status { get; set; } = ClaimStatus.PENDING;
 
     public string Title { get; set; } = null!;
 

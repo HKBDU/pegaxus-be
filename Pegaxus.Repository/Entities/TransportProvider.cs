@@ -1,8 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// TransportProvider: Danh mục nhà cung cấp dịch vụ vận chuyển bên ngoài, 
+/// lưu thông tin liên hệ, phương thức hỗ trợ và trạng thái hoạt động.
+/// </summary>
 public partial class TransportProvider
 {
     public Guid TransportProviderId { get; set; }
@@ -10,6 +15,8 @@ public partial class TransportProvider
     public string ProviderCode { get; set; } = null!;
 
     public string ProviderName { get; set; } = null!;
+
+    public ProviderStatus Status { get; set; } = ProviderStatus.ACTIVE;
 
     public string? ContactName { get; set; }
 

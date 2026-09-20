@@ -1,8 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// EmergencyCostRequest: Yêu cầu chi phí khẩn cấp phát sinh từ IncidentReport, 
+/// được Employee phê duyệt hoặc từ chối trước khi đưa vào InvoiceItem.
+/// </summary>
 public partial class EmergencyCostRequest
 {
     public Guid EmergencyCostRequestId { get; set; }
@@ -10,6 +15,10 @@ public partial class EmergencyCostRequest
     public Guid IncidentReportId { get; set; }
 
     public string RequestCode { get; set; } = null!;
+
+    public EmergencyCostCategory Category { get; set; }
+
+    public EmergencyCostStatus Status { get; set; } = EmergencyCostStatus.PENDING;
 
     public string Description { get; set; } = null!;
 

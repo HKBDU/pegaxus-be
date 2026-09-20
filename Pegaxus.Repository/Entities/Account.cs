@@ -1,8 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// Account: Tài khoản đăng nhập dùng chung cho Customer hoặc Employee, 
+/// lưu thông tin xác thực, loại tài khoản, trạng thái và dữ liệu soft delete.
+/// </summary>
 public partial class Account
 {
     public Guid AccountId { get; set; }
@@ -10,6 +15,10 @@ public partial class Account
     public string Email { get; set; } = null!;
 
     public string PasswordHash { get; set; } = null!;
+
+    public AccountType AccountType { get; set; }
+
+    public AccountStatus Status { get; set; } = AccountStatus.ACTIVE;
 
     public DateTime? LastLoginAt { get; set; }
 

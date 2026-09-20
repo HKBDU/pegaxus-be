@@ -1,8 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// Employee: Hồ sơ nhân viên gắn 1-1 với Account, 
+/// xác định vai trò và các nghiệp vụ được phân công như Booking, TransportPlan, Route hoặc 
+/// phê duyệt chi phí.
+/// </summary>
 public partial class Employee
 {
     public Guid EmployeeId { get; set; }
@@ -10,6 +16,8 @@ public partial class Employee
     public Guid AccountId { get; set; }
 
     public string EmployeeCode { get; set; } = null!;
+
+    public EmployeeRole Role { get; set; }
 
     public string FullName { get; set; } = null!;
 

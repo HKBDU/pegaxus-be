@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// IncidentReport: Báo cáo sự cố phát sinh trong quá trình vận chuyển. category gồm VEHICLE, HORSE_HEALTH hoặc BOTH.
+/// IncidentReport: Báo cáo sự cố phát sinh trong quá trình vận chuyển. 
+/// category gồm VEHICLE, HORSE_HEALTH hoặc BOTH.
 /// </summary>
 public partial class IncidentReport
 {
@@ -15,6 +17,12 @@ public partial class IncidentReport
     public Guid EmployeeId { get; set; }
 
     public Guid LocationId { get; set; }
+
+    public IncidentCategory Category { get; set; }
+
+    public IncidentSeverity Severity { get; set; }
+
+    public IncidentStatus Status { get; set; } = IncidentStatus.REPORTED;
 
     public string Title { get; set; } = null!;
 

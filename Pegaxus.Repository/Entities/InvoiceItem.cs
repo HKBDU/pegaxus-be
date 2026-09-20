@@ -1,8 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// InvoiceItem: Một dòng chi phí trong Invoice, 
+/// có thể gắn với Horse hoặc EmergencyCostRequest và 
+/// lưu loại phí, số lượng, đơn giá, thành tiền.
+/// </summary>
 public partial class InvoiceItem
 {
     public Guid InvoiceItemId { get; set; }
@@ -12,6 +18,8 @@ public partial class InvoiceItem
     public Guid? HorseId { get; set; }
 
     public Guid? EmergencyCostRequestId { get; set; }
+
+    public InvoiceItemType ItemType { get; set; }
 
     public string Description { get; set; } = null!;
 

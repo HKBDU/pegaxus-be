@@ -4,7 +4,9 @@ using System.Collections.Generic;
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// RefreshToken: Token dùng để cấp lại Access Token cho một Account. Một Account có thể có nhiều RefreshToken cho nhiều thiết bị/phiên đăng nhập. Database chỉ lưu token_hash, không lưu raw token.
+/// RefreshToken: Token dùng để cấp lại Access Token cho một Account. 
+/// Một Account có thể có nhiều RefreshToken cho nhiều thiết bị/phiên đăng nhập. 
+/// Database chỉ lưu token_hash, không lưu raw token.
 /// </summary>
 public partial class RefreshToken
 {

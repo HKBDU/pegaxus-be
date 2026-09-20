@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// Route: Một tuyến đường có hướng nối từ một Location bắt đầu đến một Location kết thúc. Route có thể được tái sử dụng trong nhiều RoutePlan.
+/// Route: Một tuyến đường có hướng nối từ một Location bắt đầu đến một Location kết thúc. 
+/// Route có thể được tái sử dụng trong nhiều RoutePlan.
 /// </summary>
 public partial class Route
 {
@@ -15,6 +17,8 @@ public partial class Route
     public Guid FromLocationId { get; set; }
 
     public Guid ToLocationId { get; set; }
+
+    public TransportMode TransportMode { get; set; }
 
     public string? RouteName { get; set; }
 

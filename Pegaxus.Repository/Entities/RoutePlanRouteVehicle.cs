@@ -4,7 +4,9 @@ using System.Collections.Generic;
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// RoutePlanRouteVehicle: Bảng trung gian N-N gán Vehicle vào một chặng RoutePlanRoute cụ thể. Nhờ vậy một Transport có thể đi xe -&gt; máy bay -&gt; xe, và cùng một Vehicle có thể được tái sử dụng ở nhiều chuyến/chặng khác nhau.
+/// RoutePlanRouteVehicle: Bảng trung gian N-N gán Vehicle vào một chặng RoutePlanRoute cụ thể. 
+/// Nhờ vậy một Transport có thể đi xe -&gt; máy bay -&gt; xe, 
+/// và cùng một Vehicle có thể được tái sử dụng ở nhiều chuyến/chặng khác nhau.
 /// </summary>
 public partial class RoutePlanRouteVehicle
 {

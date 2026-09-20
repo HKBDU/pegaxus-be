@@ -1,10 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// ComplianceDocument: Giấy tờ thực tế được cung cấp để đáp ứng một DossierRequirement. Đây là document logic, không phải từng file upload.
+/// ComplianceDocument: Giấy tờ thực tế được cung cấp để đáp ứng một DossierRequirement. 
+/// Đây là document logic, không phải từng file upload.
 /// </summary>
 public partial class ComplianceDocument
 {
@@ -15,6 +17,8 @@ public partial class ComplianceDocument
     public string DocumentCode { get; set; } = null!;
 
     public string DocumentName { get; set; } = null!;
+
+    public ComplianceDocumentStatus Status { get; set; } = ComplianceDocumentStatus.PROVIDED;
 
     public string? DocumentNumber { get; set; }
 

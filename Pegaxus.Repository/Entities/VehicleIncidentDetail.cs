@@ -1,8 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// VehicleIncidentDetail: Chi tiết phương tiện của một IncidentReport, 
+/// gồm loại sự cố, tình trạng vận hành, nhu cầu sửa chữa, kéo xe, thay thế và 
+/// chi phí ước tính.
+/// </summary>
 public partial class VehicleIncidentDetail
 {
     public Guid VehicleIncidentDetailId { get; set; }
@@ -10,6 +16,8 @@ public partial class VehicleIncidentDetail
     public Guid IncidentReportId { get; set; }
 
     public Guid VehicleId { get; set; }
+
+    public VehicleIncidentType IncidentType { get; set; }
 
     public string? VehicleCondition { get; set; }
 

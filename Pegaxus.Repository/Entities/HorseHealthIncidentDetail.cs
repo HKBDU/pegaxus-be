@@ -1,8 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
+/// <summary>
+/// HorseHealthIncidentDetail: Chi tiết sức khỏe của một Horse trong IncidentReport, 
+/// gồm triệu chứng, chỉ số sinh tồn, sơ cứu, yêu cầu bác sĩ thú y và kết quả xử lý.
+/// </summary>
 public partial class HorseHealthIncidentDetail
 {
     public Guid HorseHealthIncidentDetailId { get; set; }
@@ -10,6 +15,8 @@ public partial class HorseHealthIncidentDetail
     public Guid IncidentReportId { get; set; }
 
     public Guid HorseId { get; set; }
+
+    public HorseIncidentType IncidentType { get; set; }
 
     public string ConditionDescription { get; set; } = null!;
 

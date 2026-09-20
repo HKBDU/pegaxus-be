@@ -1,10 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// Vehicle: Phương tiện vận chuyển master dùng chung cho ROAD, AIR hoặc SEA, ví dụ xe tải chở ngựa, máy bay hoặc tàu. Vehicle không thuộc cố định một TransportPlan; phương tiện được gán vào từng chặng RoutePlanRoute.
+/// Vehicle: Phương tiện vận chuyển master dùng chung cho ROAD, AIR hoặc SEA, 
+/// ví dụ xe tải chở ngựa, máy bay hoặc tàu. 
+/// Vehicle không thuộc cố định một TransportPlan; 
+/// phương tiện được gán vào từng chặng RoutePlanRoute.
 /// </summary>
 public partial class Vehicle
 {
@@ -17,6 +21,10 @@ public partial class Vehicle
     public string? LicensePlate { get; set; }
 
     public string? VehicleType { get; set; }
+
+    public TransportMode TransportMode { get; set; }
+
+    public VehicleStatus Status { get; set; } = VehicleStatus.AVAILABLE;
 
     public string? Manufacturer { get; set; }
 
