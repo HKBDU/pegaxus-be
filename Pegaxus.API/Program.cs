@@ -4,6 +4,8 @@ using Npgsql.NameTranslation;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Entities;
+using Pegaxus.API.Middleware;
+using Pegaxus.API.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,6 +23,9 @@ builder.Services.AddDbContext<AppDbContext>((services, options) =>
 
 // Add services to the container.
 builder.Services.AddControllers();
+builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
+builder.Services.AddJwtServices(builder.Configuration);
+builder.Services.AddAuthorization();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen(c =>
 {
@@ -53,6 +58,8 @@ builder.Services.AddHealthChecks();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
+app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
 {
     app.UseSwagger();
@@ -67,6 +74,7 @@ app.UseHttpsRedirection();
 
 app.UseCors("AllowFrontend");
 
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapHealthChecks("/health");
