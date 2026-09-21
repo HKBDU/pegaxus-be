@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerUI;
 
@@ -11,7 +11,7 @@ public static class SwaggerExtensions
         services.AddSwaggerGen(options =>
         {
             options.SwaggerDoc("v1", new OpenApiInfo() { Title = "Pegaxus APIs", Version = "v1" });
-            
+
             options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",
@@ -56,7 +56,7 @@ public static class SwaggerExtensions
             };
         }
     }
-    
+
     public static void UseSwaggerAPI(this WebApplication app)
     {
         app.UseSwagger();
@@ -65,7 +65,7 @@ public static class SwaggerExtensions
             // foreach (var version in app.DescribeApiVersions().Select(version => version.GroupName))
             //     options.SwaggerEndpoint($"/swagger/{version}/swagger.json", version);
 
-            options.DisplayRequestDuration();   
+            options.DisplayRequestDuration();
             options.EnableTryItOutByDefault();
             options.DocExpansion(DocExpansion.List);
         });

@@ -2,9 +2,9 @@ name: Quality
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [main, pegaxus-dev]
   push:
-    branches: [main, dev]
+    branches: [main, pegaxus-dev]
 
 permissions:
   contents: read
@@ -47,4 +47,4 @@ jobs:
       - name: Build solution
         run: dotnet build Pegaxus.sln --configuration Release --no-restore
       - name: Run tests
-        run: dotnet test Pegaxus.sln --configuration Release --no-build --verbosity normal || true
+        run: dotnet test Pegaxus.sln --configuration Release --no-build --verbosity normal

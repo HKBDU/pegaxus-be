@@ -6,7 +6,7 @@ using Pegaxus.Service.MediaService;
 
 namespace Pegaxus.Service.CloudinaryService;
 
-public class Service:IService
+public class Service : IService
 {
     private readonly Cloudinary _cloudinary;
     private readonly CloudinaryOptions _cloudinaryOptions = new();
@@ -30,7 +30,7 @@ public class Service:IService
         {
             throw new ArgumentException("File is not a valid image.", nameof(file));
         }
-        
+
         await using var stream = file.OpenReadStream();
         var uploadParams = new ImageUploadParams()
         {
@@ -39,35 +39,35 @@ public class Service:IService
         var uploadResult = await _cloudinary.UploadAsync(uploadParams);
         return uploadResult.SecureUrl.ToString();
     }
-    
+
     private bool IsImageFile(IFormFile file)
     {
-        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif",".webp" };
+        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
         var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
         return allowedExtensions.Contains(fileExtension);
     }
-    
+
     // UploadFileAsync: upload PDF, DOCX... lên Cloudinary dùng RawUploadParams
     public async Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file)
     {
         await using var stream = file.OpenReadStream();
- 
+
         var uploadParams = new RawUploadParams
         {
-            File           = new FileDescription(file.FileName, stream),
-            Folder         = "smartcenter/documents",
-            UseFilename    = true,
+            File = new FileDescription(file.FileName, stream),
+            Folder = "smartcenter/documents",
+            UseFilename = true,
             UniqueFilename = true,
         };
- 
+
         var uploadResult = await _cloudinary.UploadAsync(uploadParams);
- 
+
         if (uploadResult.Error != null)
             throw new Exception($"Cloudinary upload failed: {uploadResult.Error.Message}");
- 
+
         return (uploadResult.SecureUrl.ToString(), uploadResult.PublicId);
     }
- 
+
     // DeleteFileAsync: xóa file khỏi Cloudinary theo publicId
     public async Task DeleteFileAsync(string publicId)
     {
@@ -75,9 +75,9 @@ public class Service:IService
         {
             ResourceType = ResourceType.Raw
         };
- 
+
         var result = await _cloudinary.DestroyAsync(deleteParams);
- 
+
         if (result.Error != null)
             throw new Exception($"Cloudinary delete failed: {result.Error.Message}");
     }
