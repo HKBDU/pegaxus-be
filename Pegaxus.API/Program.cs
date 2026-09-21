@@ -1,14 +1,13 @@
 using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
+using Pegaxus.API.Controllers;
 using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
 using Pegaxus.Repository;
 
-
 using JwtService = Pegaxus.Service.JwtService;
 using MediaService = Pegaxus.Service.MediaService;
 using CloudinaryService = Pegaxus.Service.CloudinaryService;
-
 
 Env.Load();
 
@@ -31,6 +30,8 @@ builder.Services.AddSwaggerServices();
 builder.Services.AddScoped<JwtService.IJwtService, JwtService.JwtServices>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<MediaService.IService, CloudinaryService.Service>();
+builder.Services.Configure<SePayOptions>(builder.Configuration.GetSection(SePayOptions.SectionName));
+builder.Services.AddSingleton<SePayWebhookDeduplicator>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
