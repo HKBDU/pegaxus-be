@@ -19,7 +19,7 @@ public static class SwaggerExtensions
                 Scheme = "bearer",
                 BearerFormat = "JWT",
                 In = ParameterLocation.Header,
-                Description = "Nhập JWT token (không cần thêm tiền tố 'Bearer')."
+                Description = "Enter the JWT token without the 'Bearer' prefix."
             });
 
             options.OperationFilter<AuthorizeOperationFilter>();
