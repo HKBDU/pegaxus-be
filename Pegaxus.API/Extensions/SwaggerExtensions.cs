@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.OpenApi.Models;
 using Swashbuckle.AspNetCore.SwaggerUI;
 
@@ -9,10 +10,8 @@ public static class SwaggerExtensions
     {
         services.AddSwaggerGen(options =>
         {
-            options.SwaggerDoc("v1", new OpenApiInfo() { Title = "Pegaxus Apis", Version = "v1" });
-            // Tạo version cho phiên bản API
+            options.SwaggerDoc("v1", new OpenApiInfo() { Title = "Pegaxus APIs", Version = "v1" });
 
-            // Add cấu hình cho phép nhập token JWT vào Swagger UI để thử nghiệm các endpoint có bảo vệ bằng JWT
             options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
                 Name = "Authorization",
@@ -20,28 +19,45 @@ public static class SwaggerExtensions
                 Scheme = "bearer",
                 BearerFormat = "JWT",
                 In = ParameterLocation.Header,
-                Description = "Enter 'Bearer' [space] and then your token in the text input below.\nExample: 'Bearer eyJhbGciOiJIUzI1NiIsInR...' "
+                Description = "Nhập JWT token (không cần thêm tiền tố 'Bearer')."
             });
 
-            options.AddSecurityRequirement(new OpenApiSecurityRequirement
+            options.OperationFilter<AuthorizeOperationFilter>();
+        });
+    }
+
+    public sealed class AuthorizeOperationFilter : Swashbuckle.AspNetCore.SwaggerGen.IOperationFilter
+    {
+        public void Apply(OpenApiOperation operation,
+            Swashbuckle.AspNetCore.SwaggerGen.OperationFilterContext context)
+        {
+            var metadata = context.ApiDescription.ActionDescriptor.EndpointMetadata;
+            var requiresAuthorization = metadata.OfType<IAuthorizeData>().Any();
+            var allowsAnonymous = metadata.OfType<IAllowAnonymous>().Any();
+
+            if (!requiresAuthorization || allowsAnonymous)
             {
+                return;
+            }
+
+            operation.Security = new List<OpenApiSecurityRequirement>
+            {
+                new OpenApiSecurityRequirement
                 {
-                    new OpenApiSecurityScheme
+                    [new OpenApiSecurityScheme
                     {
                         Reference = new OpenApiReference
                         {
                             Type = ReferenceType.SecurityScheme,
                             Id = "Bearer"
                         }
-                    },
-                    new string[] {}
+                    }] = Array.Empty<string>()
                 }
-            });
-        });
+            };
+        }
     }
 
-    // Cách mà mình sẽ xài cái đồ chơi này như thế nào
-    public static void UseSwaggerApi(this WebApplication app)
+    public static void UseSwaggerAPI(this WebApplication app)
     {
         app.UseSwagger();
         app.UseSwaggerUI(options =>
@@ -49,7 +65,7 @@ public static class SwaggerExtensions
             // foreach (var version in app.DescribeApiVersions().Select(version => version.GroupName))
             //     options.SwaggerEndpoint($"/swagger/{version}/swagger.json", version);
 
-            options.DisplayRequestDuration();    // Hiển thị thời gian thực hiện request trong Swagger UI
+            options.DisplayRequestDuration();
             options.EnableTryItOutByDefault();
             options.DocExpansion(DocExpansion.List);
         });
