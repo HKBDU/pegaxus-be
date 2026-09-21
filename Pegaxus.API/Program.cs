@@ -1,6 +1,7 @@
 using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.API.Extensions;
+using Pegaxus.API.Middleware;
 using Pegaxus.Repository;
 
 
@@ -32,7 +33,7 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<MediaService.IService, CloudinaryService.Service>();
 
 
-// builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
+builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
 
 var app = builder.Build();
 
@@ -44,7 +45,7 @@ using (var scope = app.Services.CreateScope())
 
 app.UseSwaggerAPI();
 
-// app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
+app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
 app.UseAuthentication();
 app.UseAuthorization();
