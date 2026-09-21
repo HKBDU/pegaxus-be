@@ -1,9 +1,11 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Pegaxus.Service.JwtService;
 
-public sealed class JwtOptions
+public class JwtOptions
 {
-    public string Issuer { get; set; } = string.Empty;
-    public string Audience { get; set; } = string.Empty;
-    public string SecretKey { get; set; } = string.Empty;
-    public int ExpirationMinutes { get; set; }
+    [Required] public string Issuer { get; set; } = string.Empty;
+    [Required] public string Audience { get; set; } = string.Empty;
+    [Required] public string SecretKey { get; set; } = string.Empty;
+    [Required] public double ExpireMinutes { get; set; }
 }
