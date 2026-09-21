@@ -1,75 +1,53 @@
+using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
-using Npgsql.NameTranslation;
+using Pegaxus.API.Extensions;
 using Pegaxus.Repository;
-using Pegaxus.Repository.Enum;
-using Pegaxus.Repository.Entities;
+
+
+using JwtService = Pegaxus.Service.JwtService;
+using MediaService = Pegaxus.Service.MediaService;
+using CloudinaryService = Pegaxus.Service.CloudinaryService;
+
+
+Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("ConnectionStrings:DefaultConnection is required.");
-var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
-var snakeCase = new NpgsqlSnakeCaseNameTranslator();
-var exactNames = new NpgsqlNullNameTranslator();
-foreach (var enumType in typeof(AccountStatus).Assembly.GetTypes()
-             .Where(type => type.IsEnum && type.Namespace == typeof(AccountStatus).Namespace))
-    dataSourceBuilder.MapEnum(enumType, snakeCase.TranslateTypeName(enumType.Name), exactNames);
-builder.Services.AddSingleton(dataSourceBuilder.Build());
-builder.Services.AddDbContext<AppDbContext>((services, options) =>
-    options.UseNpgsql(services.GetRequiredService<NpgsqlDataSource>()));
-
-// Add services to the container.
 builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
-    {
-        Title = "Pegaxus API",
-        Version = "v1",
-        Description = "Racehorse Cross-Border Logistics & Quarantine Management System API"
-    });
-});
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient();
 
-// Configure CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? new[] { "http://localhost:3000", "http://localhost:5173" };
+builder.Services.AddDbContext<AppDbContext>(options =>
+    options.UseNpgsql(
+        builder.Configuration.GetConnectionString("DefaultConnection")
+    )
+);
 
-        policy.WithOrigins(allowedOrigins)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
-    });
-});
+// builder.Services.AddApplicationServices();
+builder.Services.AddJwtServices(builder.Configuration);
+builder.Services.AddSwaggerServices();
 
-// Health Checks
-builder.Services.AddHealthChecks();
+builder.Services.AddScoped<JwtService.IJwtService, JwtService.JwtServices>();
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<MediaService.IService, CloudinaryService.Service>();
+
+
+// builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
+using (var scope = app.Services.CreateScope())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Pegaxus API v1");
-        c.RoutePrefix = "swagger";
-    });
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
 }
 
-app.UseHttpsRedirection();
+app.UseSwaggerAPI();
 
-app.UseCors("AllowFrontend");
+// app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
+app.UseAuthentication();
 app.UseAuthorization();
-
-app.MapHealthChecks("/health");
 
 app.MapControllers();
 
