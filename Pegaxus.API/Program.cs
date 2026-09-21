@@ -49,7 +49,7 @@ using (var scope = app.Services.CreateScope())
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
 if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
-    app.UseSwaggerApi();
+    app.UseSwaggerAPI();
 
 app.UseCors("AllowFrontend");
 app.UseAuthentication();
