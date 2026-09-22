@@ -16,7 +16,7 @@ using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.Auth;
 
-public sealed class Service : IService
+public class Service : IService
 {
     private readonly AppDbContext _db;
     private readonly IPasswordHasher<Account> _passwordHasher;
@@ -38,8 +38,8 @@ public sealed class Service : IService
         _configuration = configuration;
     }
 
-    public async Task<RegisterResponse> RegisterAsync(
-        RegisterRequest request,
+    public async Task<Response.RegisterResponse> RegisterAsync(
+        Request.RegisterRequest request,
         CancellationToken cancellationToken = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
@@ -107,7 +107,13 @@ public sealed class Service : IService
             throw;
         }
 
-        return new RegisterResponse(account.AccountId, customer.CustomerId, account.Email, false);
+        return new Response.RegisterResponse
+        {
+            AccountId = account.AccountId,
+            CustomerId = customer.CustomerId,
+            Email = account.Email,
+            EmailVerified = false
+        };
     }
 
     private async Task SendVerificationEmailAsync(

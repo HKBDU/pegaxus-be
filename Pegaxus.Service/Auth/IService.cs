@@ -2,7 +2,5 @@ namespace Pegaxus.Service.Auth;
 
 public interface IService
 {
-    Task<RegisterResponse> RegisterAsync(
-        RegisterRequest request,
-        CancellationToken cancellationToken = default);
+    Task<Response.RegisterResponse> RegisterAsync(Request.RegisterRequest request, CancellationToken cancellationToken = default);
 }

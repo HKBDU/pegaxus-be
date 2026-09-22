@@ -3,7 +3,7 @@ param([string]$BaseUrl = "http://localhost:5000")
 $body = @{
     fullName = ""
     email = "invalid"
-    password = "weak"
+    password = "ABCDEF1!"
     confirmPassword = "different"
 } | ConvertTo-Json
 
