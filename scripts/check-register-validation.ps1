@@ -1,27 +1,33 @@
 param([string]$BaseUrl = "http://localhost:5000")
 
-$body = @{
+function Assert-ValidationError([string]$Path, [hashtable]$Body, [string[]]$ExpectedFields) {
+    try {
+        Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl$Path" `
+            -Method Post -ContentType "application/json" -Body ($Body | ConvertTo-Json) | Out-Null
+        throw "Expected HTTP 400 from $Path"
+    }
+    catch {
+        $response = $_.Exception.Response
+        if ($null -eq $response -or [int]$response.StatusCode -ne 400) { throw }
+
+        $reader = [IO.StreamReader]::new($response.GetResponseStream())
+        $result = $reader.ReadToEnd() | ConvertFrom-Json
+        $fields = @($result.errors | ForEach-Object field)
+        foreach ($field in $ExpectedFields) {
+            if ($fields -notcontains $field) { throw "Missing '$field' validation error from $Path" }
+        }
+    }
+}
+
+Assert-ValidationError "/api/v1/auth/register" @{
     fullName = ""
     email = "invalid"
     password = "ABCDEF1!"
     confirmPassword = "different"
-} | ConvertTo-Json
+} @("fullName", "email", "password", "confirmPassword")
 
-try {
-    Invoke-WebRequest -UseBasicParsing -Uri "$BaseUrl/api/v1/auth/register" `
-        -Method Post -ContentType "application/json" -Body $body | Out-Null
-    throw "Expected HTTP 400"
-}
-catch {
-    $response = $_.Exception.Response
-    if ($null -eq $response -or [int]$response.StatusCode -ne 400) { throw }
+Assert-ValidationError "/api/v1/auth/forgot-password" @{
+    email = "invalid"
+} @("email")
 
-    $reader = [IO.StreamReader]::new($response.GetResponseStream())
-    $result = $reader.ReadToEnd() | ConvertFrom-Json
-    $fields = @($result.errors | ForEach-Object field)
-    if ($fields -notcontains "fullName" -or $fields -notcontains "email" -or $fields -notcontains "password" -or $fields -notcontains "confirmPassword") {
-        throw "Missing expected validation errors"
-    }
-}
-
-Write-Output "Register validation check passed"
+Write-Output "Auth validation checks passed"

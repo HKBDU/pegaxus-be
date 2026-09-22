@@ -92,7 +92,11 @@ public class Service : IService
                 AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
             }, cancellationToken);
 
-            await SendVerificationEmailAsync(email, customer.FullName, otp, cancellationToken);
+            await SendEmailAsync(
+                email,
+                "Verify your Pegaxus account",
+                $"<p>Hello {WebUtility.HtmlEncode(customer.FullName)},</p><p>Your OTP is <strong>{otp}</strong>. It expires in 5 minutes.</p>",
+                cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException exception)
@@ -116,10 +120,57 @@ public class Service : IService
         };
     }
 
-    private async Task SendVerificationEmailAsync(
+    public async Task ForgotPasswordAsync(
+        Request.ForgotPasswordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var otpKey = $"otp:PASSWORD_RESET:{email}";
+        var cooldownKey = $"otp-cooldown:PASSWORD_RESET:{email}";
+
+        if (await _cache.GetStringAsync(cooldownKey, cancellationToken) is not null)
+            throw new TooManyRequestsException("Please wait before requesting another OTP");
+
+        await _cache.SetStringAsync(cooldownKey, "1", new DistributedCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+        }, cancellationToken);
+
+        var accountExists = await _db.Accounts.AnyAsync(account =>
+            !account.IsDeleted &&
+            account.Status == AccountStatus.ACTIVE &&
+            account.Email.ToLower() == email,
+            cancellationToken);
+        if (!accountExists)
+            return;
+
+        var otp = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+        await _cache.SetStringAsync(otpKey, JsonSerializer.Serialize(new OtpCacheEntry(HashOtp(otp), 0)),
+            new DistributedCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
+            }, cancellationToken);
+
+        try
+        {
+            await SendEmailAsync(
+                email,
+                "Reset your Pegaxus password",
+                $"<p>Your password reset OTP is <strong>{otp}</strong>. It expires in 5 minutes.</p>",
+                cancellationToken);
+        }
+        catch
+        {
+            await _cache.RemoveAsync(otpKey, CancellationToken.None);
+            await _cache.RemoveAsync(cooldownKey, CancellationToken.None);
+            throw;
+        }
+    }
+
+    private async Task SendEmailAsync(
         string recipient,
-        string fullName,
-        string otp,
+        string subject,
+        string html,
         CancellationToken cancellationToken)
     {
         var apiKey = _configuration["Resend:ApiKey"] ?? _configuration["RESEND_API_KEY"];
@@ -138,8 +189,8 @@ public class Service : IService
             {
                 from = $"{fromName} <{fromEmail}>",
                 to = new[] { recipient },
-                subject = "Verify your Pegaxus account",
-                html = $"<p>Hello {WebUtility.HtmlEncode(fullName)},</p><p>Your OTP is <strong>{otp}</strong>. It expires in 5 minutes.</p>"
+                subject,
+                html
             })
         };
         message.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);

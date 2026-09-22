@@ -23,26 +23,54 @@ public sealed class AuthController : ControllerBase
         [FromServices] IValidator<AuthService.Request.RegisterRequest> validator,
         CancellationToken cancellationToken)
     {
-        var validation = await validator.ValidateAsync(request, cancellationToken);
-        if (!validation.IsValid)
-        {
-            var errors = validation.Errors.Select(error => new
-            {
-                field = char.ToLowerInvariant(error.PropertyName[0]) + error.PropertyName[1..],
-                message = error.ErrorMessage
-            });
-
-            return BadRequest(ResponseBuilder.ErrorResponse(
-                errors,
-                "The request data is invalid",
-                HttpContext.TraceIdentifier));
-        }
+        var validationError = await ValidateRequestAsync(request, validator, cancellationToken);
+        if (validationError is not null)
+            return validationError;
 
         var response = await _service.RegisterAsync(request, cancellationToken);
 
         return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
             response,
             "Registration successful. Check your email for the OTP.",
+            HttpContext.TraceIdentifier));
+    }
+
+    [HttpPost("forgot-password")]
+    public async Task<IActionResult> ForgotPassword(
+        AuthService.Request.ForgotPasswordRequest request,
+        [FromServices] IValidator<AuthService.Request.ForgotPasswordRequest> validator,
+        CancellationToken cancellationToken)
+    {
+        var validationError = await ValidateRequestAsync(request, validator, cancellationToken);
+        if (validationError is not null)
+            return validationError;
+
+        await _service.ForgotPasswordAsync(request, cancellationToken);
+
+        return Accepted(ResponseBuilder.SuccessResponse(
+            null,
+            "If the email exists, a password reset OTP has been sent.",
+            HttpContext.TraceIdentifier));
+    }
+
+    private async Task<BadRequestObjectResult?> ValidateRequestAsync<T>(
+        T request,
+        IValidator<T> validator,
+        CancellationToken cancellationToken)
+    {
+        var validation = await validator.ValidateAsync(request, cancellationToken);
+        if (validation.IsValid)
+            return null;
+
+        var errors = validation.Errors.Select(error => new
+        {
+            field = char.ToLowerInvariant(error.PropertyName[0]) + error.PropertyName[1..],
+            message = error.ErrorMessage
+        });
+
+        return BadRequest(ResponseBuilder.ErrorResponse(
+            errors,
+            "The request data is invalid",
             HttpContext.TraceIdentifier));
     }
 }
