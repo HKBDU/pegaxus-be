@@ -34,3 +34,8 @@ public class ConflictException : Exceptions
 {
     public ConflictException(string message) : base(message, 409) { }
 }
+
+public class TooManyRequestsException : Exceptions
+{
+    public TooManyRequestsException(string message) : base(message, 429) { }
+}
