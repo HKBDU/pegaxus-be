@@ -16,6 +16,7 @@ using AuthService = Pegaxus.Service.Auth;
 using JwtService = Pegaxus.Service.JwtService;
 using MediaService = Pegaxus.Service.MediaService;
 using CloudinaryService = Pegaxus.Service.CloudinaryService;
+using MailService = Pegaxus.Service.MailService;
 
 
 Env.Load();
@@ -76,6 +77,7 @@ builder.Services.AddScoped<IValidator<AuthService.Request.RegisterRequest>, Auth
 builder.Services.AddScoped<IValidator<AuthService.Request.ForgotPasswordRequest>, AuthService.Validations.ForgotPasswordRequestValidator>();
 builder.Services.AddScoped<IPasswordHasher<Account>, PasswordHasher<Account>>();
 builder.Services.AddScoped<MediaService.IService, CloudinaryService.Service>();
+builder.Services.AddScoped<MailService.IService, MailService.Service>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
