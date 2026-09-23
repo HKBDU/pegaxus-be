@@ -15,14 +15,13 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.JwtService;
 using MailService = Pegaxus.Service.MailService;
-using JwtClaim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Auth;
 
 public class Service : IService
 {
     private readonly AppDbContext _db;
-    private readonly IPasswordHasher<Account> _passwordHasher;
+    private readonly IPasswordHasher<AccountEntity> _passwordHasher;
     private readonly IDistributedCache _cache;
     private readonly MailService.IService _mailService;
     private readonly IJwtService _jwtService;
@@ -33,7 +32,7 @@ public class Service : IService
 
     public Service(
         AppDbContext db,
-        IPasswordHasher<Account> passwordHasher,
+        IPasswordHasher<AccountEntity> passwordHasher,
         IDistributedCache cache,
         MailService.IService mailService,
         IJwtService jwtService,
