@@ -25,11 +25,13 @@ public class BadRequestException : Exceptions
 public class UnauthorizedException : Exceptions
 {
     public UnauthorizedException(string message) : base(message, 401) { }
+    public UnauthorizedException(string message, string errorCode) : base(message, 401, errorCode) { }
 }
 
 public class ForbiddenException : Exceptions
 {
     public ForbiddenException(string message) : base(message, 403) { }
+    public ForbiddenException(string message, string errorCode) : base(message, 403, errorCode) { }
 }
 
 public class NotFoundException : Exceptions

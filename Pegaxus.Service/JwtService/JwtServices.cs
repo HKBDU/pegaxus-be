@@ -30,7 +30,7 @@ public class JwtServices : IJwtService
             claims: claims,// Những thông tin mà bạn muốn lưu trữ trong token
                            // thường là thông tin về người dùng như ID, email, vai trò, v.v.
                            //nằm trong payload
-            expires: DateTime.Now.AddMinutes(_jwtOption.ExpireMinutes),
+            expires: DateTime.UtcNow.AddMinutes(_jwtOption.ExpirationMinutes),
             signingCredentials: signingCredentials
             );
 

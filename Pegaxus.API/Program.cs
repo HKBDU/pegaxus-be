@@ -24,6 +24,9 @@ Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Keep issued access tokens at the 15-minute API contract lifetime in every environment.
+builder.Configuration["JwtOptions:ExpirationMinutes"] = "15";
+
 builder.Services
     .AddControllers()
     .ConfigureApiBehaviorOptions(options =>

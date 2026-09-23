@@ -1,4 +1,3 @@
-using System.IdentityModel.Tokens.Jwt;
 using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -59,10 +58,12 @@ public class Service : IService
             .FirstOrDefaultAsync(a => !a.IsDeleted && a.Email.ToLower() == email, cancellationToken);
 
         if (account is null)
-            throw new UnauthorizedException("Invalid email or password");
+            throw new UnauthorizedException("Email or password incorrect", "INVALID_CREDENTIALS");
 
+        if (account.Status == AccountStatus.SUSPENDED)
+            throw new ForbiddenException("Account suspended", "ACCOUNT_SUSPENDED");
         if (account.Status != AccountStatus.ACTIVE)
-            throw new ForbiddenException("Account is inactive or suspended");
+            throw new ForbiddenException("Account inactive", "ACCOUNT_INACTIVE");
 
         var failedKey = $"auth:login:failed:{account.AccountId}";
         var lockedKey = $"auth:login:locked:{account.AccountId}";
@@ -73,20 +74,21 @@ public class Service : IService
         if (passwordResult == PasswordVerificationResult.Failed)
         {
             await RecordLoginFailureAsync(failedKey, lockedKey, cancellationToken);
-            throw new UnauthorizedException("Invalid email or password");
+            throw new UnauthorizedException("Email or password incorrect", "INVALID_CREDENTIALS");
         }
+
+        if (account.EmailVerifiedAt is null)
+            throw new ForbiddenException("Account email has not been verified", "ACCOUNT_NOT_VERIFIED");
 
         var role = account.AccountType switch
         {
-            AccountType.CUSTOMER when account.CustomerAccount is { IsDeleted: false } => "Customer",
+            AccountType.CUSTOMER when account.CustomerAccount is { IsDeleted: false } => "CUSTOMER",
             AccountType.EMPLOYEE when account.EmployeeAccount is { IsDeleted: false, IsActive: true } employee =>
                 employee.Role switch
                 {
-                    EmployeeRole.LOGISTICS_MANAGER => "LogisticsManager",
-                    EmployeeRole.TRANSPORT_SPECIALIST => "TransportSpecialist",
-                    EmployeeRole.FLEET_ROUTE_COORDINATOR => "FleetRouteCoordinator",
-                    EmployeeRole.DRIVER => "Driver",
-                    EmployeeRole.ESCORT => "Escort",
+                    EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.TRANSPORT_SPECIALIST or
+                        EmployeeRole.FLEET_ROUTE_COORDINATOR or EmployeeRole.DRIVER or EmployeeRole.ESCORT =>
+                        employee.Role.ToString(),
                     _ => throw new ForbiddenException("Account role is not permitted to log in")
                 },
             _ => throw new ForbiddenException("Account profile is inactive or unavailable")
@@ -100,13 +102,21 @@ public class Service : IService
             new(ClaimTypes.NameIdentifier, account.AccountId.ToString()),
             new(ClaimTypes.Email, account.Email),
             new("account_type", account.AccountType.ToString()),
-            new(ClaimTypes.Role, role)
+            new(ClaimTypes.Role, account.AccountType == AccountType.CUSTOMER
+                ? "Customer"
+                : role switch
+                {
+                    "LOGISTICS_MANAGER" => "LogisticsManager",
+                    "TRANSPORT_SPECIALIST" => "TransportSpecialist",
+                    "FLEET_ROUTE_COORDINATOR" => "FleetRouteCoordinator",
+                    "DRIVER" => "Driver",
+                    _ => "Escort"
+                })
         };
         if (account.AccountType == AccountType.EMPLOYEE)
             claims.Add(new JwtClaim(ClaimTypes.Role, "Employee"));
 
         var accessToken = _jwtService.GenerateAccessToken(claims);
-        var accessTokenExpiresAt = new JwtSecurityTokenHandler().ReadJwtToken(accessToken).ValidTo;
         var refreshToken = _jwtService.GenerateRefreshToken();
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         var context = _httpContextAccessor.HttpContext;
@@ -130,16 +140,22 @@ public class Service : IService
         {
             AccessToken = accessToken,
             RefreshToken = refreshToken,
-            ExpiresAt = accessTokenExpiresAt,
-            Account = new Response.UserInfoResponse
+            ExpiresIn = 900,
+            User = new Response.UserInfoResponse
             {
                 AccountId = account.AccountId,
-                Email = account.Email,
+                CustomerId = account.AccountType == AccountType.CUSTOMER
+                    ? account.CustomerAccount!.CustomerId
+                    : null,
+                EmployeeId = account.AccountType == AccountType.EMPLOYEE
+                    ? account.EmployeeAccount!.EmployeeId
+                    : null,
                 FullName = account.AccountType == AccountType.CUSTOMER
                     ? account.CustomerAccount!.FullName
                     : account.EmployeeAccount!.FullName,
                 AccountType = account.AccountType.ToString(),
-                Role = role
+                Role = role,
+                AvatarUrl = account.AvatarUrl
             }
         };
     }
