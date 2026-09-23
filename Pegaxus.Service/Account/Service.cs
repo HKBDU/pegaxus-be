@@ -137,7 +137,7 @@ public sealed class Service : IService
         var validContentType = file.ContentType is "image/jpeg" or "image/png";
 
         if (file.Length == 0 || file.Length > maxFileSize || !validExtension || !validContentType)
-            throw new BadRequestException("Ảnh phải là JPG/PNG và không quá 2 MB", "INVALID_FILE");
+            throw new BadRequestException("Image must be JPG/PNG and no larger than 2 MB", "INVALID_FILE");
     }
 
     public async Task ChangePasswordAsync(
@@ -158,12 +158,12 @@ public sealed class Service : IService
                 account.PasswordHash,
                 request.CurrentPassword) is not (PasswordVerificationResult.Success or PasswordVerificationResult.SuccessRehashNeeded))
             throw new BadRequestException(
-                "Mật khẩu hiện tại không chính xác",
+                "Current password is incorrect",
                 "CURRENT_PASSWORD_INCORRECT");
 
         if (!string.Equals(request.NewPassword, request.ConfirmPassword, StringComparison.Ordinal))
             throw new BadRequestException(
-                "Mật khẩu xác nhận không khớp",
+                "Password confirmation does not match",
                 "PASSWORD_MISMATCH");
 
         ValidatePassword(request.NewPassword);
@@ -180,6 +180,6 @@ public sealed class Service : IService
             !password.Any(char.IsLower) ||
             !password.Any(char.IsDigit))
             throw new BadRequestException(
-                "Mật khẩu mới phải dài từ 6 đến 128 ký tự và chứa chữ hoa, chữ thường, số");
+                "New password must be 6 to 128 characters and contain uppercase, lowercase, and numeric characters");
     }
 }
