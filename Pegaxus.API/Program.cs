@@ -5,7 +5,6 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Npgsql.NameTranslation;
-using System.Text.Json.Serialization;
 using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
 using Pegaxus.Repository;
@@ -22,13 +21,12 @@ using MailService = Pegaxus.Service.MailService;
 using AccountService = Pegaxus.Service.AccountService;
 
 
-Env.TraversePath().Load();
+Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services
     .AddControllers()
-    .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new JsonStringEnumConverter()))
     .ConfigureApiBehaviorOptions(options =>
     {
         options.InvalidModelStateResponseFactory = context =>
@@ -46,7 +44,8 @@ builder.Services
 
             return new BadRequestObjectResult(ResponseBuilder.ErrorResponse(
                 errors,
-                "The request data is invalid"));
+                "The request data is invalid",
+                context.HttpContext.TraceIdentifier));
         };
     });
 builder.Services.AddHttpContextAccessor();
