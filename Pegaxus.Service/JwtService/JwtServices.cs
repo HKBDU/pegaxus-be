@@ -16,6 +16,8 @@ public class JwtServices : IJwtService
         configuration.GetSection(nameof(JwtOptions)).Bind(_jwtOption);
     }
 
+    public int AccessTokenExpirationSeconds => (int)TimeSpan.FromMinutes(_jwtOption.ExpirationMinutes).TotalSeconds;
+
     public string GenerateAccessToken(IEnumerable<Claim> claims)
     {
         var signingCredentials = new SigningCredentials(
@@ -32,7 +34,7 @@ public class JwtServices : IJwtService
     }
 
     public string GenerateRefreshToken() =>
-        Convert.ToBase64String(RandomNumberGenerator.GetBytes(64));
+        $"rt_{Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()}";
 
     public ClaimsPrincipal ValidateToken(string token)
     {

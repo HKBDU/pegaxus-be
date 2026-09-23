@@ -1,3 +1,4 @@
+using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.Extensions.Caching.Distributed;
@@ -7,6 +8,8 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using MailService = Pegaxus.Service.MailService;
+using JwtService = Pegaxus.Service.JwtService;
+using Claim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Test;
 
@@ -22,6 +25,7 @@ internal static class TestSupport
         new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
 
     internal static RecordingMailService CreateMailService() => new();
+    internal static JwtService.IJwtService CreateJwtService() => new StubJwtService();
 
     internal static async Task<(Account Account, Customer Customer)> AddCustomerAsync(AppDbContext db)
     {
@@ -143,5 +147,13 @@ internal static class TestSupport
             Calls++;
             return Task.CompletedTask;
         }
+    }
+
+    private sealed class StubJwtService : JwtService.IJwtService
+    {
+        public int AccessTokenExpirationSeconds => 900;
+        public string GenerateAccessToken(IEnumerable<Claim> claims) => "access-token";
+        public string GenerateRefreshToken() => $"rt_{Guid.NewGuid():N}";
+        public ClaimsPrincipal ValidateToken(string token) => throw new NotSupportedException();
     }
 }

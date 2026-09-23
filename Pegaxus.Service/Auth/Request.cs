@@ -14,4 +14,21 @@ public class Request
     {
         public string Email { get; set; } = string.Empty;
     }
+
+    public class VerifyEmailRequest
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Otp { get; set; } = string.Empty;
+    }
+
+    public class ResendOtpRequest
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Purpose { get; set; } = string.Empty;
+    }
+
+    public class RefreshTokenRequest
+    {
+        public string RefreshToken { get; set; } = string.Empty;
+    }
 }

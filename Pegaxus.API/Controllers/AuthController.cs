@@ -44,6 +44,42 @@ public sealed class AuthController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(null, "If the email exists, an OTP has been sent"));
     }
 
+    [HttpPost("verify-email")]
+    public async Task<IActionResult> VerifyEmail(
+        AuthService.Request.VerifyEmailRequest request,
+        [FromServices] IValidator<AuthService.Request.VerifyEmailRequest> validator,
+        CancellationToken cancellationToken)
+    {
+        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        if (error is not null) return error;
+        await _service.VerifyEmailAsync(request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(null, "Xác thực email thành công"));
+    }
+
+    [HttpPost("resend-otp")]
+    public async Task<IActionResult> ResendOtp(
+        AuthService.Request.ResendOtpRequest request,
+        [FromServices] IValidator<AuthService.Request.ResendOtpRequest> validator,
+        CancellationToken cancellationToken)
+    {
+        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        if (error is not null) return error;
+        var response = await _service.ResendOtpAsync(request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(response, "Đã gửi lại mã OTP"));
+    }
+
+    [HttpPost("refresh-token")]
+    public async Task<IActionResult> RefreshToken(
+        AuthService.Request.RefreshTokenRequest request,
+        [FromServices] IValidator<AuthService.Request.RefreshTokenRequest> validator,
+        CancellationToken cancellationToken)
+    {
+        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        if (error is not null) return error;
+        var response = await _service.RefreshTokenAsync(request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(response, "Làm mới token thành công"));
+    }
+
     private async Task<BadRequestObjectResult?> ValidateRequestAsync<T>(
         T request,
         IValidator<T> validator,
