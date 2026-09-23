@@ -35,11 +35,13 @@ public class ForbiddenException : Exceptions
 public class NotFoundException : Exceptions
 {
     public NotFoundException(string message) : base(message, 404) { }
+    public NotFoundException(string message, string errorCode) : base(message, 404, errorCode) { }
 }
 
 public class ConflictException : Exceptions
 {
     public ConflictException(string message) : base(message, 409) { }
+    public ConflictException(string message, string errorCode) : base(message, 409, errorCode) { }
 }
 
 public class TooManyRequestsException : Exceptions
