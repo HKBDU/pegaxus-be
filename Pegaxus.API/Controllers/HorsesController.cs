@@ -32,14 +32,16 @@ public sealed class HorsesController : ControllerBase
             return Unauthorized(ResponseBuilder.ErrorResponse(
                 null,
                 "The authenticated account identifier is invalid",
-                HttpContext.TraceIdentifier));
+                errorCode: "UNAUTHORIZED",
+                code: StatusCodes.Status401Unauthorized,
+                traceId: HttpContext.TraceIdentifier));
 
         var response = await _service.GetCustomerHorsesAsync(accountId, request, cancellationToken);
 
         return Ok(ResponseBuilder.SuccessResponse(
             response,
             "Horse list retrieved successfully",
-            HttpContext.TraceIdentifier));
+            traceId: HttpContext.TraceIdentifier));
     }
 
     [HttpGet("{horseId:guid}")]
@@ -55,7 +57,9 @@ public sealed class HorsesController : ControllerBase
             return Unauthorized(ResponseBuilder.ErrorResponse(
                 null,
                 "The authenticated account identifier is invalid",
-                HttpContext.TraceIdentifier));
+                errorCode: "UNAUTHORIZED",
+                code: StatusCodes.Status401Unauthorized,
+                traceId: HttpContext.TraceIdentifier));
 
         var canViewAll = User.IsInRole("LogisticsManager") || User.IsInRole("LOGISTICS_MANAGER");
         var response = await _service.GetHorseAsync(accountId, horseId, canViewAll, cancellationToken);
@@ -63,7 +67,7 @@ public sealed class HorsesController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(
             response,
             "Horse information retrieved successfully",
-            HttpContext.TraceIdentifier));
+            traceId: HttpContext.TraceIdentifier));
     }
 
     [HttpPost]
@@ -79,14 +83,17 @@ public sealed class HorsesController : ControllerBase
             return Unauthorized(ResponseBuilder.ErrorResponse(
                 null,
                 "The authenticated account identifier is invalid",
-                HttpContext.TraceIdentifier));
+                errorCode: "UNAUTHORIZED",
+                code: StatusCodes.Status401Unauthorized,
+                traceId: HttpContext.TraceIdentifier));
 
         var response = await _service.CreateHorseAsync(accountId, request, cancellationToken);
 
         return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
             response,
             "Horse added successfully",
-            HttpContext.TraceIdentifier));
+            code: StatusCodes.Status201Created,
+            traceId: HttpContext.TraceIdentifier));
     }
 
     [HttpPut("{horseId:guid}")]
@@ -103,13 +110,15 @@ public sealed class HorsesController : ControllerBase
             return Unauthorized(ResponseBuilder.ErrorResponse(
                 null,
                 "The authenticated account identifier is invalid",
-                HttpContext.TraceIdentifier));
+                errorCode: "UNAUTHORIZED",
+                code: StatusCodes.Status401Unauthorized,
+                traceId: HttpContext.TraceIdentifier));
 
         await _service.UpdateHorseAsync(accountId, horseId, request, cancellationToken);
 
         return Ok(ResponseBuilder.SuccessResponse(
             null,
             "Horse information updated successfully",
-            HttpContext.TraceIdentifier));
+            traceId: HttpContext.TraceIdentifier));
     }
 }

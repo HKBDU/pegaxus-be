@@ -1,3 +1,4 @@
+using System.Data;
 using System.Net;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -12,22 +13,24 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.JwtService;
 using MailService = Pegaxus.Service.MailService;
+using JwtService = Pegaxus.Service.JwtService;
+using Claim = System.Security.Claims.Claim;
+using AppException = Pegaxus.Service.Exceptions.Exceptions;
 using AccountEntity = Pegaxus.Repository.Entities.Account;
-using JwtClaim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Auth;
 
 public class Service : IService
 {
+    private const string EmailVerification = "EMAIL_VERIFICATION";
+    private const string PasswordReset = "PASSWORD_RESET";
     private readonly AppDbContext _db;
     private readonly IPasswordHasher<AccountEntity> _passwordHasher;
     private readonly IDistributedCache _cache;
     private readonly MailService.IService _mailService;
-    private readonly IJwtService _jwtService;
+    private readonly JwtService.IJwtService _jwtService;
     private readonly IHttpContextAccessor _httpContextAccessor;
-
     private static readonly TimeSpan LoginAttemptWindow = TimeSpan.FromMinutes(15);
     private const int MaxLoginFailures = 5;
 
@@ -36,7 +39,7 @@ public class Service : IService
         IPasswordHasher<AccountEntity> passwordHasher,
         IDistributedCache cache,
         MailService.IService mailService,
-        IJwtService jwtService,
+        JwtService.IJwtService jwtService,
         IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
@@ -53,13 +56,12 @@ public class Service : IService
     {
         var email = request.Email.Trim().ToLowerInvariant();
         var account = await _db.Accounts
-            .Include(a => a.CustomerAccount)
-            .Include(a => a.EmployeeAccount)
-            .FirstOrDefaultAsync(a => !a.IsDeleted && a.Email.ToLower() == email, cancellationToken);
+            .Include(item => item.CustomerAccount)
+            .Include(item => item.EmployeeAccount)
+            .FirstOrDefaultAsync(item => !item.IsDeleted && item.Email.ToLower() == email, cancellationToken);
 
         if (account is null)
             throw new UnauthorizedException("Email or password incorrect");
-
         if (account.Status == AccountStatus.SUSPENDED)
             throw new ForbiddenException("Account suspended");
         if (account.Status != AccountStatus.ACTIVE)
@@ -70,8 +72,7 @@ public class Service : IService
         if (await _cache.GetStringAsync(lockedKey, cancellationToken) is not null)
             throw new TooManyRequestsException("Too many failed login attempts. Please try again later.");
 
-        var passwordResult = _passwordHasher.VerifyHashedPassword(account, account.PasswordHash, request.Password);
-        if (passwordResult == PasswordVerificationResult.Failed)
+        if (_passwordHasher.VerifyHashedPassword(account, account.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
         {
             await RecordLoginFailureAsync(failedKey, lockedKey, cancellationToken);
             throw new UnauthorizedException("Email or password incorrect");
@@ -83,51 +84,24 @@ public class Service : IService
         var role = account.AccountType switch
         {
             AccountType.CUSTOMER when account.CustomerAccount is { IsDeleted: false } => "CUSTOMER",
-            AccountType.EMPLOYEE when account.EmployeeAccount is { IsDeleted: false, IsActive: true } employee =>
-                employee.Role switch
-                {
-                    EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.TRANSPORT_SPECIALIST or
-                        EmployeeRole.FLEET_ROUTE_COORDINATOR or EmployeeRole.DRIVER or EmployeeRole.ESCORT =>
-                        employee.Role.ToString(),
-                    _ => throw new ForbiddenException("Account role is not permitted to log in")
-                },
+            AccountType.EMPLOYEE when account.EmployeeAccount is { IsDeleted: false, IsActive: true } employee => employee.Role.ToString(),
             _ => throw new ForbiddenException("Account profile is inactive or unavailable")
         };
 
         await _cache.RemoveAsync(failedKey, cancellationToken);
         await _cache.RemoveAsync(lockedKey, cancellationToken);
 
-        var claims = new List<JwtClaim>
-        {
-            new(ClaimTypes.NameIdentifier, account.AccountId.ToString()),
-            new(ClaimTypes.Email, account.Email),
-            new("account_type", account.AccountType.ToString()),
-            new(ClaimTypes.Role, account.AccountType == AccountType.CUSTOMER
-                ? "Customer"
-                : role switch
-                {
-                    "LOGISTICS_MANAGER" => "LogisticsManager",
-                    "TRANSPORT_SPECIALIST" => "TransportSpecialist",
-                    "FLEET_ROUTE_COORDINATOR" => "FleetRouteCoordinator",
-                    "DRIVER" => "Driver",
-                    _ => "Escort"
-                })
-        };
-        if (account.AccountType == AccountType.EMPLOYEE)
-            claims.Add(new JwtClaim(ClaimTypes.Role, "Employee"));
-
-        var accessToken = _jwtService.GenerateAccessToken(claims);
+        var accessToken = _jwtService.GenerateAccessToken(CreateClaims(account));
         var refreshToken = _jwtService.GenerateRefreshToken();
-        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var now = UtcNow();
         var context = _httpContextAccessor.HttpContext;
         var ip = context?.Connection.RemoteIpAddress?.ToString();
         var device = context?.Request.Headers.UserAgent.ToString();
-
         _db.RefreshTokens.Add(new RefreshToken
         {
             RefreshTokenId = Guid.NewGuid(),
             AccountId = account.AccountId,
-            TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken))),
+            TokenHash = Hash(refreshToken),
             CreatedAt = now,
             ExpiresAt = now.AddDays(7),
             CreatedByIp = string.IsNullOrWhiteSpace(ip) ? null : ip[..Math.Min(ip.Length, 64)],
@@ -140,19 +114,13 @@ public class Service : IService
         {
             AccessToken = accessToken,
             RefreshToken = refreshToken,
-            ExpiresIn = 900,
+            ExpiresIn = _jwtService.AccessTokenExpirationSeconds,
             User = new Response.UserInfoResponse
             {
                 AccountId = account.AccountId,
-                CustomerId = account.AccountType == AccountType.CUSTOMER
-                    ? account.CustomerAccount!.CustomerId
-                    : null,
-                EmployeeId = account.AccountType == AccountType.EMPLOYEE
-                    ? account.EmployeeAccount!.EmployeeId
-                    : null,
-                FullName = account.AccountType == AccountType.CUSTOMER
-                    ? account.CustomerAccount!.FullName
-                    : account.EmployeeAccount!.FullName,
+                CustomerId = account.CustomerAccount?.CustomerId,
+                EmployeeId = account.EmployeeAccount?.EmployeeId,
+                FullName = account.CustomerAccount?.FullName ?? account.EmployeeAccount!.FullName,
                 AccountType = account.AccountType.ToString(),
                 Role = role,
                 AvatarUrl = account.AvatarUrl
@@ -171,36 +139,31 @@ public class Service : IService
 
         if (count >= MaxLoginFailures)
         {
-            await _cache.SetStringAsync(lockedKey, "1", new DistributedCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = LoginAttemptWindow
-            }, cancellationToken);
+            await _cache.SetStringAsync(
+                lockedKey,
+                "1",
+                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = LoginAttemptWindow },
+                cancellationToken);
             await _cache.RemoveAsync(failedKey, cancellationToken);
             throw new TooManyRequestsException("Too many failed login attempts. Please try again later.");
         }
 
-        await _cache.SetStringAsync(failedKey, JsonSerializer.Serialize(new LoginFailureEntry(count, windowStart)),
-            new DistributedCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = windowStart.Add(LoginAttemptWindow) - now
-            }, cancellationToken);
+        await _cache.SetStringAsync(
+            failedKey,
+            JsonSerializer.Serialize(new LoginFailureEntry(count, windowStart)),
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = windowStart.Add(LoginAttemptWindow) - now },
+            cancellationToken);
     }
-
-    private sealed record LoginFailureEntry(int Count, DateTimeOffset WindowStartedAt);
 
     public async Task<Response.RegisterResponse> RegisterAsync(
         Request.RegisterRequest request,
         CancellationToken cancellationToken = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
-        if (await _db.Accounts.AnyAsync(account =>
-                !account.IsDeleted &&
-                account.Status == AccountStatus.ACTIVE &&
-                account.Email.ToLower() == email,
-                cancellationToken))
-            throw new ConflictException("Email is already in use");
+        if (await _db.Accounts.AnyAsync(account => !account.IsDeleted && account.Email.ToLower() == email, cancellationToken))
+            throw new AppException("Email is already in use", 409, "EMAIL_ALREADY_EXISTS");
 
-        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var now = UtcNow();
         var account = new Account
         {
             AccountId = Guid.NewGuid(),
@@ -211,7 +174,6 @@ public class Service : IService
             UpdatedAt = now
         };
         account.PasswordHash = _passwordHasher.HashPassword(account, request.Password);
-
         var customer = new Customer
         {
             CustomerId = Guid.NewGuid(),
@@ -221,103 +183,30 @@ public class Service : IService
             UpdatedAt = now
         };
 
-        var otp = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
-        var otpKey = $"otp:EMAIL_VERIFICATION:{email}";
-        var cooldownKey = $"otp-cooldown:EMAIL_VERIFICATION:{email}";
-
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         try
         {
             _db.Accounts.Add(account);
             _db.Customers.Add(customer);
             await _db.SaveChangesAsync(cancellationToken);
-
-            var otpValue = JsonSerializer.Serialize(new OtpCacheEntry(HashOtp(otp), 0));
-            await _cache.SetStringAsync(otpKey, otpValue, new DistributedCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
-            }, cancellationToken);
-            await _cache.SetStringAsync(cooldownKey, "1", new DistributedCacheEntryOptions
-            {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
-            }, cancellationToken);
-
-            var htmlBody = $"""
-                <!DOCTYPE html>
-                <html lang="en">
-                <head>
-                    <meta charset="UTF-8">
-                    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-                    <title>Verify Your Account</title>
-                </head>
-                <body style="margin:0;padding:0;background-color:#f7f7f8;font-family:Arial,Helvetica,sans-serif;color:#1f2937;">
-                    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7f7f8;padding:40px 16px;">
-                        <tr><td align="center">
-                            <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:600px;background-color:#ffffff;border-radius:24px;overflow:hidden;box-shadow:0 16px 50px rgba(0,0,0,0.08);">
-                                <tr><td style="padding:42px 40px 36px;background:linear-gradient(135deg,#ff7a00 0%,#ff9f43 100%);text-align:center;">
-                                    <div style="font-size:34px;margin-bottom:20px;">🔐</div>
-                                    <h1 style="margin:0;color:#ffffff;font-size:28px;line-height:1.3;">Verify Your Account</h1>
-                                    <p style="margin:10px 0 0;color:rgba(255,255,255,0.88);font-size:15px;">One final step to keep your account secure.</p>
-                                </td></tr>
-                                <tr><td style="padding:42px 42px 34px;">
-                                    <p style="margin:0 0 16px;font-size:17px;line-height:1.7;color:#374151;">
-                                        Hello <strong style="color:#111827;">{WebUtility.HtmlEncode(customer.FullName)}</strong>,
-                                    </p>
-                                    <p style="margin:0 0 28px;font-size:15px;line-height:1.8;color:#6b7280;">
-                                        We received a request to verify your account. Please use the one-time password below to continue.
-                                    </p>
-                                    <table width="100%" cellpadding="0" cellspacing="0" border="0">
-                                        <tr><td align="center" style="padding:30px 20px;background-color:#fff7ed;border:2px solid #fed7aa;border-radius:18px;">
-                                            <div style="margin-bottom:10px;color:#9a3412;font-size:12px;font-weight:700;letter-spacing:2px;text-transform:uppercase;">Your verification code</div>
-                                            <div style="color:#f97316;font-size:42px;line-height:1.2;font-weight:800;letter-spacing:10px;">{otp}</div>
-                                            <div style="margin-top:12px;color:#9a3412;font-size:13px;">Valid for <strong>5 minutes</strong></div>
-                                        </td></tr>
-                                    </table>
-                                    <p style="margin:28px 0 0;padding:16px 18px;background-color:#fffaf5;border-left:4px solid #fb923c;border-radius:8px;color:#7c2d12;font-size:13px;line-height:1.6;">
-                                        ⚠️ <strong>Security notice:</strong> Never share this OTP with anyone. Our team will never ask you for this code.
-                                    </p>
-                                    <p style="margin:28px 0 0;color:#9ca3af;font-size:13px;line-height:1.7;text-align:center;">
-                                        If you didn't request this verification code, you can safely ignore this email.
-                                    </p>
-                                </td></tr>
-                                <tr><td style="padding:24px 40px 30px;background-color:#111827;text-align:center;">
-                                    <div style="color:#fb923c;font-size:18px;font-weight:700;margin-bottom:8px;">Pegaxus</div>
-                                    <p style="margin:0;color:#9ca3af;font-size:12px;line-height:1.6;">This is an automated message.<br>Please do not reply to this email.</p>
-                                </td></tr>
-                            </table>
-                            <p style="margin:22px 0 0;color:#9ca3af;font-size:11px;text-align:center;">© {DateTime.UtcNow.Year} Pegaxus. All rights reserved.</p>
-                        </td></tr>
-                    </table>
-                </body>
-                </html>
-                """;
-
-            await _mailService.SendMail(new MailService.MailContent
-            {
-                To = email,
-                Subject = "Verify your Pegaxus account",
-                Body = htmlBody
-            });
+            await SendOtpAsync(email, EmailVerification, customer.FullName, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException exception)
             when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            throw new ConflictException("Email is already in use");
+            throw new AppException("Email is already in use", 409, "EMAIL_ALREADY_EXISTS");
         }
         catch
         {
-            await _cache.RemoveAsync(otpKey, CancellationToken.None);
-            await _cache.RemoveAsync(cooldownKey, CancellationToken.None);
+            await RemoveOtpAsync(email, EmailVerification);
             throw;
         }
 
         return new Response.RegisterResponse
         {
             AccountId = account.AccountId,
-            CustomerId = customer.CustomerId,
-            Email = account.Email,
-            EmailVerified = false
+            CustomerId = customer.CustomerId
         };
     }
 
@@ -326,51 +215,324 @@ public class Service : IService
         CancellationToken cancellationToken = default)
     {
         var email = request.Email.Trim().ToLowerInvariant();
-        var otpKey = $"otp:PASSWORD_RESET:{email}";
-        var cooldownKey = $"otp-cooldown:PASSWORD_RESET:{email}";
-
-        if (await _cache.GetStringAsync(cooldownKey, cancellationToken) is not null)
-            throw new TooManyRequestsException("Please wait before requesting another OTP");
-
-        await _cache.SetStringAsync(cooldownKey, "1", new DistributedCacheEntryOptions
+        await EnsureCooldownExpiredAsync(email, PasswordReset, cancellationToken);
+        var account = await _db.Accounts
+            .Include(item => item.CustomerAccount)
+            .Include(item => item.EmployeeAccount)
+            .SingleOrDefaultAsync(item => !item.IsDeleted && item.Email.ToLower() == email, cancellationToken);
+        if (account is null)
         {
-            AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
-        }, cancellationToken);
-
-        var accountExists = await _db.Accounts.AnyAsync(account =>
-            !account.IsDeleted &&
-            account.Status == AccountStatus.ACTIVE &&
-            account.Email.ToLower() == email,
-            cancellationToken);
-        if (!accountExists)
+            await SetCooldownAsync(email, PasswordReset, cancellationToken);
             return;
+        }
 
-        var otp = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
-        await _cache.SetStringAsync(otpKey, JsonSerializer.Serialize(new OtpCacheEntry(HashOtp(otp), 0)),
-            new DistributedCacheEntryOptions
+        await SendOtpAsync(
+            email,
+            PasswordReset,
+            account.CustomerAccount?.FullName ?? account.EmployeeAccount?.FullName ?? account.Email,
+            cancellationToken);
+    }
+
+    public async Task VerifyEmailAsync(
+        Request.VerifyEmailRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var account = await _db.Accounts.SingleOrDefaultAsync(
+            item => !item.IsDeleted && item.Email.ToLower() == email,
+            cancellationToken);
+        if (account is null)
+            throw new AppException("Account not found", 404, "ACCOUNT_NOT_FOUND");
+
+        await ValidateOtpAsync(email, EmailVerification, request.Otp, cancellationToken);
+        var now = UtcNow();
+        account.EmailVerifiedAt ??= now;
+        account.UpdatedAt = now;
+        await _db.SaveChangesAsync(cancellationToken);
+        await _cache.RemoveAsync(OtpKey(email, EmailVerification), cancellationToken);
+    }
+
+    public async Task<Response.ResendOtpResponse> ResendOtpAsync(
+        Request.ResendOtpRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var purpose = request.Purpose.Trim().ToUpperInvariant();
+        await EnsureCooldownExpiredAsync(email, purpose, cancellationToken);
+
+        var account = await _db.Accounts
+            .Include(item => item.CustomerAccount)
+            .Include(item => item.EmployeeAccount)
+            .SingleOrDefaultAsync(item => !item.IsDeleted && item.Email.ToLower() == email, cancellationToken);
+        if (account is null || purpose == EmailVerification && account.EmailVerifiedAt is not null)
+        {
+            await SetCooldownAsync(email, purpose, cancellationToken);
+            return new Response.ResendOtpResponse { ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5) };
+        }
+
+        return new Response.ResendOtpResponse
+        {
+            ExpiresAt = await SendOtpAsync(
+                email,
+                purpose,
+                account.CustomerAccount?.FullName ?? account.EmployeeAccount?.FullName ?? account.Email,
+                cancellationToken)
+        };
+    }
+
+    public async Task<Response.RefreshTokenResponse> RefreshTokenAsync(
+        Request.RefreshTokenRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var now = UtcNow();
+        await using var transaction = await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken);
+        try
+        {
+            var currentToken = await _db.RefreshTokens
+                .Include(item => item.Account)
+                .ThenInclude(item => item.EmployeeAccount)
+                .SingleOrDefaultAsync(item => item.TokenHash == Hash(request.RefreshToken), cancellationToken);
+            if (currentToken is null || currentToken.RevokedAt is not null || currentToken.ExpiresAt <= now ||
+                currentToken.Account.IsDeleted || currentToken.Account.Status != AccountStatus.ACTIVE ||
+                currentToken.Account.EmailVerifiedAt is null ||
+                currentToken.Account.AccountType == AccountType.EMPLOYEE && currentToken.Account.EmployeeAccount?.IsActive != true)
+                throw InvalidRefreshToken();
+
+            var rawRefreshToken = _jwtService.GenerateRefreshToken();
+            var replacement = new RefreshToken
             {
-                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(5)
-            }, cancellationToken);
+                RefreshTokenId = Guid.NewGuid(),
+                AccountId = currentToken.AccountId,
+                TokenHash = Hash(rawRefreshToken),
+                CreatedAt = now,
+                ExpiresAt = now.AddDays(7)
+            };
+            currentToken.RevokedAt = now;
+            currentToken.ReplacedByTokenId = replacement.RefreshTokenId;
+            currentToken.ReplacedByToken = replacement;
+            _db.RefreshTokens.Add(replacement);
+
+            var claims = CreateClaims(currentToken.Account);
+            var accessToken = _jwtService.GenerateAccessToken(claims);
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return new Response.RefreshTokenResponse
+            {
+                AccessToken = accessToken,
+                RefreshToken = rawRefreshToken,
+                ExpiresIn = _jwtService.AccessTokenExpirationSeconds
+            };
+        }
+        catch (PostgresException exception) when (exception.SqlState == PostgresErrorCodes.SerializationFailure)
+        {
+            throw InvalidRefreshToken();
+        }
+        catch (DbUpdateException exception)
+            when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure })
+        {
+            throw InvalidRefreshToken();
+        }
+    }
+
+    public async Task ResetPasswordAsync(
+        Request.ResetPasswordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        await ValidateOtpAsync(email, PasswordReset, request.Otp, cancellationToken);
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        var account = await _db.Accounts
+            .Include(item => item.RefreshTokens)
+            .SingleOrDefaultAsync(item => !item.IsDeleted && item.Email.ToLower() == email, cancellationToken);
+        if (account is null)
+            throw new AppException("OTP has expired", 400, "OTP_EXPIRED");
+
+        var now = UtcNow();
+        account.PasswordHash = _passwordHasher.HashPassword(account, request.NewPassword);
+        account.UpdatedAt = now;
+        foreach (var refreshToken in account.RefreshTokens.Where(item => item.RevokedAt is null))
+            refreshToken.RevokedAt = now;
+
+        await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        await _cache.RemoveAsync(OtpKey(email, PasswordReset), cancellationToken);
+    }
+
+    private async Task<DateTimeOffset> SendOtpAsync(
+        string email,
+        string purpose,
+        string fullName,
+        CancellationToken cancellationToken)
+    {
+        var otp = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
+        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        await _cache.SetStringAsync(
+            OtpKey(email, purpose),
+            JsonSerializer.Serialize(new OtpCacheEntry(Hash(otp), 0, expiresAt)),
+            new DistributedCacheEntryOptions { AbsoluteExpiration = expiresAt },
+            cancellationToken);
+        await SetCooldownAsync(email, purpose, cancellationToken);
 
         try
         {
+            var isVerification = purpose == EmailVerification;
             await _mailService.SendMail(new MailService.MailContent
             {
                 To = email,
-                Subject = "Reset your Pegaxus password",
-                Body = $"<p>Your password reset OTP is <strong>{otp}</strong>. It expires in 5 minutes.</p>"
+                Subject = isVerification ? "Verify your Pegaxus account" : "Reset your Pegaxus password",
+                Body = $"""
+                    <!doctype html>
+                    <html lang="en">
+                    <body style="margin:0;background:#f3f5f7;font-family:Arial,sans-serif;color:#17202a;">
+                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:32px 16px;">
+                        <tr>
+                          <td align="center">
+                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(23,32,42,.08);">
+                              <tr><td style="background:#12344d;padding:24px 32px;color:#ffffff;font-size:24px;font-weight:700;">PEGAXUS</td></tr>
+                              <tr>
+                                <td style="padding:32px;">
+                                  <h1 style="margin:0 0 16px;font-size:24px;">{(isVerification ? "Verify your email" : "Reset your password")}</h1>
+                                  <p style="margin:0 0 12px;line-height:1.6;">Hello {WebUtility.HtmlEncode(fullName)},</p>
+                                  <p style="margin:0 0 24px;line-height:1.6;">{(isVerification ? "Use this code to verify your Pegaxus account." : "Use this code to reset your Pegaxus password.")}</p>
+                                  <div style="padding:18px;text-align:center;background:#fff4e6;border:1px solid #f5a623;border-radius:12px;font-size:32px;font-weight:700;letter-spacing:8px;color:#12344d;">{otp}</div>
+                                  <p style="margin:24px 0 0;line-height:1.6;color:#5d6d7e;">This code expires in 5 minutes. Never share it with anyone.</p>
+                                  <p style="margin:12px 0 0;line-height:1.6;color:#5d6d7e;">If you did not request this, you can safely ignore this email.</p>
+                                </td>
+                              </tr>
+                            </table>
+                          </td>
+                        </tr>
+                      </table>
+                    </body>
+                    </html>
+                    """
             });
         }
         catch
         {
-            await _cache.RemoveAsync(otpKey, CancellationToken.None);
-            await _cache.RemoveAsync(cooldownKey, CancellationToken.None);
+            await RemoveOtpAsync(email, purpose);
             throw;
+        }
+
+        return expiresAt;
+    }
+
+    private async Task ValidateOtpAsync(
+        string email,
+        string purpose,
+        string otp,
+        CancellationToken cancellationToken)
+    {
+        var key = OtpKey(email, purpose);
+        var value = await _cache.GetStringAsync(key, cancellationToken);
+        OtpCacheEntry? entry = null;
+        if (value is not null)
+        {
+            try
+            {
+                entry = JsonSerializer.Deserialize<OtpCacheEntry>(value);
+            }
+            catch (JsonException)
+            {
+                // Corrupt cache entries are unusable and treated as expired.
+            }
+        }
+
+        if (entry is null || entry.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            await _cache.RemoveAsync(key, cancellationToken);
+            throw new AppException("OTP has expired", 400, "OTP_EXPIRED");
+        }
+
+        if (MatchesHash(otp, entry.CodeHash))
+            return;
+
+        var attempts = entry.Attempts + 1;
+        if (attempts >= 5)
+        {
+            await _cache.RemoveAsync(key, cancellationToken);
+            throw new AppException("Too many invalid attempts. Please request a new code", 429, "OTP_TOO_MANY_ATTEMPTS");
+        }
+
+        await _cache.SetStringAsync(
+            key,
+            JsonSerializer.Serialize(entry with { Attempts = attempts }),
+            new DistributedCacheEntryOptions { AbsoluteExpiration = entry.ExpiresAt },
+            cancellationToken);
+        throw new AppException("OTP is invalid", 400, "OTP_INVALID");
+    }
+
+    private async Task EnsureCooldownExpiredAsync(string email, string purpose, CancellationToken cancellationToken)
+    {
+        if (await _cache.GetStringAsync(CooldownKey(email, purpose), cancellationToken) is not null)
+            throw new AppException("Please wait 60 seconds before requesting another code", 429, "OTP_RESEND_TOO_SOON");
+    }
+
+    private async Task SetCooldownAsync(string email, string purpose, CancellationToken cancellationToken) =>
+        await _cache.SetStringAsync(
+            CooldownKey(email, purpose),
+            "1",
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1) },
+            cancellationToken);
+
+    private async Task RemoveOtpAsync(string email, string purpose)
+    {
+        await _cache.RemoveAsync(OtpKey(email, purpose), CancellationToken.None);
+        await _cache.RemoveAsync(CooldownKey(email, purpose), CancellationToken.None);
+    }
+
+    private static string OtpKey(string email, string purpose) => $"otp:{purpose}:{email}";
+    private static string CooldownKey(string email, string purpose) => $"otp-cooldown:{purpose}:{email}";
+    private static string Hash(string value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+    private static bool MatchesHash(string value, string expectedHash)
+    {
+        try
+        {
+            return CryptographicOperations.FixedTimeEquals(
+                SHA256.HashData(Encoding.UTF8.GetBytes(value)),
+                Convert.FromHexString(expectedHash));
+        }
+        catch (FormatException)
+        {
+            return false;
         }
     }
 
-    private static string HashOtp(string otp) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(otp)));
+    private static List<Claim> CreateClaims(AccountEntity account)
+    {
+        var claims = new List<Claim>
+        {
+            new(ClaimTypes.NameIdentifier, account.AccountId.ToString()),
+            new(ClaimTypes.Email, account.Email),
+            new("accountType", account.AccountType.ToString())
+        };
+        if (account.AccountType == AccountType.CUSTOMER)
+        {
+            claims.Add(new Claim(ClaimTypes.Role, "Customer"));
+        }
+        else
+        {
+            claims.Add(new Claim(ClaimTypes.Role, "Employee"));
+            claims.Add(new Claim(ClaimTypes.Role, account.EmployeeAccount!.Role switch
+            {
+                EmployeeRole.LOGISTICS_MANAGER => "LogisticsManager",
+                EmployeeRole.TRANSPORT_SPECIALIST => "TransportSpecialist",
+                EmployeeRole.FLEET_ROUTE_COORDINATOR => "FleetRouteCoordinator",
+                EmployeeRole.DRIVER => "Driver",
+                EmployeeRole.ESCORT => "Escort",
+                _ => throw InvalidRefreshToken()
+            }));
+        }
 
-    private sealed record OtpCacheEntry(string CodeHash, int Attempts);
+        return claims;
+    }
+
+    private static AppException InvalidRefreshToken() =>
+        new("Session has expired. Please sign in again", 401, "REFRESH_TOKEN_INVALID");
+    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+    private sealed record OtpCacheEntry(string CodeHash, int Attempts, DateTimeOffset ExpiresAt);
+    private sealed record LoginFailureEntry(int Count, DateTimeOffset WindowStartedAt);
 }

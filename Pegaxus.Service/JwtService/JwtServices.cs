@@ -18,37 +18,40 @@ public class JwtServices : IJwtService
         // Ánh xạ dữ liệu từ AppSettings vào Object JwtOptions
     }
 
+    public int AccessTokenExpirationSeconds => (int)TimeSpan.FromMinutes(_jwtOption.ExpirationMinutes).TotalSeconds;
+
     public string GenerateAccessToken(IEnumerable<Claim> claims)
     {
-        var secretKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOption.SecretKey));
-        //tạo 1 key để mã hóa token, sử dụng secretkey từ JwtOptions
-        var signingCredentials = new SigningCredentials(secretKey, SecurityAlgorithms.HmacSha256);
-        //Tạo 1 đối tượng SigningCredentials để xác định thuật toán mã hóa và key sử dụng để ký tokem
-        var tokenOptions = new JwtSecurityToken(
-            issuer: _jwtOption.Issuer,//Cái token này được kí - tạo ra bởi ai, tổ chức nào
-            audience: _jwtOption.Audience,// Cái token này dành cho ai, tổ chức nào
-            claims: claims,// Những thông tin mà bạn muốn lưu trữ trong token
-                           // thường là thông tin về người dùng như ID, email, vai trò, v.v.
-                           //nằm trong payload
+        var signingCredentials = new SigningCredentials(
+            new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOption.SecretKey)),
+            SecurityAlgorithms.HmacSha256);
+        var token = new JwtSecurityToken(
+            issuer: _jwtOption.Issuer,
+            audience: _jwtOption.Audience,
+            claims: claims,
             expires: DateTime.UtcNow.AddMinutes(_jwtOption.ExpirationMinutes),
-            signingCredentials: signingCredentials
-            );
+            signingCredentials: signingCredentials);
 
-        var tokenString = new JwtSecurityTokenHandler().WriteToken(tokenOptions);
-        //sau đó gọi  JwtSecurityTokenHandler
-        //
-        return tokenString;
+        return new JwtSecurityTokenHandler().WriteToken(token);
     }
-    public string GenerateRefreshToken()
-    {
-        var bytes = new byte[64];
-        using var rng = RandomNumberGenerator.Create();
-        rng.GetBytes(bytes);
-        return Convert.ToBase64String(bytes);
-    }
+
+    public string GenerateRefreshToken() =>
+        $"rt_{Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()}";
 
     public ClaimsPrincipal ValidateToken(string token)
     {
-        throw new NotImplementedException();
+        return new JwtSecurityTokenHandler().ValidateToken(token, new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidateAudience = true,
+            ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            ValidIssuer = _jwtOption.Issuer,
+            ValidAudience = _jwtOption.Audience,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtOption.SecretKey)),
+            NameClaimType = ClaimTypes.NameIdentifier,
+            RoleClaimType = ClaimTypes.Role,
+            ClockSkew = TimeSpan.Zero
+        }, out _);
     }
 }

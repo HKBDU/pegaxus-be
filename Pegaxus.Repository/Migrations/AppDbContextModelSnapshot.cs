@@ -781,7 +781,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("status")
                         .HasDefaultValueSql("'DRAFT'::compliance_dossier_status");
 
-                    b.Property<Guid>("TransportId")
+                    b.Property<Guid?>("TransportId")
                         .HasColumnType("uuid")
                         .HasColumnName("transport_id");
 
@@ -4190,7 +4190,6 @@ namespace Pegaxus.Repository.Migrations
                     b.HasOne("Pegaxus.Repository.Entities.Transport", "Transport")
                         .WithMany("Notifications")
                         .HasForeignKey("TransportId")
-                        .IsRequired()
                         .HasConstraintName("Notification_transport_id_fkey");
 
                     b.Navigation("Transport");

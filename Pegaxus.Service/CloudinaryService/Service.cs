@@ -47,7 +47,7 @@ public class Service : IService
         return allowedExtensions.Contains(fileExtension);
     }
 
-    // UploadFileAsync: upload PDF, DOCX... lên Cloudinary dùng RawUploadParams
+    // Upload non-image files such as PDF and DOCX through RawUploadParams.
     public async Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file)
     {
         await using var stream = file.OpenReadStream();
@@ -68,7 +68,7 @@ public class Service : IService
         return (uploadResult.SecureUrl.ToString(), uploadResult.PublicId);
     }
 
-    // DeleteFileAsync: xóa file khỏi Cloudinary theo publicId
+    // Delete a Cloudinary file by public ID.
     public async Task DeleteFileAsync(string publicId)
     {
         var deleteParams = new DeletionParams(publicId)
