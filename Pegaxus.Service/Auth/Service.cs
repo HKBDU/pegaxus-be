@@ -1,7 +1,9 @@
 using System.Net;
+using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
@@ -10,8 +12,10 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.JwtService;
 using MailService = Pegaxus.Service.MailService;
 using AccountEntity = Pegaxus.Repository.Entities.Account;
+using JwtClaim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Auth;
 
@@ -21,18 +25,168 @@ public class Service : IService
     private readonly IPasswordHasher<AccountEntity> _passwordHasher;
     private readonly IDistributedCache _cache;
     private readonly MailService.IService _mailService;
+    private readonly IJwtService _jwtService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+
+    private static readonly TimeSpan LoginAttemptWindow = TimeSpan.FromMinutes(15);
+    private const int MaxLoginFailures = 5;
 
     public Service(
         AppDbContext db,
         IPasswordHasher<AccountEntity> passwordHasher,
         IDistributedCache cache,
-        MailService.IService mailService)
+        MailService.IService mailService,
+        IJwtService jwtService,
+        IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _cache = cache;
         _mailService = mailService;
+        _jwtService = jwtService;
+        _httpContextAccessor = httpContextAccessor;
     }
+
+    public async Task<Response.LoginResponse> LoginAsync(
+        Request.LoginRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var account = await _db.Accounts
+            .Include(a => a.CustomerAccount)
+            .Include(a => a.EmployeeAccount)
+            .FirstOrDefaultAsync(a => !a.IsDeleted && a.Email.ToLower() == email, cancellationToken);
+
+        if (account is null)
+            throw new UnauthorizedException("Email or password incorrect");
+
+        if (account.Status == AccountStatus.SUSPENDED)
+            throw new ForbiddenException("Account suspended");
+        if (account.Status != AccountStatus.ACTIVE)
+            throw new ForbiddenException("Account inactive");
+
+        var failedKey = $"auth:login:failed:{account.AccountId}";
+        var lockedKey = $"auth:login:locked:{account.AccountId}";
+        if (await _cache.GetStringAsync(lockedKey, cancellationToken) is not null)
+            throw new TooManyRequestsException("Too many failed login attempts. Please try again later.");
+
+        var passwordResult = _passwordHasher.VerifyHashedPassword(account, account.PasswordHash, request.Password);
+        if (passwordResult == PasswordVerificationResult.Failed)
+        {
+            await RecordLoginFailureAsync(failedKey, lockedKey, cancellationToken);
+            throw new UnauthorizedException("Email or password incorrect");
+        }
+
+        if (account.EmailVerifiedAt is null)
+            throw new ForbiddenException("Account email has not been verified");
+
+        var role = account.AccountType switch
+        {
+            AccountType.CUSTOMER when account.CustomerAccount is { IsDeleted: false } => "CUSTOMER",
+            AccountType.EMPLOYEE when account.EmployeeAccount is { IsDeleted: false, IsActive: true } employee =>
+                employee.Role switch
+                {
+                    EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.TRANSPORT_SPECIALIST or
+                        EmployeeRole.FLEET_ROUTE_COORDINATOR or EmployeeRole.DRIVER or EmployeeRole.ESCORT =>
+                        employee.Role.ToString(),
+                    _ => throw new ForbiddenException("Account role is not permitted to log in")
+                },
+            _ => throw new ForbiddenException("Account profile is inactive or unavailable")
+        };
+
+        await _cache.RemoveAsync(failedKey, cancellationToken);
+        await _cache.RemoveAsync(lockedKey, cancellationToken);
+
+        var claims = new List<JwtClaim>
+        {
+            new(ClaimTypes.NameIdentifier, account.AccountId.ToString()),
+            new(ClaimTypes.Email, account.Email),
+            new("account_type", account.AccountType.ToString()),
+            new(ClaimTypes.Role, account.AccountType == AccountType.CUSTOMER
+                ? "Customer"
+                : role switch
+                {
+                    "LOGISTICS_MANAGER" => "LogisticsManager",
+                    "TRANSPORT_SPECIALIST" => "TransportSpecialist",
+                    "FLEET_ROUTE_COORDINATOR" => "FleetRouteCoordinator",
+                    "DRIVER" => "Driver",
+                    _ => "Escort"
+                })
+        };
+        if (account.AccountType == AccountType.EMPLOYEE)
+            claims.Add(new JwtClaim(ClaimTypes.Role, "Employee"));
+
+        var accessToken = _jwtService.GenerateAccessToken(claims);
+        var refreshToken = _jwtService.GenerateRefreshToken();
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var context = _httpContextAccessor.HttpContext;
+        var ip = context?.Connection.RemoteIpAddress?.ToString();
+        var device = context?.Request.Headers.UserAgent.ToString();
+
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            RefreshTokenId = Guid.NewGuid(),
+            AccountId = account.AccountId,
+            TokenHash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(refreshToken))),
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7),
+            CreatedByIp = string.IsNullOrWhiteSpace(ip) ? null : ip[..Math.Min(ip.Length, 64)],
+            DeviceInfo = string.IsNullOrWhiteSpace(device) ? null : device[..Math.Min(device.Length, 500)]
+        });
+        account.LastLoginAt = now;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return new Response.LoginResponse
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            ExpiresIn = 900,
+            User = new Response.UserInfoResponse
+            {
+                AccountId = account.AccountId,
+                CustomerId = account.AccountType == AccountType.CUSTOMER
+                    ? account.CustomerAccount!.CustomerId
+                    : null,
+                EmployeeId = account.AccountType == AccountType.EMPLOYEE
+                    ? account.EmployeeAccount!.EmployeeId
+                    : null,
+                FullName = account.AccountType == AccountType.CUSTOMER
+                    ? account.CustomerAccount!.FullName
+                    : account.EmployeeAccount!.FullName,
+                AccountType = account.AccountType.ToString(),
+                Role = role,
+                AvatarUrl = account.AvatarUrl
+            }
+        };
+    }
+
+    private async Task RecordLoginFailureAsync(string failedKey, string lockedKey, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var cached = await _cache.GetStringAsync(failedKey, cancellationToken);
+        var entry = cached is null ? null : JsonSerializer.Deserialize<LoginFailureEntry>(cached);
+        var withinWindow = entry is not null && now - entry.WindowStartedAt < LoginAttemptWindow;
+        var windowStart = withinWindow ? entry!.WindowStartedAt : now;
+        var count = withinWindow ? entry!.Count + 1 : 1;
+
+        if (count >= MaxLoginFailures)
+        {
+            await _cache.SetStringAsync(lockedKey, "1", new DistributedCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = LoginAttemptWindow
+            }, cancellationToken);
+            await _cache.RemoveAsync(failedKey, cancellationToken);
+            throw new TooManyRequestsException("Too many failed login attempts. Please try again later.");
+        }
+
+        await _cache.SetStringAsync(failedKey, JsonSerializer.Serialize(new LoginFailureEntry(count, windowStart)),
+            new DistributedCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = windowStart.Add(LoginAttemptWindow) - now
+            }, cancellationToken);
+    }
+
+    private sealed record LoginFailureEntry(int Count, DateTimeOffset WindowStartedAt);
 
     public async Task<Response.RegisterResponse> RegisterAsync(
         Request.RegisterRequest request,

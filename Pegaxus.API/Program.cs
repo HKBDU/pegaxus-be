@@ -18,11 +18,15 @@ using MediaService = Pegaxus.Service.MediaService;
 using CloudinaryService = Pegaxus.Service.CloudinaryService;
 using MailService = Pegaxus.Service.MailService;
 using AccountService = Pegaxus.Service.AccountService;
+using HorseService = Pegaxus.Service.HorseService;
 
 
 Env.Load();
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Keep issued access tokens at the 15-minute API contract lifetime in every environment.
+builder.Configuration["JwtOptions:ExpirationMinutes"] = "15";
 
 builder.Services
     .AddControllers()
@@ -74,12 +78,14 @@ builder.Services.AddStackExchangeRedisCache(options =>
 
 builder.Services.AddScoped<JwtService.IJwtService, JwtService.JwtServices>();
 builder.Services.AddScoped<AuthService.IService, AuthService.Service>();
+builder.Services.AddScoped<IValidator<AuthService.Request.LoginRequest>, AuthService.Validations.LoginRequestValidator>();
 builder.Services.AddScoped<IValidator<AuthService.Request.RegisterRequest>, AuthService.Validations.RegisterRequestValidator>();
 builder.Services.AddScoped<IValidator<AuthService.Request.ForgotPasswordRequest>, AuthService.Validations.ForgotPasswordRequestValidator>();
 builder.Services.AddScoped<IPasswordHasher<Account>, PasswordHasher<Account>>();
 builder.Services.AddScoped<MediaService.IService, CloudinaryService.Service>();
 builder.Services.AddScoped<MailService.IService, MailService.Service>();
 builder.Services.AddScoped<AccountService.IService, AccountService.Service>();
+builder.Services.AddScoped<HorseService.IService, HorseService.Service>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
