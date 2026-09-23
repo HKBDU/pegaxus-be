@@ -31,7 +31,8 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
             await context.Response.WriteAsJsonAsync(ResponseBuilder.ErrorResponse(
                 statusCode >= StatusCodes.Status500InternalServerError ? null : ex.Message,
                 GetErrorMessage(ex, statusCode),
-                context.TraceIdentifier));
+                context.TraceIdentifier,
+                ex is Exceptions appException ? appException.ErrorCode : null));
         }
     }
 
