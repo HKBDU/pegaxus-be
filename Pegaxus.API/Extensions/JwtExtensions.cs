@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.IdentityModel.Tokens;
 using Pegaxus.Service.JwtService;
+using Pegaxus.Service.Models;
 
 namespace Pegaxus.API.Extensions;
 
@@ -27,6 +28,11 @@ public static class JwtExtensions
         configuration
             .GetSection(nameof(JwtOptions))
             .Bind(jwtOption);
+
+        if (string.IsNullOrWhiteSpace(jwtOption.SecretKey) || jwtOption.SecretKey.Length < 32)
+            throw new InvalidOperationException("JwtOptions:SecretKey must contain at least 32 characters");
+        if (jwtOption.ExpirationMinutes <= 0)
+            throw new InvalidOperationException("JwtOptions:ExpirationMinutes must be greater than 0");
 
         var key = Encoding.UTF8.GetBytes(jwtOption.SecretKey);
 
@@ -55,7 +61,30 @@ public static class JwtExtensions
                         new SymmetricSecurityKey(key),
 
                     NameClaimType = ClaimTypes.NameIdentifier,
-                    RoleClaimType = ClaimTypes.Role
+                    RoleClaimType = ClaimTypes.Role,
+                    ClockSkew = TimeSpan.Zero
+                };
+                options.Events = new JwtBearerEvents
+                {
+                    OnChallenge = async context =>
+                    {
+                        context.HandleResponse();
+                        context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                        await context.Response.WriteAsJsonAsync(ResponseBuilder.ErrorResponse(
+                            null,
+                            "The authentication session is invalid or has expired",
+                            "UNAUTHORIZED",
+                            StatusCodes.Status401Unauthorized));
+                    },
+                    OnForbidden = async context =>
+                    {
+                        context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        await context.Response.WriteAsJsonAsync(ResponseBuilder.ErrorResponse(
+                            null,
+                            "You do not have permission to perform this action",
+                            "FORBIDDEN",
+                            StatusCodes.Status403Forbidden));
+                    }
                 };
             });
 

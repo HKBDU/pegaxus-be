@@ -30,14 +30,16 @@ public sealed class AccountsController : ControllerBase
             return Unauthorized(ResponseBuilder.ErrorResponse(
                 null,
                 "The authenticated account identifier is invalid",
-                HttpContext.TraceIdentifier));
+                errorCode: "UNAUTHORIZED",
+                code: StatusCodes.Status401Unauthorized,
+                traceId: HttpContext.TraceIdentifier));
 
         var response = await _service.GetCurrentProfileAsync(accountId, cancellationToken);
 
         return Ok(ResponseBuilder.SuccessResponse(
             response,
             "Profile retrieved successfully",
-            HttpContext.TraceIdentifier));
+            traceId: HttpContext.TraceIdentifier));
     }
 
     [HttpPatch("me")]
@@ -51,14 +53,16 @@ public sealed class AccountsController : ControllerBase
             return Unauthorized(ResponseBuilder.ErrorResponse(
                 null,
                 "The authenticated account identifier is invalid",
-                HttpContext.TraceIdentifier));
+                errorCode: "UNAUTHORIZED",
+                code: StatusCodes.Status401Unauthorized,
+                traceId: HttpContext.TraceIdentifier));
 
         var response = await _service.UpdateProfileAsync(accountId, request, cancellationToken);
 
         return Ok(ResponseBuilder.SuccessResponse(
             response,
             "Profile updated successfully",
-            HttpContext.TraceIdentifier));
+            traceId: HttpContext.TraceIdentifier));
     }
 
     [HttpPut("me/password")]
@@ -72,13 +76,15 @@ public sealed class AccountsController : ControllerBase
             return Unauthorized(ResponseBuilder.ErrorResponse(
                 null,
                 "The authenticated account identifier is invalid",
-                HttpContext.TraceIdentifier));
+                errorCode: "UNAUTHORIZED",
+                code: StatusCodes.Status401Unauthorized,
+                traceId: HttpContext.TraceIdentifier));
 
         await _service.ChangePasswordAsync(accountId, request, cancellationToken);
 
         return Ok(ResponseBuilder.SuccessResponse(
             null,
             "Change password successfully",
-            HttpContext.TraceIdentifier));
+            traceId: HttpContext.TraceIdentifier));
     }
 }

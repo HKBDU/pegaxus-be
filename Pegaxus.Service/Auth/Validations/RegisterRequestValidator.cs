@@ -19,7 +19,7 @@ public class RegisterRequestValidator : AbstractValidator<Request.RegisterReques
 
         RuleFor(x => x.Password)
             .NotEmpty().WithMessage("Password is required.")
-            .Length(6, 128).WithMessage("Password must be between 6 and 128 characters.")
+            .Length(8, 128).WithMessage("Password must be between 8 and 128 characters.")
             .Matches(@"[A-Z]").WithMessage("Password must contain at least 1 uppercase letter.")
             .Matches(@"[a-z]").WithMessage("Password must contain at least 1 lowercase letter.")
             .Matches(@"[0-9]").WithMessage("Password must contain at least 1 numeric character.");

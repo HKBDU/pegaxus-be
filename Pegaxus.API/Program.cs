@@ -13,6 +13,7 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Models;
 
 using AuthService = Pegaxus.Service.Auth;
+using BookingService = Pegaxus.Service.BookingService;
 using JwtService = Pegaxus.Service.JwtService;
 using MediaService = Pegaxus.Service.MediaService;
 using CloudinaryService = Pegaxus.Service.CloudinaryService;
@@ -48,7 +49,7 @@ builder.Services
             return new BadRequestObjectResult(ResponseBuilder.ErrorResponse(
                 errors,
                 "The request data is invalid",
-                context.HttpContext.TraceIdentifier));
+                traceId: context.HttpContext.TraceIdentifier));
         };
     });
 builder.Services.AddHttpContextAccessor();
@@ -81,6 +82,15 @@ builder.Services.AddScoped<AuthService.IService, AuthService.Service>();
 builder.Services.AddScoped<IValidator<AuthService.Request.LoginRequest>, AuthService.Validations.LoginRequestValidator>();
 builder.Services.AddScoped<IValidator<AuthService.Request.RegisterRequest>, AuthService.Validations.RegisterRequestValidator>();
 builder.Services.AddScoped<IValidator<AuthService.Request.ForgotPasswordRequest>, AuthService.Validations.ForgotPasswordRequestValidator>();
+builder.Services.AddScoped<IValidator<AuthService.Request.VerifyEmailRequest>, AuthService.Validations.VerifyEmailRequestValidator>();
+builder.Services.AddScoped<IValidator<AuthService.Request.ResendOtpRequest>, AuthService.Validations.ResendOtpRequestValidator>();
+builder.Services.AddScoped<IValidator<AuthService.Request.RefreshTokenRequest>, AuthService.Validations.RefreshTokenRequestValidator>();
+builder.Services.AddScoped<IValidator<AuthService.Request.ResetPasswordRequest>, AuthService.Validations.ResetPasswordRequestValidator>();
+builder.Services.AddScoped<BookingService.IService, BookingService.Service>();
+builder.Services.AddScoped<IValidator<BookingService.Request.CreateBookingRequest>, BookingService.Validations.CreateBookingRequestValidator>();
+builder.Services.AddScoped<IValidator<BookingService.Request.UpdateBookingRequest>, BookingService.Validations.UpdateBookingRequestValidator>();
+builder.Services.AddScoped<IValidator<BookingService.Request.CancelBookingRequest>, BookingService.Validations.CancelBookingRequestValidator>();
+builder.Services.AddScoped<IValidator<BookingService.Request.RejectBookingRequest>, BookingService.Validations.RejectBookingRequestValidator>();
 builder.Services.AddScoped<IPasswordHasher<Account>, PasswordHasher<Account>>();
 builder.Services.AddScoped<MediaService.IService, CloudinaryService.Service>();
 builder.Services.AddScoped<MailService.IService, MailService.Service>();

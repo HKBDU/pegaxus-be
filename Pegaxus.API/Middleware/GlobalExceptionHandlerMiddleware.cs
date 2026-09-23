@@ -29,10 +29,11 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
             context.Response.Clear();
             context.Response.StatusCode = statusCode;
             await context.Response.WriteAsJsonAsync(ResponseBuilder.ErrorResponse(
-                statusCode >= StatusCodes.Status500InternalServerError ? null : ex.Message,
+                null,
                 GetErrorMessage(ex, statusCode),
-                context.TraceIdentifier,
-                ex is Exceptions appException ? appException.ErrorCode : null));
+                errorCode: GetErrorCode(ex, statusCode),
+                code: statusCode,
+                traceId: context.TraceIdentifier));
         }
     }
 
@@ -51,7 +52,21 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
     private static string GetErrorMessage(Exception ex, int statusCode)
     {
         return statusCode >= StatusCodes.Status500InternalServerError
-            ? "Unexpected error occurred"
+            ? "A system error occurred. Please try again later"
             : ex.Message;
+    }
+
+    private static string GetErrorCode(Exception ex, int statusCode)
+    {
+        if (ex is Exceptions appException)
+            return appException.ErrorCode;
+
+        return statusCode switch
+        {
+            StatusCodes.Status400BadRequest => "VALIDATION_ERROR",
+            StatusCodes.Status401Unauthorized => "UNAUTHORIZED",
+            StatusCodes.Status404NotFound => "NOT_FOUND",
+            _ => "SYSTEM_ERROR"
+        };
     }
 }
