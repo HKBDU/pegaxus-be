@@ -53,7 +53,7 @@ public sealed class AuthController : ControllerBase
         var error = await ValidateRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         await _service.VerifyEmailAsync(request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(null, "Xác thực email thành công"));
+        return Ok(ResponseBuilder.SuccessResponse(null, "Email verified successfully"));
     }
 
     [HttpPost("resend-otp")]
@@ -65,7 +65,7 @@ public sealed class AuthController : ControllerBase
         var error = await ValidateRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         var response = await _service.ResendOtpAsync(request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Đã gửi lại mã OTP"));
+        return Ok(ResponseBuilder.SuccessResponse(response, "OTP has been resent"));
     }
 
     [HttpPost("refresh-token")]
@@ -77,7 +77,19 @@ public sealed class AuthController : ControllerBase
         var error = await ValidateRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         var response = await _service.RefreshTokenAsync(request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Làm mới token thành công"));
+        return Ok(ResponseBuilder.SuccessResponse(response, "Token refreshed successfully"));
+    }
+
+    [HttpPost("reset-password")]
+    public async Task<IActionResult> ResetPassword(
+        AuthService.Request.ResetPasswordRequest request,
+        [FromServices] IValidator<AuthService.Request.ResetPasswordRequest> validator,
+        CancellationToken cancellationToken)
+    {
+        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        if (error is not null) return error;
+        await _service.ResetPasswordAsync(request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(null, "Password reset successfully. Please sign in again"));
     }
 
     private async Task<BadRequestObjectResult?> ValidateRequestAsync<T>(

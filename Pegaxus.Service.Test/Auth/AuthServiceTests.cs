@@ -137,6 +137,49 @@ public class AuthServiceTests
         Assert.Equal(2, await db.RefreshTokens.CountAsync());
     }
 
+    [Fact]
+    public async Task ResetPassword_ChangesPasswordAndRevokesRefreshTokens()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, _) = await TestSupport.AddCustomerAsync(db);
+        var refreshToken = new RefreshToken
+        {
+            RefreshTokenId = Guid.NewGuid(),
+            AccountId = account.AccountId,
+            Account = account,
+            TokenHash = Hash("rt_old"),
+            CreatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified),
+            ExpiresAt = DateTime.SpecifyKind(DateTime.UtcNow.AddDays(1), DateTimeKind.Unspecified)
+        };
+        db.RefreshTokens.Add(refreshToken);
+        await db.SaveChangesAsync();
+        var cache = TestSupport.CreateCache();
+        var otp = "730251";
+        await cache.SetStringAsync(
+            $"otp:PASSWORD_RESET:{account.Email}",
+            JsonSerializer.Serialize(new
+            {
+                CodeHash = Hash(otp),
+                Attempts = 0,
+                ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5)
+            }));
+        var service = CreateService(db, cache, TestSupport.CreateMailService());
+
+        await service.ResetPasswordAsync(new AuthRequest.ResetPasswordRequest
+        {
+            Email = account.Email,
+            Otp = otp,
+            NewPassword = "NewPassword1",
+            ConfirmPassword = "NewPassword1"
+        });
+
+        Assert.Equal(
+            PasswordVerificationResult.Success,
+            new PasswordHasher<Account>().VerifyHashedPassword(account, account.PasswordHash, "NewPassword1"));
+        Assert.NotNull(refreshToken.RevokedAt);
+        Assert.Null(await cache.GetStringAsync($"otp:PASSWORD_RESET:{account.Email}"));
+    }
+
     private static AuthService CreateService(
         Pegaxus.Repository.AppDbContext db,
         IDistributedCache cache,

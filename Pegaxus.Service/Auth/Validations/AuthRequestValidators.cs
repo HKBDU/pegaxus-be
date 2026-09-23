@@ -31,3 +31,22 @@ public class RefreshTokenRequestValidator : AbstractValidator<Request.RefreshTok
         RuleFor(x => x.RefreshToken).NotEmpty();
     }
 }
+
+public class ResetPasswordRequestValidator : AbstractValidator<Request.ResetPasswordRequest>
+{
+    public ResetPasswordRequestValidator()
+    {
+        RuleLevelCascadeMode = CascadeMode.Stop;
+        RuleFor(x => x.Email).NotEmpty().EmailAddress().MaximumLength(255);
+        RuleFor(x => x.Otp).Matches(@"^\d{6}$");
+        RuleFor(x => x.NewPassword)
+            .NotEmpty()
+            .Length(8, 128)
+            .Matches(@"[A-Z]")
+            .Matches(@"[a-z]")
+            .Matches(@"[0-9]");
+        RuleFor(x => x.ConfirmPassword)
+            .NotEmpty()
+            .Equal(x => x.NewPassword).WithMessage("ConfirmPassword doesn't match.");
+    }
+}

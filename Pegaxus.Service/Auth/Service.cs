@@ -130,7 +130,7 @@ public class Service : IService
             item => !item.IsDeleted && item.Email.ToLower() == email,
             cancellationToken);
         if (account is null)
-            throw new NotFoundException("Không tìm thấy tài khoản", "ACCOUNT_NOT_FOUND");
+            throw new NotFoundException("Account not found", "ACCOUNT_NOT_FOUND");
 
         await ValidateOtpAsync(email, EmailVerification, request.Otp, cancellationToken);
         var now = UtcNow();
@@ -223,6 +223,31 @@ public class Service : IService
         }
     }
 
+    public async Task ResetPasswordAsync(
+        Request.ResetPasswordRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        await ValidateOtpAsync(email, PasswordReset, request.Otp, cancellationToken);
+
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        var account = await _db.Accounts
+            .Include(item => item.RefreshTokens)
+            .SingleOrDefaultAsync(item => !item.IsDeleted && item.Email.ToLower() == email, cancellationToken);
+        if (account is null)
+            throw new BadRequestException("OTP has expired", "OTP_EXPIRED");
+
+        var now = UtcNow();
+        account.PasswordHash = _passwordHasher.HashPassword(account, request.NewPassword);
+        account.UpdatedAt = now;
+        foreach (var refreshToken in account.RefreshTokens.Where(item => item.RevokedAt is null))
+            refreshToken.RevokedAt = now;
+
+        await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        await _cache.RemoveAsync(OtpKey(email, PasswordReset), cancellationToken);
+    }
+
     private async Task<DateTimeOffset> SendOtpAsync(
         string email,
         string purpose,
@@ -306,7 +331,7 @@ public class Service : IService
         if (entry is null || entry.ExpiresAt <= DateTimeOffset.UtcNow)
         {
             await _cache.RemoveAsync(key, cancellationToken);
-            throw new BadRequestException("Mã OTP đã hết hạn", "OTP_EXPIRED");
+            throw new BadRequestException("OTP has expired", "OTP_EXPIRED");
         }
 
         if (MatchesHash(otp, entry.CodeHash))
@@ -316,7 +341,7 @@ public class Service : IService
         if (attempts >= 5)
         {
             await _cache.RemoveAsync(key, cancellationToken);
-            throw new TooManyRequestsException("Nhập sai quá 5 lần, vui lòng yêu cầu mã mới", "OTP_TOO_MANY_ATTEMPTS");
+            throw new TooManyRequestsException("Too many invalid attempts. Please request a new code", "OTP_TOO_MANY_ATTEMPTS");
         }
 
         await _cache.SetStringAsync(
@@ -324,13 +349,13 @@ public class Service : IService
             JsonSerializer.Serialize(entry with { Attempts = attempts }),
             new DistributedCacheEntryOptions { AbsoluteExpiration = entry.ExpiresAt },
             cancellationToken);
-        throw new BadRequestException("Mã OTP không chính xác", "OTP_INVALID");
+        throw new BadRequestException("OTP is invalid", "OTP_INVALID");
     }
 
     private async Task EnsureCooldownExpiredAsync(string email, string purpose, CancellationToken cancellationToken)
     {
         if (await _cache.GetStringAsync(CooldownKey(email, purpose), cancellationToken) is not null)
-            throw new TooManyRequestsException("Vui lòng đợi 60 giây trước khi gửi lại mã", "OTP_RESEND_TOO_SOON");
+            throw new TooManyRequestsException("Please wait 60 seconds before requesting another code", "OTP_RESEND_TOO_SOON");
     }
 
     private async Task SetCooldownAsync(string email, string purpose, CancellationToken cancellationToken) =>
@@ -393,7 +418,7 @@ public class Service : IService
     }
 
     private static UnauthorizedException InvalidRefreshToken() =>
-        new("Phiên đăng nhập đã hết hạn, vui lòng đăng nhập lại", "REFRESH_TOKEN_INVALID");
+        new("Session has expired. Please sign in again", "REFRESH_TOKEN_INVALID");
     private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
     private sealed record OtpCacheEntry(string CodeHash, int Attempts, DateTimeOffset ExpiresAt);
