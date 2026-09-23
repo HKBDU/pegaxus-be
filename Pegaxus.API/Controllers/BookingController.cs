@@ -22,6 +22,41 @@ public class BookingController : ControllerBase
         _service = service;
     }
 
+    [HttpGet]
+    [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
+    public async Task<IActionResult> GetList(
+        [FromQuery] BookingService.Request.BookingListRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetListAsync(GetAccountId(), request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Bookings retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("{bookingId:guid}")]
+    [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
+    public async Task<IActionResult> Get(Guid bookingId, CancellationToken cancellationToken)
+    {
+        var response = await _service.GetAsync(GetAccountId(), bookingId, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Booking retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("{bookingId:guid}/histories")]
+    [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
+    public async Task<IActionResult> GetHistories(Guid bookingId, CancellationToken cancellationToken)
+    {
+        var response = await _service.GetHistoriesAsync(GetAccountId(), bookingId, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Booking history retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     [HttpPost]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> Create(
