@@ -3,16 +3,23 @@ namespace Pegaxus.Service.Exceptions;
 public class Exceptions : Exception
 {
     public int StatusCode { get; set; }
+    public string? ErrorCode { get; set; }
     
     public Exceptions(string message, int statusCode = 400) : base(message)
     {
         StatusCode = statusCode;
     }
 
+    public Exceptions(string message, int statusCode, string errorCode) : this(message, statusCode)
+    {
+        ErrorCode = errorCode;
+    }
+
 }
 public class BadRequestException : Exceptions
 {
     public BadRequestException(string message) : base(message, 400) { }
+    public BadRequestException(string message, string errorCode) : base(message, 400, errorCode) { }
 }
 
 public class UnauthorizedException : Exceptions
