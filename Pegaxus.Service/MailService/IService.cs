@@ -7,7 +7,7 @@ public interface IService
 
 public class MailContent
 {
-    public required string To { get; set; } //Địa chỉ gửi đến
-    public required string Subject { get; set; } //Chủ đề (tiêu đê email)
-    public required string Body { get; set; } //Nội dung (hỗ trợ HTML) của email
+    public required string To { get; set; }
+    public required string Subject { get; set; }
+    public required string Body { get; set; }
 }

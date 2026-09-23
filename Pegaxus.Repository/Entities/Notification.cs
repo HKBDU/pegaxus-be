@@ -5,15 +5,15 @@ using Pegaxus.Repository.Enum;
 namespace Pegaxus.Repository.Entities;
 
 /// <summary>
-/// Notification: Thông báo phát sinh trong một Transport, 
-/// chứa loại, mức ưu tiên, nội dung và tham chiếu nghiệp vụ; 
+/// Notification: Thông báo nghiệp vụ, có thể liên quan đến một Transport,
+/// chứa loại, mức ưu tiên, nội dung và tham chiếu nghiệp vụ;
 /// người nhận được quản lý qua AccountNotification.
 /// </summary>
 public partial class Notification
 {
     public Guid NotificationId { get; set; }
 
-    public Guid TransportId { get; set; }
+    public Guid? TransportId { get; set; }
 
     public NotificationType NotificationType { get; set; }
 
@@ -35,5 +35,5 @@ public partial class Notification
 
     public virtual ICollection<AccountNotification> AccountNotifications { get; set; } = new List<AccountNotification>();
 
-    public virtual Transport Transport { get; set; } = null!;
+    public virtual Transport? Transport { get; set; }
 }
