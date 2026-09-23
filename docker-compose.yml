@@ -50,9 +50,9 @@ services:
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-pegaxus_db};Username=${POSTGRES_USER:-pegaxus_user};Password=${POSTGRES_PASSWORD:-pegaxus_secret_password}
       ConnectionStrings__Redis: redis:6379
-      JwtOptions__SecretKey: ${JWT_SECRET:-YourSuperSecretKeyWithAtLeast32CharactersLongForPegaxus2026!}
-      JwtOptions__Issuer: ${JWT_ISSUER:-Pegaxus.API}
-      JwtOptions__Audience: ${JWT_AUDIENCE:-Pegaxus.Client}
+      JwtOptions__SecretKey: ${JWT_SECRET:-secretKeySieuCapVoDich123kkkNguVL@}
+      JwtOptions__Issuer: ${JWT_ISSUER:-pegaxusServer}
+      JwtOptions__Audience: ${JWT_AUDIENCE:-pegaxusClient}
       JwtOptions__ExpirationMinutes: ${JWT_EXPIRY_MINUTES:-15}
       MailOptions__Mail: ${MailOptions__Mail:-}
       MailOptions__DisplayName: ${MailOptions__DisplayName:-Pegaxus}
