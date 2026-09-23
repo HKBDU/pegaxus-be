@@ -4,6 +4,15 @@ namespace Pegaxus.Service.BookingService;
 
 public class Request
 {
+    public class BookingListRequest
+    {
+        public int PageIndex { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+        public string? Search { get; set; }
+        public string? Status { get; set; }
+        public List<string>? SortBy { get; set; }
+    }
+
     public class CreateBookingRequest
     {
         public string OriginAddress { get; set; } = string.Empty;

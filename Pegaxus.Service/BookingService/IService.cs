@@ -2,6 +2,18 @@ namespace Pegaxus.Service.BookingService;
 
 public interface IService
 {
+    Task<Response.BookingDetailResponse> GetAsync(
+        Guid accountId,
+        Guid bookingId,
+        CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Response.BookingHistoryResponse>> GetHistoriesAsync(
+        Guid accountId,
+        Guid bookingId,
+        CancellationToken cancellationToken = default);
+    Task<Response.BookingListResponse> GetListAsync(
+        Guid accountId,
+        Request.BookingListRequest request,
+        CancellationToken cancellationToken = default);
     Task<Response.CreateBookingResponse> CreateAsync(Guid accountId, Request.CreateBookingRequest request, CancellationToken cancellationToken = default);
     Task<Response.UpdateBookingResponse> UpdateAsync(Guid accountId, Guid bookingId, Request.UpdateBookingRequest request, CancellationToken cancellationToken = default);
     Task CancelAsync(Guid accountId, Guid bookingId, Request.CancelBookingRequest request, CancellationToken cancellationToken = default);
