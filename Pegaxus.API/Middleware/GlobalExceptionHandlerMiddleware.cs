@@ -31,8 +31,9 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
             await context.Response.WriteAsJsonAsync(ResponseBuilder.ErrorResponse(
                 null,
                 GetErrorMessage(ex, statusCode),
-                GetErrorCode(ex, statusCode),
-                statusCode));
+                errorCode: GetErrorCode(ex, statusCode),
+                code: statusCode,
+                traceId: context.TraceIdentifier));
         }
     }
 
