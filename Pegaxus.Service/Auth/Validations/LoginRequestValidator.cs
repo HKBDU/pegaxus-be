@@ -1,0 +1,19 @@
+using FluentValidation;
+
+namespace Pegaxus.Service.Auth.Validations;
+
+public class LoginRequestValidator : AbstractValidator<Request.LoginRequest>
+{
+    public LoginRequestValidator()
+    {
+        RuleLevelCascadeMode = CascadeMode.Stop;
+
+        RuleFor(x => x.Email)
+            .NotEmpty().WithMessage("Email is required.")
+            .EmailAddress().WithMessage("Email format is invalid.")
+            .MaximumLength(255).WithMessage("Email must not exceed 255 characters.");
+
+        RuleFor(x => x.Password)
+            .NotEmpty().WithMessage("Password is required.");
+    }
+}

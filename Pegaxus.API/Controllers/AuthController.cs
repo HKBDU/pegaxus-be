@@ -17,6 +17,20 @@ public sealed class AuthController : ControllerBase
         _service = service;
     }
 
+    [HttpPost("login")]
+    public async Task<IActionResult> Login(
+        AuthService.Request.LoginRequest request,
+        [FromServices] IValidator<AuthService.Request.LoginRequest> validator,
+        CancellationToken cancellationToken)
+    {
+        var validationError = await ValidateRequestAsync(request, validator, cancellationToken);
+        if (validationError is not null)
+            return validationError;
+
+        var response = await _service.LoginAsync(request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(response, "Login successful. Welcome back!", traceId: HttpContext.TraceIdentifier));
+    }
+
     [HttpPost("register")]
     public async Task<IActionResult> Register(
         AuthService.Request.RegisterRequest request,

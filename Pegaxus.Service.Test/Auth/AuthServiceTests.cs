@@ -184,7 +184,7 @@ public class AuthServiceTests
         Pegaxus.Repository.AppDbContext db,
         IDistributedCache cache,
         TestSupport.RecordingMailService mailService) =>
-        new(db, new PasswordHasher<Account>(), cache, mailService, TestSupport.CreateJwtService());
+        new(db, new PasswordHasher<Account>(), cache, mailService, TestSupport.CreateJwtService(), new Microsoft.AspNetCore.Http.HttpContextAccessor());
 
     private static string Hash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));

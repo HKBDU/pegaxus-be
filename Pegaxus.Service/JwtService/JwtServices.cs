@@ -1,4 +1,4 @@
-using System.IdentityModel.Tokens.Jwt;
+﻿using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
@@ -9,11 +9,13 @@ namespace Pegaxus.Service.JwtService;
 
 public class JwtServices : IJwtService
 {
+
     private readonly JwtOptions _jwtOption = new();
 
     public JwtServices(IConfiguration configuration)
     {
         configuration.GetSection(nameof(JwtOptions)).Bind(_jwtOption);
+        // Ánh xạ dữ liệu từ AppSettings vào Object JwtOptions
     }
 
     public int AccessTokenExpirationSeconds => (int)TimeSpan.FromMinutes(_jwtOption.ExpirationMinutes).TotalSeconds;

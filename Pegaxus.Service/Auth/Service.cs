@@ -4,6 +4,7 @@ using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
@@ -15,6 +16,7 @@ using Pegaxus.Service.Exceptions;
 using MailService = Pegaxus.Service.MailService;
 using JwtService = Pegaxus.Service.JwtService;
 using Claim = System.Security.Claims.Claim;
+using AppException = Pegaxus.Service.Exceptions.Exceptions;
 using AccountEntity = Pegaxus.Repository.Entities.Account;
 
 namespace Pegaxus.Service.Auth;
@@ -28,19 +30,129 @@ public class Service : IService
     private readonly IDistributedCache _cache;
     private readonly MailService.IService _mailService;
     private readonly JwtService.IJwtService _jwtService;
+    private readonly IHttpContextAccessor _httpContextAccessor;
+    private static readonly TimeSpan LoginAttemptWindow = TimeSpan.FromMinutes(15);
+    private const int MaxLoginFailures = 5;
 
     public Service(
         AppDbContext db,
         IPasswordHasher<AccountEntity> passwordHasher,
         IDistributedCache cache,
         MailService.IService mailService,
-        JwtService.IJwtService jwtService)
+        JwtService.IJwtService jwtService,
+        IHttpContextAccessor httpContextAccessor)
     {
         _db = db;
         _passwordHasher = passwordHasher;
         _cache = cache;
         _mailService = mailService;
         _jwtService = jwtService;
+        _httpContextAccessor = httpContextAccessor;
+    }
+
+    public async Task<Response.LoginResponse> LoginAsync(
+        Request.LoginRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var account = await _db.Accounts
+            .Include(item => item.CustomerAccount)
+            .Include(item => item.EmployeeAccount)
+            .FirstOrDefaultAsync(item => !item.IsDeleted && item.Email.ToLower() == email, cancellationToken);
+
+        if (account is null)
+            throw new UnauthorizedException("Email or password incorrect");
+        if (account.Status == AccountStatus.SUSPENDED)
+            throw new ForbiddenException("Account suspended");
+        if (account.Status != AccountStatus.ACTIVE)
+            throw new ForbiddenException("Account inactive");
+
+        var failedKey = $"auth:login:failed:{account.AccountId}";
+        var lockedKey = $"auth:login:locked:{account.AccountId}";
+        if (await _cache.GetStringAsync(lockedKey, cancellationToken) is not null)
+            throw new TooManyRequestsException("Too many failed login attempts. Please try again later.");
+
+        if (_passwordHasher.VerifyHashedPassword(account, account.PasswordHash, request.Password) == PasswordVerificationResult.Failed)
+        {
+            await RecordLoginFailureAsync(failedKey, lockedKey, cancellationToken);
+            throw new UnauthorizedException("Email or password incorrect");
+        }
+
+        if (account.EmailVerifiedAt is null)
+            throw new ForbiddenException("Account email has not been verified");
+
+        var role = account.AccountType switch
+        {
+            AccountType.CUSTOMER when account.CustomerAccount is { IsDeleted: false } => "CUSTOMER",
+            AccountType.EMPLOYEE when account.EmployeeAccount is { IsDeleted: false, IsActive: true } employee => employee.Role.ToString(),
+            _ => throw new ForbiddenException("Account profile is inactive or unavailable")
+        };
+
+        await _cache.RemoveAsync(failedKey, cancellationToken);
+        await _cache.RemoveAsync(lockedKey, cancellationToken);
+
+        var accessToken = _jwtService.GenerateAccessToken(CreateClaims(account));
+        var refreshToken = _jwtService.GenerateRefreshToken();
+        var now = UtcNow();
+        var context = _httpContextAccessor.HttpContext;
+        var ip = context?.Connection.RemoteIpAddress?.ToString();
+        var device = context?.Request.Headers.UserAgent.ToString();
+        _db.RefreshTokens.Add(new RefreshToken
+        {
+            RefreshTokenId = Guid.NewGuid(),
+            AccountId = account.AccountId,
+            TokenHash = Hash(refreshToken),
+            CreatedAt = now,
+            ExpiresAt = now.AddDays(7),
+            CreatedByIp = string.IsNullOrWhiteSpace(ip) ? null : ip[..Math.Min(ip.Length, 64)],
+            DeviceInfo = string.IsNullOrWhiteSpace(device) ? null : device[..Math.Min(device.Length, 500)]
+        });
+        account.LastLoginAt = now;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return new Response.LoginResponse
+        {
+            AccessToken = accessToken,
+            RefreshToken = refreshToken,
+            ExpiresIn = _jwtService.AccessTokenExpirationSeconds,
+            User = new Response.UserInfoResponse
+            {
+                AccountId = account.AccountId,
+                CustomerId = account.CustomerAccount?.CustomerId,
+                EmployeeId = account.EmployeeAccount?.EmployeeId,
+                FullName = account.CustomerAccount?.FullName ?? account.EmployeeAccount!.FullName,
+                AccountType = account.AccountType.ToString(),
+                Role = role,
+                AvatarUrl = account.AvatarUrl
+            }
+        };
+    }
+
+    private async Task RecordLoginFailureAsync(string failedKey, string lockedKey, CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var cached = await _cache.GetStringAsync(failedKey, cancellationToken);
+        var entry = cached is null ? null : JsonSerializer.Deserialize<LoginFailureEntry>(cached);
+        var withinWindow = entry is not null && now - entry.WindowStartedAt < LoginAttemptWindow;
+        var windowStart = withinWindow ? entry!.WindowStartedAt : now;
+        var count = withinWindow ? entry!.Count + 1 : 1;
+
+        if (count >= MaxLoginFailures)
+        {
+            await _cache.SetStringAsync(
+                lockedKey,
+                "1",
+                new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = LoginAttemptWindow },
+                cancellationToken);
+            await _cache.RemoveAsync(failedKey, cancellationToken);
+            throw new TooManyRequestsException("Too many failed login attempts. Please try again later.");
+        }
+
+        await _cache.SetStringAsync(
+            failedKey,
+            JsonSerializer.Serialize(new LoginFailureEntry(count, windowStart)),
+            new DistributedCacheEntryOptions { AbsoluteExpirationRelativeToNow = windowStart.Add(LoginAttemptWindow) - now },
+            cancellationToken);
     }
 
     public async Task<Response.RegisterResponse> RegisterAsync(
@@ -49,7 +161,7 @@ public class Service : IService
     {
         var email = request.Email.Trim().ToLowerInvariant();
         if (await _db.Accounts.AnyAsync(account => !account.IsDeleted && account.Email.ToLower() == email, cancellationToken))
-            throw new ConflictException("Email is already in use", "EMAIL_ALREADY_EXISTS");
+            throw new AppException("Email is already in use", 409, "EMAIL_ALREADY_EXISTS");
 
         var now = UtcNow();
         var account = new Account
@@ -83,7 +195,7 @@ public class Service : IService
         catch (DbUpdateException exception)
             when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation })
         {
-            throw new ConflictException("Email is already in use", "EMAIL_ALREADY_EXISTS");
+            throw new AppException("Email is already in use", 409, "EMAIL_ALREADY_EXISTS");
         }
         catch
         {
@@ -130,7 +242,7 @@ public class Service : IService
             item => !item.IsDeleted && item.Email.ToLower() == email,
             cancellationToken);
         if (account is null)
-            throw new NotFoundException("Account not found", "ACCOUNT_NOT_FOUND");
+            throw new AppException("Account not found", 404, "ACCOUNT_NOT_FOUND");
 
         await ValidateOtpAsync(email, EmailVerification, request.Otp, cancellationToken);
         var now = UtcNow();
@@ -235,7 +347,7 @@ public class Service : IService
             .Include(item => item.RefreshTokens)
             .SingleOrDefaultAsync(item => !item.IsDeleted && item.Email.ToLower() == email, cancellationToken);
         if (account is null)
-            throw new BadRequestException("OTP has expired", "OTP_EXPIRED");
+            throw new AppException("OTP has expired", 400, "OTP_EXPIRED");
 
         var now = UtcNow();
         account.PasswordHash = _passwordHasher.HashPassword(account, request.NewPassword);
@@ -331,7 +443,7 @@ public class Service : IService
         if (entry is null || entry.ExpiresAt <= DateTimeOffset.UtcNow)
         {
             await _cache.RemoveAsync(key, cancellationToken);
-            throw new BadRequestException("OTP has expired", "OTP_EXPIRED");
+            throw new AppException("OTP has expired", 400, "OTP_EXPIRED");
         }
 
         if (MatchesHash(otp, entry.CodeHash))
@@ -341,7 +453,7 @@ public class Service : IService
         if (attempts >= 5)
         {
             await _cache.RemoveAsync(key, cancellationToken);
-            throw new TooManyRequestsException("Too many invalid attempts. Please request a new code", "OTP_TOO_MANY_ATTEMPTS");
+            throw new AppException("Too many invalid attempts. Please request a new code", 429, "OTP_TOO_MANY_ATTEMPTS");
         }
 
         await _cache.SetStringAsync(
@@ -349,13 +461,13 @@ public class Service : IService
             JsonSerializer.Serialize(entry with { Attempts = attempts }),
             new DistributedCacheEntryOptions { AbsoluteExpiration = entry.ExpiresAt },
             cancellationToken);
-        throw new BadRequestException("OTP is invalid", "OTP_INVALID");
+        throw new AppException("OTP is invalid", 400, "OTP_INVALID");
     }
 
     private async Task EnsureCooldownExpiredAsync(string email, string purpose, CancellationToken cancellationToken)
     {
         if (await _cache.GetStringAsync(CooldownKey(email, purpose), cancellationToken) is not null)
-            throw new TooManyRequestsException("Please wait 60 seconds before requesting another code", "OTP_RESEND_TOO_SOON");
+            throw new AppException("Please wait 60 seconds before requesting another code", 429, "OTP_RESEND_TOO_SOON");
     }
 
     private async Task SetCooldownAsync(string email, string purpose, CancellationToken cancellationToken) =>
@@ -417,9 +529,10 @@ public class Service : IService
         return claims;
     }
 
-    private static UnauthorizedException InvalidRefreshToken() =>
-        new("Session has expired. Please sign in again", "REFRESH_TOKEN_INVALID");
+    private static AppException InvalidRefreshToken() =>
+        new("Session has expired. Please sign in again", 401, "REFRESH_TOKEN_INVALID");
     private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
     private sealed record OtpCacheEntry(string CodeHash, int Attempts, DateTimeOffset ExpiresAt);
+    private sealed record LoginFailureEntry(int Count, DateTimeOffset WindowStartedAt);
 }
