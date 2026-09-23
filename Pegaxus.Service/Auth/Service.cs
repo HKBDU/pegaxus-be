@@ -58,12 +58,12 @@ public class Service : IService
             .FirstOrDefaultAsync(a => !a.IsDeleted && a.Email.ToLower() == email, cancellationToken);
 
         if (account is null)
-            throw new UnauthorizedException("Email or password incorrect", "INVALID_CREDENTIALS");
+            throw new UnauthorizedException("Email or password incorrect");
 
         if (account.Status == AccountStatus.SUSPENDED)
-            throw new ForbiddenException("Account suspended", "ACCOUNT_SUSPENDED");
+            throw new ForbiddenException("Account suspended");
         if (account.Status != AccountStatus.ACTIVE)
-            throw new ForbiddenException("Account inactive", "ACCOUNT_INACTIVE");
+            throw new ForbiddenException("Account inactive");
 
         var failedKey = $"auth:login:failed:{account.AccountId}";
         var lockedKey = $"auth:login:locked:{account.AccountId}";
@@ -74,11 +74,11 @@ public class Service : IService
         if (passwordResult == PasswordVerificationResult.Failed)
         {
             await RecordLoginFailureAsync(failedKey, lockedKey, cancellationToken);
-            throw new UnauthorizedException("Email or password incorrect", "INVALID_CREDENTIALS");
+            throw new UnauthorizedException("Email or password incorrect");
         }
 
         if (account.EmailVerifiedAt is null)
-            throw new ForbiddenException("Account email has not been verified", "ACCOUNT_NOT_VERIFIED");
+            throw new ForbiddenException("Account email has not been verified");
 
         var role = account.AccountType switch
         {
