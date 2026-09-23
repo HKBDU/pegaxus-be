@@ -11,19 +11,20 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using MailService = Pegaxus.Service.MailService;
+using AccountEntity = Pegaxus.Repository.Entities.Account;
 
 namespace Pegaxus.Service.Auth;
 
 public class Service : IService
 {
     private readonly AppDbContext _db;
-    private readonly IPasswordHasher<Account> _passwordHasher;
+    private readonly IPasswordHasher<AccountEntity> _passwordHasher;
     private readonly IDistributedCache _cache;
     private readonly MailService.IService _mailService;
 
     public Service(
         AppDbContext db,
-        IPasswordHasher<Account> passwordHasher,
+        IPasswordHasher<AccountEntity> passwordHasher,
         IDistributedCache cache,
         MailService.IService mailService)
     {
