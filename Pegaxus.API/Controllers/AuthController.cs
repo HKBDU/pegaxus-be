@@ -1,4 +1,5 @@
 using FluentValidation;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.Service.Models;
 
@@ -104,6 +105,19 @@ public sealed class AuthController : ControllerBase
         if (error is not null) return error;
         await _service.ResetPasswordAsync(request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(null, "Password reset successfully. Please sign in again"));
+    }
+
+    [Authorize]
+    [HttpPost("logout")]
+    public async Task<IActionResult> Logout(
+        AuthService.Request.LogoutRequest request,
+        [FromServices] IValidator<AuthService.Request.LogoutRequest> validator,
+        CancellationToken cancellationToken)
+    {
+        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        if (error is not null) return error;
+        await _service.LogoutAsync(request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(null, "Logout successful"));
     }
 
     private async Task<BadRequestObjectResult?> ValidateRequestAsync<T>(

@@ -85,6 +85,7 @@ builder.Services.AddScoped<IValidator<AuthService.Request.ForgotPasswordRequest>
 builder.Services.AddScoped<IValidator<AuthService.Request.VerifyEmailRequest>, AuthService.Validations.VerifyEmailRequestValidator>();
 builder.Services.AddScoped<IValidator<AuthService.Request.ResendOtpRequest>, AuthService.Validations.ResendOtpRequestValidator>();
 builder.Services.AddScoped<IValidator<AuthService.Request.RefreshTokenRequest>, AuthService.Validations.RefreshTokenRequestValidator>();
+builder.Services.AddScoped<IValidator<AuthService.Request.LogoutRequest>, AuthService.Validations.LogoutRequestValidator>();
 builder.Services.AddScoped<IValidator<AuthService.Request.ResetPasswordRequest>, AuthService.Validations.ResetPasswordRequestValidator>();
 builder.Services.AddScoped<BookingService.IService, BookingService.Service>();
 builder.Services.AddScoped<IValidator<BookingService.Request.CreateBookingRequest>, BookingService.Validations.CreateBookingRequestValidator>();
