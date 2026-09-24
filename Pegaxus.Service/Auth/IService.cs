@@ -8,5 +8,6 @@ public interface IService
     Task VerifyEmailAsync(Request.VerifyEmailRequest request, CancellationToken cancellationToken = default);
     Task<Response.ResendOtpResponse> ResendOtpAsync(Request.ResendOtpRequest request, CancellationToken cancellationToken = default);
     Task<Response.RefreshTokenResponse> RefreshTokenAsync(Request.RefreshTokenRequest request, CancellationToken cancellationToken = default);
+    Task LogoutAsync(Request.LogoutRequest request, CancellationToken cancellationToken = default);
     Task ResetPasswordAsync(Request.ResetPasswordRequest request, CancellationToken cancellationToken = default);
 }

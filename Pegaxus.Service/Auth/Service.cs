@@ -335,6 +335,29 @@ public class Service : IService
         }
     }
 
+    public async Task LogoutAsync(
+        Request.LogoutRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var context = _httpContextAccessor.HttpContext;
+        if (!Guid.TryParse(context?.User.FindFirstValue(ClaimTypes.NameIdentifier), out var accountId))
+            throw new UnauthorizedException("Authentication required");
+
+        var now = UtcNow();
+        var tokenHash = Hash(request.RefreshToken);
+        var token = await _db.RefreshTokens.SingleOrDefaultAsync(item =>
+            item.AccountId == accountId && item.TokenHash == tokenHash &&
+            item.RevokedAt == null && item.ExpiresAt > now, cancellationToken);
+
+        if (token is null)
+            return;
+
+        var ip = context!.Connection.RemoteIpAddress?.ToString();
+        token.RevokedAt = now;
+        token.RevokedByIp = string.IsNullOrWhiteSpace(ip) ? null : ip[..Math.Min(ip.Length, 64)];
+        await _db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task ResetPasswordAsync(
         Request.ResetPasswordRequest request,
         CancellationToken cancellationToken = default)
