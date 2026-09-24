@@ -85,7 +85,7 @@ public sealed class Service : IService
     {
         var customerId = await _appDbContext.Customers
             .Where(customer =>
-                customer.AccountId == accountId &&
+                customer.AccountId == accountId && 
                 !customer.IsDeleted &&
                 !customer.Account.IsDeleted)
             .Select(customer => (Guid?)customer.CustomerId)
@@ -97,9 +97,12 @@ public sealed class Service : IService
         var horseName = request.HorseName.Trim();
         ValidateText(horseName, 150, "HorseName", required: true);
         ValidateText(request.Breed, 100, "Breed");
+        ValidateText(request.Color, 100, "Color");
         ValidateText(request.CountryOfOrigin, 100, "CountryOfOrigin");
         ValidateText(request.MicrochipNumber, 100, "MicrochipNumber");
         ValidateText(request.PassportNumber, 100, "PassportNumber");
+        ValidateMeasurement(request.WeightKg, "WeightKg");
+        ValidateMeasurement(request.HeightCm, "HeightCm");
 
         var sex = ParseSex(request.Sex);
 
@@ -129,9 +132,13 @@ public sealed class Service : IService
             Sex = sex,
             Breed = NormalizeOptional(request.Breed),
             DateOfBirth = request.DateOfBirth,
+            Color = NormalizeOptional(request.Color),
             CountryOfOrigin = NormalizeOptional(request.CountryOfOrigin),
+            WeightKg = request.WeightKg,
+            HeightCm = request.HeightCm,
             MicrochipNumber = microchipNumber,
             PassportNumber = passportNumber,
+            IdentificationNotes = NormalizeOptional(request.IdentificationNotes),
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -193,6 +200,8 @@ public sealed class Service : IService
             DateOfBirth = horse.DateOfBirth,
             Color = horse.Color,
             CountryOfOrigin = horse.CountryOfOrigin,
+            WeightKg = horse.WeightKg,
+            HeightCm = horse.HeightCm,
             PassportNumber = horse.PassportNumber,
             MicrochipNumber = horse.MicrochipNumber,
             IdentificationNotes = horse.IdentificationNotes,
@@ -231,9 +240,12 @@ public sealed class Service : IService
         var horseName = request.HorseName.Trim();
         ValidateText(horseName, 150, "HorseName", required: true);
         ValidateText(request.Breed, 100, "Breed");
+        ValidateText(request.Color, 100, "Color");
         ValidateText(request.CountryOfOrigin, 100, "CountryOfOrigin");
         ValidateText(request.MicrochipNumber, 100, "MicrochipNumber");
         ValidateText(request.PassportNumber, 100, "PassportNumber");
+        ValidateMeasurement(request.WeightKg, "WeightKg");
+        ValidateMeasurement(request.HeightCm, "HeightCm");
 
         var sex = ParseSex(request.Sex);
         var microchipNumber = NormalizeOptional(request.MicrochipNumber);
@@ -257,9 +269,13 @@ public sealed class Service : IService
         horse.Sex = sex;
         horse.Breed = NormalizeOptional(request.Breed);
         horse.DateOfBirth = request.DateOfBirth;
+        horse.Color = NormalizeOptional(request.Color);
         horse.CountryOfOrigin = NormalizeOptional(request.CountryOfOrigin);
+        horse.WeightKg = request.WeightKg;
+        horse.HeightCm = request.HeightCm;
         horse.MicrochipNumber = microchipNumber;
         horse.PassportNumber = passportNumber;
+        horse.IdentificationNotes = NormalizeOptional(request.IdentificationNotes);
         horse.UpdatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
         try
@@ -287,6 +303,12 @@ public sealed class Service : IService
             throw new BadRequestException($"{fieldName} is required");
         if (value is not null && value.Length > maxLength)
             throw new BadRequestException($"{fieldName} must not exceed {maxLength} characters");
+    }
+
+    private static void ValidateMeasurement(decimal? value, string fieldName)
+    {
+        if (value is <= 0)
+            throw new BadRequestException($"{fieldName} must be greater than 0");
     }
 
     private static HorseSex? ParseSex(string? value)

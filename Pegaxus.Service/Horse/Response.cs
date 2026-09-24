@@ -35,6 +35,8 @@ public static class Response
         public DateOnly? DateOfBirth { get; init; }
         public string? Color { get; init; }
         public string? CountryOfOrigin { get; init; }
+        public decimal? WeightKg { get; init; }
+        public decimal? HeightCm { get; init; }
         public string? PassportNumber { get; init; }
         public string? MicrochipNumber { get; init; }
         public string? IdentificationNotes { get; init; }
