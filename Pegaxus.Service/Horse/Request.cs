@@ -15,8 +15,12 @@ public static class Request
         public string? Sex { get; set; }
         public string? Breed { get; set; }
         public DateOnly? DateOfBirth { get; set; }
+        public string? Color { get; set; }
         public string? CountryOfOrigin { get; set; }
+        public decimal? WeightKg { get; set; }
+        public decimal? HeightCm { get; set; }
         public string? MicrochipNumber { get; set; }
         public string? PassportNumber { get; set; }
+        public string? IdentificationNotes { get; set; }
     }
 }
