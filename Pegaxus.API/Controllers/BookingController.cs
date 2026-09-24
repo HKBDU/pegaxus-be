@@ -57,6 +57,61 @@ public class BookingController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    [HttpPost("{bookingId:guid}/horses")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> AddHorse(
+        Guid bookingId,
+        BookingService.Request.AddHorseRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _service.AddHorseIntoBookingAsync(GetAccountId(), bookingId, request, cancellationToken);
+        return StatusCode(201, ResponseBuilder.SuccessResponse(
+            null,
+            "Horse added to booking successfully",
+            201,
+            HttpContext.TraceIdentifier));
+    }
+
+    [HttpPatch("{bookingId:guid}/horses/{horseId:guid}")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> UpdateHorseNotes(
+        Guid bookingId,
+        Guid horseId,
+        BookingService.Request.UpdateHorseNotesRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _service.UpdateHorseNotesAsync(
+            GetAccountId(),
+            bookingId,
+            horseId,
+            request,
+            cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            null,
+            "Horse handling notes updated successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpDelete("{bookingId:guid}/horses/{horseId:guid}")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> RemoveHorse(
+        Guid bookingId,
+        Guid horseId,
+        CancellationToken cancellationToken)
+    {
+        await _service.RemoveHorseAsync(
+            GetAccountId(),
+            bookingId,
+            horseId,
+            cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            null,
+            "Horse removed from booking successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     [HttpPost]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> Create(

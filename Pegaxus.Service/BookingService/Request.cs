@@ -4,6 +4,17 @@ namespace Pegaxus.Service.BookingService;
 
 public class Request
 {
+    public class AddHorseRequest
+    {
+        public Guid HorseId { get; set; }
+        public string? SpecialHandlingNotes { get; set; }
+    }
+
+    public class UpdateHorseNotesRequest
+    {
+        public string? SpecialHandlingNotes { get; set; }
+    }
+
     public class BookingListRequest
     {
         public int PageIndex { get; set; } = 1;
