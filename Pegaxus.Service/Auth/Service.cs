@@ -91,6 +91,72 @@ public class Service : IService
         await _cache.RemoveAsync(failedKey, cancellationToken);
         await _cache.RemoveAsync(lockedKey, cancellationToken);
 
+        return await IssueTokensAsync(account, role, cancellationToken);
+    }
+
+    public async Task<Response.LoginResponse> GoogleLoginAsync(
+        Request.GoogleLoginRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var subject = request.Subject.Trim();
+        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email))
+            throw new AppException("Google account information is invalid", 400, "GOOGLE_ACCOUNT_INVALID");
+
+        var account = await _db.Accounts
+            .Include(item => item.CustomerAccount)
+            .Include(item => item.EmployeeAccount)
+            .SingleOrDefaultAsync(item => !item.IsDeleted && item.Email.ToLower() == email, cancellationToken);
+
+        var now = UtcNow();
+        if (account is null)
+        {
+            account = new Account
+            {
+                AccountId = Guid.NewGuid(),
+                Email = email,
+                AccountType = AccountType.CUSTOMER,
+                Status = AccountStatus.ACTIVE,
+                EmailVerifiedAt = now,
+                CreatedAt = now,
+                UpdatedAt = now,
+                AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim()
+            };
+            account.PasswordHash = _passwordHasher.HashPassword(account, Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
+            account.CustomerAccount = new Customer
+            {
+                CustomerId = Guid.NewGuid(),
+                AccountId = account.AccountId,
+                FullName = string.IsNullOrWhiteSpace(request.FullName) ? email : request.FullName.Trim(),
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            _db.Accounts.Add(account);
+        }
+        else
+        {
+            if (account.AccountType != AccountType.CUSTOMER || account.CustomerAccount is null || account.CustomerAccount.IsDeleted)
+                throw new ForbiddenException("This email is linked to an unavailable account");
+            if (account.Status == AccountStatus.SUSPENDED)
+                throw new ForbiddenException("Account suspended");
+            if (account.Status != AccountStatus.ACTIVE)
+                throw new ForbiddenException("Account inactive");
+
+            account.EmailVerifiedAt ??= now;
+            if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
+                account.AvatarUrl = request.AvatarUrl.Trim();
+            account.UpdatedAt = now;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return await IssueTokensAsync(account, "CUSTOMER", cancellationToken);
+    }
+
+    private async Task<Response.LoginResponse> IssueTokensAsync(
+        AccountEntity account,
+        string role,
+        CancellationToken cancellationToken)
+    {
         var accessToken = _jwtService.GenerateAccessToken(CreateClaims(account));
         var refreshToken = _jwtService.GenerateRefreshToken();
         var now = UtcNow();

@@ -1,4 +1,5 @@
 using DotNetEnv;
+using Microsoft.AspNetCore.Authentication.Google;
 using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -73,6 +74,34 @@ builder.Services.AddDbContext<AppDbContext>((services, options) =>
 
 // builder.Services.AddApplicationServices();
 builder.Services.AddJwtServices(builder.Configuration);
+const string googleExternalScheme = "GoogleExternal";
+var googleClientId = builder.Configuration["Google:ClientId"];
+var googleClientSecret = builder.Configuration["Google:ClientSecret"];
+var googleConfigured = !string.IsNullOrWhiteSpace(googleClientId) &&
+                       !string.IsNullOrWhiteSpace(googleClientSecret);
+if (googleConfigured)
+{
+    builder.Services.AddAuthentication()
+        .AddCookie(googleExternalScheme, options =>
+        {
+            options.Cookie.Name = "pegaxus.google.external";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+            options.SlidingExpiration = false;
+        })
+        .AddGoogle(GoogleDefaults.AuthenticationScheme, options =>
+        {
+            options.ClientId = googleClientId!;
+            options.ClientSecret = googleClientSecret!;
+            options.SignInScheme = googleExternalScheme;
+            options.CallbackPath = "/api/v1/auth/google/callback";
+            options.Scope.Add("email");
+            options.Scope.Add("profile");
+            options.SaveTokens = false;
+        });
+}
 builder.Services.AddSwaggerServices();
 builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379");
