@@ -136,7 +136,11 @@ internal static class TestSupport
         return (booking, horse);
     }
 
-    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+    private static DateTime UtcNow()
+    {
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        return new DateTime(now.Ticks - now.Ticks % 10, DateTimeKind.Unspecified);
+    }
 
     internal sealed class RecordingMailService : MailService.IService
     {

@@ -295,8 +295,8 @@ public class Service : IService
             bookingId,
             accountId,
             BookingHistoryType.SUBMIT,
-            BookingStatus.DRAFT,
-            BookingStatus.DRAFT,
+            booking.Status,
+            booking.Status,
             $"Added horse: {horse.HorseName}",
             now);
         await _db.SaveChangesAsync(cancellationToken);
@@ -331,8 +331,8 @@ public class Service : IService
             bookingId,
             accountId,
             BookingHistoryType.SUBMIT,
-            BookingStatus.DRAFT,
-            BookingStatus.DRAFT,
+            booking.Status,
+            booking.Status,
             $"Updated handling notes for horse: {bookingHorse.Horse.HorseName}",
             now);
         await _db.SaveChangesAsync(cancellationToken);
@@ -363,8 +363,8 @@ public class Service : IService
             bookingId,
             accountId,
             BookingHistoryType.SUBMIT,
-            BookingStatus.DRAFT,
-            BookingStatus.DRAFT,
+            booking.Status,
+            booking.Status,
             $"Removed horse: {bookingHorse.Horse.HorseName}",
             now);
         await _db.SaveChangesAsync(cancellationToken);
@@ -520,8 +520,8 @@ public class Service : IService
             bookingId,
             accountId,
             BookingHistoryType.SUBMIT,
-            BookingStatus.DRAFT,
-            BookingStatus.DRAFT,
+            booking.Status,
+            booking.Status,
             $"Updated: {string.Join(", ", changedFields)}",
             now);
         await _db.SaveChangesAsync(cancellationToken);
@@ -678,8 +678,8 @@ public class Service : IService
             cancellationToken);
         if (booking is null)
             throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
-        if (booking.Status != BookingStatus.DRAFT)
-            throw new ConflictException("The booking must be in DRAFT status to be edited", "INVALID_BOOKING_STATUS");
+        if (booking.Status != BookingStatus.PENDING && booking.Status != BookingStatus.DRAFT)
+            throw new ConflictException("The booking cannot be edited in its current status", "INVALID_BOOKING_STATUS");
         return booking;
     }
 
@@ -826,7 +826,7 @@ public class Service : IService
     }
 
     private async Task<string> GenerateBookingCodeAsync(CancellationToken cancellationToken) =>
-        await GenerateCodeAsync("REQ", code => _db.Bookings.AnyAsync(booking => booking.BookingCode == code, cancellationToken));
+        await GenerateCodeAsync("BK", code => _db.Bookings.AnyAsync(booking => booking.BookingCode == code, cancellationToken));
 
     private async Task<string> GenerateTransportCodeAsync(CancellationToken cancellationToken) =>
         await GenerateCodeAsync("TP", code => _db.Transports.AnyAsync(transport => transport.TransportCode == code, cancellationToken));

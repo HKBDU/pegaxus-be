@@ -39,8 +39,30 @@ public class BookingServiceTests
         });
 
         Assert.Equal(result.BookingId, (await db.Bookings.SingleAsync()).BookingId);
+        Assert.StartsWith("BK-", result.BookingCode);
         Assert.Equal(horse.HorseId, (await db.BookingHorses.SingleAsync()).HorseId);
         Assert.Equal(BookingStatus.PENDING, (await db.BookingStatusHistories.SingleAsync()).NewStatus);
+    }
+
+    [Fact]
+    public async Task Update_PendingBooking_UpdatesDirectlyAndRecordsPendingHistory()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, customer) = await TestSupport.AddCustomerAsync(db);
+        var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer);
+        var service = CreateService(db);
+
+        var result = await service.UpdateAsync(account.AccountId, booking.BookingId, new BookingRequest.UpdateBookingRequest
+        {
+            LastUpdatedAt = booking.UpdatedAt,
+            OriginAddress = "Updated pending origin"
+        });
+
+        Assert.Equal("Updated pending origin", booking.OriginAddress);
+        var lastHistory = await db.BookingStatusHistories.OrderBy(h => h.ChangedAt).LastAsync();
+        Assert.Equal(BookingStatus.PENDING, lastHistory.PreviousStatus);
+        Assert.Equal(BookingStatus.PENDING, lastHistory.NewStatus);
+        Assert.Equal(BookingHistoryType.SUBMIT, lastHistory.Type);
     }
 
     [Fact]
