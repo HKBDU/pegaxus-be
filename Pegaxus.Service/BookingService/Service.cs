@@ -485,8 +485,9 @@ public class Service : IService
         CancellationToken cancellationToken = default)
     {
         var booking = await GetOwnedDraftBookingAsync(accountId, bookingId, cancellationToken);
-        var clientUpdatedAt = DateTime.SpecifyKind(request.LastUpdatedAt, DateTimeKind.Unspecified);
-        if (booking.UpdatedAt != clientUpdatedAt)
+        var clientUpdatedAtUtc = ToDatabasePrecision(request.LastUpdatedAt.UtcDateTime);
+        var clientUpdatedAtValue = ToDatabasePrecision(request.LastUpdatedAt.DateTime);
+        if (booking.UpdatedAt != clientUpdatedAtUtc && booking.UpdatedAt != clientUpdatedAtValue)
             throw new ConflictException(
                 "The booking was modified. Refresh and try again",
                 "BOOKING_MODIFIED");
@@ -525,7 +526,7 @@ public class Service : IService
             now);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new Response.UpdateBookingResponse { UpdatedAt = AsUtc(now) };
+        return new Response.UpdateBookingResponse { UpdatedAt = AsUtc(booking.UpdatedAt) };
     }
 
     public async Task CancelAsync(
@@ -869,7 +870,12 @@ public class Service : IService
     }
 
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+    private static DateTime UtcNow() => ToDatabasePrecision(DateTime.UtcNow);
+    private static DateTime ToDatabasePrecision(DateTime value)
+    {
+        var unspecified = DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+        return new DateTime(unspecified.Ticks - unspecified.Ticks % 10, DateTimeKind.Unspecified);
+    }
     private static DateTimeOffset AsUtc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
     private static DateTimeOffset? AsUtcNullable(DateTime? value) => value.HasValue ? AsUtc(value.Value) : null;
 }

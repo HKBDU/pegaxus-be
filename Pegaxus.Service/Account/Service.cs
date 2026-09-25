@@ -67,9 +67,16 @@ public sealed class Service : IService
             AvatarUrl = account.AvatarUrl,
             Customer = customer,
             Employee = employee,
+            CreatedAt = ToUtcOffset(account.CreatedAt),
+            LastLoginAt = account.LastLoginAt.HasValue
+                ? ToUtcOffset(account.LastLoginAt.Value)
+                : null,
             UpdatedAt = new DateTimeOffset(DateTime.SpecifyKind(account.UpdatedAt, DateTimeKind.Utc))
         };
     }
+
+    private static DateTimeOffset ToUtcOffset(DateTime value) =>
+        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
     public async Task<Response.ProfileResponse> UpdateProfileAsync(
         Guid accountId,

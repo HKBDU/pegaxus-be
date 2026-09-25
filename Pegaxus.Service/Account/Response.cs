@@ -16,6 +16,8 @@ public static class Response
         public string? AvatarUrl { get; init; }
         public CustomerResponse? Customer { get; init; }
         public EmployeeResponse? Employee { get; init; }
+        public DateTimeOffset CreatedAt { get; init; }
+        public DateTimeOffset? LastLoginAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }
 
