@@ -47,7 +47,8 @@ public class Service : IService
             .Include(item => item.Transport)
             .Where(item =>
                 item.BookingId == bookingId &&
-                (canViewAll || item.Customer.AccountId == accountId))
+                (canViewAll && item.Status != BookingStatus.DRAFT ||
+                 !canViewAll && item.Customer.AccountId == accountId))
             .SingleOrDefaultAsync(cancellationToken);
 
         if (booking is null)
@@ -128,7 +129,8 @@ public class Service : IService
         var canViewAll = employeeRole == EmployeeRole.LOGISTICS_MANAGER;
         var bookingExists = await _db.Bookings.AnyAsync(booking =>
             booking.BookingId == bookingId &&
-            (canViewAll || booking.Customer.AccountId == accountId),
+            (canViewAll && booking.Status != BookingStatus.DRAFT ||
+             !canViewAll && booking.Customer.AccountId == accountId),
             cancellationToken);
         if (!bookingExists)
             throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
@@ -196,7 +198,9 @@ public class Service : IService
 
         var query = _db.Bookings
             .AsNoTracking()
-            .Where(booking => canViewAll || booking.CustomerId == customerId!.Value);
+            .Where(booking =>
+                (canViewAll && booking.Status != BookingStatus.DRAFT) ||
+                (!canViewAll && booking.CustomerId == customerId!.Value));
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
@@ -263,7 +267,7 @@ public class Service : IService
         Request.AddHorseRequest request,
         CancellationToken cancellationToken = default)
     {
-        var booking = await GetOwnedPendingBookingAsync(accountId, bookingId, cancellationToken);
+        var booking = await GetOwnedDraftBookingAsync(accountId, bookingId, cancellationToken);
         var horse = await _db.Horses.SingleOrDefaultAsync(item =>
             item.HorseId == request.HorseId &&
             item.CustomerId == booking.CustomerId &&
@@ -291,8 +295,8 @@ public class Service : IService
             bookingId,
             accountId,
             BookingHistoryType.SUBMIT,
-            BookingStatus.PENDING,
-            BookingStatus.PENDING,
+            BookingStatus.DRAFT,
+            BookingStatus.DRAFT,
             $"Added horse: {horse.HorseName}",
             now);
         await _db.SaveChangesAsync(cancellationToken);
@@ -306,7 +310,7 @@ public class Service : IService
         Request.UpdateHorseNotesRequest request,
         CancellationToken cancellationToken = default)
     {
-        var booking = await GetOwnedPendingBookingAsync(accountId, bookingId, cancellationToken);
+        var booking = await GetOwnedDraftBookingAsync(accountId, bookingId, cancellationToken);
         if (request.SpecialHandlingNotes?.Length > 2000)
             throw new BadRequestException("Special handling notes must not exceed 2000 characters");
 
@@ -327,8 +331,8 @@ public class Service : IService
             bookingId,
             accountId,
             BookingHistoryType.SUBMIT,
-            BookingStatus.PENDING,
-            BookingStatus.PENDING,
+            BookingStatus.DRAFT,
+            BookingStatus.DRAFT,
             $"Updated handling notes for horse: {bookingHorse.Horse.HorseName}",
             now);
         await _db.SaveChangesAsync(cancellationToken);
@@ -341,7 +345,7 @@ public class Service : IService
         Guid horseId,
         CancellationToken cancellationToken = default)
     {
-        var booking = await GetOwnedPendingBookingAsync(accountId, bookingId, cancellationToken);
+        var booking = await GetOwnedDraftBookingAsync(accountId, bookingId, cancellationToken);
         var bookingHorse = await _db.BookingHorses
             .Include(item => item.Horse)
             .SingleOrDefaultAsync(item =>
@@ -359,9 +363,52 @@ public class Service : IService
             bookingId,
             accountId,
             BookingHistoryType.SUBMIT,
-            BookingStatus.PENDING,
-            BookingStatus.PENDING,
+            BookingStatus.DRAFT,
+            BookingStatus.DRAFT,
             $"Removed horse: {bookingHorse.Horse.HorseName}",
+            now);
+        await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task ChangeStatusAsync(
+        Guid accountId,
+        Guid bookingId,
+        Request.ChangeStatusRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var customer = await GetCustomerAsync(accountId, cancellationToken);
+        var booking = await _db.Bookings.SingleOrDefaultAsync(item =>
+            item.BookingId == bookingId && item.CustomerId == customer.CustomerId,
+            cancellationToken);
+        if (booking is null)
+            throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
+
+        if (!Enum.TryParse<BookingStatus>(request.Status.Trim(), true, out var targetStatus) ||
+            targetStatus is not (BookingStatus.DRAFT or BookingStatus.PENDING))
+            throw new BadRequestException("Only DRAFT and PENDING statuses are supported", "INVALID_BOOKING_STATUS");
+
+        var validTransition = booking.Status == BookingStatus.PENDING && targetStatus == BookingStatus.DRAFT ||
+                              booking.Status == BookingStatus.DRAFT && targetStatus == BookingStatus.PENDING;
+        if (!validTransition)
+            throw new ConflictException(
+                "The booking status cannot be changed from its current state",
+                "INVALID_BOOKING_STATUS");
+
+        var now = UtcNow();
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        var previousStatus = booking.Status;
+        booking.Status = targetStatus;
+        booking.UpdatedAt = now;
+        AddHistory(
+            bookingId,
+            accountId,
+            BookingHistoryType.SUBMIT,
+            previousStatus,
+            targetStatus,
+            targetStatus == BookingStatus.DRAFT
+                ? "Booking moved to draft"
+                : "Booking submitted for review",
             now);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -437,7 +484,7 @@ public class Service : IService
         Request.UpdateBookingRequest request,
         CancellationToken cancellationToken = default)
     {
-        var booking = await GetOwnedPendingBookingAsync(accountId, bookingId, cancellationToken);
+        var booking = await GetOwnedDraftBookingAsync(accountId, bookingId, cancellationToken);
         var clientUpdatedAt = DateTime.SpecifyKind(request.LastUpdatedAt, DateTimeKind.Unspecified);
         if (booking.UpdatedAt != clientUpdatedAt)
             throw new ConflictException(
@@ -472,8 +519,8 @@ public class Service : IService
             bookingId,
             accountId,
             BookingHistoryType.SUBMIT,
-            BookingStatus.PENDING,
-            BookingStatus.PENDING,
+            BookingStatus.DRAFT,
+            BookingStatus.DRAFT,
             $"Updated: {string.Join(", ", changedFields)}",
             now);
         await _db.SaveChangesAsync(cancellationToken);
@@ -620,6 +667,21 @@ public class Service : IService
         return booking;
     }
 
+    private async Task<BookingEntity> GetOwnedDraftBookingAsync(
+        Guid accountId,
+        Guid bookingId,
+        CancellationToken cancellationToken)
+    {
+        var booking = await _db.Bookings.SingleOrDefaultAsync(item =>
+            item.BookingId == bookingId && item.Customer.AccountId == accountId,
+            cancellationToken);
+        if (booking is null)
+            throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
+        if (booking.Status != BookingStatus.DRAFT)
+            throw new ConflictException("The booking must be in DRAFT status to be edited", "INVALID_BOOKING_STATUS");
+        return booking;
+    }
+
     private async Task<Employee> GetLogisticsManagerAsync(Guid accountId, CancellationToken cancellationToken)
     {
         var employee = await _db.Employees.SingleOrDefaultAsync(item =>
@@ -693,6 +755,7 @@ public class Service : IService
 
     private static string GetStatusName(BookingStatus status) => status switch
     {
+        BookingStatus.DRAFT => "Draft",
         BookingStatus.PENDING => "Pending",
         BookingStatus.APPROVED => "Approved",
         BookingStatus.REJECTED => "Rejected",

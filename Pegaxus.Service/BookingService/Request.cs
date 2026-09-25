@@ -15,6 +15,11 @@ public class Request
         public string? SpecialHandlingNotes { get; set; }
     }
 
+    public class ChangeStatusRequest
+    {
+        public string Status { get; set; } = string.Empty;
+    }
+
     public class BookingListRequest
     {
         public int PageIndex { get; set; } = 1;

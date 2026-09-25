@@ -1,7 +1,8 @@
 namespace Pegaxus.Repository.Enum;
 
 public enum BookingStatus {
-    PENDING = 1,
+    DRAFT = 1,
+    PENDING,
     APPROVED,
     REJECTED,
     CANCELLED
