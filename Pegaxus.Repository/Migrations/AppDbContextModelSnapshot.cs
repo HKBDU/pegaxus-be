@@ -25,7 +25,7 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "approval_decision", new[] { "APPROVED", "REJECTED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "authority_submission_status", new[] { "DRAFT", "SUBMITTED", "PENDING", "APPROVED", "REJECTED", "RETURNED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "booking_history_type", new[] { "SUBMIT", "APPROVE", "REJECT", "CANCEL" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "booking_status", new[] { "PENDING", "APPROVED", "REJECTED", "CANCELLED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "booking_status", new[] { "DRAFT", "PENDING", "APPROVED", "REJECTED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "claim_resolution_type", new[] { "COMPENSATION", "PARTIAL_COMPENSATION", "REFUND", "SERVICE_RECOVERY", "NO_COMPENSATION", "OTHER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "claim_status", new[] { "PENDING", "APPROVED", "REJECTED", "RESOLVED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "claim_type", new[] { "HORSE_INJURY", "HORSE_HEALTH", "LOSS", "DAMAGE", "DELAY", "DOCUMENT_ISSUE", "SERVICE_ISSUE", "OTHER" });

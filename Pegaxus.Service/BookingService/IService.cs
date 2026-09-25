@@ -30,6 +30,11 @@ public interface IService
         Guid bookingId,
         Guid horseId,
         CancellationToken cancellationToken = default);
+    Task ChangeStatusAsync(
+        Guid accountId,
+        Guid bookingId,
+        Request.ChangeStatusRequest request,
+        CancellationToken cancellationToken = default);
     Task<Response.CreateBookingResponse> CreateAsync(Guid accountId, Request.CreateBookingRequest request, CancellationToken cancellationToken = default);
     Task<Response.UpdateBookingResponse> UpdateAsync(Guid accountId, Guid bookingId, Request.UpdateBookingRequest request, CancellationToken cancellationToken = default);
     Task CancelAsync(Guid accountId, Guid bookingId, Request.CancelBookingRequest request, CancellationToken cancellationToken = default);

@@ -112,6 +112,25 @@ public class BookingController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    [HttpPatch("{bookingId:guid}/status")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> ChangeStatus(
+        Guid bookingId,
+        BookingService.Request.ChangeStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _service.ChangeStatusAsync(
+            GetAccountId(),
+            bookingId,
+            request,
+            cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            null,
+            "Booking status updated successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     [HttpPost]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> Create(
