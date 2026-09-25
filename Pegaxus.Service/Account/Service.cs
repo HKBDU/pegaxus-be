@@ -47,7 +47,8 @@ public sealed class Service : IService
             ? new Response.EmployeeResponse
             {
                 EmployeeId = employeeData.EmployeeId,
-                EmployeeCode = employeeData.EmployeeCode
+                EmployeeCode = employeeData.EmployeeCode,
+                DateOfBirth = employeeData.DateOfBirth
             }
             : null;
         var isEmployee = employee is not null;
@@ -90,6 +91,9 @@ public sealed class Service : IService
         ValidateText(request.Phone, 30, "Phone");
         ValidateText(request.Address, 500, "Address");
 
+        if (request.DateOfBirth is { } dateOfBirth && dateOfBirth > DateOnly.FromDateTime(DateTime.UtcNow))
+            throw new BadRequestException("Date of birth cannot be in the future");
+
         if (request.Avatar is not null)
             ValidateAvatar(request.Avatar);
 
@@ -99,6 +103,13 @@ public sealed class Service : IService
                 customer.FullName = request.FullName.Trim();
             if (account.EmployeeAccount is { IsDeleted: false } employee)
                 employee.FullName = request.FullName.Trim();
+        }
+        if (request.DateOfBirth is not null)
+        {
+            if (account.CustomerAccount is { IsDeleted: false } customer)
+                customer.DateOfBirth = request.DateOfBirth;
+            if (account.EmployeeAccount is { IsDeleted: false } employee)
+                employee.DateOfBirth = request.DateOfBirth;
         }
         if (request.Phone is not null)
         {
