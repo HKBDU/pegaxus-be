@@ -50,7 +50,7 @@ public class Request
 
     public class UpdateBookingRequest
     {
-        public DateTime LastUpdatedAt { get; set; }
+        public DateTimeOffset LastUpdatedAt { get; set; }
         public string? OriginAddress { get; set; }
         public string? OriginCountry { get; set; }
         public string? DestinationAddress { get; set; }

@@ -23,4 +23,9 @@ public interface IService
         Guid horseId,
         Request.CreateHorseRequest request,
         CancellationToken cancellationToken = default);
+
+    Task DeleteHorseAsync(
+        Guid accountId,
+        Guid horseId,
+        CancellationToken cancellationToken = default);
 }

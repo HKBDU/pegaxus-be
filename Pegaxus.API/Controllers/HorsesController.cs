@@ -121,4 +121,29 @@ public sealed class HorsesController : ControllerBase
             "Horse information updated successfully",
             traceId: HttpContext.TraceIdentifier));
     }
+
+    [HttpDelete("{horseId:guid}")]
+    public async Task<IActionResult> DeleteHorse(
+        Guid horseId,
+        CancellationToken cancellationToken)
+    {
+        var accountIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
+            ?? User.FindFirstValue("sub")
+            ?? User.FindFirstValue("accountId");
+
+        if (!Guid.TryParse(accountIdValue, out var accountId))
+            return Unauthorized(ResponseBuilder.ErrorResponse(
+                null,
+                "The authenticated account identifier is invalid",
+                errorCode: "UNAUTHORIZED",
+                code: StatusCodes.Status401Unauthorized,
+                traceId: HttpContext.TraceIdentifier));
+
+        await _service.DeleteHorseAsync(accountId, horseId, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            null,
+            "Horse removed successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
 }
