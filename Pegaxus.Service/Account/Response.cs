@@ -29,5 +29,6 @@ public static class Response
     {
         public Guid EmployeeId { get; init; }
         public required string EmployeeCode { get; init; }
+        public DateOnly? DateOfBirth { get; init; }
     }
 }
