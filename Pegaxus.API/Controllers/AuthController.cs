@@ -1,7 +1,10 @@
 using FluentValidation;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.Service.Models;
+using System.Security.Claims;
 
 using AuthService = Pegaxus.Service.Auth;
 
@@ -12,10 +15,69 @@ namespace Pegaxus.API.Controllers;
 public sealed class AuthController : ControllerBase
 {
     private readonly AuthService.IService _service;
+    private readonly IConfiguration _configuration;
+    private const string GoogleExternalScheme = "GoogleExternal";
 
-    public AuthController(AuthService.IService service)
+    public AuthController(AuthService.IService service, IConfiguration configuration)
     {
         _service = service;
+        _configuration = configuration;
+    }
+
+    [HttpGet("google/login")]
+    [AllowAnonymous]
+    public IActionResult GoogleLogin()
+    {
+        if (string.IsNullOrWhiteSpace(_configuration["Google:ClientId"]) ||
+            string.IsNullOrWhiteSpace(_configuration["Google:ClientSecret"]))
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, ResponseBuilder.ErrorResponse(
+                null, "Google login is not configured", "GOOGLE_NOT_CONFIGURED",
+                StatusCodes.Status503ServiceUnavailable, HttpContext.TraceIdentifier));
+
+        var properties = new AuthenticationProperties
+        {
+            RedirectUri = Url.ActionLink(nameof(GoogleCallback))
+        };
+        return Challenge(properties, GoogleDefaults.AuthenticationScheme);
+    }
+
+    [HttpGet("google/callback")]
+    [AllowAnonymous]
+    public async Task<IActionResult> GoogleCallback(CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(_configuration["Google:ClientId"]) ||
+            string.IsNullOrWhiteSpace(_configuration["Google:ClientSecret"]))
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, ResponseBuilder.ErrorResponse(
+                null, "Google login is not configured", "GOOGLE_NOT_CONFIGURED",
+                StatusCodes.Status503ServiceUnavailable, HttpContext.TraceIdentifier));
+
+        var result = await HttpContext.AuthenticateAsync(GoogleExternalScheme);
+        if (!result.Succeeded || result.Principal is null)
+            return Unauthorized(ResponseBuilder.ErrorResponse(
+                null, "Google authentication failed", "GOOGLE_AUTHENTICATION_FAILED",
+                StatusCodes.Status401Unauthorized, HttpContext.TraceIdentifier));
+
+        var principal = result.Principal;
+        var subject = principal.FindFirstValue(ClaimTypes.NameIdentifier)
+                      ?? principal.FindFirstValue("sub");
+        var email = principal.FindFirstValue(ClaimTypes.Email)
+                    ?? principal.FindFirstValue("email");
+        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email))
+            return Unauthorized(ResponseBuilder.ErrorResponse(
+                null, "Google account information is invalid", "GOOGLE_ACCOUNT_INVALID",
+                StatusCodes.Status401Unauthorized, HttpContext.TraceIdentifier));
+
+        var response = await _service.GoogleLoginAsync(new AuthService.Request.GoogleLoginRequest
+        {
+            Subject = subject,
+            Email = email,
+            FullName = principal.FindFirstValue(ClaimTypes.Name) ?? email,
+            AvatarUrl = principal.FindFirstValue("picture")
+        }, cancellationToken);
+
+        await HttpContext.SignOutAsync(GoogleExternalScheme);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response, "Google login successful. Welcome back!", traceId: HttpContext.TraceIdentifier));
     }
 
     [HttpPost("login")]
