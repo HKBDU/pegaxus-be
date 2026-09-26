@@ -1145,6 +1145,60 @@ namespace Pegaxus.Repository.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentAttachment", b =>
+                {
+                    b.Property<Guid>("DocumentAttachmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_attachment_id");
+
+                    b.Property<Guid>("DocumentVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_version_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<long?>("FileSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("file_size_bytes");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("file_url");
+
+                    b.Property<string>("MimeType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("mime_type");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("DocumentAttachmentId")
+                        .HasName("DocumentAttachment_pkey");
+
+                    b.HasIndex(new[] { "DocumentVersionId" }, "DocumentAttachment_document_version_id_idx");
+
+                    b.HasIndex(new[] { "DocumentVersionId", "SortOrder" }, "DocumentAttachment_document_version_id_sort_order_key")
+                        .IsUnique();
+
+                    b.ToTable("DocumentAttachment", null, t =>
+                        {
+                            t.HasComment("DocumentAttachment: Một file cụ thể thuộc cùng một lần nộp giấy tờ.");
+                        });
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentVersion", b =>
                 {
                     b.Property<Guid>("DocumentVersionId")
@@ -3870,6 +3924,17 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("ComplianceDocument");
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentAttachment", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.DocumentVersion", "DocumentVersion")
+                        .WithMany("DocumentAttachments")
+                        .HasForeignKey("DocumentVersionId")
+                        .IsRequired()
+                        .HasConstraintName("DocumentAttachment_document_version_id_fkey");
+
+                    b.Navigation("DocumentVersion");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.DossierRequirement", b =>
                 {
                     b.HasOne("Pegaxus.Repository.Entities.ComplianceDossier", "ComplianceDossier")
@@ -4479,6 +4544,7 @@ namespace Pegaxus.Repository.Migrations
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentVersion", b =>
                 {
                     b.Navigation("DocumentReviews");
+                    b.Navigation("DocumentAttachments");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DossierRequirement", b =>

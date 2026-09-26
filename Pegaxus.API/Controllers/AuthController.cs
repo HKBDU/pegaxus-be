@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.Service.Models;
+using Pegaxus.Service.Exceptions;
 using System.Security.Claims;
 
 using AuthService = Pegaxus.Service.Auth;
@@ -36,26 +37,22 @@ public sealed class AuthController : ControllerBase
 
         var properties = new AuthenticationProperties
         {
-            RedirectUri = Url.ActionLink(nameof(GoogleCallback))
+            RedirectUri = Url.ActionLink(nameof(GoogleComplete))
         };
         return Challenge(properties, GoogleDefaults.AuthenticationScheme);
     }
 
-    [HttpGet("google/callback")]
+    [HttpGet("google/complete")]
     [AllowAnonymous]
-    public async Task<IActionResult> GoogleCallback(CancellationToken cancellationToken)
+    public async Task<IActionResult> GoogleComplete(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_configuration["Google:ClientId"]) ||
             string.IsNullOrWhiteSpace(_configuration["Google:ClientSecret"]))
-            return StatusCode(StatusCodes.Status503ServiceUnavailable, ResponseBuilder.ErrorResponse(
-                null, "Google login is not configured", "GOOGLE_NOT_CONFIGURED",
-                StatusCodes.Status503ServiceUnavailable, HttpContext.TraceIdentifier));
+            return RedirectGoogleError("GOOGLE_NOT_CONFIGURED");
 
         var result = await HttpContext.AuthenticateAsync(GoogleExternalScheme);
         if (!result.Succeeded || result.Principal is null)
-            return Unauthorized(ResponseBuilder.ErrorResponse(
-                null, "Google authentication failed", "GOOGLE_AUTHENTICATION_FAILED",
-                StatusCodes.Status401Unauthorized, HttpContext.TraceIdentifier));
+            return RedirectGoogleError("GOOGLE_AUTHENTICATION_FAILED");
 
         var principal = result.Principal;
         var subject = principal.FindFirstValue(ClaimTypes.NameIdentifier)
@@ -63,22 +60,48 @@ public sealed class AuthController : ControllerBase
         var email = principal.FindFirstValue(ClaimTypes.Email)
                     ?? principal.FindFirstValue("email");
         if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email))
-            return Unauthorized(ResponseBuilder.ErrorResponse(
-                null, "Google account information is invalid", "GOOGLE_ACCOUNT_INVALID",
-                StatusCodes.Status401Unauthorized, HttpContext.TraceIdentifier));
+            return RedirectGoogleError("GOOGLE_ACCOUNT_INVALID");
 
-        var response = await _service.GoogleLoginAsync(new AuthService.Request.GoogleLoginRequest
+        try
         {
-            Subject = subject,
-            Email = email,
-            FullName = principal.FindFirstValue(ClaimTypes.Name) ?? email,
-            AvatarUrl = principal.FindFirstValue("picture")
-        }, cancellationToken);
+            var response = await _service.GoogleLoginAsync(new AuthService.Request.GoogleLoginRequest
+            {
+                Subject = subject,
+                Email = email,
+                FullName = principal.FindFirstValue(ClaimTypes.Name) ?? email,
+                AvatarUrl = principal.FindFirstValue("picture")
+            }, cancellationToken);
 
-        await HttpContext.SignOutAsync(GoogleExternalScheme);
+            var code = await _service.CreateGoogleLoginCodeAsync(response, cancellationToken);
+            await HttpContext.SignOutAsync(GoogleExternalScheme);
+            return Redirect($"{GetFrontendCallbackUrl()}?code={Uri.EscapeDataString(code)}");
+        }
+        catch (Exceptions exception)
+        {
+            await HttpContext.SignOutAsync(GoogleExternalScheme);
+            return RedirectGoogleError(exception.ErrorCode);
+        }
+    }
+
+    [HttpPost("google/exchange")]
+    [AllowAnonymous]
+    public async Task<IActionResult> ExchangeGoogleLogin(
+        AuthService.Request.GoogleLoginExchangeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.ExchangeGoogleLoginCodeAsync(request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(
             response, "Google login successful. Welcome back!", traceId: HttpContext.TraceIdentifier));
     }
+
+    private string GetFrontendCallbackUrl()
+    {
+        var frontendUrl = _configuration["Cors:FrontendUrl"] ?? "http://localhost:5173";
+        return $"{frontendUrl.TrimEnd('/')}/auth/google/callback";
+    }
+
+    private IActionResult RedirectGoogleError(string errorCode) =>
+        Redirect($"{GetFrontendCallbackUrl()}?error={Uri.EscapeDataString(errorCode)}");
 
     [HttpPost("login")]
     public async Task<IActionResult> Login(

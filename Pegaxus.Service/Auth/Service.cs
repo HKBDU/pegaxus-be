@@ -25,6 +25,7 @@ public class Service : IService
 {
     private const string EmailVerification = "EMAIL_VERIFICATION";
     private const string PasswordReset = "PASSWORD_RESET";
+    private const string GoogleLoginCodePrefix = "auth:google:code:";
     private readonly AppDbContext _db;
     private readonly IPasswordHasher<AccountEntity> _passwordHasher;
     private readonly IDistributedCache _cache;
@@ -150,6 +151,47 @@ public class Service : IService
 
         await _db.SaveChangesAsync(cancellationToken);
         return await IssueTokensAsync(account, "CUSTOMER", cancellationToken);
+    }
+
+    public async Task<string> CreateGoogleLoginCodeAsync(
+        Response.LoginResponse response,
+        CancellationToken cancellationToken = default)
+    {
+        var code = $"gl_{Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()}";
+        await _cache.SetStringAsync(
+            GoogleLoginCodePrefix + code,
+            JsonSerializer.Serialize(response),
+            new DistributedCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+            },
+            cancellationToken);
+        return code;
+    }
+
+    public async Task<Response.LoginResponse> ExchangeGoogleLoginCodeAsync(
+        Request.GoogleLoginExchangeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var code = request.Code.Trim();
+        if (string.IsNullOrWhiteSpace(code))
+            throw new AppException("Google login code is required", 400, "GOOGLE_LOGIN_CODE_INVALID");
+
+        var key = GoogleLoginCodePrefix + code;
+        var value = await _cache.GetStringAsync(key, cancellationToken);
+        await _cache.RemoveAsync(key, cancellationToken);
+        if (value is null)
+            throw new AppException("Google login code is invalid or expired", 400, "GOOGLE_LOGIN_CODE_INVALID");
+
+        try
+        {
+            return JsonSerializer.Deserialize<Response.LoginResponse>(value)
+                ?? throw new JsonException("Google login code payload is empty");
+        }
+        catch (JsonException)
+        {
+            throw new AppException("Google login code is invalid or expired", 400, "GOOGLE_LOGIN_CODE_INVALID");
+        }
     }
 
     private async Task<Response.LoginResponse> IssueTokensAsync(

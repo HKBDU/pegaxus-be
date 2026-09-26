@@ -32,4 +32,6 @@ public partial class DocumentVersion
     public virtual ComplianceDocument ComplianceDocument { get; set; } = null!;
 
     public virtual ICollection<DocumentReview> DocumentReviews { get; set; } = new List<DocumentReview>();
+
+    public virtual ICollection<DocumentAttachment> DocumentAttachments { get; set; } = new List<DocumentAttachment>();
 }

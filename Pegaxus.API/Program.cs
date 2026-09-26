@@ -1,5 +1,6 @@
 using DotNetEnv;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.DataProtection;
 using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -22,10 +23,24 @@ using MailService = Pegaxus.Service.MailService;
 using AccountService = Pegaxus.Service.AccountService;
 using HorseService = Pegaxus.Service.HorseService;
 
+var envDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
+while (envDirectory is not null)
+{
+    var envPath = Path.Combine(envDirectory.FullName, ".env");
+    if (File.Exists(envPath))
+    {
+        Env.Load(envPath);
+        break;
+    }
 
-Env.Load();
+    envDirectory = envDirectory.Parent;
+}
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".keys")))
+    .SetApplicationName("Pegaxus");
 
 // Keep issued access tokens at the 15-minute API contract lifetime in every environment.
 builder.Configuration["JwtOptions:ExpirationMinutes"] = "15";
@@ -108,9 +123,36 @@ if (googleConfigured)
             options.ClientSecret = googleClientSecret!;
             options.SignInScheme = googleExternalScheme;
             options.CallbackPath = "/api/v1/auth/google/callback";
+            options.CorrelationCookie.Name = "pegaxus.google.correlation";
+            options.CorrelationCookie.HttpOnly = true;
+            options.CorrelationCookie.IsEssential = true;
+            options.CorrelationCookie.Path = "/";
+            options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+            options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
             options.Scope.Add("email");
             options.Scope.Add("profile");
             options.SaveTokens = false;
+            options.Events.OnRemoteFailure = context =>
+            {
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("GoogleAuthentication");
+                logger.LogError(
+                    context.Failure,
+                    "Google OAuth failed for {Path}. Error={Error}, ErrorDescription={ErrorDescription}",
+                    context.HttpContext.Request.Path,
+                    context.Request.Query["error"].ToString(),
+                    context.Request.Query["error_description"].ToString());
+                logger.LogError(
+                    "Google OAuth callback cookies: {CookieNames}",
+                    string.Join(", ", context.HttpContext.Request.Cookies.Keys));
+
+                var frontendUrl = builder.Configuration["Cors:FrontendUrl"] ?? "http://localhost:5173";
+                context.Response.Redirect(
+                    $"{frontendUrl.TrimEnd('/')}/auth/google/callback?error=GOOGLE_AUTHENTICATION_FAILED");
+                context.HandleResponse();
+                return Task.CompletedTask;
+            };
         });
 }
 builder.Services.AddSwaggerServices();
@@ -154,6 +196,22 @@ app.UseSwaggerAPI();
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
 app.UseCors("Frontend");
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Equals("/api/v1/auth/google/callback", StringComparison.OrdinalIgnoreCase))
+    {
+        var logger = context.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("GoogleAuthentication");
+        logger.LogInformation(
+            "Google OAuth callback received. HasState={HasState}, CorrelationCookies={CorrelationCookies}",
+            context.Request.Query.ContainsKey("state"),
+            string.Join(", ", context.Request.Cookies.Keys
+                .Where(key => key.StartsWith("pegaxus.google.correlation", StringComparison.Ordinal))));
+    }
+
+    await next();
+});
 app.UseAuthentication();
 app.UseAuthorization();
 

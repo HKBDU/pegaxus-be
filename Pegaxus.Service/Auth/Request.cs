@@ -16,6 +16,11 @@ public class Request
         public string? AvatarUrl { get; set; }
     }
 
+    public class GoogleLoginExchangeRequest
+    {
+        public string Code { get; set; } = string.Empty;
+    }
+
     public class RegisterRequest
     {
         public string FullName { get; set; } = string.Empty;
