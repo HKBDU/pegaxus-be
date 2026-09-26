@@ -37,14 +37,14 @@ public sealed class AuthController : ControllerBase
 
         var properties = new AuthenticationProperties
         {
-            RedirectUri = Url.ActionLink(nameof(GoogleCallback))
+            RedirectUri = Url.ActionLink(nameof(GoogleComplete))
         };
         return Challenge(properties, GoogleDefaults.AuthenticationScheme);
     }
 
-    [HttpGet("google/callback")]
+    [HttpGet("google/complete")]
     [AllowAnonymous]
-    public async Task<IActionResult> GoogleCallback(CancellationToken cancellationToken)
+    public async Task<IActionResult> GoogleComplete(CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(_configuration["Google:ClientId"]) ||
             string.IsNullOrWhiteSpace(_configuration["Google:ClientSecret"]))
