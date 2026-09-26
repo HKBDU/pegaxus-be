@@ -1,4 +1,5 @@
 using FluentValidation;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.BookingService.Validations;
 
@@ -18,8 +19,18 @@ public class UpdateBookingRequestValidator : AbstractValidator<Request.UpdateBoo
                 request.CustomerNote is not null)
             .WithMessage("At least one field must be updated.");
         RuleFor(x => x.OriginAddress).NotEmpty().MaximumLength(500).When(x => x.OriginAddress is not null);
-        RuleFor(x => x.OriginCountry).NotEmpty().MaximumLength(100).When(x => x.OriginCountry is not null);
+        RuleFor(x => x.OriginCountry)
+            .NotEmpty()
+            .MaximumLength(100)
+            .Must(country => CountryUtils.IsEuCountry(country) || CountryUtils.IsUnitedKingdom(country))
+            .WithMessage("Origin country must be an accepted 27 EU member country or United Kingdom.")
+            .When(x => x.OriginCountry is not null);
         RuleFor(x => x.DestinationAddress).NotEmpty().MaximumLength(500).When(x => x.DestinationAddress is not null);
-        RuleFor(x => x.DestinationCountry).NotEmpty().MaximumLength(100).When(x => x.DestinationCountry is not null);
+        RuleFor(x => x.DestinationCountry)
+            .NotEmpty()
+            .MaximumLength(100)
+            .Must(country => CountryUtils.IsEuCountry(country) || CountryUtils.IsUnitedKingdom(country))
+            .WithMessage("Destination country must be an accepted 27 EU member country or United Kingdom.")
+            .When(x => x.DestinationCountry is not null);
     }
 }

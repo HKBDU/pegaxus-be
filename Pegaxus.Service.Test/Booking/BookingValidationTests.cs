@@ -38,4 +38,56 @@ public class BookingValidationTests
         Assert.Contains(cancel.Errors, error => error.PropertyName == "Reason");
         Assert.Contains(reject.Errors, error => error.PropertyName == "Reason");
     }
+
+    [Fact]
+    public void CreateBooking_ValidatesEuAndUkCountryRules()
+    {
+        var validator = new CreateBookingRequestValidator();
+
+        // Cross-border EU to EU is valid
+        var validEuResult = validator.Validate(new BookingRequest.CreateBookingRequest
+        {
+            OriginAddress = "123 St",
+            OriginCountry = "France",
+            DestinationAddress = "456 St",
+            DestinationCountry = "Germany",
+            Horses = [new BookingRequest.BookingHorseRequest { HorseId = Guid.NewGuid() }]
+        });
+        Assert.True(validEuResult.IsValid);
+
+        // Same country domestic must be United Kingdom
+        var validUkResult = validator.Validate(new BookingRequest.CreateBookingRequest
+        {
+            OriginAddress = "London",
+            OriginCountry = "United Kingdom",
+            DestinationAddress = "Manchester",
+            DestinationCountry = "United Kingdom",
+            Horses = [new BookingRequest.BookingHorseRequest { HorseId = Guid.NewGuid() }]
+        });
+        Assert.True(validUkResult.IsValid);
+
+        // Same country EU (e.g. France to France) is rejected
+        var invalidSameCountryEuResult = validator.Validate(new BookingRequest.CreateBookingRequest
+        {
+            OriginAddress = "Paris",
+            OriginCountry = "France",
+            DestinationAddress = "Nice",
+            DestinationCountry = "France",
+            Horses = [new BookingRequest.BookingHorseRequest { HorseId = Guid.NewGuid() }]
+        });
+        Assert.False(invalidSameCountryEuResult.IsValid);
+        Assert.Contains(invalidSameCountryEuResult.Errors, error => error.PropertyName == "DestinationCountry");
+
+        // Non-EU country (e.g. Vietnam) is rejected
+        var invalidNonEuResult = validator.Validate(new BookingRequest.CreateBookingRequest
+        {
+            OriginAddress = "Hanoi",
+            OriginCountry = "Vietnam",
+            DestinationAddress = "Paris",
+            DestinationCountry = "France",
+            Horses = [new BookingRequest.BookingHorseRequest { HorseId = Guid.NewGuid() }]
+        });
+        Assert.False(invalidNonEuResult.IsValid);
+        Assert.Contains(invalidNonEuResult.Errors, error => error.PropertyName == "OriginCountry");
+    }
 }
