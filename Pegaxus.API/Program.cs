@@ -111,6 +111,14 @@ if (googleConfigured)
             options.Scope.Add("email");
             options.Scope.Add("profile");
             options.SaveTokens = false;
+            options.Events.OnRemoteFailure = context =>
+            {
+                var frontendUrl = builder.Configuration["Cors:FrontendUrl"] ?? "http://localhost:5173";
+                context.Response.Redirect(
+                    $"{frontendUrl.TrimEnd('/')}/auth/google/callback?error=GOOGLE_AUTHENTICATION_FAILED");
+                context.HandleResponse();
+                return Task.CompletedTask;
+            };
         });
 }
 builder.Services.AddSwaggerServices();
