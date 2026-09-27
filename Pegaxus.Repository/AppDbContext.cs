@@ -42,6 +42,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<DocumentReview> DocumentReviews { get; set; }
 
+    public virtual DbSet<DocumentAttachment> DocumentAttachments { get; set; }
+
     public virtual DbSet<DocumentVersion> DocumentVersions { get; set; }
 
     public virtual DbSet<DossierRequirement> DossierRequirements { get; set; }
@@ -110,7 +112,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("approval_decision", new[] { "APPROVED", "REJECTED" })
             .HasPostgresEnum("authority_submission_status", new[] { "DRAFT", "SUBMITTED", "PENDING", "APPROVED", "REJECTED", "RETURNED" })
             .HasPostgresEnum("booking_history_type", new[] { "SUBMIT", "APPROVE", "REJECT", "CANCEL" })
-            .HasPostgresEnum("booking_status", new[] { "PENDING", "APPROVED", "REJECTED", "CANCELLED" })
+            .HasPostgresEnum("booking_status", new[] { "DRAFT", "PENDING", "APPROVED", "REJECTED", "CANCELLED" })
             .HasPostgresEnum("claim_resolution_type", new[] { "COMPENSATION", "PARTIAL_COMPENSATION", "REFUND", "SERVICE_RECOVERY", "NO_COMPENSATION", "OTHER" })
             .HasPostgresEnum("claim_status", new[] { "PENDING", "APPROVED", "REJECTED", "RESOLVED", "CANCELLED" })
             .HasPostgresEnum("claim_type", new[] { "HORSE_INJURY", "HORSE_HEALTH", "LOSS", "DAMAGE", "DELAY", "DOCUMENT_ISSUE", "SERVICE_ISSUE", "OTHER" })
@@ -831,6 +833,40 @@ public partial class AppDbContext : DbContext
                 .HasConstraintName("DocumentVersion_compliance_document_id_fkey");
         });
 
+        modelBuilder.Entity<DocumentAttachment>(entity =>
+        {
+            entity.HasKey(e => e.DocumentAttachmentId).HasName("DocumentAttachment_pkey");
+
+            entity.ToTable("DocumentAttachment", tb => tb.HasComment("DocumentAttachment: Một file cụ thể thuộc cùng một lần nộp giấy tờ."));
+
+            entity.HasIndex(e => e.DocumentVersionId, "DocumentAttachment_document_version_id_idx");
+
+            entity.HasIndex(e => new { e.DocumentVersionId, e.SortOrder }, "DocumentAttachment_document_version_id_sort_order_key")
+                .IsUnique();
+
+            entity.Property(e => e.DocumentAttachmentId).HasColumnName("document_attachment_id");
+            entity.Property(e => e.DocumentVersionId).HasColumnName("document_version_id");
+            entity.Property(e => e.FileName)
+                .HasMaxLength(255)
+                .HasColumnName("file_name");
+            entity.Property(e => e.FileUrl)
+                .HasMaxLength(1000)
+                .HasColumnName("file_url");
+            entity.Property(e => e.MimeType)
+                .HasMaxLength(100)
+                .HasColumnName("mime_type");
+            entity.Property(e => e.FileSizeBytes).HasColumnName("file_size_bytes");
+            entity.Property(e => e.SortOrder).HasColumnName("sort_order");
+            entity.Property(e => e.CreatedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("created_at");
+
+            entity.HasOne(d => d.DocumentVersion).WithMany(p => p.DocumentAttachments)
+                .HasForeignKey(d => d.DocumentVersionId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("DocumentAttachment_document_version_id_fkey");
+        });
+
         modelBuilder.Entity<DossierRequirement>(entity =>
         {
             entity.HasKey(e => e.DossierRequirementId).HasName("DossierRequirement_pkey");
@@ -1026,6 +1062,8 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.Country)
                 .HasMaxLength(100)
                 .HasColumnName("country");
+            entity.Property(e => e.DateOfBirth)
+                .HasColumnName("date_of_birth");
             entity.Property(e => e.CreatedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");

@@ -6,6 +6,7 @@ public static class Response
     {
         public Guid AccountId { get; init; }
         public required string Email { get; init; }
+        public required string EmailVerificationStatus { get; init; }
         public required string AccountType { get; init; }
         public required string Status { get; init; }
         public required string Role { get; init; }
@@ -13,9 +14,12 @@ public static class Response
         public string? Phone { get; init; }
         public string? Country { get; init; }
         public string? Address { get; init; }
+        public string? IdentityNumber { get; init; }
         public string? AvatarUrl { get; init; }
         public CustomerResponse? Customer { get; init; }
         public EmployeeResponse? Employee { get; init; }
+        public DateTimeOffset CreatedAt { get; init; }
+        public DateTimeOffset? LastLoginAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }
 
@@ -29,5 +33,6 @@ public static class Response
     {
         public Guid EmployeeId { get; init; }
         public required string EmployeeCode { get; init; }
+        public DateOnly? DateOfBirth { get; init; }
     }
 }

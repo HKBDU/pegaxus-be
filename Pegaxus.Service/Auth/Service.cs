@@ -25,6 +25,7 @@ public class Service : IService
 {
     private const string EmailVerification = "EMAIL_VERIFICATION";
     private const string PasswordReset = "PASSWORD_RESET";
+    private const string GoogleLoginCodePrefix = "auth:google:code:";
     private readonly AppDbContext _db;
     private readonly IPasswordHasher<AccountEntity> _passwordHasher;
     private readonly IDistributedCache _cache;
@@ -91,6 +92,113 @@ public class Service : IService
         await _cache.RemoveAsync(failedKey, cancellationToken);
         await _cache.RemoveAsync(lockedKey, cancellationToken);
 
+        return await IssueTokensAsync(account, role, cancellationToken);
+    }
+
+    public async Task<Response.LoginResponse> GoogleLoginAsync(
+        Request.GoogleLoginRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var email = request.Email.Trim().ToLowerInvariant();
+        var subject = request.Subject.Trim();
+        if (string.IsNullOrWhiteSpace(subject) || string.IsNullOrWhiteSpace(email))
+            throw new AppException("Google account information is invalid", 400, "GOOGLE_ACCOUNT_INVALID");
+
+        var account = await _db.Accounts
+            .Include(item => item.CustomerAccount)
+            .Include(item => item.EmployeeAccount)
+            .SingleOrDefaultAsync(item => !item.IsDeleted && item.Email.ToLower() == email, cancellationToken);
+
+        var now = UtcNow();
+        if (account is null)
+        {
+            account = new Account
+            {
+                AccountId = Guid.NewGuid(),
+                Email = email,
+                AccountType = AccountType.CUSTOMER,
+                Status = AccountStatus.ACTIVE,
+                EmailVerifiedAt = now,
+                CreatedAt = now,
+                UpdatedAt = now,
+                AvatarUrl = string.IsNullOrWhiteSpace(request.AvatarUrl) ? null : request.AvatarUrl.Trim()
+            };
+            account.PasswordHash = _passwordHasher.HashPassword(account, Convert.ToHexString(RandomNumberGenerator.GetBytes(32)));
+            account.CustomerAccount = new Customer
+            {
+                CustomerId = Guid.NewGuid(),
+                AccountId = account.AccountId,
+                FullName = string.IsNullOrWhiteSpace(request.FullName) ? email : request.FullName.Trim(),
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            _db.Accounts.Add(account);
+        }
+        else
+        {
+            if (account.AccountType != AccountType.CUSTOMER || account.CustomerAccount is null || account.CustomerAccount.IsDeleted)
+                throw new ForbiddenException("This email is linked to an unavailable account");
+            if (account.Status == AccountStatus.SUSPENDED)
+                throw new ForbiddenException("Account suspended");
+            if (account.Status != AccountStatus.ACTIVE)
+                throw new ForbiddenException("Account inactive");
+
+            account.EmailVerifiedAt ??= now;
+            if (!string.IsNullOrWhiteSpace(request.AvatarUrl))
+                account.AvatarUrl = request.AvatarUrl.Trim();
+            account.UpdatedAt = now;
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return await IssueTokensAsync(account, "CUSTOMER", cancellationToken);
+    }
+
+    public async Task<string> CreateGoogleLoginCodeAsync(
+        Response.LoginResponse response,
+        CancellationToken cancellationToken = default)
+    {
+        var code = $"gl_{Convert.ToHexString(RandomNumberGenerator.GetBytes(32)).ToLowerInvariant()}";
+        await _cache.SetStringAsync(
+            GoogleLoginCodePrefix + code,
+            JsonSerializer.Serialize(response),
+            new DistributedCacheEntryOptions
+            {
+                AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(1)
+            },
+            cancellationToken);
+        return code;
+    }
+
+    public async Task<Response.LoginResponse> ExchangeGoogleLoginCodeAsync(
+        Request.GoogleLoginExchangeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var code = request.Code.Trim();
+        if (string.IsNullOrWhiteSpace(code))
+            throw new AppException("Google login code is required", 400, "GOOGLE_LOGIN_CODE_INVALID");
+
+        var key = GoogleLoginCodePrefix + code;
+        var value = await _cache.GetStringAsync(key, cancellationToken);
+        await _cache.RemoveAsync(key, cancellationToken);
+        if (value is null)
+            throw new AppException("Google login code is invalid or expired", 400, "GOOGLE_LOGIN_CODE_INVALID");
+
+        try
+        {
+            return JsonSerializer.Deserialize<Response.LoginResponse>(value)
+                ?? throw new JsonException("Google login code payload is empty");
+        }
+        catch (JsonException)
+        {
+            throw new AppException("Google login code is invalid or expired", 400, "GOOGLE_LOGIN_CODE_INVALID");
+        }
+    }
+
+    private async Task<Response.LoginResponse> IssueTokensAsync(
+        AccountEntity account,
+        string role,
+        CancellationToken cancellationToken)
+    {
         var accessToken = _jwtService.GenerateAccessToken(CreateClaims(account));
         var refreshToken = _jwtService.GenerateRefreshToken();
         var now = UtcNow();
@@ -333,6 +441,29 @@ public class Service : IService
         {
             throw InvalidRefreshToken();
         }
+    }
+
+    public async Task LogoutAsync(
+        Request.LogoutRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var context = _httpContextAccessor.HttpContext;
+        if (!Guid.TryParse(context?.User.FindFirstValue(ClaimTypes.NameIdentifier), out var accountId))
+            throw new UnauthorizedException("Authentication required");
+
+        var now = UtcNow();
+        var tokenHash = Hash(request.RefreshToken);
+        var token = await _db.RefreshTokens.SingleOrDefaultAsync(item =>
+            item.AccountId == accountId && item.TokenHash == tokenHash &&
+            item.RevokedAt == null && item.ExpiresAt > now, cancellationToken);
+
+        if (token is null)
+            return;
+
+        var ip = context!.Connection.RemoteIpAddress?.ToString();
+        token.RevokedAt = now;
+        token.RevokedByIp = string.IsNullOrWhiteSpace(ip) ? null : ip[..Math.Min(ip.Length, 64)];
+        await _db.SaveChangesAsync(cancellationToken);
     }
 
     public async Task ResetPasswordAsync(

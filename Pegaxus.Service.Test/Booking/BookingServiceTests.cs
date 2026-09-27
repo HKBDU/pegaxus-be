@@ -30,10 +30,10 @@ public class BookingServiceTests
 
         var result = await service.CreateAsync(account.AccountId, new BookingRequest.CreateBookingRequest
         {
-            OriginAddress = "Ho Chi Minh City",
-            OriginCountry = "Vietnam",
-            DestinationAddress = "Melbourne",
-            DestinationCountry = "Australia",
+            OriginAddress = "Paris",
+            OriginCountry = "France",
+            DestinationAddress = "Berlin",
+            DestinationCountry = "Germany",
             RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(21),
             Horses = [new BookingRequest.BookingHorseRequest { HorseId = horse.HorseId }]
         });
@@ -50,6 +50,10 @@ public class BookingServiceTests
         var (account, customer) = await TestSupport.AddCustomerAsync(db);
         var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer);
         var service = CreateService(db);
+        await service.ChangeStatusAsync(account.AccountId, booking.BookingId, new BookingRequest.ChangeStatusRequest
+        {
+            Status = "DRAFT"
+        });
 
         var result = await service.UpdateAsync(account.AccountId, booking.BookingId, new BookingRequest.UpdateBookingRequest
         {
@@ -60,7 +64,9 @@ public class BookingServiceTests
         Assert.Equal("New origin", booking.OriginAddress);
         Assert.Equal("Old destination", booking.DestinationAddress);
         Assert.Equal(result.UpdatedAt.UtcDateTime, DateTime.SpecifyKind(booking.UpdatedAt, DateTimeKind.Utc));
-        Assert.Contains("originAddress", (await db.BookingStatusHistories.SingleAsync()).Reason);
+        Assert.Contains(
+            "originAddress",
+            (await db.BookingStatusHistories.OrderBy(history => history.ChangedAt).LastAsync()).Reason);
     }
 
     [Fact]
@@ -70,6 +76,10 @@ public class BookingServiceTests
         var (account, customer) = await TestSupport.AddCustomerAsync(db);
         var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer);
         var service = CreateService(db);
+        await service.ChangeStatusAsync(account.AccountId, booking.BookingId, new BookingRequest.ChangeStatusRequest
+        {
+            Status = "DRAFT"
+        });
 
         var exception = await Assert.ThrowsAsync<ConflictException>(() => service.UpdateAsync(
             account.AccountId,

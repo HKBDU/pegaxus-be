@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 using BookingEntity = Pegaxus.Repository.Entities.Booking;
@@ -20,6 +21,398 @@ public class Service : IService
     {
         _db = db;
         _mailService = mailService;
+    }
+
+    public async Task<Response.BookingDetailResponse> GetAsync(
+        Guid accountId,
+        Guid bookingId,
+        CancellationToken cancellationToken = default)
+    {
+        var employeeRole = await _db.Employees
+            .Where(employee =>
+                employee.AccountId == accountId &&
+                !employee.IsDeleted &&
+                employee.IsActive &&
+                !employee.Account.IsDeleted &&
+                employee.Account.Status == AccountStatus.ACTIVE)
+            .Select(employee => (EmployeeRole?)employee.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var canViewAll = employeeRole == EmployeeRole.LOGISTICS_MANAGER;
+        var booking = await _db.Bookings
+            .AsNoTracking()
+            .Include(item => item.Customer)
+            .Include(item => item.BookingHorses)
+                .ThenInclude(item => item.Horse)
+            .Include(item => item.AssignedEmployee)
+            .Include(item => item.Transport)
+            .Where(item =>
+                item.BookingId == bookingId &&
+                (canViewAll && item.Status != BookingStatus.DRAFT ||
+                 !canViewAll && item.Customer.AccountId == accountId))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (booking is null)
+            throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
+
+        return new Response.BookingDetailResponse
+        {
+            BookingId = booking.BookingId,
+            BookingCode = booking.BookingCode,
+            Status = booking.Status.ToString(),
+            StatusName = GetStatusName(booking.Status),
+            Customer = new Response.CustomerResponse
+            {
+                CustomerId = booking.Customer.CustomerId,
+                FullName = booking.Customer.FullName,
+                Phone = booking.Customer.Phone
+            },
+            OriginAddress = booking.OriginAddress,
+            OriginCountry = booking.OriginCountry,
+            DestinationAddress = booking.DestinationAddress,
+            DestinationCountry = booking.DestinationCountry,
+            RequestedDepartureDate = booking.RequestedDepartureDate,
+            RequestedArrivalDate = booking.RequestedArrivalDate,
+            TotalHorses = booking.BookingHorses.Count,
+            Horses = booking.BookingHorses.Select(item => new Response.BookingHorseResponse
+            {
+                HorseId = item.HorseId,
+                HorseName = item.Horse.HorseName,
+                Sex = item.Horse.Sex?.ToString(),
+                Breed = item.Horse.Breed,
+                MicrochipNumber = item.Horse.MicrochipNumber,
+                PassportNumber = item.Horse.PassportNumber,
+                SpecialHandlingNotes = item.SpecialHandlingNotes
+            }).ToList(),
+            SpecialRequirements = booking.SpecialRequirements,
+            CustomerNote = booking.CustomerNote,
+            AssignedEmployee = booking.AssignedEmployee is null
+                ? null
+                : new Response.AssignedEmployeeResponse
+                {
+                    EmployeeId = booking.AssignedEmployee.EmployeeId,
+                    FullName = booking.AssignedEmployee.FullName
+                },
+            SubmittedAt = AsUtc(booking.SubmittedAt ?? booking.CreatedAt),
+            ApprovedAt = AsUtcNullable(booking.ApprovedAt),
+            RejectedAt = AsUtcNullable(booking.RejectedAt),
+            CancelledAt = AsUtcNullable(booking.CancelledAt),
+            RejectionReason = booking.RejectionReason,
+            CancellationReason = booking.CancellationReason,
+            Transport = booking.Transport is null
+                ? null
+                : new Response.TransportDetailResponse
+                {
+                    TransportId = booking.Transport.TransportId,
+                    TransportCode = booking.Transport.TransportCode,
+                    Status = booking.Transport.Status.ToString()
+                },
+            CreatedAt = AsUtc(booking.CreatedAt),
+            UpdatedAt = AsUtc(booking.UpdatedAt)
+        };
+    }
+
+    public async Task<IReadOnlyList<Response.BookingHistoryResponse>> GetHistoriesAsync(
+        Guid accountId,
+        Guid bookingId,
+        CancellationToken cancellationToken = default)
+    {
+        var employeeRole = await _db.Employees
+            .Where(employee =>
+                employee.AccountId == accountId &&
+                !employee.IsDeleted &&
+                employee.IsActive &&
+                !employee.Account.IsDeleted &&
+                employee.Account.Status == AccountStatus.ACTIVE)
+            .Select(employee => (EmployeeRole?)employee.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var canViewAll = employeeRole == EmployeeRole.LOGISTICS_MANAGER;
+        var bookingExists = await _db.Bookings.AnyAsync(booking =>
+            booking.BookingId == bookingId &&
+            (canViewAll && booking.Status != BookingStatus.DRAFT ||
+             !canViewAll && booking.Customer.AccountId == accountId),
+            cancellationToken);
+        if (!bookingExists)
+            throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
+
+        var histories = await _db.BookingStatusHistories
+            .AsNoTracking()
+            .Where(history => history.BookingId == bookingId)
+            .Include(history => history.ChangedByAccount)
+                .ThenInclude(account => account.CustomerAccount)
+            .Include(history => history.ChangedByAccount)
+                .ThenInclude(account => account.EmployeeAccount)
+            .OrderBy(history => history.ChangedAt)
+            .ThenBy(history => history.BookingStatusHistoryId)
+            .ToListAsync(cancellationToken);
+
+        return histories.Select(history => new Response.BookingHistoryResponse
+        {
+            HistoryId = history.BookingStatusHistoryId,
+            Action = GetHistoryAction(history),
+            PreviousStatus = history.PreviousStatus?.ToString(),
+            NewStatus = history.NewStatus.ToString(),
+            Reason = history.Reason,
+            ChangedBy = new Response.ChangedByResponse
+            {
+                AccountId = history.ChangedByAccountId,
+                FullName = GetAccountFullName(history.ChangedByAccount),
+                Role = GetAccountRole(history.ChangedByAccount)
+            },
+            ChangedAt = AsUtc(history.ChangedAt)
+        }).ToList();
+    }
+
+    public async Task<Response.BookingListResponse> GetListAsync(
+        Guid accountId,
+        Request.BookingListRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.PageIndex < 1)
+            throw new BadRequestException("PageIndex must be greater than or equal to 1");
+        if (request.PageSize < 1 || request.PageSize > 100)
+            throw new BadRequestException("PageSize must be between 1 and 100");
+
+        var employeeRole = await _db.Employees
+            .Where(employee =>
+                employee.AccountId == accountId &&
+                !employee.IsDeleted &&
+                employee.IsActive &&
+                !employee.Account.IsDeleted &&
+                employee.Account.Status == AccountStatus.ACTIVE)
+            .Select(employee => (EmployeeRole?)employee.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var customerId = await _db.Customers
+            .Where(customer =>
+                customer.AccountId == accountId &&
+                !customer.IsDeleted &&
+                !customer.Account.IsDeleted &&
+                customer.Account.Status == AccountStatus.ACTIVE)
+            .Select(customer => (Guid?)customer.CustomerId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        var canViewAll = employeeRole == EmployeeRole.LOGISTICS_MANAGER;
+        if (!canViewAll && customerId is null)
+            throw new ForbiddenException("Only customers and logistics managers can access bookings");
+
+        var query = _db.Bookings
+            .AsNoTracking()
+            .Where(booking =>
+                (canViewAll && booking.Status != BookingStatus.DRAFT) ||
+                (!canViewAll && booking.CustomerId == customerId!.Value));
+
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            if (!Enum.TryParse<BookingStatus>(request.Status.Trim(), true, out var status))
+                throw new BadRequestException("Booking status is invalid", "INVALID_STATUS");
+            query = query.Where(booking => booking.Status == status);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = canViewAll
+                ? query.Where(booking =>
+                    booking.BookingCode.ToLower().Contains(search) ||
+                    booking.Customer.FullName.ToLower().Contains(search) ||
+                    booking.OriginAddress.ToLower().Contains(search) ||
+                    booking.OriginCountry.ToLower().Contains(search) ||
+                    booking.DestinationAddress.ToLower().Contains(search) ||
+                    booking.DestinationCountry.ToLower().Contains(search))
+                : query.Where(booking =>
+                    booking.BookingCode.ToLower().Contains(search) ||
+                    booking.OriginAddress.ToLower().Contains(search) ||
+                    booking.OriginCountry.ToLower().Contains(search) ||
+                    booking.DestinationAddress.ToLower().Contains(search) ||
+                    booking.DestinationCountry.ToLower().Contains(search));
+        }
+
+        query = ApplySorting(query, request.SortBy);
+
+        var totalItems = await query.CountAsync(cancellationToken);
+        var items = await query
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(booking => new Response.BookingListItemResponse
+            {
+                BookingId = booking.BookingId,
+                BookingCode = booking.BookingCode,
+                Status = booking.Status.ToString(),
+                StatusName = GetStatusName(booking.Status),
+                CustomerName = booking.Customer.FullName,
+                OriginAddress = booking.OriginAddress,
+                OriginCountry = booking.OriginCountry,
+                DestinationAddress = booking.DestinationAddress,
+                DestinationCountry = booking.DestinationCountry,
+                RequestedDepartureDate = booking.RequestedDepartureDate,
+                TotalHorses = booking.BookingHorses.Count,
+                CreatedAt = AsUtc(booking.CreatedAt)
+            })
+            .ToListAsync(cancellationToken);
+
+        return new Response.BookingListResponse
+        {
+            Items = items,
+            PageIndex = request.PageIndex,
+            PageSize = request.PageSize,
+            TotalItems = totalItems,
+            TotalPages = (int)Math.Ceiling(totalItems / (double)request.PageSize)
+        };
+    }
+
+    public async Task AddHorseIntoBookingAsync(
+        Guid accountId,
+        Guid bookingId,
+        Request.AddHorseRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var booking = await GetOwnedDraftBookingAsync(accountId, bookingId, cancellationToken);
+        var horse = await _db.Horses.SingleOrDefaultAsync(item =>
+            item.HorseId == request.HorseId &&
+            item.CustomerId == booking.CustomerId &&
+            !item.IsDeleted,
+            cancellationToken);
+        if (horse is null)
+            throw new NotFoundException("Horse not found", "HORSE_NOT_FOUND");
+
+        if (await _db.BookingHorses.AnyAsync(item =>
+                item.BookingId == bookingId && item.HorseId == request.HorseId,
+                cancellationToken))
+            throw new ConflictException("Horse already belongs to this booking", "HORSE_ALREADY_IN_BOOKING");
+
+        var now = UtcNow();
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        _db.BookingHorses.Add(new BookingHorse
+        {
+            BookingId = bookingId,
+            HorseId = request.HorseId,
+            SpecialHandlingNotes = EmptyToNull(request.SpecialHandlingNotes),
+            CreatedAt = now
+        });
+        booking.UpdatedAt = now;
+        AddHistory(
+            bookingId,
+            accountId,
+            BookingHistoryType.SUBMIT,
+            BookingStatus.DRAFT,
+            BookingStatus.DRAFT,
+            $"Added horse: {horse.HorseName}",
+            now);
+        await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task UpdateHorseNotesAsync(
+        Guid accountId,
+        Guid bookingId,
+        Guid horseId,
+        Request.UpdateHorseNotesRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var booking = await GetOwnedDraftBookingAsync(accountId, bookingId, cancellationToken);
+        if (request.SpecialHandlingNotes?.Length > 2000)
+            throw new BadRequestException("Special handling notes must not exceed 2000 characters");
+
+        var bookingHorse = await _db.BookingHorses
+            .Include(item => item.Horse)
+            .SingleOrDefaultAsync(item =>
+                item.BookingId == bookingId &&
+                item.HorseId == horseId,
+                cancellationToken);
+        if (bookingHorse is null)
+            throw new NotFoundException("Horse is not in this booking", "HORSE_NOT_IN_BOOKING");
+
+        var now = UtcNow();
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        bookingHorse.SpecialHandlingNotes = EmptyToNull(request.SpecialHandlingNotes);
+        booking.UpdatedAt = now;
+        AddHistory(
+            bookingId,
+            accountId,
+            BookingHistoryType.SUBMIT,
+            BookingStatus.DRAFT,
+            BookingStatus.DRAFT,
+            $"Updated handling notes for horse: {bookingHorse.Horse.HorseName}",
+            now);
+        await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task RemoveHorseAsync(
+        Guid accountId,
+        Guid bookingId,
+        Guid horseId,
+        CancellationToken cancellationToken = default)
+    {
+        var booking = await GetOwnedDraftBookingAsync(accountId, bookingId, cancellationToken);
+        var bookingHorse = await _db.BookingHorses
+            .Include(item => item.Horse)
+            .SingleOrDefaultAsync(item =>
+                item.BookingId == bookingId &&
+                item.HorseId == horseId,
+                cancellationToken);
+        if (bookingHorse is null)
+            throw new NotFoundException("Horse is not in this booking", "HORSE_NOT_IN_BOOKING");
+
+        var now = UtcNow();
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        _db.BookingHorses.Remove(bookingHorse);
+        booking.UpdatedAt = now;
+        AddHistory(
+            bookingId,
+            accountId,
+            BookingHistoryType.SUBMIT,
+            BookingStatus.DRAFT,
+            BookingStatus.DRAFT,
+            $"Removed horse: {bookingHorse.Horse.HorseName}",
+            now);
+        await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task ChangeStatusAsync(
+        Guid accountId,
+        Guid bookingId,
+        Request.ChangeStatusRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var customer = await GetCustomerAsync(accountId, cancellationToken);
+        var booking = await _db.Bookings.SingleOrDefaultAsync(item =>
+            item.BookingId == bookingId && item.CustomerId == customer.CustomerId,
+            cancellationToken);
+        if (booking is null)
+            throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
+
+        if (!Enum.TryParse<BookingStatus>(request.Status.Trim(), true, out var targetStatus) ||
+            targetStatus is not (BookingStatus.DRAFT or BookingStatus.PENDING))
+            throw new BadRequestException("Only DRAFT and PENDING statuses are supported", "INVALID_BOOKING_STATUS");
+
+        var validTransition = booking.Status == BookingStatus.PENDING && targetStatus == BookingStatus.DRAFT ||
+                              booking.Status == BookingStatus.DRAFT && targetStatus == BookingStatus.PENDING;
+        if (!validTransition)
+            throw new ConflictException(
+                "The booking status cannot be changed from its current state",
+                "INVALID_BOOKING_STATUS");
+
+        var now = UtcNow();
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        var previousStatus = booking.Status;
+        booking.Status = targetStatus;
+        booking.UpdatedAt = now;
+        AddHistory(
+            bookingId,
+            accountId,
+            BookingHistoryType.SUBMIT,
+            previousStatus,
+            targetStatus,
+            targetStatus == BookingStatus.DRAFT
+                ? "Booking moved to draft"
+                : "Booking submitted for review",
+            now);
+        await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
     }
 
     public async Task<Response.CreateBookingResponse> CreateAsync(
@@ -45,6 +438,10 @@ public class Service : IService
             if (ownedHorseCount != horseIds.Length)
                 throw new NotFoundException("Horse not found", "HORSE_NOT_FOUND");
         }
+
+        var (isRouteValid, routeErrorMessage) = CountryUtils.ValidateRoute(request.OriginCountry, request.DestinationCountry);
+        if (!isRouteValid)
+            throw new BadRequestException(routeErrorMessage);
 
         var now = UtcNow();
         var booking = new BookingEntity
@@ -92,9 +489,10 @@ public class Service : IService
         Request.UpdateBookingRequest request,
         CancellationToken cancellationToken = default)
     {
-        var booking = await GetOwnedPendingBookingAsync(accountId, bookingId, cancellationToken);
-        var clientUpdatedAt = DateTime.SpecifyKind(request.LastUpdatedAt, DateTimeKind.Unspecified);
-        if (booking.UpdatedAt != clientUpdatedAt)
+        var booking = await GetOwnedDraftBookingAsync(accountId, bookingId, cancellationToken);
+        var clientUpdatedAtUtc = ToDatabasePrecision(request.LastUpdatedAt.UtcDateTime);
+        var clientUpdatedAtValue = ToDatabasePrecision(request.LastUpdatedAt.DateTime);
+        if (booking.UpdatedAt != clientUpdatedAtUtc && booking.UpdatedAt != clientUpdatedAtValue)
             throw new ConflictException(
                 "The booking was modified. Refresh and try again",
                 "BOOKING_MODIFIED");
@@ -102,6 +500,13 @@ public class Service : IService
         var departureDate = request.RequestedDepartureDate ?? booking.RequestedDepartureDate;
         var arrivalDate = request.RequestedArrivalDate ?? booking.RequestedArrivalDate;
         ValidateDates(departureDate, arrivalDate);
+
+        var targetOrigin = request.OriginCountry?.Trim() ?? booking.OriginCountry;
+        var targetDestination = request.DestinationCountry?.Trim() ?? booking.DestinationCountry;
+        var (isUpdatedRouteValid, updatedRouteErrorMessage) = CountryUtils.ValidateRoute(targetOrigin, targetDestination);
+        if (!isUpdatedRouteValid)
+            throw new BadRequestException(updatedRouteErrorMessage);
+
         var changedFields = new List<string>();
         Set(request.OriginAddress, value => booking.OriginAddress = value, "originAddress", changedFields);
         Set(request.OriginCountry, value => booking.OriginCountry = value, "originCountry", changedFields);
@@ -127,13 +532,13 @@ public class Service : IService
             bookingId,
             accountId,
             BookingHistoryType.SUBMIT,
-            BookingStatus.PENDING,
-            BookingStatus.PENDING,
+            BookingStatus.DRAFT,
+            BookingStatus.DRAFT,
             $"Updated: {string.Join(", ", changedFields)}",
             now);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return new Response.UpdateBookingResponse { UpdatedAt = AsUtc(now) };
+        return new Response.UpdateBookingResponse { UpdatedAt = AsUtc(booking.UpdatedAt) };
     }
 
     public async Task CancelAsync(
@@ -275,6 +680,21 @@ public class Service : IService
         return booking;
     }
 
+    private async Task<BookingEntity> GetOwnedDraftBookingAsync(
+        Guid accountId,
+        Guid bookingId,
+        CancellationToken cancellationToken)
+    {
+        var booking = await _db.Bookings.SingleOrDefaultAsync(item =>
+            item.BookingId == bookingId && item.Customer.AccountId == accountId,
+            cancellationToken);
+        if (booking is null)
+            throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
+        if (booking.Status != BookingStatus.DRAFT)
+            throw new ConflictException("The booking must be in DRAFT status to be edited", "INVALID_BOOKING_STATUS");
+        return booking;
+    }
+
     private async Task<Employee> GetLogisticsManagerAsync(Guid accountId, CancellationToken cancellationToken)
     {
         var employee = await _db.Employees.SingleOrDefaultAsync(item =>
@@ -295,6 +715,83 @@ public class Service : IService
         if (booking.Status != BookingStatus.PENDING)
             throw new ConflictException("The action is not allowed in the current booking status", "INVALID_BOOKING_STATUS");
     }
+
+    private static IQueryable<BookingEntity> ApplySorting(
+        IQueryable<BookingEntity> query,
+        IReadOnlyCollection<string>? sortBy)
+    {
+        var sortParameters = sortBy is null || sortBy.Count == 0
+            ? ["createdAt:desc"]
+            : sortBy.SelectMany(value => value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+
+        IOrderedQueryable<BookingEntity>? orderedQuery = null;
+        foreach (var sortParameter in sortParameters)
+        {
+            var parts = sortParameter.Split(':', StringSplitOptions.TrimEntries);
+            if (parts.Length != 2 ||
+                (parts[1].ToLowerInvariant() != "asc" && parts[1].ToLowerInvariant() != "desc") ||
+                (parts[0].ToLowerInvariant() != "createdat" &&
+                 parts[0].ToLowerInvariant() != "requesteddeparturedate"))
+                throw new BadRequestException("Sort parameter is invalid", "INVALID_SORT_PARAMETER");
+
+            var ascending = parts[1].Equals("asc", StringComparison.OrdinalIgnoreCase);
+            var field = parts[0].ToLowerInvariant();
+            orderedQuery = orderedQuery is null
+                ? ApplyPrimarySort(query, field, ascending)
+                : ApplySecondarySort(orderedQuery, field, ascending);
+        }
+
+        return orderedQuery ?? query.OrderByDescending(booking => booking.CreatedAt);
+    }
+
+    private static IOrderedQueryable<BookingEntity> ApplyPrimarySort(
+        IQueryable<BookingEntity> query,
+        string field,
+        bool ascending) => field switch
+        {
+            "createdat" when ascending => query.OrderBy(booking => booking.CreatedAt),
+            "createdat" => query.OrderByDescending(booking => booking.CreatedAt),
+            "requesteddeparturedate" when ascending => query.OrderBy(booking => booking.RequestedDepartureDate),
+            _ => query.OrderByDescending(booking => booking.RequestedDepartureDate)
+        };
+
+    private static IOrderedQueryable<BookingEntity> ApplySecondarySort(
+        IOrderedQueryable<BookingEntity> query,
+        string field,
+        bool ascending) => field switch
+        {
+            "createdat" when ascending => query.ThenBy(booking => booking.CreatedAt),
+            "createdat" => query.ThenByDescending(booking => booking.CreatedAt),
+            "requesteddeparturedate" when ascending => query.ThenBy(booking => booking.RequestedDepartureDate),
+            _ => query.ThenByDescending(booking => booking.RequestedDepartureDate)
+        };
+
+    private static string GetStatusName(BookingStatus status) => status switch
+    {
+        BookingStatus.DRAFT => "Draft",
+        BookingStatus.PENDING => "Pending",
+        BookingStatus.APPROVED => "Approved",
+        BookingStatus.REJECTED => "Rejected",
+        BookingStatus.CANCELLED => "Cancelled",
+        _ => status.ToString()
+    };
+
+    private static string GetHistoryAction(BookingStatusHistory history) => history.Type switch
+    {
+        BookingHistoryType.APPROVE => "APPROVED",
+        BookingHistoryType.REJECT => "REJECTED",
+        BookingHistoryType.CANCEL => "CANCELLED",
+        BookingHistoryType.SUBMIT when history.PreviousStatus is null => "CREATED",
+        BookingHistoryType.SUBMIT => "UPDATED",
+        _ => history.Type.ToString()
+    };
+
+    private static string GetAccountFullName(Account account) =>
+        account.CustomerAccount?.FullName ?? account.EmployeeAccount?.FullName ?? account.Email;
+
+    private static string GetAccountRole(Account account) => account.AccountType == AccountType.CUSTOMER
+        ? "CUSTOMER"
+        : account.EmployeeAccount?.Role.ToString() ?? "EMPLOYEE";
 
     private void AddHistory(
         Guid bookingId,
@@ -341,7 +838,7 @@ public class Service : IService
     }
 
     private async Task<string> GenerateBookingCodeAsync(CancellationToken cancellationToken) =>
-        await GenerateCodeAsync("BK", code => _db.Bookings.AnyAsync(booking => booking.BookingCode == code, cancellationToken));
+        await GenerateCodeAsync("REQ", code => _db.Bookings.AnyAsync(booking => booking.BookingCode == code, cancellationToken));
 
     private async Task<string> GenerateTransportCodeAsync(CancellationToken cancellationToken) =>
         await GenerateCodeAsync("TP", code => _db.Transports.AnyAsync(transport => transport.TransportCode == code, cancellationToken));
@@ -385,6 +882,12 @@ public class Service : IService
     }
 
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+    private static DateTime UtcNow() => ToDatabasePrecision(DateTime.UtcNow);
+    private static DateTime ToDatabasePrecision(DateTime value)
+    {
+        var unspecified = DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+        return new DateTime(unspecified.Ticks - unspecified.Ticks % 10, DateTimeKind.Unspecified);
+    }
     private static DateTimeOffset AsUtc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
+    private static DateTimeOffset? AsUtcNullable(DateTime? value) => value.HasValue ? AsUtc(value.Value) : null;
 }

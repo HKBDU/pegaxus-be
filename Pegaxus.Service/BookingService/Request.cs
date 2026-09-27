@@ -4,6 +4,31 @@ namespace Pegaxus.Service.BookingService;
 
 public class Request
 {
+    public class AddHorseRequest
+    {
+        public Guid HorseId { get; set; }
+        public string? SpecialHandlingNotes { get; set; }
+    }
+
+    public class UpdateHorseNotesRequest
+    {
+        public string? SpecialHandlingNotes { get; set; }
+    }
+
+    public class ChangeStatusRequest
+    {
+        public string Status { get; set; } = string.Empty;
+    }
+
+    public class BookingListRequest
+    {
+        public int PageIndex { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+        public string? Search { get; set; }
+        public string? Status { get; set; }
+        public List<string>? SortBy { get; set; }
+    }
+
     public class CreateBookingRequest
     {
         public string OriginAddress { get; set; } = string.Empty;
@@ -25,7 +50,7 @@ public class Request
 
     public class UpdateBookingRequest
     {
-        public DateTime LastUpdatedAt { get; set; }
+        public DateTimeOffset LastUpdatedAt { get; set; }
         public string? OriginAddress { get; set; }
         public string? OriginCountry { get; set; }
         public string? DestinationAddress { get; set; }

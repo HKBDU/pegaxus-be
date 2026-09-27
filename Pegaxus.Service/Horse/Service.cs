@@ -85,7 +85,7 @@ public sealed class Service : IService
     {
         var customerId = await _appDbContext.Customers
             .Where(customer =>
-                customer.AccountId == accountId &&
+                customer.AccountId == accountId && 
                 !customer.IsDeleted &&
                 !customer.Account.IsDeleted)
             .Select(customer => (Guid?)customer.CustomerId)
@@ -94,12 +94,17 @@ public sealed class Service : IService
         if (customerId is null)
             throw new ForbiddenException("Only customer accounts can create horses");
 
-        var horseName = request.HorseName.Trim();
+        var horseName = request.HorseName?.Trim() ?? string.Empty;
         ValidateText(horseName, 150, "HorseName", required: true);
-        ValidateText(request.Breed, 100, "Breed");
-        ValidateText(request.CountryOfOrigin, 100, "CountryOfOrigin");
-        ValidateText(request.MicrochipNumber, 100, "MicrochipNumber");
-        ValidateText(request.PassportNumber, 100, "PassportNumber");
+        ValidateText(request.Breed, 100, "Breed", required: true);
+        ValidateText(request.Color, 100, "Color", required: true);
+        ValidateText(request.CountryOfOrigin, 100, "CountryOfOrigin", required: true);
+        ValidateMicrochipNumber(request.MicrochipNumber);
+        ValidatePassportNumber(request.PassportNumber);
+        ValidateText(request.IdentificationNotes, 1000, "IdentificationNotes", required: true);
+        ValidateRequiredDateOfBirth(request.DateOfBirth);
+        ValidateRequiredMeasurement(request.WeightKg, "WeightKg");
+        ValidateRequiredMeasurement(request.HeightCm, "HeightCm");
 
         var sex = ParseSex(request.Sex);
 
@@ -129,9 +134,13 @@ public sealed class Service : IService
             Sex = sex,
             Breed = NormalizeOptional(request.Breed),
             DateOfBirth = request.DateOfBirth,
+            Color = NormalizeOptional(request.Color),
             CountryOfOrigin = NormalizeOptional(request.CountryOfOrigin),
+            WeightKg = request.WeightKg,
+            HeightCm = request.HeightCm,
             MicrochipNumber = microchipNumber,
             PassportNumber = passportNumber,
+            IdentificationNotes = NormalizeOptional(request.IdentificationNotes),
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -193,6 +202,8 @@ public sealed class Service : IService
             DateOfBirth = horse.DateOfBirth,
             Color = horse.Color,
             CountryOfOrigin = horse.CountryOfOrigin,
+            WeightKg = horse.WeightKg,
+            HeightCm = horse.HeightCm,
             PassportNumber = horse.PassportNumber,
             MicrochipNumber = horse.MicrochipNumber,
             IdentificationNotes = horse.IdentificationNotes,
@@ -228,12 +239,17 @@ public sealed class Service : IService
                 "Horse belongs to an approved request and cannot be updated",
                 "HORSE_IN_APPROVED_BOOKING");
 
-        var horseName = request.HorseName.Trim();
+        var horseName = request.HorseName?.Trim() ?? string.Empty;
         ValidateText(horseName, 150, "HorseName", required: true);
-        ValidateText(request.Breed, 100, "Breed");
-        ValidateText(request.CountryOfOrigin, 100, "CountryOfOrigin");
-        ValidateText(request.MicrochipNumber, 100, "MicrochipNumber");
-        ValidateText(request.PassportNumber, 100, "PassportNumber");
+        ValidateText(request.Breed, 100, "Breed", required: true);
+        ValidateText(request.Color, 100, "Color", required: true);
+        ValidateText(request.CountryOfOrigin, 100, "CountryOfOrigin", required: true);
+        ValidateMicrochipNumber(request.MicrochipNumber);
+        ValidatePassportNumber(request.PassportNumber);
+        ValidateText(request.IdentificationNotes, 1000, "IdentificationNotes", required: true);
+        ValidateRequiredDateOfBirth(request.DateOfBirth);
+        ValidateRequiredMeasurement(request.WeightKg, "WeightKg");
+        ValidateRequiredMeasurement(request.HeightCm, "HeightCm");
 
         var sex = ParseSex(request.Sex);
         var microchipNumber = NormalizeOptional(request.MicrochipNumber);
@@ -257,9 +273,13 @@ public sealed class Service : IService
         horse.Sex = sex;
         horse.Breed = NormalizeOptional(request.Breed);
         horse.DateOfBirth = request.DateOfBirth;
+        horse.Color = NormalizeOptional(request.Color);
         horse.CountryOfOrigin = NormalizeOptional(request.CountryOfOrigin);
+        horse.WeightKg = request.WeightKg;
+        horse.HeightCm = request.HeightCm;
         horse.MicrochipNumber = microchipNumber;
         horse.PassportNumber = passportNumber;
+        horse.IdentificationNotes = NormalizeOptional(request.IdentificationNotes);
         horse.UpdatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
         try
@@ -281,6 +301,41 @@ public sealed class Service : IService
         }
     }
 
+    public async Task DeleteHorseAsync(
+        Guid accountId,
+        Guid horseId,
+        CancellationToken cancellationToken = default)
+    {
+        var horse = await _appDbContext.Horses
+            .SingleOrDefaultAsync(item =>
+                item.HorseId == horseId &&
+                !item.IsDeleted &&
+                item.Customer.AccountId == accountId &&
+                !item.Customer.IsDeleted &&
+                !item.Customer.Account.IsDeleted,
+                cancellationToken);
+
+        if (horse is null)
+            throw new NotFoundException("Horse not found", "HORSE_NOT_FOUND");
+
+        var isInApprovedBooking = await _appDbContext.BookingHorses.AnyAsync(item =>
+            item.HorseId == horseId &&
+            item.Booking.Status == BookingStatus.APPROVED,
+            cancellationToken);
+        if (isInApprovedBooking)
+            throw new ConflictException(
+                "Horse belongs to an approved request and cannot be deleted",
+                "HORSE_IN_APPROVED_BOOKING");
+
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        horse.IsDeleted = true;
+        horse.DeletedAt = now;
+        horse.DeletedByAccountId = accountId;
+        horse.UpdatedAt = now;
+
+        await _appDbContext.SaveChangesAsync(cancellationToken);
+    }
+
     private static void ValidateText(string? value, int maxLength, string fieldName, bool required = false)
     {
         if (required && string.IsNullOrWhiteSpace(value))
@@ -289,10 +344,50 @@ public sealed class Service : IService
             throw new BadRequestException($"{fieldName} must not exceed {maxLength} characters");
     }
 
+    private static readonly System.Text.RegularExpressions.Regex MicrochipRegex = new(@"^\d{15}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex PassportRegex = new(@"^[A-Za-z0-9]{15}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static void ValidateMicrochipNumber(string? value)
+    {
+        ValidateText(value, 100, "MicrochipNumber", required: true);
+        var trimmed = value?.Trim();
+        if (trimmed is not null && !MicrochipRegex.IsMatch(trimmed))
+            throw new BadRequestException("Microchip Number must be a valid 15-digit ISO 11784/11785 microchip number");
+    }
+
+    private static void ValidatePassportNumber(string? value)
+    {
+        ValidateText(value, 100, "PassportNumber", required: true);
+        var trimmed = value?.Trim();
+        if (trimmed is not null && !PassportRegex.IsMatch(trimmed))
+            throw new BadRequestException("Passport Number must be a valid 15-character EU passport/UELN number");
+    }
+
+    private static void ValidateMeasurement(decimal? value, string fieldName)
+    {
+        if (value is <= 0)
+            throw new BadRequestException($"{fieldName} must be greater than 0");
+    }
+
+    private static void ValidateRequiredMeasurement(decimal? value, string fieldName)
+    {
+        if (value is null)
+            throw new BadRequestException($"{fieldName} is required");
+        ValidateMeasurement(value, fieldName);
+    }
+
+    private static void ValidateRequiredDateOfBirth(DateOnly? value)
+    {
+        if (value is null)
+            throw new BadRequestException("DateOfBirth is required");
+        if (value > DateOnly.FromDateTime(DateTime.UtcNow))
+            throw new BadRequestException("DateOfBirth cannot be in the future");
+    }
+
     private static HorseSex? ParseSex(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
-            return null;
+            throw new BadRequestException("Sex is required");
         if (!Enum.TryParse<HorseSex>(value.Trim(), true, out var sex))
             throw new BadRequestException("Sex is invalid");
         return sex;

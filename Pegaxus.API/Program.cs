@@ -1,4 +1,6 @@
 using DotNetEnv;
+using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.DataProtection;
 using FluentValidation;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -20,11 +22,26 @@ using CloudinaryService = Pegaxus.Service.CloudinaryService;
 using MailService = Pegaxus.Service.MailService;
 using AccountService = Pegaxus.Service.AccountService;
 using HorseService = Pegaxus.Service.HorseService;
+using EmployeeService = Pegaxus.Service.EmployeeService;
 
+var envDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
+while (envDirectory is not null)
+{
+    var envPath = Path.Combine(envDirectory.FullName, ".env");
+    if (File.Exists(envPath))
+    {
+        Env.Load(envPath);
+        break;
+    }
 
-Env.Load();
+    envDirectory = envDirectory.Parent;
+}
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".keys")))
+    .SetApplicationName("Pegaxus");
 
 // Keep issued access tokens at the 15-minute API contract lifetime in every environment.
 builder.Configuration["JwtOptions:ExpirationMinutes"] = "15";
@@ -49,9 +66,20 @@ builder.Services
             return new BadRequestObjectResult(ResponseBuilder.ErrorResponse(
                 errors,
                 "The request data is invalid",
-                traceId: context.HttpContext.TraceIdentifier));
+            traceId: context.HttpContext.TraceIdentifier));
         };
     });
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("Frontend", policy =>
+    {
+        policy
+            .WithOrigins("http://localhost:5173")
+            .AllowAnyHeader()
+            .AllowAnyMethod()
+            .AllowCredentials();
+    });
+});
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 
@@ -73,6 +101,61 @@ builder.Services.AddDbContext<AppDbContext>((services, options) =>
 
 // builder.Services.AddApplicationServices();
 builder.Services.AddJwtServices(builder.Configuration);
+const string googleExternalScheme = "GoogleExternal";
+var googleClientId = builder.Configuration["Google:ClientId"];
+var googleClientSecret = builder.Configuration["Google:ClientSecret"];
+var googleConfigured = !string.IsNullOrWhiteSpace(googleClientId) &&
+                       !string.IsNullOrWhiteSpace(googleClientSecret);
+if (googleConfigured)
+{
+    builder.Services.AddAuthentication()
+        .AddCookie(googleExternalScheme, options =>
+        {
+            options.Cookie.Name = "pegaxus.google.external";
+            options.Cookie.HttpOnly = true;
+            options.Cookie.SameSite = SameSiteMode.Lax;
+            options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.ExpireTimeSpan = TimeSpan.FromMinutes(5);
+            options.SlidingExpiration = false;
+        })
+        .AddGoogle(GoogleDefaults.AuthenticationScheme, options =>
+        {
+            options.ClientId = googleClientId!;
+            options.ClientSecret = googleClientSecret!;
+            options.SignInScheme = googleExternalScheme;
+            options.CallbackPath = "/api/v1/auth/google/callback";
+            options.CorrelationCookie.Name = "pegaxus.google.correlation";
+            options.CorrelationCookie.HttpOnly = true;
+            options.CorrelationCookie.IsEssential = true;
+            options.CorrelationCookie.Path = "/";
+            options.CorrelationCookie.SameSite = SameSiteMode.Lax;
+            options.CorrelationCookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+            options.Scope.Add("email");
+            options.Scope.Add("profile");
+            options.SaveTokens = false;
+            options.Events.OnRemoteFailure = context =>
+            {
+                var logger = context.HttpContext.RequestServices
+                    .GetRequiredService<ILoggerFactory>()
+                    .CreateLogger("GoogleAuthentication");
+                logger.LogError(
+                    context.Failure,
+                    "Google OAuth failed for {Path}. Error={Error}, ErrorDescription={ErrorDescription}",
+                    context.HttpContext.Request.Path,
+                    context.Request.Query["error"].ToString(),
+                    context.Request.Query["error_description"].ToString());
+                logger.LogError(
+                    "Google OAuth callback cookies: {CookieNames}",
+                    string.Join(", ", context.HttpContext.Request.Cookies.Keys));
+
+                var frontendUrl = builder.Configuration["Cors:FrontendUrl"] ?? "http://localhost:5173";
+                context.Response.Redirect(
+                    $"{frontendUrl.TrimEnd('/')}/auth/google/callback?error=GOOGLE_AUTHENTICATION_FAILED");
+                context.HandleResponse();
+                return Task.CompletedTask;
+            };
+        });
+}
 builder.Services.AddSwaggerServices();
 builder.Services.AddStackExchangeRedisCache(options =>
     options.Configuration = builder.Configuration.GetConnectionString("Redis") ?? "localhost:6379");
@@ -85,6 +168,7 @@ builder.Services.AddScoped<IValidator<AuthService.Request.ForgotPasswordRequest>
 builder.Services.AddScoped<IValidator<AuthService.Request.VerifyEmailRequest>, AuthService.Validations.VerifyEmailRequestValidator>();
 builder.Services.AddScoped<IValidator<AuthService.Request.ResendOtpRequest>, AuthService.Validations.ResendOtpRequestValidator>();
 builder.Services.AddScoped<IValidator<AuthService.Request.RefreshTokenRequest>, AuthService.Validations.RefreshTokenRequestValidator>();
+builder.Services.AddScoped<IValidator<AuthService.Request.LogoutRequest>, AuthService.Validations.LogoutRequestValidator>();
 builder.Services.AddScoped<IValidator<AuthService.Request.ResetPasswordRequest>, AuthService.Validations.ResetPasswordRequestValidator>();
 builder.Services.AddScoped<BookingService.IService, BookingService.Service>();
 builder.Services.AddScoped<IValidator<BookingService.Request.CreateBookingRequest>, BookingService.Validations.CreateBookingRequestValidator>();
@@ -96,6 +180,7 @@ builder.Services.AddScoped<MediaService.IService, CloudinaryService.Service>();
 builder.Services.AddScoped<MailService.IService, MailService.Service>();
 builder.Services.AddScoped<AccountService.IService, AccountService.Service>();
 builder.Services.AddScoped<HorseService.IService, HorseService.Service>();
+builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
@@ -106,12 +191,30 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
     await db.Database.MigrateAsync();
+    await Pegaxus.API.AppDbContextSeedData.SeedAsync(db);
 }
 
 app.UseSwaggerAPI();
 
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
+app.UseCors("Frontend");
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Equals("/api/v1/auth/google/callback", StringComparison.OrdinalIgnoreCase))
+    {
+        var logger = context.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("GoogleAuthentication");
+        logger.LogInformation(
+            "Google OAuth callback received. HasState={HasState}, CorrelationCookies={CorrelationCookies}",
+            context.Request.Query.ContainsKey("state"),
+            string.Join(", ", context.Request.Cookies.Keys
+                .Where(key => key.StartsWith("pegaxus.google.correlation", StringComparison.Ordinal))));
+    }
+
+    await next();
+});
 app.UseAuthentication();
 app.UseAuthorization();
 

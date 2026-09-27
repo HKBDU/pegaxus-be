@@ -22,6 +22,115 @@ public class BookingController : ControllerBase
         _service = service;
     }
 
+    [HttpGet]
+    [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
+    public async Task<IActionResult> GetList(
+        [FromQuery] BookingService.Request.BookingListRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetListAsync(GetAccountId(), request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Bookings retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("{bookingId:guid}")]
+    [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
+    public async Task<IActionResult> Get(Guid bookingId, CancellationToken cancellationToken)
+    {
+        var response = await _service.GetAsync(GetAccountId(), bookingId, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Booking retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("{bookingId:guid}/histories")]
+    [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
+    public async Task<IActionResult> GetHistories(Guid bookingId, CancellationToken cancellationToken)
+    {
+        var response = await _service.GetHistoriesAsync(GetAccountId(), bookingId, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Booking history retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpPost("{bookingId:guid}/horses")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> AddHorse(
+        Guid bookingId,
+        BookingService.Request.AddHorseRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _service.AddHorseIntoBookingAsync(GetAccountId(), bookingId, request, cancellationToken);
+        return StatusCode(201, ResponseBuilder.SuccessResponse(
+            null,
+            "Horse added to booking successfully",
+            201,
+            HttpContext.TraceIdentifier));
+    }
+
+    [HttpPatch("{bookingId:guid}/horses/{horseId:guid}")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> UpdateHorseNotes(
+        Guid bookingId,
+        Guid horseId,
+        BookingService.Request.UpdateHorseNotesRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _service.UpdateHorseNotesAsync(
+            GetAccountId(),
+            bookingId,
+            horseId,
+            request,
+            cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            null,
+            "Horse handling notes updated successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpDelete("{bookingId:guid}/horses/{horseId:guid}")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> RemoveHorse(
+        Guid bookingId,
+        Guid horseId,
+        CancellationToken cancellationToken)
+    {
+        await _service.RemoveHorseAsync(
+            GetAccountId(),
+            bookingId,
+            horseId,
+            cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            null,
+            "Horse removed from booking successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpPatch("{bookingId:guid}/status")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> ChangeStatus(
+        Guid bookingId,
+        BookingService.Request.ChangeStatusRequest request,
+        CancellationToken cancellationToken)
+    {
+        await _service.ChangeStatusAsync(
+            GetAccountId(),
+            bookingId,
+            request,
+            cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            null,
+            "Booking status updated successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     [HttpPost]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> Create(
