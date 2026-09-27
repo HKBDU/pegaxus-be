@@ -55,7 +55,7 @@ public class Service : IService
         var uploadParams = new RawUploadParams
         {
             File = new FileDescription(file.FileName, stream),
-            Folder = "smartcenter/documents",
+            Folder = "pegaxus/documents",
             UseFilename = true,
             UniqueFilename = true,
         };
