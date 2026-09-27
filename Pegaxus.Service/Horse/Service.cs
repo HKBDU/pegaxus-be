@@ -99,8 +99,8 @@ public sealed class Service : IService
         ValidateText(request.Breed, 100, "Breed", required: true);
         ValidateText(request.Color, 100, "Color", required: true);
         ValidateText(request.CountryOfOrigin, 100, "CountryOfOrigin", required: true);
-        ValidateText(request.MicrochipNumber, 100, "MicrochipNumber", required: true);
-        ValidateText(request.PassportNumber, 100, "PassportNumber", required: true);
+        ValidateMicrochipNumber(request.MicrochipNumber);
+        ValidatePassportNumber(request.PassportNumber);
         ValidateText(request.IdentificationNotes, 1000, "IdentificationNotes", required: true);
         ValidateRequiredDateOfBirth(request.DateOfBirth);
         ValidateRequiredMeasurement(request.WeightKg, "WeightKg");
@@ -244,8 +244,8 @@ public sealed class Service : IService
         ValidateText(request.Breed, 100, "Breed", required: true);
         ValidateText(request.Color, 100, "Color", required: true);
         ValidateText(request.CountryOfOrigin, 100, "CountryOfOrigin", required: true);
-        ValidateText(request.MicrochipNumber, 100, "MicrochipNumber", required: true);
-        ValidateText(request.PassportNumber, 100, "PassportNumber", required: true);
+        ValidateMicrochipNumber(request.MicrochipNumber);
+        ValidatePassportNumber(request.PassportNumber);
         ValidateText(request.IdentificationNotes, 1000, "IdentificationNotes", required: true);
         ValidateRequiredDateOfBirth(request.DateOfBirth);
         ValidateRequiredMeasurement(request.WeightKg, "WeightKg");
@@ -342,6 +342,25 @@ public sealed class Service : IService
             throw new BadRequestException($"{fieldName} is required");
         if (value is not null && value.Length > maxLength)
             throw new BadRequestException($"{fieldName} must not exceed {maxLength} characters");
+    }
+
+    private static readonly System.Text.RegularExpressions.Regex MicrochipRegex = new(@"^\d{15}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+    private static readonly System.Text.RegularExpressions.Regex PassportRegex = new(@"^[A-Za-z0-9]{15}$", System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    private static void ValidateMicrochipNumber(string? value)
+    {
+        ValidateText(value, 100, "MicrochipNumber", required: true);
+        var trimmed = value?.Trim();
+        if (trimmed is not null && !MicrochipRegex.IsMatch(trimmed))
+            throw new BadRequestException("Microchip Number must be a valid 15-digit ISO 11784/11785 microchip number");
+    }
+
+    private static void ValidatePassportNumber(string? value)
+    {
+        ValidateText(value, 100, "PassportNumber", required: true);
+        var trimmed = value?.Trim();
+        if (trimmed is not null && !PassportRegex.IsMatch(trimmed))
+            throw new BadRequestException("Passport Number must be a valid 15-character EU passport/UELN number");
     }
 
     private static void ValidateMeasurement(decimal? value, string fieldName)

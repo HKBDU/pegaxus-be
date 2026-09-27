@@ -100,9 +100,9 @@ internal static class TestSupport
             Customer = customer,
             Status = BookingStatus.PENDING,
             OriginAddress = "Old origin",
-            OriginCountry = "Vietnam",
+            OriginCountry = "France",
             DestinationAddress = "Old destination",
-            DestinationCountry = "Australia",
+            DestinationCountry = "Germany",
             RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(21),
             CreatedAt = now,
             UpdatedAt = now

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 using BookingEntity = Pegaxus.Repository.Entities.Booking;
@@ -438,6 +439,10 @@ public class Service : IService
                 throw new NotFoundException("Horse not found", "HORSE_NOT_FOUND");
         }
 
+        var (isRouteValid, routeErrorMessage) = CountryUtils.ValidateRoute(request.OriginCountry, request.DestinationCountry);
+        if (!isRouteValid)
+            throw new BadRequestException(routeErrorMessage);
+
         var now = UtcNow();
         var booking = new BookingEntity
         {
@@ -495,6 +500,13 @@ public class Service : IService
         var departureDate = request.RequestedDepartureDate ?? booking.RequestedDepartureDate;
         var arrivalDate = request.RequestedArrivalDate ?? booking.RequestedArrivalDate;
         ValidateDates(departureDate, arrivalDate);
+
+        var targetOrigin = request.OriginCountry?.Trim() ?? booking.OriginCountry;
+        var targetDestination = request.DestinationCountry?.Trim() ?? booking.DestinationCountry;
+        var (isUpdatedRouteValid, updatedRouteErrorMessage) = CountryUtils.ValidateRoute(targetOrigin, targetDestination);
+        if (!isUpdatedRouteValid)
+            throw new BadRequestException(updatedRouteErrorMessage);
+
         var changedFields = new List<string>();
         Set(request.OriginAddress, value => booking.OriginAddress = value, "originAddress", changedFields);
         Set(request.OriginCountry, value => booking.OriginCountry = value, "originCountry", changedFields);

@@ -30,10 +30,10 @@ public class BookingServiceTests
 
         var result = await service.CreateAsync(account.AccountId, new BookingRequest.CreateBookingRequest
         {
-            OriginAddress = "Ho Chi Minh City",
-            OriginCountry = "Vietnam",
-            DestinationAddress = "Melbourne",
-            DestinationCountry = "Australia",
+            OriginAddress = "Paris",
+            OriginCountry = "France",
+            DestinationAddress = "Berlin",
+            DestinationCountry = "Germany",
             RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(21),
             Horses = [new BookingRequest.BookingHorseRequest { HorseId = horse.HorseId }]
         });
