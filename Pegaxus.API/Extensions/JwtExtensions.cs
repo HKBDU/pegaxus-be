@@ -1,7 +1,10 @@
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Pegaxus.Repository;
+using Pegaxus.Repository.Enum;
 using Pegaxus.Service.JwtService;
 using Pegaxus.Service.Models;
 
@@ -84,6 +87,32 @@ public static class JwtExtensions
                             "You do not have permission to perform this action",
                             "FORBIDDEN",
                             StatusCodes.Status403Forbidden));
+                    },
+                    OnTokenValidated = async context =>
+                    {
+                        var accountIdValue = context.Principal?.FindFirstValue(ClaimTypes.NameIdentifier)
+                            ?? context.Principal?.FindFirstValue("sub")
+                            ?? context.Principal?.FindFirstValue("accountId");
+                        if (!Guid.TryParse(accountIdValue, out var accountId))
+                        {
+                            context.Fail("The authenticated account identifier is invalid");
+                            return;
+                        }
+
+                        var db = context.HttpContext.RequestServices.GetRequiredService<AppDbContext>();
+                        var account = await db.Accounts
+                            .AsNoTracking()
+                            .Include(item => item.CustomerAccount)
+                            .Include(item => item.EmployeeAccount)
+                            .SingleOrDefaultAsync(item => item.AccountId == accountId);
+
+                        var valid = account is not null &&
+                            !account.IsDeleted &&
+                            account.Status == AccountStatus.ACTIVE &&
+                            (account.AccountType != AccountType.CUSTOMER || account.CustomerAccount is { IsDeleted: false }) &&
+                            (account.AccountType != AccountType.EMPLOYEE || account.EmployeeAccount is { IsDeleted: false, IsActive: true });
+                        if (!valid)
+                            context.Fail("The account is inactive or unavailable");
                     }
                 };
             });
