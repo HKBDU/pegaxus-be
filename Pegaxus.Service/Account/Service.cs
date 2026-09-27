@@ -57,6 +57,7 @@ public sealed class Service : IService
         {
             AccountId = account.AccountId,
             Email = account.Email,
+            EmailVerificationStatus = account.EmailVerifiedAt.HasValue ? "VERIFIED" : "UNVERIFIED",
             AccountType = account.AccountType.ToString(),
             Status = account.Status.ToString(),
             Role = isEmployee ? account.EmployeeAccount!.Role.ToString() : "CUSTOMER",
@@ -64,6 +65,7 @@ public sealed class Service : IService
             Phone = isEmployee ? account.EmployeeAccount!.Phone : account.CustomerAccount?.Phone,
             Country = isEmployee ? account.EmployeeAccount!.Country : account.CustomerAccount?.Country,
             Address = isEmployee ? account.EmployeeAccount!.Address : account.CustomerAccount?.Address,
+            IdentityNumber = account.CustomerAccount?.IdentityNumber,
             AvatarUrl = account.AvatarUrl,
             Customer = customer,
             Employee = employee,
@@ -97,6 +99,11 @@ public sealed class Service : IService
         ValidateText(request.FullName, 150, "FullName");
         ValidateText(request.Phone, 30, "Phone");
         ValidateText(request.Address, 500, "Address");
+        ValidateText(request.Country, 100, "Country");
+        ValidateText(request.IdentityNumber, 100, "IdentityNumber");
+
+        if (request.IdentityNumber is not null && account.CustomerAccount is null)
+            throw new BadRequestException("Identity number is only available for customer accounts", "INVALID_PROFILE_FIELD");
 
         if (request.DateOfBirth is { } dateOfBirth && dateOfBirth > DateOnly.FromDateTime(DateTime.UtcNow))
             throw new BadRequestException("Date of birth cannot be in the future");
@@ -132,6 +139,15 @@ public sealed class Service : IService
             if (account.EmployeeAccount is { IsDeleted: false } employee)
                 employee.Address = request.Address.Trim();
         }
+        if (request.Country is not null)
+        {
+            if (account.CustomerAccount is { IsDeleted: false } customer)
+                customer.Country = request.Country.Trim();
+            if (account.EmployeeAccount is { IsDeleted: false } employee)
+                employee.Country = request.Country.Trim();
+        }
+        if (request.IdentityNumber is not null && account.CustomerAccount is { IsDeleted: false } customerAccount)
+            customerAccount.IdentityNumber = request.IdentityNumber.Trim();
         if (request.Avatar is not null)
             account.AvatarUrl = await _mediaService.UploadImageAsync(request.Avatar);
 
