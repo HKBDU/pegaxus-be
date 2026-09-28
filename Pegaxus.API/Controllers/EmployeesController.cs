@@ -28,6 +28,18 @@ public sealed class EmployeesController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(response, "Employee accounts retrieved successfully", traceId: HttpContext.TraceIdentifier));
     }
 
+    [HttpGet("export")]
+    public async Task<IActionResult> Export(
+        [FromQuery] EmployeeService.Request.EmployeeListRequest request,
+        CancellationToken cancellationToken)
+    {
+        var file = await _service.ExportAsync(request, cancellationToken);
+        return File(
+            file,
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            $"employees-{DateTime.UtcNow:yyyyMMdd}.xlsx");
+    }
+
     [HttpGet("{employeeId:guid}")]
     public async Task<IActionResult> Get(Guid employeeId, CancellationToken cancellationToken)
     {
@@ -46,7 +58,7 @@ public sealed class EmployeesController : ControllerBase
     [HttpPatch("{employeeId:guid}")]
     public async Task<IActionResult> Update(Guid employeeId, EmployeeService.Request.UpdateEmployeeRequest request, CancellationToken cancellationToken)
     {
-        var response = await _service.UpdateAsync(employeeId, request, cancellationToken);
+        var response = await _service.UpdateAsync(employeeId, request, GetAccountId(), cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(response, "Employment information updated successfully", traceId: HttpContext.TraceIdentifier));
     }
 

@@ -21,6 +21,14 @@ public class BookingValidationTests
     }
 
     [Fact]
+    public void CreateBooking_RejectsEmptyHorseList()
+    {
+        var result = new CreateBookingRequestValidator().Validate(new BookingRequest.CreateBookingRequest());
+
+        Assert.Contains(result.Errors, error => error.PropertyName == "Horses");
+    }
+
+    [Fact]
     public void UpdateBooking_RequiresVersionAndChangedField()
     {
         var result = new UpdateBookingRequestValidator().Validate(new BookingRequest.UpdateBookingRequest());

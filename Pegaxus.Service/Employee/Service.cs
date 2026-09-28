@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -26,33 +27,7 @@ public sealed class Service : IService
         CancellationToken cancellationToken = default)
     {
         ValidatePaging(request.PageIndex, request.PageSize);
-        var role = ParseOptionalRole(request.Role);
-        var accountStatus = ParseAccountStatusFilter(request.AccountStatus);
-        var workingStatus = ParseWorkingStatus(request.WorkingStatus);
-
-        var query = _db.Employees
-            .AsNoTracking()
-            .Where(employee =>
-                !employee.IsDeleted &&
-                !employee.Account.IsDeleted &&
-                employee.Account.Status != AccountStatus.SUSPENDED);
-
-        if (role is not null)
-            query = query.Where(employee => employee.Role == role.Value);
-        if (accountStatus is not null)
-            query = query.Where(employee => employee.Account.Status == accountStatus.Value);
-        if (workingStatus is not null)
-            query = query.Where(employee => employee.IsActive == workingStatus.Value);
-        if (!string.IsNullOrWhiteSpace(request.Search))
-        {
-            var search = request.Search.Trim().ToLower();
-            query = query.Where(employee =>
-                EF.Functions.Like(employee.FullName.ToLower(), $"%{search}%") ||
-                EF.Functions.Like(employee.Account.Email.ToLower(), $"%{search}%") ||
-                (employee.Phone != null && EF.Functions.Like(employee.Phone.ToLower(), $"%{search}%")) ||
-                EF.Functions.Like(employee.EmployeeCode.ToLower(), $"%{search}%"));
-        }
-
+        var query = BuildQuery(request);
         var totalItems = await query.CountAsync(cancellationToken);
         var ordered = ApplySort(query, request.SortBy);
         var items = await ordered
@@ -81,6 +56,52 @@ public sealed class Service : IService
             TotalItems = totalItems,
             TotalPages = (int)Math.Ceiling(totalItems / (double)request.PageSize)
         };
+    }
+
+    public async Task<byte[]> ExportAsync(
+        Request.EmployeeListRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        // ponytail: in-memory workbook is enough for this admin list; stream if exports become large.
+        var employees = await ApplySort(BuildQuery(request), request.SortBy)
+            .Select(employee => new
+            {
+                employee.EmployeeCode,
+                employee.FullName,
+                employee.Account.Email,
+                employee.Phone,
+                Role = employee.Role.ToString(),
+                AccountStatus = employee.Account.Status.ToString(),
+                WorkingStatus = employee.IsActive ? "ACTIVE" : "INACTIVE",
+                employee.CreatedAt
+            })
+            .ToListAsync(cancellationToken);
+
+        using var workbook = new XLWorkbook();
+        var sheet = workbook.Worksheets.Add("Employees");
+        var headers = new[] { "Employee Code", "Full Name", "Email", "Phone", "Role", "Account Status", "Working Status", "Created At" };
+        for (var column = 0; column < headers.Length; column++)
+            sheet.Cell(1, column + 1).Value = headers[column];
+        for (var index = 0; index < employees.Count; index++)
+        {
+            var employee = employees[index];
+            var row = index + 2;
+            sheet.Cell(row, 1).Value = employee.EmployeeCode;
+            sheet.Cell(row, 2).Value = employee.FullName;
+            sheet.Cell(row, 3).Value = employee.Email;
+            sheet.Cell(row, 4).Value = employee.Phone ?? string.Empty;
+            sheet.Cell(row, 5).Value = employee.Role;
+            sheet.Cell(row, 6).Value = employee.AccountStatus;
+            sheet.Cell(row, 7).Value = employee.WorkingStatus;
+            sheet.Cell(row, 8).Value = ToUtcOffset(employee.CreatedAt).UtcDateTime;
+        }
+        sheet.Row(1).Style.Font.Bold = true;
+        sheet.SheetView.FreezeRows(1);
+        sheet.Column(8).Style.DateFormat.Format = "yyyy-mm-dd hh:mm:ss";
+        sheet.Columns().AdjustToContents();
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
     }
 
     public async Task<Response.EmployeeDetailResponse> GetAsync(Guid employeeId, CancellationToken cancellationToken = default)
@@ -155,9 +176,11 @@ public sealed class Service : IService
     public async Task<Response.EmploymentUpdatedResponse> UpdateAsync(
         Guid employeeId,
         Request.UpdateEmployeeRequest request,
+        Guid managerAccountId,
         CancellationToken cancellationToken = default)
     {
         var employee = await GetVisibleEmployeeAsync(employeeId, cancellationToken);
+        EnsureNotSelf(employee, managerAccountId);
         if (request.Role is null && request.WorkingStatus is null)
             throw new BadRequestException("At least one field must be provided");
         if (request.Role is not null)
@@ -183,6 +206,7 @@ public sealed class Service : IService
         CancellationToken cancellationToken = default)
     {
         var employee = await GetVisibleEmployeeAsync(employeeId, cancellationToken);
+        EnsureNotSelf(employee, managerAccountId);
         if (!Enum.TryParse<AccountStatus>(request.Status.Trim(), true, out var status))
             throw new BadRequestException("Status is invalid", "INVALID_ACCOUNT_STATUS");
 
@@ -220,6 +244,28 @@ public sealed class Service : IService
             .SingleOrDefaultAsync(item => item.EmployeeId == employeeId &&
                 !item.IsDeleted && !item.Account.IsDeleted && item.Account.Status != AccountStatus.SUSPENDED, cancellationToken);
         return employee ?? throw new NotFoundException("Employee not found", "EMPLOYEE_NOT_FOUND");
+    }
+
+    private IQueryable<Employee> BuildQuery(Request.EmployeeListRequest request)
+    {
+        var role = ParseOptionalRole(request.Role);
+        var accountStatus = ParseAccountStatusFilter(request.AccountStatus);
+        var workingStatus = ParseWorkingStatus(request.WorkingStatus);
+        var query = _db.Employees.AsNoTracking().Where(employee =>
+            !employee.IsDeleted && !employee.Account.IsDeleted && employee.Account.Status != AccountStatus.SUSPENDED);
+        if (role is not null) query = query.Where(employee => employee.Role == role.Value);
+        if (accountStatus is not null) query = query.Where(employee => employee.Account.Status == accountStatus.Value);
+        if (workingStatus is not null) query = query.Where(employee => employee.IsActive == workingStatus.Value);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(employee =>
+                EF.Functions.Like(employee.FullName.ToLower(), $"%{search}%") ||
+                EF.Functions.Like(employee.Account.Email.ToLower(), $"%{search}%") ||
+                (employee.Phone != null && EF.Functions.Like(employee.Phone.ToLower(), $"%{search}%")) ||
+                EF.Functions.Like(employee.EmployeeCode.ToLower(), $"%{search}%"));
+        }
+        return query;
     }
 
     private static IQueryable<Employee> ApplySort(IQueryable<Employee> query, string[]? values)
@@ -283,6 +329,12 @@ public sealed class Service : IService
         DeletedAt = deletedAt.HasValue ? ToUtcOffset(deletedAt.Value) : null,
         UpdatedAt = ToUtcOffset(employee.UpdatedAt)
     };
+
+    private static void EnsureNotSelf(Employee employee, Guid managerAccountId)
+    {
+        if (employee.AccountId == managerAccountId)
+            throw new ConflictException("You cannot update your own employee account", "CANNOT_UPDATE_OWN_ACCOUNT");
+    }
 
     private static EmployeeRole? ParseOptionalRole(string? value) => string.IsNullOrWhiteSpace(value)
         ? null

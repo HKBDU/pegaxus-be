@@ -31,6 +31,7 @@ public class CreateBookingRequestValidator : AbstractValidator<Request.CreateBoo
                 }
             });
 
+        RuleFor(x => x.Horses).NotEmpty().WithMessage("At least one horse is required.");
         RuleForEach(x => x.Horses).SetValidator(new BookingHorseRequestValidator());
     }
 }
