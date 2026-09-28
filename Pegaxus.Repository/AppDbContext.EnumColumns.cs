@@ -11,6 +11,7 @@ public partial class AppDbContext
         Configure<Account>(modelBuilder, "status", "account_status", nameof(Account.Status), "Account_status_idx", "ACTIVE");
         Configure<AccountNotification>(modelBuilder, "status", "recipient_status", nameof(AccountNotification.Status), "AccountNotification_status_idx", "PENDING");
         Configure<AuthoritySubmission>(modelBuilder, "status", "authority_submission_status", nameof(AuthoritySubmission.Status), "AuthoritySubmission_status_idx", "DRAFT");
+        Configure<AuthoritySubmissionEvidenceFile>(modelBuilder, "evidence_type", "authority_evidence_type", nameof(AuthoritySubmissionEvidenceFile.EvidenceType), "AuthoritySubmissionEvidenceFile_evidence_type_idx");
         Configure<Booking>(modelBuilder, "status", "booking_status", nameof(Booking.Status), "Booking_status_idx", "PENDING");
         Configure<BookingStatusHistory>(modelBuilder, "type", "booking_history_type", nameof(BookingStatusHistory.Type), "BookingStatusHistory_type_idx");
         Configure<BookingStatusHistory>(modelBuilder, "previous_status", "booking_status", nameof(BookingStatusHistory.PreviousStatus));
@@ -21,11 +22,16 @@ public partial class AppDbContext
         Configure<ComplianceDocument>(modelBuilder, "status", "compliance_document_status", nameof(ComplianceDocument.Status), "ComplianceDocument_status_idx", "PROVIDED");
         Configure<ComplianceDossier>(modelBuilder, "status", "compliance_dossier_status", nameof(ComplianceDossier.Status), "ComplianceDossier_status_idx", "DRAFT");
         Configure<ComplianceRequirement>(modelBuilder, "status", "compliance_requirement_status", nameof(ComplianceRequirement.Status), "ComplianceRequirement_status_idx", "ACTIVE");
+        Configure<ComplianceRequirement>(modelBuilder, "category", "compliance_requirement_category", nameof(ComplianceRequirement.Category), "ComplianceRequirement_category_idx");
+        Configure<CustomsClearanceProof>(modelBuilder, "customs_lane", "customs_lane", nameof(CustomsClearanceProof.CustomsLane), "CustomsClearanceProof_customs_lane_idx");
+        Configure<CustomsClearanceProof>(modelBuilder, "status", "customs_clearance_proof_status", nameof(CustomsClearanceProof.Status), "CustomsClearanceProof_status_idx", "PendingVerification");
         Configure<CostApprovalDecision>(modelBuilder, "decision", "approval_decision", nameof(CostApprovalDecision.Decision), "CostApprovalDecision_decision_idx");
         Configure<DocumentRequest>(modelBuilder, "request_type", "document_request_type", nameof(DocumentRequest.RequestType), "DocumentRequest_request_type_idx");
         Configure<DocumentRequest>(modelBuilder, "status", "document_request_status", nameof(DocumentRequest.Status), "DocumentRequest_status_idx", "OPEN");
         Configure<DocumentReview>(modelBuilder, "result", "document_review_result", nameof(DocumentReview.Result), "DocumentReview_result_idx");
         Configure<DossierRequirement>(modelBuilder, "status", "dossier_requirement_status", nameof(DossierRequirement.Status), "DossierRequirement_status_idx", "PENDING");
+        Configure<QuarantineProof>(modelBuilder, "status", "quarantine_proof_status", nameof(QuarantineProof.Status), "QuarantineProof_status_idx", "PendingVerification");
+        Configure<AuditDossier>(modelBuilder, "visibility", "audit_visibility", nameof(AuditDossier.Visibility), "AuditDossier_visibility_idx");
         Configure<DossierTemplate>(modelBuilder, "status", "dossier_template_status", nameof(DossierTemplate.Status), "DossierTemplate_status_idx", "DRAFT");
         Configure<EmergencyCostRequest>(modelBuilder, "category", "emergency_cost_category", nameof(EmergencyCostRequest.Category), "EmergencyCostRequest_category_idx");
         Configure<EmergencyCostRequest>(modelBuilder, "status", "emergency_cost_status", nameof(EmergencyCostRequest.Status), "EmergencyCostRequest_status_idx", "PENDING");

@@ -22,6 +22,12 @@ public partial class ComplianceRequirement
 
     public string? IssuingAuthority { get; set; }
 
+    public string? Country { get; set; }
+
+    public ComplianceRequirementCategory Category { get; set; }
+
+    public int? ValidityPeriodDays { get; set; }
+
     public bool ValidityRequired { get; set; }
 
     public bool IsDeleted { get; set; }
