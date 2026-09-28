@@ -395,6 +395,10 @@ public class Service : IService
             throw new ConflictException(
                 "The booking status cannot be changed from its current state",
                 "INVALID_BOOKING_STATUS");
+        if (targetStatus == BookingStatus.PENDING && !await HasHorseAsync(bookingId, cancellationToken))
+            throw new UnprocessableEntityException(
+                "The booking has no horse and cannot be submitted",
+                "BOOKING_HAS_NO_HORSE");
 
         var now = UtcNow();
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
@@ -421,6 +425,8 @@ public class Service : IService
         CancellationToken cancellationToken = default)
     {
         ValidateDates(request.RequestedDepartureDate, request.RequestedArrivalDate);
+        if (request.Horses is null || request.Horses.Count == 0)
+            throw new BadRequestException("At least one horse is required", "BOOKING_HAS_NO_HORSE");
         if (request.Horses.Select(horse => horse.HorseId).Distinct().Count() != request.Horses.Count)
             throw new BadRequestException(
                 "A horse can only be selected once per booking",
@@ -573,9 +579,7 @@ public class Service : IService
         EnsurePending(booking);
         if (booking!.Transport is not null)
             throw new ConflictException("The booking already has a transport", "INVALID_BOOKING_STATUS");
-        if (!await _db.BookingHorses.AnyAsync(item =>
-                item.BookingId == bookingId && !item.Horse.IsDeleted,
-                cancellationToken))
+        if (!await HasHorseAsync(bookingId, cancellationToken))
             throw new UnprocessableEntityException(
                 "The booking has no horse and cannot be approved",
                 "BOOKING_HAS_NO_HORSE");
@@ -839,6 +843,9 @@ public class Service : IService
 
     private async Task<string> GenerateBookingCodeAsync(CancellationToken cancellationToken) =>
         await GenerateCodeAsync("REQ", code => _db.Bookings.AnyAsync(booking => booking.BookingCode == code, cancellationToken));
+
+    private Task<bool> HasHorseAsync(Guid bookingId, CancellationToken cancellationToken) =>
+        _db.BookingHorses.AnyAsync(item => item.BookingId == bookingId && !item.Horse.IsDeleted, cancellationToken);
 
     private async Task<string> GenerateTransportCodeAsync(CancellationToken cancellationToken) =>
         await GenerateCodeAsync("TP", code => _db.Transports.AnyAsync(transport => transport.TransportCode == code, cancellationToken));

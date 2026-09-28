@@ -145,6 +145,21 @@ public class BookingServiceTests
     }
 
     [Fact]
+    public async Task Submit_RejectsBookingWithoutHorse()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, customer) = await TestSupport.AddCustomerAsync(db);
+        var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer);
+        var service = CreateService(db);
+        await service.ChangeStatusAsync(account.AccountId, booking.BookingId, new BookingRequest.ChangeStatusRequest { Status = "DRAFT" });
+
+        var exception = await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
+            service.ChangeStatusAsync(account.AccountId, booking.BookingId, new BookingRequest.ChangeStatusRequest { Status = "PENDING" }));
+
+        Assert.Equal("BOOKING_HAS_NO_HORSE", exception.ErrorCode);
+    }
+
+    [Fact]
     public async Task Reject_SetsReasonNotificationAndEmail()
     {
         await using var db = TestSupport.CreateDb();
