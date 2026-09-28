@@ -37,4 +37,6 @@ public partial class AuthoritySubmission
     public DateTime UpdatedAt { get; set; }
 
     public virtual ComplianceDossier ComplianceDossier { get; set; } = null!;
+
+    public virtual ICollection<AuthoritySubmissionEvidenceFile> EvidenceFiles { get; set; } = new List<AuthoritySubmissionEvidenceFile>();
 }

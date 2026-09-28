@@ -16,11 +16,15 @@ public partial class DossierRequirement
 
     public Guid ComplianceRequirementId { get; set; }
 
+    public Guid? HorseId { get; set; }
+
     public DossierRequirementStatus Status { get; set; } = DossierRequirementStatus.PENDING;
 
     public bool IsMandatory { get; set; }
 
     public DateOnly? DueDate { get; set; }
+
+    public DateOnly? ValidUntil { get; set; }
 
     public string? Instruction { get; set; }
 
@@ -39,6 +43,8 @@ public partial class DossierRequirement
     public virtual ComplianceDossier ComplianceDossier { get; set; } = null!;
 
     public virtual ComplianceRequirement ComplianceRequirement { get; set; } = null!;
+
+    public virtual Horse? Horse { get; set; }
 
     public virtual ICollection<DocumentRequest> DocumentRequests { get; set; } = new List<DocumentRequest>();
 }
