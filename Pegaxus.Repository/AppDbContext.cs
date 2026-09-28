@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 
@@ -984,7 +985,12 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.BcpName).HasMaxLength(200).HasColumnName("bcp_name");
             entity.Property(e => e.OfficialVeterinarianName).HasMaxLength(200).HasColumnName("official_veterinarian_name");
             entity.Property(e => e.BcpReceiptNumber).HasMaxLength(100).HasColumnName("bcp_receipt_number");
-            entity.Property(e => e.MicrochipChecklist).HasColumnType("jsonb").HasColumnName("microchip_checklist");
+            entity.Property(e => e.MicrochipChecklist)
+                .HasConversion(
+                    value => value == null ? null : value.RootElement.GetRawText(),
+                    value => value == null ? null : JsonDocument.Parse(value, default))
+                .HasColumnType("jsonb")
+                .HasColumnName("microchip_checklist");
             entity.Property(e => e.InspectionAt).HasColumnType("timestamp without time zone").HasColumnName("inspection_at");
             entity.Property(e => e.SubmittedAt).HasColumnType("timestamp without time zone").HasColumnName("submitted_at");
             entity.Property(e => e.VerifiedAt).HasColumnType("timestamp without time zone").HasColumnName("verified_at");
@@ -1088,7 +1094,12 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.TargetId).HasColumnName("target_id");
             entity.Property(e => e.ActorAccountId).HasColumnName("actor_account_id");
             entity.Property(e => e.Summary).HasColumnName("summary");
-            entity.Property(e => e.Details).HasColumnType("jsonb").HasColumnName("details");
+            entity.Property(e => e.Details)
+                .HasConversion(
+                    value => value == null ? null : value.RootElement.GetRawText(),
+                    value => value == null ? null : JsonDocument.Parse(value, default))
+                .HasColumnType("jsonb")
+                .HasColumnName("details");
             entity.Property(e => e.CreatedAt).HasColumnType("timestamp without time zone").HasColumnName("created_at");
             entity.HasOne(e => e.ComplianceDossier).WithMany()
                 .HasForeignKey(e => e.ComplianceDossierId).OnDelete(DeleteBehavior.ClientSetNull)
