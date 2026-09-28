@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 
@@ -18,6 +19,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<AuthoritySubmission> AuthoritySubmissions { get; set; }
 
+    public virtual DbSet<AuthoritySubmissionEvidenceFile> AuthoritySubmissionEvidenceFiles { get; set; }
+
     public virtual DbSet<Booking> Bookings { get; set; }
 
     public virtual DbSet<BookingHorse> BookingHorses { get; set; }
@@ -34,6 +37,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<ComplianceRequirement> ComplianceRequirements { get; set; }
 
+    public virtual DbSet<CustomsClearanceProof> CustomsClearanceProofs { get; set; }
+
     public virtual DbSet<CostApprovalDecision> CostApprovalDecisions { get; set; }
 
     public virtual DbSet<Customer> Customers { get; set; }
@@ -46,7 +51,13 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<DocumentVersion> DocumentVersions { get; set; }
 
+    public virtual DbSet<AuditDossier> AuditDossiers { get; set; }
+
     public virtual DbSet<DossierRequirement> DossierRequirements { get; set; }
+
+    public virtual DbSet<ProofAttachment> ProofAttachments { get; set; }
+
+    public virtual DbSet<QuarantineProof> QuarantineProofs { get; set; }
 
     public virtual DbSet<DossierTemplate> DossierTemplates { get; set; }
 
@@ -111,6 +122,8 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("account_type", new[] { "CUSTOMER", "EMPLOYEE" })
             .HasPostgresEnum("approval_decision", new[] { "APPROVED", "REJECTED" })
             .HasPostgresEnum("authority_submission_status", new[] { "DRAFT", "SUBMITTED", "PENDING", "APPROVED", "REJECTED", "RETURNED" })
+            .HasPostgresEnum("authority_evidence_type", new[] { "Acceptance", "Rejection", "AdditionalInformation", "Other" })
+            .HasPostgresEnum("audit_visibility", new[] { "Public", "Internal" })
             .HasPostgresEnum("booking_history_type", new[] { "SUBMIT", "APPROVE", "REJECT", "CANCEL" })
             .HasPostgresEnum("booking_status", new[] { "DRAFT", "PENDING", "APPROVED", "REJECTED", "CANCELLED" })
             .HasPostgresEnum("claim_resolution_type", new[] { "COMPENSATION", "PARTIAL_COMPENSATION", "REFUND", "SERVICE_RECOVERY", "NO_COMPENSATION", "OTHER" })
@@ -119,6 +132,9 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("compliance_document_status", new[] { "PROVIDED", "PENDING", "APPROVED", "REJECTED", "EXPIRED" })
             .HasPostgresEnum("compliance_dossier_status", new[] { "DRAFT", "IN_PREPARATION", "READY_FOR_SUBMISSION", "SUBMITTED", "PENDING", "APPROVED", "REJECTED", "CLOSED" })
             .HasPostgresEnum("compliance_requirement_status", new[] { "ACTIVE", "INACTIVE" })
+            .HasPostgresEnum("compliance_requirement_category", new[] { "Quarantine", "Customs", "Transport", "HorseHealth", "HorseIdentity", "Other" })
+            .HasPostgresEnum("customs_clearance_proof_status", new[] { "PendingVerification", "Cleared", "Held", "Rejected" })
+            .HasPostgresEnum("customs_lane", new[] { "GreenLane", "OrangeLane", "RedLane" })
             .HasPostgresEnum("document_request_status", new[] { "OPEN", "FULFILLED", "CANCELLED" })
             .HasPostgresEnum("document_request_type", new[] { "MISSING_DOCUMENT", "REVISION", "REUPLOAD", "ADDITIONAL_INFORMATION" })
             .HasPostgresEnum("document_review_result", new[] { "APPROVED", "REJECTED", "REVISION_REQUIRED" })
@@ -146,6 +162,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("notification_type", new[] { "BOOKING", "TRANSPORT", "ROUTE", "HANDOVER", "HORSE_HEALTH", "INCIDENT", "EMERGENCY_COST", "PAYMENT", "CLAIM", "COMPLIANCE", "DOCUMENT", "SYSTEM" })
             .HasPostgresEnum("payment_method", new[] { "CASH", "BANK_TRANSFER", "OTHER" })
             .HasPostgresEnum("provider_status", new[] { "ACTIVE", "INACTIVE", "SUSPENDED" })
+            .HasPostgresEnum("quarantine_proof_status", new[] { "PendingVerification", "Passed", "PassedWithConditions", "Holdback", "Failed", "Rejected" })
             .HasPostgresEnum("receipt_status", new[] { "PENDING", "CONFIRMED", "FAILED", "REFUNDED" })
             .HasPostgresEnum("recipient_status", new[] { "PENDING", "DELIVERED", "READ", "FAILED" })
             .HasPostgresEnum("route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED" })
@@ -277,6 +294,31 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.ComplianceDossierId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("AuthoritySubmission_compliance_dossier_id_fkey");
+        });
+
+        modelBuilder.Entity<AuthoritySubmissionEvidenceFile>(entity =>
+        {
+            entity.HasKey(e => e.AuthoritySubmissionEvidenceFileId).HasName("AuthoritySubmissionEvidenceFile_pkey");
+            entity.ToTable("AuthoritySubmissionEvidenceFile");
+            entity.HasIndex(e => e.AuthoritySubmissionId, "AuthoritySubmissionEvidenceFile_authority_submission_id_idx");
+            entity.HasIndex(e => e.UploadedByEmployeeId, "AuthoritySubmissionEvidenceFile_uploaded_by_employee_id_idx");
+            entity.Property(e => e.AuthoritySubmissionEvidenceFileId).HasColumnName("authority_submission_evidence_file_id");
+            entity.Property(e => e.AuthoritySubmissionId).HasColumnName("authority_submission_id");
+            entity.Property(e => e.UploadedByEmployeeId).HasColumnName("uploaded_by_employee_id");
+            entity.Property(e => e.FileName).HasMaxLength(255).HasColumnName("file_name");
+            entity.Property(e => e.FileUrl).HasMaxLength(1000).HasColumnName("file_url");
+            entity.Property(e => e.MimeType).HasMaxLength(100).HasColumnName("mime_type");
+            entity.Property(e => e.FileSizeBytes).HasColumnName("file_size_bytes");
+            entity.Property(e => e.Note).HasColumnName("note");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.HasOne(e => e.AuthoritySubmission).WithMany(e => e.EvidenceFiles)
+                .HasForeignKey(e => e.AuthoritySubmissionId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("AuthoritySubmissionEvidenceFile_authority_submission_id_fkey");
+            entity.HasOne(e => e.UploadedByEmployee).WithMany()
+                .HasForeignKey(e => e.UploadedByEmployeeId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("AuthoritySubmissionEvidenceFile_uploaded_by_employee_id_fkey");
         });
 
         modelBuilder.Entity<Booking>(entity =>
@@ -605,6 +647,9 @@ public partial class AppDbContext : DbContext
             entity.HasIndex(e => e.RequirementName, "ComplianceRequirement_requirement_name_idx");
 
             entity.Property(e => e.ComplianceRequirementId).HasColumnName("compliance_requirement_id");
+            entity.Property(e => e.Country)
+                .HasMaxLength(100)
+                .HasColumnName("country");
             entity.Property(e => e.CreatedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");
@@ -631,6 +676,7 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.ValidityRequired)
                 .HasDefaultValue(false)
                 .HasColumnName("validity_required");
+            entity.Property(e => e.ValidityPeriodDays).HasColumnName("validity_period_days");
 
             entity.HasOne(d => d.DeletedByAccount).WithMany(p => p.ComplianceRequirements)
                 .HasForeignKey(d => d.DeletedByAccountId)
@@ -873,7 +919,13 @@ public partial class AppDbContext : DbContext
 
             entity.ToTable("DossierRequirement", tb => tb.HasComment("DossierRequirement: Một yêu cầu pháp lý thực tế đã được sinh ra trong ComplianceDossier của chuyến đi cụ thể, dựa trên loại ComplianceRequirement."));
 
-            entity.HasIndex(e => new { e.ComplianceDossierId, e.ComplianceRequirementId }, "DossierRequirement_compliance_dossier_id_compliance_require_idx").IsUnique();
+            entity.HasIndex(e => new { e.ComplianceDossierId, e.ComplianceRequirementId }, "DossierRequirement_dossier_requirement_global_key")
+                .IsUnique()
+                .HasFilter("horse_id IS NULL");
+
+            entity.HasIndex(e => new { e.ComplianceDossierId, e.ComplianceRequirementId, e.HorseId }, "DossierRequirement_dossier_requirement_horse_key")
+                .IsUnique()
+                .HasFilter("horse_id IS NOT NULL");
 
             entity.HasIndex(e => e.ComplianceDossierId, "DossierRequirement_compliance_dossier_id_idx");
 
@@ -882,6 +934,7 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.DossierRequirementId).HasColumnName("dossier_requirement_id");
             entity.Property(e => e.ComplianceDossierId).HasColumnName("compliance_dossier_id");
             entity.Property(e => e.ComplianceRequirementId).HasColumnName("compliance_requirement_id");
+            entity.Property(e => e.HorseId).HasColumnName("horse_id");
             entity.Property(e => e.CreatedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");
@@ -897,6 +950,7 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.UpdatedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
+            entity.Property(e => e.ValidUntil).HasColumnName("valid_until");
             entity.Property(e => e.WaivedReason).HasColumnName("waived_reason");
 
             entity.HasOne(d => d.ComplianceDossier).WithMany(p => p.DossierRequirements)
@@ -908,6 +962,151 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.ComplianceRequirementId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("DossierRequirement_compliance_requirement_id_fkey");
+
+            entity.HasOne(d => d.Horse).WithMany()
+                .HasForeignKey(d => d.HorseId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("DossierRequirement_horse_id_fkey");
+        });
+
+        modelBuilder.Entity<QuarantineProof>(entity =>
+        {
+            entity.HasKey(e => e.QuarantineProofId).HasName("QuarantineProof_pkey");
+            entity.ToTable("QuarantineProof");
+            entity.HasIndex(e => e.ComplianceDossierId, "QuarantineProof_compliance_dossier_id_idx");
+            entity.HasIndex(e => e.SubmittedByEmployeeId, "QuarantineProof_submitted_by_employee_id_idx");
+            entity.HasIndex(e => e.VerifiedByEmployeeId, "QuarantineProof_verified_by_employee_id_idx");
+            entity.HasIndex(e => e.LocationId, "QuarantineProof_location_id_idx");
+            entity.Property(e => e.QuarantineProofId).HasColumnName("quarantine_proof_id");
+            entity.Property(e => e.ComplianceDossierId).HasColumnName("compliance_dossier_id");
+            entity.Property(e => e.SubmittedByEmployeeId).HasColumnName("submitted_by_employee_id");
+            entity.Property(e => e.VerifiedByEmployeeId).HasColumnName("verified_by_employee_id");
+            entity.Property(e => e.LocationId).HasColumnName("location_id");
+            entity.Property(e => e.BcpName).HasMaxLength(200).HasColumnName("bcp_name");
+            entity.Property(e => e.OfficialVeterinarianName).HasMaxLength(200).HasColumnName("official_veterinarian_name");
+            entity.Property(e => e.BcpReceiptNumber).HasMaxLength(100).HasColumnName("bcp_receipt_number");
+            entity.Property(e => e.MicrochipChecklist)
+                .HasConversion(
+                    value => value == null ? null : value.RootElement.GetRawText(),
+                    value => value == null ? null : JsonDocument.Parse(value, default))
+                .HasColumnType("jsonb")
+                .HasColumnName("microchip_checklist");
+            entity.Property(e => e.InspectionAt).HasColumnType("timestamp without time zone").HasColumnName("inspection_at");
+            entity.Property(e => e.SubmittedAt).HasColumnType("timestamp without time zone").HasColumnName("submitted_at");
+            entity.Property(e => e.VerifiedAt).HasColumnType("timestamp without time zone").HasColumnName("verified_at");
+            entity.Property(e => e.Conditions).HasColumnName("conditions");
+            entity.Property(e => e.VerificationNote).HasColumnName("verification_note");
+            entity.Property(e => e.RejectionReason).HasColumnName("rejection_reason");
+            entity.Property(e => e.IsFinalized).HasDefaultValue(false).HasColumnName("is_finalized");
+            entity.Property(e => e.FinalizedAt).HasColumnType("timestamp without time zone").HasColumnName("finalized_at");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp without time zone").HasColumnName("updated_at");
+            entity.HasOne(e => e.ComplianceDossier).WithMany()
+                .HasForeignKey(e => e.ComplianceDossierId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("QuarantineProof_compliance_dossier_id_fkey");
+            entity.HasOne(e => e.SubmittedByEmployee).WithMany()
+                .HasForeignKey(e => e.SubmittedByEmployeeId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("QuarantineProof_submitted_by_employee_id_fkey");
+            entity.HasOne(e => e.VerifiedByEmployee).WithMany()
+                .HasForeignKey(e => e.VerifiedByEmployeeId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("QuarantineProof_verified_by_employee_id_fkey");
+            entity.HasOne<Location>().WithMany()
+                .HasForeignKey(e => e.LocationId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("QuarantineProof_location_id_fkey");
+        });
+
+        modelBuilder.Entity<CustomsClearanceProof>(entity =>
+        {
+            entity.HasKey(e => e.CustomsClearanceProofId).HasName("CustomsClearanceProof_pkey");
+            entity.ToTable("CustomsClearanceProof");
+            entity.HasIndex(e => e.ComplianceDossierId, "CustomsClearanceProof_compliance_dossier_id_idx");
+            entity.HasIndex(e => e.SubmittedByEmployeeId, "CustomsClearanceProof_submitted_by_employee_id_idx");
+            entity.HasIndex(e => e.VerifiedByEmployeeId, "CustomsClearanceProof_verified_by_employee_id_idx");
+            entity.HasIndex(e => e.LocationId, "CustomsClearanceProof_location_id_idx");
+            entity.Property(e => e.CustomsClearanceProofId).HasColumnName("customs_clearance_proof_id");
+            entity.Property(e => e.ComplianceDossierId).HasColumnName("compliance_dossier_id");
+            entity.Property(e => e.SubmittedByEmployeeId).HasColumnName("submitted_by_employee_id");
+            entity.Property(e => e.VerifiedByEmployeeId).HasColumnName("verified_by_employee_id");
+            entity.Property(e => e.LocationId).HasColumnName("location_id");
+            entity.Property(e => e.CustomsPortName).HasMaxLength(200).HasColumnName("customs_port_name");
+            entity.Property(e => e.MrnNumber).HasMaxLength(100).HasColumnName("mrn_number");
+            entity.Property(e => e.ClearanceAt).HasColumnType("timestamp without time zone").HasColumnName("clearance_at");
+            entity.Property(e => e.SubmittedAt).HasColumnType("timestamp without time zone").HasColumnName("submitted_at");
+            entity.Property(e => e.VerifiedAt).HasColumnType("timestamp without time zone").HasColumnName("verified_at");
+            entity.Property(e => e.VerificationNote).HasColumnName("verification_note");
+            entity.Property(e => e.RejectionReason).HasColumnName("rejection_reason");
+            entity.Property(e => e.IsFinalized).HasDefaultValue(false).HasColumnName("is_finalized");
+            entity.Property(e => e.FinalizedAt).HasColumnType("timestamp without time zone").HasColumnName("finalized_at");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp without time zone").HasColumnName("updated_at");
+            entity.HasOne(e => e.ComplianceDossier).WithMany()
+                .HasForeignKey(e => e.ComplianceDossierId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("CustomsClearanceProof_compliance_dossier_id_fkey");
+            entity.HasOne(e => e.SubmittedByEmployee).WithMany()
+                .HasForeignKey(e => e.SubmittedByEmployeeId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("CustomsClearanceProof_submitted_by_employee_id_fkey");
+            entity.HasOne(e => e.VerifiedByEmployee).WithMany()
+                .HasForeignKey(e => e.VerifiedByEmployeeId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("CustomsClearanceProof_verified_by_employee_id_fkey");
+            entity.HasOne<Location>().WithMany()
+                .HasForeignKey(e => e.LocationId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("CustomsClearanceProof_location_id_fkey");
+        });
+
+        modelBuilder.Entity<ProofAttachment>(entity =>
+        {
+            entity.HasKey(e => e.ProofAttachmentId).HasName("ProofAttachment_pkey");
+            entity.ToTable("ProofAttachment", table => table.HasCheckConstraint(
+                "ProofAttachment_exactly_one_proof_check",
+                "(quarantine_proof_id IS NOT NULL) <> (customs_clearance_proof_id IS NOT NULL)"));
+            entity.HasIndex(e => new { e.QuarantineProofId, e.SortOrder }, "ProofAttachment_quarantine_proof_id_sort_order_key")
+                .IsUnique().HasFilter("quarantine_proof_id IS NOT NULL");
+            entity.HasIndex(e => new { e.CustomsClearanceProofId, e.SortOrder }, "ProofAttachment_customs_clearance_proof_id_sort_order_key")
+                .IsUnique().HasFilter("customs_clearance_proof_id IS NOT NULL");
+            entity.Property(e => e.ProofAttachmentId).HasColumnName("proof_attachment_id");
+            entity.Property(e => e.QuarantineProofId).HasColumnName("quarantine_proof_id");
+            entity.Property(e => e.CustomsClearanceProofId).HasColumnName("customs_clearance_proof_id");
+            entity.Property(e => e.FileName).HasMaxLength(255).HasColumnName("file_name");
+            entity.Property(e => e.FileUrl).HasMaxLength(1000).HasColumnName("file_url");
+            entity.Property(e => e.MimeType).HasMaxLength(100).HasColumnName("mime_type");
+            entity.Property(e => e.FileSizeBytes).HasColumnName("file_size_bytes");
+            entity.Property(e => e.SortOrder).HasColumnName("sort_order");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.HasOne(e => e.QuarantineProof).WithMany(e => e.Attachments)
+                .HasForeignKey(e => e.QuarantineProofId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ProofAttachment_quarantine_proof_id_fkey");
+            entity.HasOne(e => e.CustomsClearanceProof).WithMany(e => e.Attachments)
+                .HasForeignKey(e => e.CustomsClearanceProofId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ProofAttachment_customs_clearance_proof_id_fkey");
+        });
+
+        modelBuilder.Entity<AuditDossier>(entity =>
+        {
+            entity.HasKey(e => e.AuditDossierId).HasName("AuditDossier_pkey");
+            entity.ToTable("AuditDossier");
+            entity.HasIndex(e => e.ComplianceDossierId, "AuditDossier_compliance_dossier_id_idx");
+            entity.HasIndex(e => e.ActorAccountId, "AuditDossier_actor_account_id_idx");
+            entity.HasIndex(e => new { e.TargetEntity, e.TargetId }, "AuditDossier_target_entity_target_id_idx");
+            entity.Property(e => e.AuditDossierId).HasColumnName("audit_dossier_id");
+            entity.Property(e => e.ComplianceDossierId).HasColumnName("compliance_dossier_id");
+            entity.Property(e => e.ActionType).HasMaxLength(100).HasColumnName("action_type");
+            entity.Property(e => e.TargetEntity).HasMaxLength(100).HasColumnName("target_entity");
+            entity.Property(e => e.TargetId).HasColumnName("target_id");
+            entity.Property(e => e.ActorAccountId).HasColumnName("actor_account_id");
+            entity.Property(e => e.Summary).HasColumnName("summary");
+            entity.Property(e => e.Details)
+                .HasConversion(
+                    value => value == null ? null : value.RootElement.GetRawText(),
+                    value => value == null ? null : JsonDocument.Parse(value, default))
+                .HasColumnType("jsonb")
+                .HasColumnName("details");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.HasOne(e => e.ComplianceDossier).WithMany()
+                .HasForeignKey(e => e.ComplianceDossierId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("AuditDossier_compliance_dossier_id_fkey");
+            entity.HasOne(e => e.ActorAccount).WithMany()
+                .HasForeignKey(e => e.ActorAccountId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("AuditDossier_actor_account_id_fkey");
         });
 
         modelBuilder.Entity<DossierTemplate>(entity =>
