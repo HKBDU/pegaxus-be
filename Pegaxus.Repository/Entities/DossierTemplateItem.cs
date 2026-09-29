@@ -20,6 +20,8 @@ public partial class DossierTemplateItem
 
     public bool IsMandatory { get; set; }
 
+    public bool AppliesPerHorse { get; set; }
+
     public string? Instruction { get; set; }
 
     public DateTime CreatedAt { get; set; }

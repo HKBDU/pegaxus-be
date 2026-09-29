@@ -22,6 +22,10 @@ public partial class CustomsClearanceProof
 
     public string? MrnNumber { get; set; }
 
+    public string? SubmittedNote { get; set; }
+
+    public DateOnly? AtaCarnetExpiryDate { get; set; }
+
     public DateTime? ClearanceAt { get; set; }
 
     public DateTime SubmittedAt { get; set; }

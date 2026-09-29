@@ -23,6 +23,8 @@ public partial class QuarantineProof
 
     public string? BcpReceiptNumber { get; set; }
 
+    public string? SubmittedNote { get; set; }
+
     public JsonDocument? MicrochipChecklist { get; set; }
 
     public DateTime? InspectionAt { get; set; }

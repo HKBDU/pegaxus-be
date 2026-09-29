@@ -14,6 +14,10 @@ public partial class ComplianceDocument
 
     public Guid DossierRequirementId { get; set; }
 
+    public Guid CreatedByAccountId { get; set; }
+
+    public Guid UpdatedByAccountId { get; set; }
+
     public string DocumentCode { get; set; } = null!;
 
     public string DocumentName { get; set; } = null!;
@@ -37,4 +41,8 @@ public partial class ComplianceDocument
     public virtual ICollection<DocumentVersion> DocumentVersions { get; set; } = new List<DocumentVersion>();
 
     public virtual DossierRequirement DossierRequirement { get; set; } = null!;
+
+    public virtual Account CreatedByAccount { get; set; } = null!;
+
+    public virtual Account UpdatedByAccount { get; set; } = null!;
 }

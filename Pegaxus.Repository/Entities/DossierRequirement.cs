@@ -26,6 +26,12 @@ public partial class DossierRequirement
 
     public DateOnly? ValidUntil { get; set; }
 
+    public bool IsDeleted { get; set; }
+
+    public DateTime? DeletedAt { get; set; }
+
+    public Guid? DeletedByAccountId { get; set; }
+
     public string? Instruction { get; set; }
 
     public DateTime? SatisfiedAt { get; set; }
@@ -45,6 +51,8 @@ public partial class DossierRequirement
     public virtual ComplianceRequirement ComplianceRequirement { get; set; } = null!;
 
     public virtual Horse? Horse { get; set; }
+
+    public virtual Account? DeletedByAccount { get; set; }
 
     public virtual ICollection<DocumentRequest> DocumentRequests { get; set; } = new List<DocumentRequest>();
 }

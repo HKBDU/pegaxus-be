@@ -22,6 +22,10 @@ public partial class ComplianceRequirement
 
     public string? IssuingAuthority { get; set; }
 
+    public string? BcpCode { get; set; }
+
+    public string? LegalBasis { get; set; }
+
     public string? Country { get; set; }
 
     public ComplianceRequirementCategory Category { get; set; }
