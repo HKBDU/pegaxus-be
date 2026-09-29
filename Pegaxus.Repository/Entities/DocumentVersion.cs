@@ -13,6 +13,8 @@ public partial class DocumentVersion
 
     public Guid ComplianceDocumentId { get; set; }
 
+    public Guid UploadedByAccountId { get; set; }
+
     public int VersionNo { get; set; }
 
     public string FileName { get; set; } = null!;
@@ -30,6 +32,8 @@ public partial class DocumentVersion
     public DateTime CreatedAt { get; set; }
 
     public virtual ComplianceDocument ComplianceDocument { get; set; } = null!;
+
+    public virtual Account UploadedByAccount { get; set; } = null!;
 
     public virtual ICollection<DocumentReview> DocumentReviews { get; set; } = new List<DocumentReview>();
 

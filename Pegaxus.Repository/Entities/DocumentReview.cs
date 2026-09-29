@@ -14,6 +14,8 @@ public partial class DocumentReview
 
     public Guid DocumentVersionId { get; set; }
 
+    public Guid ReviewedByAccountId { get; set; }
+
     public DocumentReviewResult Result { get; set; }
 
     public string? ReviewComment { get; set; }
@@ -23,4 +25,6 @@ public partial class DocumentReview
     public DateTime CreatedAt { get; set; }
 
     public virtual DocumentVersion DocumentVersion { get; set; } = null!;
+
+    public virtual Account ReviewedByAccount { get; set; } = null!;
 }

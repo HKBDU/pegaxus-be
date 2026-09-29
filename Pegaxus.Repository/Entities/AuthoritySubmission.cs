@@ -14,6 +14,8 @@ public partial class AuthoritySubmission
 
     public Guid ComplianceDossierId { get; set; }
 
+    public Guid SubmittedByAccountId { get; set; }
+
     public int SubmissionNo { get; set; }
 
     public string AuthorityName { get; set; } = null!;
@@ -23,6 +25,16 @@ public partial class AuthoritySubmission
     public string? SubmissionMethod { get; set; }
 
     public AuthoritySubmissionStatus Status { get; set; } = AuthoritySubmissionStatus.DRAFT;
+
+    public bool IsRequired { get; set; } = true;
+
+    public string? PermitNumber { get; set; }
+
+    public DateOnly? PermitIssuedDate { get; set; }
+
+    public DateOnly? PermitExpiryDate { get; set; }
+
+    public DateOnly? RevisionDueDate { get; set; }
 
     public DateTime? SubmittedAt { get; set; }
 
@@ -37,6 +49,8 @@ public partial class AuthoritySubmission
     public DateTime UpdatedAt { get; set; }
 
     public virtual ComplianceDossier ComplianceDossier { get; set; } = null!;
+
+    public virtual Account SubmittedByAccount { get; set; } = null!;
 
     public virtual ICollection<AuthoritySubmissionEvidenceFile> EvidenceFiles { get; set; } = new List<AuthoritySubmissionEvidenceFile>();
 }

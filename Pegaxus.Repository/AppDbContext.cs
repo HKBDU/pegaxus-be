@@ -53,6 +53,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<AuditDossier> AuditDossiers { get; set; }
 
+    public virtual DbSet<CatalogAuditLog> CatalogAuditLogs { get; set; }
+
     public virtual DbSet<DossierRequirement> DossierRequirements { get; set; }
 
     public virtual DbSet<ProofAttachment> ProofAttachments { get; set; }
@@ -268,6 +270,7 @@ public partial class AppDbContext : DbContext
                 .HasMaxLength(200)
                 .HasColumnName("authority_name");
             entity.Property(e => e.ComplianceDossierId).HasColumnName("compliance_dossier_id");
+            entity.Property(e => e.SubmittedByAccountId).HasColumnName("submitted_by_account_id");
             entity.Property(e => e.CreatedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");
@@ -283,6 +286,11 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.SubmissionReference)
                 .HasMaxLength(150)
                 .HasColumnName("submission_reference");
+            entity.Property(e => e.IsRequired).HasDefaultValue(true).HasColumnName("is_required");
+            entity.Property(e => e.PermitNumber).HasMaxLength(100).HasColumnName("permit_number");
+            entity.Property(e => e.PermitIssuedDate).HasColumnName("permit_issued_date");
+            entity.Property(e => e.PermitExpiryDate).HasColumnName("permit_expiry_date");
+            entity.Property(e => e.RevisionDueDate).HasColumnName("revision_due_date");
             entity.Property(e => e.SubmittedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("submitted_at");
@@ -294,6 +302,10 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.ComplianceDossierId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("AuthoritySubmission_compliance_dossier_id_fkey");
+            entity.HasOne(d => d.SubmittedByAccount).WithMany()
+                .HasForeignKey(d => d.SubmittedByAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("AuthoritySubmission_submitted_by_account_id_fkey");
         });
 
         modelBuilder.Entity<AuthoritySubmissionEvidenceFile>(entity =>
@@ -587,6 +599,14 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey<ComplianceDocument>(d => d.DossierRequirementId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("ComplianceDocument_dossier_requirement_id_fkey");
+            entity.HasOne(d => d.CreatedByAccount).WithMany()
+                .HasForeignKey(d => d.CreatedByAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ComplianceDocument_created_by_account_id_fkey");
+            entity.HasOne(d => d.UpdatedByAccount).WithMany()
+                .HasForeignKey(d => d.UpdatedByAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("ComplianceDocument_updated_by_account_id_fkey");
         });
 
         modelBuilder.Entity<ComplianceDossier>(entity =>
@@ -664,6 +684,8 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.IssuingAuthority)
                 .HasMaxLength(200)
                 .HasColumnName("issuing_authority");
+            entity.Property(e => e.BcpCode).HasMaxLength(100).HasColumnName("bcp_code");
+            entity.Property(e => e.LegalBasis).HasColumnName("legal_basis");
             entity.Property(e => e.RequirementCode)
                 .HasMaxLength(50)
                 .HasColumnName("requirement_code");
@@ -795,6 +817,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");
             entity.Property(e => e.DossierRequirementId).HasColumnName("dossier_requirement_id");
+            entity.Property(e => e.RequestedByAccountId).HasColumnName("requested_by_account_id");
             entity.Property(e => e.DueDate).HasColumnName("due_date");
             entity.Property(e => e.FulfilledAt)
                 .HasColumnType("timestamp without time zone")
@@ -814,6 +837,10 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.DossierRequirementId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("DocumentRequest_dossier_requirement_id_fkey");
+            entity.HasOne(d => d.RequestedByAccount).WithMany()
+                .HasForeignKey(d => d.RequestedByAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("DocumentRequest_requested_by_account_id_fkey");
         });
 
         modelBuilder.Entity<DocumentReview>(entity =>
@@ -831,6 +858,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");
             entity.Property(e => e.DocumentVersionId).HasColumnName("document_version_id");
+            entity.Property(e => e.ReviewedByAccountId).HasColumnName("reviewed_by_account_id");
             entity.Property(e => e.ReviewComment).HasColumnName("review_comment");
             entity.Property(e => e.ReviewedAt)
                 .HasColumnType("timestamp without time zone")
@@ -840,6 +868,10 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.DocumentVersionId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("DocumentReview_document_version_id_fkey");
+            entity.HasOne(d => d.ReviewedByAccount).WithMany()
+                .HasForeignKey(d => d.ReviewedByAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("DocumentReview_reviewed_by_account_id_fkey");
         });
 
         modelBuilder.Entity<DocumentVersion>(entity =>
@@ -854,6 +886,7 @@ public partial class AppDbContext : DbContext
 
             entity.Property(e => e.DocumentVersionId).HasColumnName("document_version_id");
             entity.Property(e => e.ComplianceDocumentId).HasColumnName("compliance_document_id");
+            entity.Property(e => e.UploadedByAccountId).HasColumnName("uploaded_by_account_id");
             entity.Property(e => e.CreatedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");
@@ -877,6 +910,10 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.ComplianceDocumentId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("DocumentVersion_compliance_document_id_fkey");
+            entity.HasOne(d => d.UploadedByAccount).WithMany()
+                .HasForeignKey(d => d.UploadedByAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("DocumentVersion_uploaded_by_account_id_fkey");
         });
 
         modelBuilder.Entity<DocumentAttachment>(entity =>
@@ -935,6 +972,11 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.ComplianceDossierId).HasColumnName("compliance_dossier_id");
             entity.Property(e => e.ComplianceRequirementId).HasColumnName("compliance_requirement_id");
             entity.Property(e => e.HorseId).HasColumnName("horse_id");
+            entity.Property(e => e.IsDeleted).HasDefaultValue(false).HasColumnName("is_deleted");
+            entity.Property(e => e.DeletedAt)
+                .HasColumnType("timestamp without time zone")
+                .HasColumnName("deleted_at");
+            entity.Property(e => e.DeletedByAccountId).HasColumnName("deleted_by_account_id");
             entity.Property(e => e.CreatedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");
@@ -967,6 +1009,10 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.HorseId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("DossierRequirement_horse_id_fkey");
+            entity.HasOne(d => d.DeletedByAccount).WithMany()
+                .HasForeignKey(d => d.DeletedByAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("DossierRequirement_deleted_by_account_id_fkey");
         });
 
         modelBuilder.Entity<QuarantineProof>(entity =>
@@ -985,6 +1031,7 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.BcpName).HasMaxLength(200).HasColumnName("bcp_name");
             entity.Property(e => e.OfficialVeterinarianName).HasMaxLength(200).HasColumnName("official_veterinarian_name");
             entity.Property(e => e.BcpReceiptNumber).HasMaxLength(100).HasColumnName("bcp_receipt_number");
+            entity.Property(e => e.SubmittedNote).HasColumnName("submitted_note");
             entity.Property(e => e.MicrochipChecklist)
                 .HasConversion(
                     value => value == null ? null : value.RootElement.GetRawText(),
@@ -1030,6 +1077,8 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.LocationId).HasColumnName("location_id");
             entity.Property(e => e.CustomsPortName).HasMaxLength(200).HasColumnName("customs_port_name");
             entity.Property(e => e.MrnNumber).HasMaxLength(100).HasColumnName("mrn_number");
+            entity.Property(e => e.SubmittedNote).HasColumnName("submitted_note");
+            entity.Property(e => e.AtaCarnetExpiryDate).HasColumnName("ata_carnet_expiry_date");
             entity.Property(e => e.ClearanceAt).HasColumnType("timestamp without time zone").HasColumnName("clearance_at");
             entity.Property(e => e.SubmittedAt).HasColumnType("timestamp without time zone").HasColumnName("submitted_at");
             entity.Property(e => e.VerifiedAt).HasColumnType("timestamp without time zone").HasColumnName("verified_at");
@@ -1078,6 +1127,38 @@ public partial class AppDbContext : DbContext
             entity.HasOne(e => e.CustomsClearanceProof).WithMany(e => e.Attachments)
                 .HasForeignKey(e => e.CustomsClearanceProofId).OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("ProofAttachment_customs_clearance_proof_id_fkey");
+        });
+
+        modelBuilder.Entity<CatalogAuditLog>(entity =>
+        {
+            entity.HasKey(e => e.CatalogAuditLogId).HasName("CatalogAuditLog_pkey");
+            entity.ToTable("CatalogAuditLog");
+            entity.HasIndex(e => new { e.EntityType, e.EntityId }, "CatalogAuditLog_entity_type_entity_id_idx");
+            entity.HasIndex(e => e.ActorAccountId, "CatalogAuditLog_actor_account_id_idx");
+            entity.HasIndex(e => e.CreatedAt, "CatalogAuditLog_created_at_idx");
+            entity.Property(e => e.CatalogAuditLogId).HasColumnName("catalog_audit_log_id");
+            entity.Property(e => e.EntityType).HasMaxLength(100).HasColumnName("entity_type");
+            entity.Property(e => e.EntityId).HasColumnName("entity_id");
+            entity.Property(e => e.ActionType).HasMaxLength(100).HasColumnName("action_type");
+            entity.Property(e => e.ActorAccountId).HasColumnName("actor_account_id");
+            entity.Property(e => e.Summary).HasColumnName("summary");
+            entity.Property(e => e.BeforeData)
+                .HasConversion(value => value.RootElement.GetRawText(), value => JsonDocument.Parse(value, default))
+                .HasColumnType("jsonb")
+                .HasColumnName("before_data");
+            entity.Property(e => e.AfterData)
+                .HasConversion(value => value.RootElement.GetRawText(), value => JsonDocument.Parse(value, default))
+                .HasColumnType("jsonb")
+                .HasColumnName("after_data");
+            entity.Property(e => e.ReferenceCountSnapshot)
+                .HasConversion(value => value == null ? null : value.RootElement.GetRawText(), value => value == null ? null : JsonDocument.Parse(value, default))
+                .HasColumnType("jsonb")
+                .HasColumnName("reference_count_snapshot");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.HasOne(e => e.ActorAccount).WithMany()
+                .HasForeignKey(e => e.ActorAccountId)
+                .OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("CatalogAuditLog_actor_account_id_fkey");
         });
 
         modelBuilder.Entity<AuditDossier>(entity =>
@@ -1174,6 +1255,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnName("created_at");
             entity.Property(e => e.DossierTemplateId).HasColumnName("dossier_template_id");
             entity.Property(e => e.Instruction).HasColumnName("instruction");
+            entity.Property(e => e.AppliesPerHorse).HasDefaultValue(false).HasColumnName("applies_per_horse");
             entity.Property(e => e.IsMandatory)
                 .HasDefaultValue(true)
                 .HasColumnName("is_mandatory");

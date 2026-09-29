@@ -14,6 +14,8 @@ public partial class DocumentRequest
 
     public Guid DossierRequirementId { get; set; }
 
+    public Guid RequestedByAccountId { get; set; }
+
     public string RequestCode { get; set; } = null!;
 
     public DocumentRequestType RequestType { get; set; }
@@ -37,4 +39,6 @@ public partial class DocumentRequest
     public DateTime UpdatedAt { get; set; }
 
     public virtual DossierRequirement DossierRequirement { get; set; } = null!;
+
+    public virtual Account RequestedByAccount { get; set; } = null!;
 }
