@@ -29,4 +29,10 @@ public interface IService
         Guid accountId,
         Guid proofId,
         CancellationToken cancellationToken = default);
+
+    Task<Response.QuarantineProofFinalizeResponse> FinalizeQuarantineProofAsync(
+        Guid accountId,
+        Guid proofId,
+        Request.FinalizeQuarantineProofRequest request,
+        CancellationToken cancellationToken = default);
 }

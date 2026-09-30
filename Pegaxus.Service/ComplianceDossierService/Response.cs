@@ -161,4 +161,13 @@ public class Response
 
         public int SortOrder { get; init; }
     }
+
+    public class QuarantineProofFinalizeResponse
+    {
+        public Guid QuarantineProofId { get; init; }
+
+        public string Status { get; init; } = string.Empty;
+
+        public bool IsFinalized { get; init; }
+    }
 }

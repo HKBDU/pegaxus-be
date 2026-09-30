@@ -54,4 +54,21 @@ public class Request
 
         public List<IFormFile> Files { get; set; } = [];
     }
+
+    public class FinalizeQuarantineProofRequest
+    {
+        public string Action { get; set; } = string.Empty;
+
+        public string? OfficialVetName { get; set; }
+
+        public string? BcpReceiptNo { get; set; }
+
+        public string? Status { get; set; }
+
+        public string? Conditions { get; set; }
+
+        public string? MicrochipChecklist { get; set; }
+
+        public string? RejectionReason { get; set; }
+    }
 }

@@ -103,6 +103,23 @@ public sealed class ComplianceDossiersController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    [HttpPatch("/api/v1/quarantine-proofs/{proofId:guid}/finalize")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> FinalizeQuarantineProof(
+        Guid proofId,
+        [FromForm] ComplianceDossierService.Request.FinalizeQuarantineProofRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.FinalizeQuarantineProofAsync(
+            GetAccountId(), proofId, request, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Quarantine proof finalized successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     private Guid GetAccountId()
     {
         var value = User.FindFirstValue(ClaimTypes.NameIdentifier)

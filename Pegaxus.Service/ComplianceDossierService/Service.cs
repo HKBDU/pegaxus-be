@@ -613,6 +613,230 @@ public sealed class Service : IService
         };
     }
 
+    public async Task<Response.QuarantineProofFinalizeResponse> FinalizeQuarantineProofAsync(
+        Guid accountId,
+        Guid proofId,
+        Request.FinalizeQuarantineProofRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var action = request.Action.Trim().ToUpperInvariant();
+        if (action is not ("FINALIZE" or "REJECT_PROOF"))
+            throw new BadRequestException("Action must be FINALIZE or REJECT_PROOF");
+
+        var employee = await _db.Employees
+            .Where(item =>
+                item.AccountId == accountId &&
+                item.Role == EmployeeRole.TRANSPORT_SPECIALIST &&
+                item.IsActive &&
+                !item.IsDeleted &&
+                !item.Account.IsDeleted &&
+                item.Account.Status == AccountStatus.ACTIVE)
+            .Select(item => new { item.EmployeeId, item.FullName })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (employee is null)
+            throw new ForbiddenException("Only an active Transport Specialist can verify quarantine proofs");
+
+        var proof = await _db.QuarantineProofs
+            .Include(item => item.ComplianceDossier)
+                .ThenInclude(item => item.Transport)
+                    .ThenInclude(item => item.Booking)
+                        .ThenInclude(item => item.BookingHorses)
+                            .ThenInclude(item => item.Horse)
+            .Include(item => item.SubmittedByEmployee)
+            .SingleOrDefaultAsync(item => item.QuarantineProofId == proofId, cancellationToken);
+
+        if (proof is null)
+            throw new NotFoundException("QuarantineProof not found", "QUARANTINE_PROOF_NOT_FOUND");
+
+        if (proof.IsFinalized)
+            throw new ConflictException(
+                "This quarantine proof is finalized and read-only",
+                "RECORD_LOCKED");
+
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var dossier = proof.ComplianceDossier;
+
+        if (action == "REJECT_PROOF")
+        {
+            if (string.IsNullOrWhiteSpace(request.RejectionReason))
+                throw new BadRequestException(
+                    "rejectionReason is required for REJECT_PROOF",
+                    "FIELD_REQUIRED_FOR_ACTION");
+
+            proof.Status = QuarantineProofStatus.Rejected;
+            proof.RejectionReason = request.RejectionReason.Trim();
+            proof.UpdatedAt = now;
+
+            AddQuarantineAudit(
+                proof,
+                accountId,
+                "QUARANTINE_PROOF_REJECTED",
+                $"Quarantine proof rejected: {proof.RejectionReason}",
+                now,
+                new { Action = action, proof.RejectionReason });
+
+            AddNotification(
+                proof.SubmittedByEmployee.AccountId,
+                dossier,
+                "BCP quarantine proof rejected",
+                now,
+                NotificationPriority.HIGH,
+                "The BCP proof was rejected. Please submit a new proof.");
+
+            await _db.SaveChangesAsync(cancellationToken);
+            return new Response.QuarantineProofFinalizeResponse
+            {
+                QuarantineProofId = proof.QuarantineProofId,
+                Status = proof.Status.ToString().ToUpperInvariant(),
+                IsFinalized = false
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(request.OfficialVetName) ||
+            string.IsNullOrWhiteSpace(request.Status) ||
+            string.IsNullOrWhiteSpace(request.MicrochipChecklist))
+            throw new BadRequestException(
+                "officialVetName, status, and microchipChecklist are required for FINALIZE",
+                "FIELD_REQUIRED_FOR_ACTION");
+
+        var status = request.Status.Trim().ToUpperInvariant() switch
+        {
+            "PASSED" => QuarantineProofStatus.Passed,
+            "PASSED_WITH_CONDITIONS" => QuarantineProofStatus.PassedWithConditions,
+            "FAILED" => QuarantineProofStatus.Failed,
+            _ => (QuarantineProofStatus?)null
+        };
+
+        if (status is null)
+            throw new BadRequestException("Status must be PASSED, PASSED_WITH_CONDITIONS, or FAILED");
+
+        if (status == QuarantineProofStatus.PassedWithConditions &&
+            string.IsNullOrWhiteSpace(request.Conditions))
+            throw new BadRequestException(
+                "conditions is required for PASSED_WITH_CONDITIONS",
+                "FIELD_REQUIRED_FOR_ACTION");
+
+        var checklist = ParseMicrochipChecklist(request.MicrochipChecklist);
+        var expectedHorses = dossier.Transport.Booking.BookingHorses.ToList();
+        var isComplete = expectedHorses.Count == checklist.Count &&
+            checklist.All(item => item.IsMatched) &&
+            expectedHorses.All(expected => checklist.Count(item => item.HorseId == expected.HorseId) == 1 &&
+                checklist.Any(item =>
+                    item.HorseId == expected.HorseId &&
+                    string.Equals(item.MicrochipNumber?.Trim(), expected.Horse.MicrochipNumber?.Trim(), StringComparison.Ordinal)));
+
+        if (!isComplete)
+            throw new BadRequestException(
+                "All horses in this dossier must be checked before finalizing",
+                "MICROCHIP_CHECK_INCOMPLETE");
+
+        proof.Status = status.Value;
+        proof.OfficialVeterinarianName = request.OfficialVetName.Trim();
+        proof.BcpReceiptNumber = request.BcpReceiptNo?.Trim();
+        proof.Conditions = request.Conditions?.Trim();
+        proof.MicrochipChecklist = JsonSerializer.SerializeToDocument(checklist);
+        proof.VerifiedByEmployeeId = employee.EmployeeId;
+        proof.VerifiedAt = now;
+        proof.IsFinalized = true;
+        proof.FinalizedAt = now;
+        proof.UpdatedAt = now;
+
+        AddQuarantineAudit(
+            proof,
+            accountId,
+            "QUARANTINE_PROOF_FINALIZED",
+            $"Quarantine proof finalized as {status.Value}",
+            now,
+            new { Action = action, Status = status.Value.ToString(), proof.BcpReceiptNumber });
+
+        var accountIds = await _db.Employees
+            .Where(item =>
+                (item.Role == EmployeeRole.DRIVER ||
+                    item.Role == EmployeeRole.ESCORT ||
+                    item.Role == EmployeeRole.LOGISTICS_MANAGER ||
+                    item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR) &&
+                item.IsActive &&
+                !item.IsDeleted &&
+                !item.Account.IsDeleted &&
+                item.Account.Status == AccountStatus.ACTIVE &&
+                (item.Role == EmployeeRole.LOGISTICS_MANAGER ||
+                    item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR ||
+                    item.EmployeeTransportPlans.Any(plan => plan.TransportPlan.TransportId == dossier.TransportId)))
+            .Select(item => item.AccountId)
+            .ToListAsync(cancellationToken);
+
+        var priority = status == QuarantineProofStatus.Failed
+            ? NotificationPriority.URGENT
+            : NotificationPriority.NORMAL;
+        var title = status == QuarantineProofStatus.Failed
+            ? "BCP quarantine inspection failed"
+            : "BCP quarantine inspection verified";
+        var message = status == QuarantineProofStatus.Failed
+            ? "The BCP quarantine proof was finalized as FAILED. Immediate action is required."
+            : $"The BCP quarantine proof was finalized as {status.Value.ToString().ToUpperInvariant()}.";
+
+        foreach (var accountIdToNotify in accountIds.Distinct())
+            AddNotification(accountIdToNotify, dossier, title, now, priority, message);
+
+        if (status == QuarantineProofStatus.Failed)
+        {
+            AddNotification(
+                dossier.Transport.Booking.Customer.AccountId,
+                dossier,
+                title,
+                now,
+                NotificationPriority.URGENT,
+                message);
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return new Response.QuarantineProofFinalizeResponse
+        {
+            QuarantineProofId = proof.QuarantineProofId,
+            Status = proof.Status.ToString().ToUpperInvariant(),
+            IsFinalized = proof.IsFinalized
+        };
+    }
+
+    private void AddQuarantineAudit(
+        QuarantineProof proof,
+        Guid accountId,
+        string actionType,
+        string summary,
+        DateTime now,
+        object details)
+    {
+        _db.AuditDossiers.Add(new AuditDossier
+        {
+            AuditDossierId = Guid.NewGuid(),
+            ComplianceDossierId = proof.ComplianceDossierId,
+            ActionType = actionType,
+            TargetEntity = nameof(QuarantineProof),
+            TargetId = proof.QuarantineProofId,
+            ActorAccountId = accountId,
+            Summary = summary,
+            Details = JsonSerializer.SerializeToDocument(details),
+            Visibility = AuditVisibility.Internal,
+            CreatedAt = now
+        });
+    }
+
+    private static List<MicrochipChecklistItem> ParseMicrochipChecklist(string value)
+    {
+        try
+        {
+            var checklist = JsonSerializer.Deserialize<List<MicrochipChecklistItem>>(
+                value,
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            return checklist ?? [];
+        }
+        catch (JsonException)
+        {
+            return [];
+        }
+    }
+
     private static void ValidateRequest(Request.RecordAuthoritySubmissionRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.AuthorityName))
@@ -703,6 +927,15 @@ public sealed class Service : IService
                     "Proof file must be JPG, JPEG, or PNG",
                     "INVALID_FILE_TYPE");
         }
+    }
+
+    private sealed class MicrochipChecklistItem
+    {
+        public Guid HorseId { get; set; }
+
+        public string? MicrochipNumber { get; set; }
+
+        public bool IsMatched { get; set; }
     }
 
     private static DateTimeOffset? ToDateTimeOffset(DateTime? value)
