@@ -23,6 +23,7 @@ using MailService = Pegaxus.Service.MailService;
 using AccountService = Pegaxus.Service.AccountService;
 using HorseService = Pegaxus.Service.HorseService;
 using EmployeeService = Pegaxus.Service.EmployeeService;
+using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
 
 var envDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
 while (envDirectory is not null)
@@ -181,6 +182,7 @@ builder.Services.AddScoped<MailService.IService, MailService.Service>();
 builder.Services.AddScoped<AccountService.IService, AccountService.Service>();
 builder.Services.AddScoped<HorseService.IService, HorseService.Service>();
 builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
+builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
