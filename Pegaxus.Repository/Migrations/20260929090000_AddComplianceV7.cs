@@ -169,24 +169,59 @@ public partial class AddComplianceV7 : Migration
         migrationBuilder.CreateIndex("CatalogAuditLog_actor_account_id_idx", "CatalogAuditLog", "actor_account_id");
         migrationBuilder.CreateIndex("CatalogAuditLog_created_at_idx", "CatalogAuditLog", "created_at");
 
-        migrationBuilder.AddForeignKey("DossierRequirement_deleted_by_account_id_fkey", "DossierRequirement", "deleted_by_account_id", "Account", "account_id");
-        migrationBuilder.AddForeignKey("ComplianceDocument_created_by_account_id_fkey", "ComplianceDocument", "created_by_account_id", "Account", "account_id");
-        migrationBuilder.AddForeignKey("ComplianceDocument_updated_by_account_id_fkey", "ComplianceDocument", "updated_by_account_id", "Account", "account_id");
-        migrationBuilder.AddForeignKey("DocumentVersion_uploaded_by_account_id_fkey", "DocumentVersion", "uploaded_by_account_id", "Account", "account_id");
-        migrationBuilder.AddForeignKey("DocumentReview_reviewed_by_account_id_fkey", "DocumentReview", "reviewed_by_account_id", "Account", "account_id");
-        migrationBuilder.AddForeignKey("DocumentRequest_requested_by_account_id_fkey", "DocumentRequest", "requested_by_account_id", "Account", "account_id");
-        migrationBuilder.AddForeignKey("AuthoritySubmission_submitted_by_account_id_fkey", "AuthoritySubmission", "submitted_by_account_id", "Account", "account_id");
+        migrationBuilder.AddForeignKey(
+            name: "DossierRequirement_deleted_by_account_id_fkey",
+            table: "DossierRequirement",
+            column: "deleted_by_account_id",
+            principalTable: "Account",
+            principalColumn: "account_id");
+        migrationBuilder.AddForeignKey(
+            name: "ComplianceDocument_created_by_account_id_fkey",
+            table: "ComplianceDocument",
+            column: "created_by_account_id",
+            principalTable: "Account",
+            principalColumn: "account_id");
+        migrationBuilder.AddForeignKey(
+            name: "ComplianceDocument_updated_by_account_id_fkey",
+            table: "ComplianceDocument",
+            column: "updated_by_account_id",
+            principalTable: "Account",
+            principalColumn: "account_id");
+        migrationBuilder.AddForeignKey(
+            name: "DocumentVersion_uploaded_by_account_id_fkey",
+            table: "DocumentVersion",
+            column: "uploaded_by_account_id",
+            principalTable: "Account",
+            principalColumn: "account_id");
+        migrationBuilder.AddForeignKey(
+            name: "DocumentReview_reviewed_by_account_id_fkey",
+            table: "DocumentReview",
+            column: "reviewed_by_account_id",
+            principalTable: "Account",
+            principalColumn: "account_id");
+        migrationBuilder.AddForeignKey(
+            name: "DocumentRequest_requested_by_account_id_fkey",
+            table: "DocumentRequest",
+            column: "requested_by_account_id",
+            principalTable: "Account",
+            principalColumn: "account_id");
+        migrationBuilder.AddForeignKey(
+            name: "AuthoritySubmission_submitted_by_account_id_fkey",
+            table: "AuthoritySubmission",
+            column: "submitted_by_account_id",
+            principalTable: "Account",
+            principalColumn: "account_id");
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
     {
-        migrationBuilder.DropForeignKey("DossierRequirement_deleted_by_account_id_fkey", "DossierRequirement");
-        migrationBuilder.DropForeignKey("ComplianceDocument_created_by_account_id_fkey", "ComplianceDocument");
-        migrationBuilder.DropForeignKey("ComplianceDocument_updated_by_account_id_fkey", "ComplianceDocument");
-        migrationBuilder.DropForeignKey("DocumentVersion_uploaded_by_account_id_fkey", "DocumentVersion");
-        migrationBuilder.DropForeignKey("DocumentReview_reviewed_by_account_id_fkey", "DocumentReview");
-        migrationBuilder.DropForeignKey("DocumentRequest_requested_by_account_id_fkey", "DocumentRequest");
-        migrationBuilder.DropForeignKey("AuthoritySubmission_submitted_by_account_id_fkey", "AuthoritySubmission");
+        migrationBuilder.DropForeignKey(name: "DossierRequirement_deleted_by_account_id_fkey", table: "DossierRequirement");
+        migrationBuilder.DropForeignKey(name: "ComplianceDocument_created_by_account_id_fkey", table: "ComplianceDocument");
+        migrationBuilder.DropForeignKey(name: "ComplianceDocument_updated_by_account_id_fkey", table: "ComplianceDocument");
+        migrationBuilder.DropForeignKey(name: "DocumentVersion_uploaded_by_account_id_fkey", table: "DocumentVersion");
+        migrationBuilder.DropForeignKey(name: "DocumentReview_reviewed_by_account_id_fkey", table: "DocumentReview");
+        migrationBuilder.DropForeignKey(name: "DocumentRequest_requested_by_account_id_fkey", table: "DocumentRequest");
+        migrationBuilder.DropForeignKey(name: "AuthoritySubmission_submitted_by_account_id_fkey", table: "AuthoritySubmission");
 
         migrationBuilder.DropTable("CatalogAuditLog");
 
