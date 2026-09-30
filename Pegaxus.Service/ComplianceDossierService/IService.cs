@@ -12,4 +12,10 @@ public interface IService
         Guid dossierId,
         Request.RecordAuthoritySubmissionRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<Response.AuthorityDecisionResponse> RecordAuthorityDecisionAsync(
+        Guid accountId,
+        Guid submissionId,
+        Request.RecordAuthorityDecisionRequest request,
+        CancellationToken cancellationToken = default);
 }

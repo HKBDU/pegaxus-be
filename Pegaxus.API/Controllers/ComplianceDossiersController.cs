@@ -53,6 +53,22 @@ public sealed class ComplianceDossiersController : ControllerBase
             HttpContext.TraceIdentifier));
     }
 
+    [HttpPatch("/api/v1/authority-submissions/{submissionId:guid}/decision")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> RecordAuthorityDecision(
+        Guid submissionId,
+        [FromForm] ComplianceDossierService.Request.RecordAuthorityDecisionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.RecordAuthorityDecisionAsync(
+            GetAccountId(), submissionId, request, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Authority decision recorded successfully for ComplianceDossier",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     private Guid GetAccountId()
     {
         var value = User.FindFirstValue(ClaimTypes.NameIdentifier)

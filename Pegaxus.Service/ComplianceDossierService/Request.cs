@@ -20,4 +20,23 @@ public class Request
 
         public string? DecisionNote { get; set; }
     }
+
+    public class RecordAuthorityDecisionRequest
+    {
+        public string Decision { get; set; } = string.Empty;
+
+        public string? PermitNumber { get; set; }
+
+        public DateOnly? PermitIssuedDate { get; set; }
+
+        public DateOnly? PermitExpiryDate { get; set; }
+
+        public IFormFile? DecisionFile { get; set; }
+
+        public string? DecisionNote { get; set; }
+
+        public string? RejectionReason { get; set; }
+
+        public DateOnly? RevisionDueDate { get; set; }
+    }
 }

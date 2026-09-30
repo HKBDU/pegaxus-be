@@ -78,4 +78,13 @@ public class Response
 
         public string DossierStatus { get; init; } = string.Empty;
     }
+
+    public class AuthorityDecisionResponse
+    {
+        public Guid AuthoritySubmissionId { get; init; }
+
+        public string SubmissionStatus { get; init; } = string.Empty;
+
+        public string DossierStatus { get; init; } = string.Empty;
+    }
 }
