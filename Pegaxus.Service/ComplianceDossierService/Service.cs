@@ -1121,6 +1121,218 @@ public sealed class Service : IService
         }
     }
 
+    public async Task<Response.CustomsClearanceProofFinalizeResponse> FinalizeCustomsClearanceProofAsync(
+        Guid accountId,
+        Guid proofId,
+        Request.FinalizeCustomsClearanceProofRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var action = request.Action.Trim().ToUpperInvariant();
+        if (action is not ("FINALIZE" or "REJECT_PROOF"))
+            throw new BadRequestException("Action must be FINALIZE or REJECT_PROOF");
+
+        var employee = await _db.Employees
+            .Where(item =>
+                item.AccountId == accountId &&
+                item.Role == EmployeeRole.TRANSPORT_SPECIALIST &&
+                item.IsActive &&
+                !item.IsDeleted &&
+                !item.Account.IsDeleted &&
+                item.Account.Status == AccountStatus.ACTIVE)
+            .Select(item => item.EmployeeId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (employee == Guid.Empty)
+            throw new ForbiddenException("Only an active Transport Specialist can verify customs proofs");
+
+        var proof = await _db.CustomsClearanceProofs
+            .Include(item => item.ComplianceDossier)
+                .ThenInclude(item => item.Transport)
+                    .ThenInclude(item => item.Booking)
+                        .ThenInclude(item => item.Customer)
+            .Include(item => item.SubmittedByEmployee)
+            .SingleOrDefaultAsync(item => item.CustomsClearanceProofId == proofId, cancellationToken);
+
+        if (proof is null)
+            throw new NotFoundException("CustomsClearanceProof not found", "CUSTOMS_CLEARANCE_PROOF_NOT_FOUND");
+
+        if (proof.IsFinalized)
+            throw new ConflictException(
+                "This customs proof is finalized and read-only",
+                "RECORD_LOCKED");
+
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var dossier = proof.ComplianceDossier;
+
+        if (action == "REJECT_PROOF")
+        {
+            if (string.IsNullOrWhiteSpace(request.RejectionReason))
+                throw new BadRequestException(
+                    "rejectionReason is required for REJECT_PROOF",
+                    "FIELD_REQUIRED_FOR_ACTION");
+
+            proof.Status = CustomsClearanceProofStatus.Rejected;
+            proof.RejectionReason = request.RejectionReason.Trim();
+            proof.UpdatedAt = now;
+            AddCustomsAudit(
+                proof,
+                accountId,
+                "CUSTOMS_PROOF_REJECTED",
+                $"Customs proof rejected: {proof.RejectionReason}",
+                now,
+                new { Action = action, proof.RejectionReason });
+            AddNotification(
+                proof.SubmittedByEmployee.AccountId,
+                dossier,
+                "Customs clearance proof rejected",
+                now,
+                NotificationPriority.HIGH,
+                "The customs proof was rejected. Please submit a new proof.");
+
+            await _db.SaveChangesAsync(cancellationToken);
+            return new Response.CustomsClearanceProofFinalizeResponse
+            {
+                CustomsClearanceProofId = proof.CustomsClearanceProofId,
+                Status = ToCustomsStatusName(proof.Status),
+                IsFinalized = false
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(request.MrnNumber) ||
+            string.IsNullOrWhiteSpace(request.CustomsLane) ||
+            string.IsNullOrWhiteSpace(request.Status))
+            throw new BadRequestException(
+                "mrnNumber, customsLane, and status are required for FINALIZE",
+                "FIELD_REQUIRED_FOR_ACTION");
+
+        var customsLane = ParseCustomsLane(request.CustomsLane);
+        if (customsLane is null)
+            throw new BadRequestException(
+                "mrnNumber, customsLane, and status are required for FINALIZE",
+                "FIELD_REQUIRED_FOR_ACTION");
+
+        var status = request.Status.Trim().ToUpperInvariant() switch
+        {
+            "CLEARED" => CustomsClearanceProofStatus.Cleared,
+            "HELD" => CustomsClearanceProofStatus.Held,
+            "REJECTED" => CustomsClearanceProofStatus.Rejected,
+            _ => (CustomsClearanceProofStatus?)null
+        };
+
+        if (status is null)
+            throw new BadRequestException("Status must be CLEARED, HELD, or REJECTED");
+
+        if (status == CustomsClearanceProofStatus.Rejected &&
+            string.IsNullOrWhiteSpace(request.RejectionReason))
+            throw new BadRequestException(
+                "rejectionReason is required when status is REJECTED",
+                "FIELD_REQUIRED_FOR_ACTION");
+
+        proof.MrnNumber = request.MrnNumber.Trim();
+        proof.CustomsLane = customsLane;
+        proof.AtaCarnetExpiryDate = request.AtaCarnetExpiryDate;
+        proof.Status = status.Value;
+        proof.VerificationNote = request.VerificationNote?.Trim();
+        proof.RejectionReason = request.RejectionReason?.Trim();
+        proof.VerifiedByEmployeeId = employee;
+        proof.VerifiedAt = now;
+        proof.IsFinalized = true;
+        proof.FinalizedAt = now;
+        proof.UpdatedAt = now;
+
+        AddCustomsAudit(
+            proof,
+            accountId,
+            "CUSTOMS_PROOF_FINALIZED",
+            $"Customs proof finalized as {status.Value}",
+            now,
+            new
+            {
+                Action = action,
+                Status = status.Value.ToString(),
+                proof.MrnNumber,
+                CustomsLane = customsLane.ToString(),
+                proof.AtaCarnetExpiryDate
+            });
+
+        var targetRoles = status == CustomsClearanceProofStatus.Held
+            ? new[] { EmployeeRole.FLEET_ROUTE_COORDINATOR }
+            : new[] { EmployeeRole.DRIVER, EmployeeRole.ESCORT, EmployeeRole.LOGISTICS_MANAGER, EmployeeRole.FLEET_ROUTE_COORDINATOR };
+        var accountIds = await _db.Employees
+            .Where(item =>
+                targetRoles.Contains(item.Role) &&
+                item.IsActive &&
+                !item.IsDeleted &&
+                !item.Account.IsDeleted &&
+                item.Account.Status == AccountStatus.ACTIVE &&
+                (item.Role == EmployeeRole.LOGISTICS_MANAGER ||
+                    item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR ||
+                    item.EmployeeTransportPlans.Any(plan => plan.TransportPlan.TransportId == dossier.TransportId)))
+            .Select(item => item.AccountId)
+            .ToListAsync(cancellationToken);
+
+        var priority = status == CustomsClearanceProofStatus.Rejected
+            ? NotificationPriority.URGENT
+            : status == CustomsClearanceProofStatus.Held
+                ? NotificationPriority.HIGH
+                : NotificationPriority.NORMAL;
+        var title = status == CustomsClearanceProofStatus.Cleared
+            ? "Customs clearance verified"
+            : status == CustomsClearanceProofStatus.Held
+                ? "Customs clearance held"
+                : "Customs clearance rejected";
+        var message = status == CustomsClearanceProofStatus.Cleared
+            ? "Customs clearance was officially verified."
+            : status == CustomsClearanceProofStatus.Held
+                ? "Customs is holding the transport for inspection."
+                : "Customs clearance was rejected. Immediate action is required.";
+
+        foreach (var accountIdToNotify in accountIds.Distinct())
+            AddNotification(accountIdToNotify, dossier, title, now, priority, message);
+
+        if (status == CustomsClearanceProofStatus.Rejected)
+        {
+            AddNotification(
+                dossier.Transport.Booking.Customer.AccountId,
+                dossier,
+                title,
+                now,
+                NotificationPriority.URGENT,
+                message);
+        }
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return new Response.CustomsClearanceProofFinalizeResponse
+        {
+            CustomsClearanceProofId = proof.CustomsClearanceProofId,
+            Status = ToCustomsStatusName(proof.Status),
+            IsFinalized = proof.IsFinalized
+        };
+    }
+
+    private void AddCustomsAudit(
+        CustomsClearanceProof proof,
+        Guid accountId,
+        string actionType,
+        string summary,
+        DateTime now,
+        object details)
+    {
+        _db.AuditDossiers.Add(new AuditDossier
+        {
+            AuditDossierId = Guid.NewGuid(),
+            ComplianceDossierId = proof.ComplianceDossierId,
+            ActionType = actionType,
+            TargetEntity = nameof(CustomsClearanceProof),
+            TargetId = proof.CustomsClearanceProofId,
+            ActorAccountId = accountId,
+            Summary = summary,
+            Details = JsonSerializer.SerializeToDocument(details),
+            Visibility = AuditVisibility.Internal,
+            CreatedAt = now
+        });
+    }
+
     private static void ValidateCustomsProofRequest(Request.SubmitCustomsClearanceProofRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.CustomsPortName))

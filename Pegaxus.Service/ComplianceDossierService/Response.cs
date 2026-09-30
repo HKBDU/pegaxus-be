@@ -229,4 +229,13 @@ public class Response
 
         public string FullName { get; init; } = string.Empty;
     }
+
+    public class CustomsClearanceProofFinalizeResponse
+    {
+        public Guid CustomsClearanceProofId { get; init; }
+
+        public string Status { get; init; } = string.Empty;
+
+        public bool IsFinalized { get; init; }
+    }
 }

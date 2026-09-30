@@ -46,4 +46,10 @@ public interface IService
         Guid accountId,
         Guid proofId,
         CancellationToken cancellationToken = default);
+
+    Task<Response.CustomsClearanceProofFinalizeResponse> FinalizeCustomsClearanceProofAsync(
+        Guid accountId,
+        Guid proofId,
+        Request.FinalizeCustomsClearanceProofRequest request,
+        CancellationToken cancellationToken = default);
 }

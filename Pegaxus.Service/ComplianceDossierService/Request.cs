@@ -88,4 +88,21 @@ public class Request
 
         public List<IFormFile> Files { get; set; } = [];
     }
+
+    public class FinalizeCustomsClearanceProofRequest
+    {
+        public string Action { get; set; } = string.Empty;
+
+        public string? MrnNumber { get; set; }
+
+        public string? CustomsLane { get; set; }
+
+        public DateOnly? AtaCarnetExpiryDate { get; set; }
+
+        public string? Status { get; set; }
+
+        public string? VerificationNote { get; set; }
+
+        public string? RejectionReason { get; set; }
+    }
 }

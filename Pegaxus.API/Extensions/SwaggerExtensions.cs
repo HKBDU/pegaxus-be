@@ -83,8 +83,11 @@ public static class SwaggerExtensions
             if (path.StartsWith("api/v1/quarantine-proofs/") && path.EndsWith("/decision") == false)
                 return ("Xem chi tiết bằng chứng kiểm dịch", "Xem trạng thái, file bằng chứng và danh sách ngựa cần đối chiếu của một QuarantineProof.");
 
-            if (path.StartsWith("api/v1/customs-clearance-proofs/"))
+            if (path.StartsWith("api/v1/customs-clearance-proofs/") && !path.EndsWith("/finalize"))
                 return ("Xem chi tiết bằng chứng hải quan", "Xem trạng thái, file bằng chứng và thông tin ATA Carnet của một CustomsClearanceProof.");
+
+            if (path.EndsWith("/finalize"))
+                return ("Chốt kết quả thông quan", "Transport Specialist xác minh MRN, phân luồng hải quan rồi chốt CLEARED, HELD hoặc REJECTED; cũng có thể từ chối proof để Driver nộp lại.");
 
             if (path.EndsWith("/finalize"))
                 return ("Chốt kết quả kiểm dịch", "Transport Specialist đối chiếu 100% mã microchip rồi chốt PASSED, PASSED_WITH_CONDITIONS hoặc FAILED; cũng có thể từ chối bằng chứng để Driver hoặc Escort nộp lại.");
