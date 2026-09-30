@@ -566,7 +566,7 @@ public sealed class Service : IService
         {
             QuarantineProofId = proof.QuarantineProofId,
             ComplianceDossierId = proof.ComplianceDossierId,
-            Status = proof.Status.ToString().ToUpperInvariant(),
+            Status = ToQuarantineStatusName(proof.Status),
             BcpName = proof.BcpName,
             LocationId = proof.LocationId,
             InspectionAt = ToDateTimeOffset(proof.InspectionAt),
@@ -688,7 +688,7 @@ public sealed class Service : IService
             return new Response.QuarantineProofFinalizeResponse
             {
                 QuarantineProofId = proof.QuarantineProofId,
-                Status = proof.Status.ToString().ToUpperInvariant(),
+                Status = ToQuarantineStatusName(proof.Status),
                 IsFinalized = false
             };
         }
@@ -794,8 +794,200 @@ public sealed class Service : IService
         return new Response.QuarantineProofFinalizeResponse
         {
             QuarantineProofId = proof.QuarantineProofId,
-            Status = proof.Status.ToString().ToUpperInvariant(),
+            Status = ToQuarantineStatusName(proof.Status),
             IsFinalized = proof.IsFinalized
+        };
+    }
+
+    public async Task<Guid> SubmitCustomsClearanceProofAsync(
+        Guid accountId,
+        Guid dossierId,
+        Request.SubmitCustomsClearanceProofRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateCustomsProofRequest(request);
+
+        var dossier = await _db.ComplianceDossiers
+            .Include(item => item.Transport)
+                .ThenInclude(item => item.Booking)
+                    .ThenInclude(item => item.Customer)
+            .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken);
+
+        if (dossier is null)
+            throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
+
+        if (dossier.Status != ComplianceDossierStatus.APPROVED)
+            throw new ConflictException(
+                "Customs proof can only be submitted when the ComplianceDossier is APPROVED",
+                "DOSSIER_NOT_APPROVED");
+
+        var latestQuarantineStatus = await _db.QuarantineProofs
+            .Where(item => item.ComplianceDossierId == dossierId)
+            .OrderByDescending(item => item.SubmittedAt)
+            .ThenByDescending(item => item.CreatedAt)
+            .Select(item => (QuarantineProofStatus?)item.Status)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (latestQuarantineStatus is not (QuarantineProofStatus.Passed or QuarantineProofStatus.PassedWithConditions))
+            throw new ConflictException(
+                "Customs proof can only be submitted after quarantine has passed",
+                "QUARANTINE_NOT_PASSED");
+
+        var driverId = await _db.Employees
+            .Where(employee =>
+                employee.AccountId == accountId &&
+                employee.Role == EmployeeRole.DRIVER &&
+                employee.IsActive &&
+                !employee.IsDeleted &&
+                !employee.Account.IsDeleted &&
+                employee.Account.Status == AccountStatus.ACTIVE &&
+                employee.EmployeeTransportPlans.Any(item =>
+                    item.TransportPlan.TransportId == dossier.TransportId))
+            .Select(employee => (Guid?)employee.EmployeeId)
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (driverId is null)
+            throw new ForbiddenException("You are not assigned to this transport", "NOT_ASSIGNED_TO_TRIP");
+
+        var customsLane = ParseCustomsLane(request.CustomsLane);
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var proof = new CustomsClearanceProof
+        {
+            CustomsClearanceProofId = Guid.NewGuid(),
+            ComplianceDossierId = dossierId,
+            Status = request.IsHeld ? CustomsClearanceProofStatus.Held : CustomsClearanceProofStatus.PendingVerification,
+            CustomsLane = customsLane,
+            SubmittedByEmployeeId = driverId.Value,
+            LocationId = request.LocationId,
+            CustomsPortName = request.CustomsPortName.Trim(),
+            MrnNumber = request.MrnNumber?.Trim(),
+            SubmittedNote = request.QuickNote?.Trim(),
+            SubmittedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        for (var index = 0; index < request.Files.Count; index++)
+        {
+            var file = request.Files[index];
+            var (fileUrl, _) = await _mediaService.UploadFileAsync(file);
+            proof.Attachments.Add(new ProofAttachment
+            {
+                ProofAttachmentId = Guid.NewGuid(),
+                CustomsClearanceProofId = proof.CustomsClearanceProofId,
+                FileName = file.FileName,
+                FileUrl = fileUrl,
+                MimeType = file.ContentType,
+                FileSizeBytes = file.Length,
+                SortOrder = index + 1,
+                CreatedAt = now
+            });
+        }
+
+        _db.CustomsClearanceProofs.Add(proof);
+
+        var roles = request.IsHeld
+            ? new[] { EmployeeRole.TRANSPORT_SPECIALIST, EmployeeRole.FLEET_ROUTE_COORDINATOR }
+            : new[] { EmployeeRole.TRANSPORT_SPECIALIST };
+        var accountIds = await _db.Employees
+            .Where(employee => roles.Contains(employee.Role) && employee.IsActive && !employee.IsDeleted &&
+                !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE)
+            .Select(employee => employee.AccountId)
+            .ToListAsync(cancellationToken);
+        var title = request.IsHeld ? "Customs clearance proof held" : "Customs clearance proof submitted";
+        var message = request.IsHeld
+            ? "Customs is holding the transport for additional inspection."
+            : "A customs clearance proof is awaiting TS verification.";
+        var priority = request.IsHeld ? NotificationPriority.URGENT : NotificationPriority.NORMAL;
+
+        foreach (var accountIdToNotify in accountIds.Distinct())
+            AddNotification(accountIdToNotify, dossier, title, now, priority, message);
+
+        await _db.SaveChangesAsync(cancellationToken);
+        return proof.CustomsClearanceProofId;
+    }
+
+    public async Task<Response.CustomsClearanceProofResponse> GetCustomsClearanceProofAsync(
+        Guid accountId,
+        Guid proofId,
+        CancellationToken cancellationToken = default)
+    {
+        var proof = await _db.CustomsClearanceProofs
+            .AsNoTracking()
+            .Include(item => item.ComplianceDossier)
+                .ThenInclude(item => item.Transport)
+                    .ThenInclude(item => item.Booking)
+                        .ThenInclude(item => item.Customer)
+            .Include(item => item.SubmittedByEmployee)
+            .Include(item => item.VerifiedByEmployee)
+            .Include(item => item.Attachments)
+            .Include(item => item.ComplianceDossier)
+                .ThenInclude(item => item.DossierRequirements)
+                    .ThenInclude(item => item.ComplianceRequirement)
+            .Include(item => item.ComplianceDossier)
+                .ThenInclude(item => item.DossierRequirements)
+                    .ThenInclude(item => item.ComplianceDocument)
+            .SingleOrDefaultAsync(item => item.CustomsClearanceProofId == proofId, cancellationToken);
+
+        if (proof is null)
+            throw new NotFoundException("CustomsClearanceProof not found", "CUSTOMS_CLEARANCE_PROOF_NOT_FOUND");
+
+        var isEmployee = await _db.Employees.AnyAsync(employee => employee.AccountId == accountId &&
+            employee.IsActive && !employee.IsDeleted && !employee.Account.IsDeleted &&
+            employee.Account.Status == AccountStatus.ACTIVE, cancellationToken);
+        var isOwner = proof.ComplianceDossier.Transport.Booking.Customer.AccountId == accountId;
+        if (!isEmployee && !isOwner)
+            throw new ForbiddenException("You do not have permission to view this CustomsClearanceProof");
+
+        var ataDocument = proof.ComplianceDossier.DossierRequirements
+            .Where(item => !item.IsDeleted && item.ComplianceDocument is not null &&
+                (item.ComplianceRequirement.RequirementCode.Contains("ATA", StringComparison.OrdinalIgnoreCase) ||
+                 item.ComplianceRequirement.RequirementName.Contains("ATA", StringComparison.OrdinalIgnoreCase)))
+            .Select(item => item.ComplianceDocument!)
+            .FirstOrDefault();
+
+        return new Response.CustomsClearanceProofResponse
+        {
+            CustomsClearanceProofId = proof.CustomsClearanceProofId,
+            ComplianceDossierId = proof.ComplianceDossierId,
+            Status = ToCustomsStatusName(proof.Status),
+            CustomsPortName = proof.CustomsPortName,
+            LocationId = proof.LocationId,
+            MrnNumber = proof.MrnNumber,
+            CustomsLane = proof.CustomsLane is null ? null : ToCustomsLaneName(proof.CustomsLane.Value),
+            SubmittedNote = proof.SubmittedNote,
+            AtaCarnetExpiryDate = proof.AtaCarnetExpiryDate,
+            AtaCarnet = ataDocument is null ? null : new Response.AtaCarnetResponse
+            {
+                ComplianceDocumentId = ataDocument.ComplianceDocumentId,
+                ExpiryDate = ataDocument.ExpiryDate,
+                Status = ataDocument.Status.ToString().ToUpperInvariant()
+            },
+            ClearanceAt = ToDateTimeOffset(proof.ClearanceAt),
+            SubmittedBy = new Response.CustomsEmployeeResponse
+            {
+                EmployeeId = proof.SubmittedByEmployeeId,
+                FullName = proof.SubmittedByEmployee.FullName
+            },
+            SubmittedAt = ToDateTimeOffset(proof.SubmittedAt)!.Value,
+            VerifiedBy = proof.VerifiedByEmployee is null ? null : new Response.CustomsEmployeeResponse
+            {
+                EmployeeId = proof.VerifiedByEmployeeId!.Value,
+                FullName = proof.VerifiedByEmployee.FullName
+            },
+            VerifiedAt = ToDateTimeOffset(proof.VerifiedAt),
+            VerificationNote = proof.VerificationNote,
+            RejectionReason = proof.RejectionReason,
+            IsFinalized = proof.IsFinalized,
+            FinalizedAt = ToDateTimeOffset(proof.FinalizedAt),
+            Files = proof.Attachments.OrderBy(item => item.SortOrder).Select(item => new Response.ProofFileResponse
+            {
+                FileName = item.FileName,
+                FileUrl = item.FileUrl,
+                MimeType = item.MimeType,
+                FileSizeBytes = item.FileSizeBytes,
+                SortOrder = item.SortOrder
+            }).ToList()
         };
     }
 
@@ -928,6 +1120,84 @@ public sealed class Service : IService
                     "INVALID_FILE_TYPE");
         }
     }
+
+    private static void ValidateCustomsProofRequest(Request.SubmitCustomsClearanceProofRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.CustomsPortName))
+            throw new BadRequestException("Customs port name is required");
+
+        if (request.IsHeld && string.IsNullOrWhiteSpace(request.QuickNote))
+            throw new BadRequestException(
+                "quickNote is required when isHeld is true",
+                "QUICK_NOTE_REQUIRED");
+
+        if (request.Files.Count == 0)
+            throw new BadRequestException(
+                "Image unclear or missing customs stamp. Please retake photo",
+                "EVIDENCE_UNCLEAR");
+
+        const long maxFileSize = 5 * 1024 * 1024;
+        foreach (var file in request.Files)
+        {
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var validExtension = extension is ".jpg" or ".jpeg" or ".png";
+            var validContentType = file.ContentType is "image/jpeg" or "image/png";
+
+            if (file.Length > maxFileSize)
+                throw new Pegaxus.Service.Exceptions.Exceptions(
+                    "Proof image must not exceed 5 MB",
+                    413,
+                    "FILE_TOO_LARGE");
+
+            if (!validExtension || !validContentType)
+                throw new BadRequestException(
+                    "Proof file must be JPG, JPEG, or PNG",
+                    "INVALID_FILE_TYPE");
+        }
+    }
+
+    private static CustomsLane? ParseCustomsLane(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return null;
+
+        return value.Trim().ToUpperInvariant() switch
+        {
+            "GREEN_LANE" => CustomsLane.GreenLane,
+            "ORANGE_LANE" => CustomsLane.OrangeLane,
+            "RED_LANE" => CustomsLane.RedLane,
+            _ => throw new BadRequestException(
+                "Customs lane must be GREEN_LANE, ORANGE_LANE, or RED_LANE")
+        };
+    }
+
+    private static string ToQuarantineStatusName(QuarantineProofStatus status) => status switch
+    {
+        QuarantineProofStatus.PendingVerification => "PENDING_VERIFICATION",
+        QuarantineProofStatus.Passed => "PASSED",
+        QuarantineProofStatus.PassedWithConditions => "PASSED_WITH_CONDITIONS",
+        QuarantineProofStatus.Holdback => "HOLDBACK",
+        QuarantineProofStatus.Failed => "FAILED",
+        QuarantineProofStatus.Rejected => "REJECTED",
+        _ => status.ToString().ToUpperInvariant()
+    };
+
+    private static string ToCustomsStatusName(CustomsClearanceProofStatus status) => status switch
+    {
+        CustomsClearanceProofStatus.PendingVerification => "PENDING_VERIFICATION",
+        CustomsClearanceProofStatus.Cleared => "CLEARED",
+        CustomsClearanceProofStatus.Held => "HELD",
+        CustomsClearanceProofStatus.Rejected => "REJECTED",
+        _ => status.ToString().ToUpperInvariant()
+    };
+
+    private static string ToCustomsLaneName(CustomsLane lane) => lane switch
+    {
+        CustomsLane.GreenLane => "GREEN_LANE",
+        CustomsLane.OrangeLane => "ORANGE_LANE",
+        CustomsLane.RedLane => "RED_LANE",
+        _ => lane.ToString().ToUpperInvariant()
+    };
 
     private sealed class MicrochipChecklistItem
     {

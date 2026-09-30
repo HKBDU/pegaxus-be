@@ -77,8 +77,14 @@ public static class SwaggerExtensions
             if (path.EndsWith("/quarantine-proofs"))
                 return ("Nộp nhanh bằng chứng kiểm dịch BCP", "Driver hoặc Escort được phân công chuyến nộp một hoặc nhiều ảnh bằng chứng tại BCP bằng multipart/form-data. Hệ thống tạo QuarantineProof chờ TS xác minh và không thay đổi trạng thái ComplianceDossier.");
 
+            if (path.EndsWith("/customs-clearance-proofs"))
+                return ("Nộp nhanh bằng chứng thông quan", "Driver được phân công chuyến nộp một hoặc nhiều ảnh bằng chứng hải quan bằng multipart/form-data. Hệ thống tạo CustomsClearanceProof chờ TS xác minh và không thay đổi trạng thái ComplianceDossier.");
+
             if (path.StartsWith("api/v1/quarantine-proofs/") && path.EndsWith("/decision") == false)
                 return ("Xem chi tiết bằng chứng kiểm dịch", "Xem trạng thái, file bằng chứng và danh sách ngựa cần đối chiếu của một QuarantineProof.");
+
+            if (path.StartsWith("api/v1/customs-clearance-proofs/"))
+                return ("Xem chi tiết bằng chứng hải quan", "Xem trạng thái, file bằng chứng và thông tin ATA Carnet của một CustomsClearanceProof.");
 
             if (path.EndsWith("/finalize"))
                 return ("Chốt kết quả kiểm dịch", "Transport Specialist đối chiếu 100% mã microchip rồi chốt PASSED, PASSED_WITH_CONDITIONS hoặc FAILED; cũng có thể từ chối bằng chứng để Driver hoặc Escort nộp lại.");

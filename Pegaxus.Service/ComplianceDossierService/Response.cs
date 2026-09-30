@@ -170,4 +170,63 @@ public class Response
 
         public bool IsFinalized { get; init; }
     }
+
+    public class CustomsClearanceProofResponse
+    {
+        public Guid CustomsClearanceProofId { get; init; }
+
+        public Guid ComplianceDossierId { get; init; }
+
+        public string Status { get; init; } = string.Empty;
+
+        public string CustomsPortName { get; init; } = string.Empty;
+
+        public Guid? LocationId { get; init; }
+
+        public string? MrnNumber { get; init; }
+
+        public string? CustomsLane { get; init; }
+
+        public string? SubmittedNote { get; init; }
+
+        public DateOnly? AtaCarnetExpiryDate { get; init; }
+
+        public AtaCarnetResponse? AtaCarnet { get; init; }
+
+        public DateTimeOffset? ClearanceAt { get; init; }
+
+        public CustomsEmployeeResponse SubmittedBy { get; init; } = null!;
+
+        public DateTimeOffset SubmittedAt { get; init; }
+
+        public CustomsEmployeeResponse? VerifiedBy { get; init; }
+
+        public DateTimeOffset? VerifiedAt { get; init; }
+
+        public string? VerificationNote { get; init; }
+
+        public string? RejectionReason { get; init; }
+
+        public bool IsFinalized { get; init; }
+
+        public DateTimeOffset? FinalizedAt { get; init; }
+
+        public IReadOnlyList<ProofFileResponse> Files { get; init; } = [];
+    }
+
+    public class AtaCarnetResponse
+    {
+        public Guid ComplianceDocumentId { get; init; }
+
+        public DateOnly? ExpiryDate { get; init; }
+
+        public string Status { get; init; } = string.Empty;
+    }
+
+    public class CustomsEmployeeResponse
+    {
+        public Guid EmployeeId { get; init; }
+
+        public string FullName { get; init; } = string.Empty;
+    }
 }

@@ -35,4 +35,15 @@ public interface IService
         Guid proofId,
         Request.FinalizeQuarantineProofRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<Guid> SubmitCustomsClearanceProofAsync(
+        Guid accountId,
+        Guid dossierId,
+        Request.SubmitCustomsClearanceProofRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<Response.CustomsClearanceProofResponse> GetCustomsClearanceProofAsync(
+        Guid accountId,
+        Guid proofId,
+        CancellationToken cancellationToken = default);
 }

@@ -120,6 +120,39 @@ public sealed class ComplianceDossiersController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    [HttpPost("/api/v1/compliance-dossiers/{dossierId:guid}/customs-clearance-proofs")]
+    [Authorize(Roles = "Driver")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> SubmitCustomsClearanceProof(
+        Guid dossierId,
+        [FromForm] ComplianceDossierService.Request.SubmitCustomsClearanceProofRequest request,
+        CancellationToken cancellationToken)
+    {
+        var proofId = await _service.SubmitCustomsClearanceProofAsync(
+            GetAccountId(), dossierId, request, cancellationToken);
+
+        return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            new { CustomsClearanceProofId = proofId },
+            "Customs proof submitted successfully. Awaiting TS Verification.",
+            StatusCodes.Status201Created,
+            HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("/api/v1/customs-clearance-proofs/{proofId:guid}")]
+    [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
+    public async Task<IActionResult> GetCustomsClearanceProof(
+        Guid proofId,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetCustomsClearanceProofAsync(
+            GetAccountId(), proofId, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "CustomsClearanceProof retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     private Guid GetAccountId()
     {
         var value = User.FindFirstValue(ClaimTypes.NameIdentifier)

@@ -71,4 +71,21 @@ public class Request
 
         public string? RejectionReason { get; set; }
     }
+
+    public class SubmitCustomsClearanceProofRequest
+    {
+        public string CustomsPortName { get; set; } = string.Empty;
+
+        public Guid? LocationId { get; set; }
+
+        public string? MrnNumber { get; set; }
+
+        public string? CustomsLane { get; set; }
+
+        public bool IsHeld { get; set; }
+
+        public string? QuickNote { get; set; }
+
+        public List<IFormFile> Files { get; set; } = [];
+    }
 }
