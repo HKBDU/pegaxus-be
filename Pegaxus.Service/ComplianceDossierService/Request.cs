@@ -39,4 +39,19 @@ public class Request
 
         public DateOnly? RevisionDueDate { get; set; }
     }
+
+    public class SubmitQuarantineProofRequest
+    {
+        public string BcpName { get; set; } = string.Empty;
+
+        public Guid? LocationId { get; set; }
+
+        public DateTimeOffset? InspectionAt { get; set; }
+
+        public bool IsHoldback { get; set; }
+
+        public string? QuickNote { get; set; }
+
+        public List<IFormFile> Files { get; set; } = [];
+    }
 }

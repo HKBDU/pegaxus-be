@@ -18,4 +18,15 @@ public interface IService
         Guid submissionId,
         Request.RecordAuthorityDecisionRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<Guid> SubmitQuarantineProofAsync(
+        Guid accountId,
+        Guid dossierId,
+        Request.SubmitQuarantineProofRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<Response.QuarantineProofResponse> GetQuarantineProofAsync(
+        Guid accountId,
+        Guid proofId,
+        CancellationToken cancellationToken = default);
 }

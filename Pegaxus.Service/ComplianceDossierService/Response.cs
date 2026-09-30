@@ -87,4 +87,78 @@ public class Response
 
         public string DossierStatus { get; init; } = string.Empty;
     }
+
+    public class QuarantineProofResponse
+    {
+        public Guid QuarantineProofId { get; init; }
+
+        public Guid ComplianceDossierId { get; init; }
+
+        public string Status { get; init; } = string.Empty;
+
+        public string BcpName { get; init; } = string.Empty;
+
+        public Guid? LocationId { get; init; }
+
+        public DateTimeOffset? InspectionAt { get; init; }
+
+        public string? SubmittedNote { get; init; }
+
+        public QuarantineEmployeeResponse SubmittedBy { get; init; } = null!;
+
+        public DateTimeOffset SubmittedAt { get; init; }
+
+        public string? OfficialVeterinarianName { get; init; }
+
+        public string? BcpReceiptNumber { get; init; }
+
+        public string? Conditions { get; init; }
+
+        public object? MicrochipChecklist { get; init; }
+
+        public QuarantineEmployeeResponse? VerifiedBy { get; init; }
+
+        public DateTimeOffset? VerifiedAt { get; init; }
+
+        public string? VerificationNote { get; init; }
+
+        public string? RejectionReason { get; init; }
+
+        public bool IsFinalized { get; init; }
+
+        public DateTimeOffset? FinalizedAt { get; init; }
+
+        public IReadOnlyList<ExpectedHorseResponse> ExpectedHorses { get; init; } = [];
+
+        public IReadOnlyList<ProofFileResponse> Files { get; init; } = [];
+    }
+
+    public class QuarantineEmployeeResponse
+    {
+        public Guid EmployeeId { get; init; }
+
+        public string FullName { get; init; } = string.Empty;
+    }
+
+    public class ExpectedHorseResponse
+    {
+        public Guid HorseId { get; init; }
+
+        public string HorseName { get; init; } = string.Empty;
+
+        public string? MicrochipNumber { get; init; }
+    }
+
+    public class ProofFileResponse
+    {
+        public string FileName { get; init; } = string.Empty;
+
+        public string FileUrl { get; init; } = string.Empty;
+
+        public string? MimeType { get; init; }
+
+        public long? FileSizeBytes { get; init; }
+
+        public int SortOrder { get; init; }
+    }
 }

@@ -10,7 +10,7 @@ using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
 namespace Pegaxus.API.Controllers;
 
 [ApiController]
-[Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+[Authorize]
 [Route("api/v1/compliance-dossiers")]
 public sealed class ComplianceDossiersController : ControllerBase
 {
@@ -37,6 +37,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     }
 
     [HttpPost("{dossierId:guid}/authority-submissions")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> RecordAuthoritySubmission(
         Guid dossierId,
@@ -66,6 +67,39 @@ public sealed class ComplianceDossiersController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(
             response,
             "Authority decision recorded successfully for ComplianceDossier",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpPost("/api/v1/compliance-dossiers/{dossierId:guid}/quarantine-proofs")]
+    [Authorize(Roles = "Driver,Escort")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> SubmitQuarantineProof(
+        Guid dossierId,
+        [FromForm] ComplianceDossierService.Request.SubmitQuarantineProofRequest request,
+        CancellationToken cancellationToken)
+    {
+        var proofId = await _service.SubmitQuarantineProofAsync(
+            GetAccountId(), dossierId, request, cancellationToken);
+
+        return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            new { QuarantineProofId = proofId },
+            "Quarantine proof submitted successfully. Awaiting TS Verification.",
+            StatusCodes.Status201Created,
+            HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("/api/v1/quarantine-proofs/{proofId:guid}")]
+    [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
+    public async Task<IActionResult> GetQuarantineProof(
+        Guid proofId,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetQuarantineProofAsync(
+            GetAccountId(), proofId, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "QuarantineProof retrieved successfully",
             traceId: HttpContext.TraceIdentifier));
     }
 

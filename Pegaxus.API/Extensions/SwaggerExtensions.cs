@@ -74,6 +74,12 @@ public static class SwaggerExtensions
             if (path.StartsWith("api/v1/bookings"))
                 return BookingDocumentation(method, path);
 
+            if (path.EndsWith("/quarantine-proofs"))
+                return ("Nộp nhanh bằng chứng kiểm dịch BCP", "Driver hoặc Escort được phân công chuyến nộp một hoặc nhiều ảnh bằng chứng tại BCP bằng multipart/form-data. Hệ thống tạo QuarantineProof chờ TS xác minh và không thay đổi trạng thái ComplianceDossier.");
+
+            if (path.StartsWith("api/v1/quarantine-proofs/") && path.EndsWith("/decision") == false)
+                return ("Xem chi tiết bằng chứng kiểm dịch", "Xem trạng thái, file bằng chứng và danh sách ngựa cần đối chiếu của một QuarantineProof.");
+
             if (path.Contains("api/v1/authority-submissions/") && path.EndsWith("/decision"))
                 return ("Cập nhật kết quả xét duyệt hồ sơ", "Transport Specialist cập nhật kết quả APPROVED, REJECTED hoặc RETURNED cho lần nộp hồ sơ bằng multipart/form-data. File quyết định là bắt buộc; hồ sơ được cập nhật trạng thái theo kết quả và các lần nộp bắt buộc còn lại.");
 

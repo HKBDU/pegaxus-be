@@ -421,6 +421,198 @@ public sealed class Service : IService
         };
     }
 
+    public async Task<Guid> SubmitQuarantineProofAsync(
+        Guid accountId,
+        Guid dossierId,
+        Request.SubmitQuarantineProofRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateQuarantineProofRequest(request);
+
+        var dossier = await _db.ComplianceDossiers
+            .Include(item => item.Transport)
+                .ThenInclude(item => item.Booking)
+                    .ThenInclude(item => item.BookingHorses)
+                        .ThenInclude(item => item.Horse)
+            .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken);
+
+        if (dossier is null)
+            throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
+
+        if (dossier.Status != ComplianceDossierStatus.APPROVED)
+            throw new ConflictException(
+                "Quarantine proof can only be submitted when the ComplianceDossier is APPROVED",
+                "DOSSIER_NOT_APPROVED");
+
+        var assignedEmployee = await _db.Employees
+            .Where(employee =>
+                employee.AccountId == accountId &&
+                (employee.Role == EmployeeRole.DRIVER || employee.Role == EmployeeRole.ESCORT) &&
+                employee.IsActive &&
+                !employee.IsDeleted &&
+                !employee.Account.IsDeleted &&
+                employee.Account.Status == AccountStatus.ACTIVE &&
+                employee.EmployeeTransportPlans.Any(item =>
+                    item.TransportPlan.TransportId == dossier.TransportId))
+            .Select(employee => new { employee.EmployeeId, employee.FullName })
+            .SingleOrDefaultAsync(cancellationToken);
+
+        if (assignedEmployee is null)
+            throw new ForbiddenException(
+                "You are not assigned to this transport",
+                "NOT_ASSIGNED_TO_TRIP");
+
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var proof = new QuarantineProof
+        {
+            QuarantineProofId = Guid.NewGuid(),
+            ComplianceDossierId = dossierId,
+            Status = request.IsHoldback
+                ? QuarantineProofStatus.Holdback
+                : QuarantineProofStatus.PendingVerification,
+            SubmittedByEmployeeId = assignedEmployee.EmployeeId,
+            LocationId = request.LocationId,
+            BcpName = request.BcpName.Trim(),
+            SubmittedNote = request.QuickNote?.Trim(),
+            InspectionAt = request.InspectionAt is null
+                ? null
+                : DateTime.SpecifyKind(request.InspectionAt.Value.UtcDateTime, DateTimeKind.Unspecified),
+            SubmittedAt = now,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        for (var index = 0; index < request.Files.Count; index++)
+        {
+            var file = request.Files[index];
+            var (fileUrl, _) = await _mediaService.UploadFileAsync(file);
+            proof.Attachments.Add(new ProofAttachment
+            {
+                ProofAttachmentId = Guid.NewGuid(),
+                FileName = file.FileName,
+                FileUrl = fileUrl,
+                MimeType = file.ContentType,
+                FileSizeBytes = file.Length,
+                SortOrder = index + 1,
+                CreatedAt = now
+            });
+        }
+
+        _db.QuarantineProofs.Add(proof);
+
+        var tsAccountIds = await _db.Employees
+            .Where(employee =>
+                employee.Role == EmployeeRole.TRANSPORT_SPECIALIST &&
+                employee.IsActive &&
+                !employee.IsDeleted &&
+                !employee.Account.IsDeleted &&
+                employee.Account.Status == AccountStatus.ACTIVE)
+            .Select(employee => employee.AccountId)
+            .ToListAsync(cancellationToken);
+
+        var title = request.IsHoldback
+            ? "BCP quarantine proof holdback reported"
+            : "BCP quarantine proof submitted";
+        var message = request.IsHoldback
+            ? "A BCP is holding the transport or horse for additional inspection."
+            : "A BCP quarantine proof is awaiting TS verification.";
+
+        foreach (var tsAccountId in tsAccountIds)
+            AddNotification(tsAccountId, dossier, title, now, request.IsHoldback ? NotificationPriority.URGENT : NotificationPriority.NORMAL, message);
+
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return proof.QuarantineProofId;
+    }
+
+    public async Task<Response.QuarantineProofResponse> GetQuarantineProofAsync(
+        Guid accountId,
+        Guid proofId,
+        CancellationToken cancellationToken = default)
+    {
+        var proof = await _db.QuarantineProofs
+            .AsNoTracking()
+            .Include(item => item.ComplianceDossier)
+                .ThenInclude(item => item.Transport)
+                    .ThenInclude(item => item.Booking)
+                        .ThenInclude(item => item.Customer)
+            .Include(item => item.ComplianceDossier)
+                .ThenInclude(item => item.Transport)
+                    .ThenInclude(item => item.Booking)
+                        .ThenInclude(item => item.BookingHorses)
+                            .ThenInclude(item => item.Horse)
+            .Include(item => item.SubmittedByEmployee)
+            .Include(item => item.VerifiedByEmployee)
+            .Include(item => item.Attachments)
+            .SingleOrDefaultAsync(item => item.QuarantineProofId == proofId, cancellationToken);
+
+        if (proof is null)
+            throw new NotFoundException("QuarantineProof not found", "QUARANTINE_PROOF_NOT_FOUND");
+
+        var isEmployee = await _db.Employees.AnyAsync(employee =>
+            employee.AccountId == accountId &&
+            employee.IsActive &&
+            !employee.IsDeleted &&
+            !employee.Account.IsDeleted &&
+            employee.Account.Status == AccountStatus.ACTIVE,
+            cancellationToken);
+        var isOwner = proof.ComplianceDossier.Transport.Booking.Customer.AccountId == accountId;
+
+        if (!isEmployee && !isOwner)
+            throw new ForbiddenException("You do not have permission to view this QuarantineProof");
+
+        var bookingHorses = proof.ComplianceDossier.Transport.Booking.BookingHorses;
+        return new Response.QuarantineProofResponse
+        {
+            QuarantineProofId = proof.QuarantineProofId,
+            ComplianceDossierId = proof.ComplianceDossierId,
+            Status = proof.Status.ToString().ToUpperInvariant(),
+            BcpName = proof.BcpName,
+            LocationId = proof.LocationId,
+            InspectionAt = ToDateTimeOffset(proof.InspectionAt),
+            SubmittedNote = proof.SubmittedNote,
+            SubmittedBy = new Response.QuarantineEmployeeResponse
+            {
+                EmployeeId = proof.SubmittedByEmployeeId,
+                FullName = proof.SubmittedByEmployee.FullName
+            },
+            SubmittedAt = ToDateTimeOffset(proof.SubmittedAt)!.Value,
+            OfficialVeterinarianName = proof.OfficialVeterinarianName,
+            BcpReceiptNumber = proof.BcpReceiptNumber,
+            Conditions = proof.Conditions,
+            MicrochipChecklist = proof.MicrochipChecklist?.RootElement.Clone(),
+            VerifiedBy = proof.VerifiedByEmployee is null
+                ? null
+                : new Response.QuarantineEmployeeResponse
+                {
+                    EmployeeId = proof.VerifiedByEmployeeId!.Value,
+                    FullName = proof.VerifiedByEmployee.FullName
+                },
+            VerifiedAt = ToDateTimeOffset(proof.VerifiedAt),
+            VerificationNote = proof.VerificationNote,
+            RejectionReason = proof.RejectionReason,
+            IsFinalized = proof.IsFinalized,
+            FinalizedAt = ToDateTimeOffset(proof.FinalizedAt),
+            ExpectedHorses = bookingHorses.Select(item => new Response.ExpectedHorseResponse
+            {
+                HorseId = item.HorseId,
+                HorseName = item.Horse.HorseName,
+                MicrochipNumber = item.Horse.MicrochipNumber
+            }).ToList(),
+            Files = proof.Attachments
+                .Where(item => item.QuarantineProofId == proof.QuarantineProofId)
+                .OrderBy(item => item.SortOrder)
+                .Select(item => new Response.ProofFileResponse
+                {
+                    FileName = item.FileName,
+                    FileUrl = item.FileUrl,
+                    MimeType = item.MimeType,
+                    FileSizeBytes = item.FileSizeBytes,
+                    SortOrder = item.SortOrder
+                }).ToList()
+        };
+    }
+
     private static void ValidateRequest(Request.RecordAuthoritySubmissionRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.AuthorityName))
@@ -478,6 +670,41 @@ public sealed class Service : IService
             throw new BadRequestException("Decision file must be PDF, JPG, JPEG, or PNG", "INVALID_FILE_TYPE");
     }
 
+    private static void ValidateQuarantineProofRequest(Request.SubmitQuarantineProofRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.BcpName))
+            throw new BadRequestException("BCP name is required");
+
+        if (request.IsHoldback && string.IsNullOrWhiteSpace(request.QuickNote))
+            throw new BadRequestException(
+                "quickNote is required when isHoldback is true",
+                "QUICK_NOTE_REQUIRED");
+
+        if (request.Files.Count == 0)
+            throw new BadRequestException(
+                "Upload failed or image unclear. Please retake the photo",
+                "EVIDENCE_UNCLEAR");
+
+        const long maxFileSize = 5 * 1024 * 1024;
+        foreach (var file in request.Files)
+        {
+            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
+            var validExtension = extension is ".jpg" or ".jpeg" or ".png";
+            var validContentType = file.ContentType is "image/jpeg" or "image/png";
+
+            if (file.Length > maxFileSize)
+                throw new Pegaxus.Service.Exceptions.Exceptions(
+                    "Proof image must not exceed 5 MB",
+                    413,
+                    "FILE_TOO_LARGE");
+
+            if (!validExtension || !validContentType)
+                throw new BadRequestException(
+                    "Proof file must be JPG, JPEG, or PNG",
+                    "INVALID_FILE_TYPE");
+        }
+    }
+
     private static DateTimeOffset? ToDateTimeOffset(DateTime? value)
     {
         return value is null
@@ -490,7 +717,8 @@ public sealed class Service : IService
         ComplianceDossier dossier,
         string title,
         DateTime now,
-        NotificationPriority priority = NotificationPriority.NORMAL)
+        NotificationPriority priority = NotificationPriority.NORMAL,
+        string? message = null)
     {
         var notificationId = Guid.NewGuid();
         _db.Notifications.Add(new Notification
@@ -500,7 +728,7 @@ public sealed class Service : IService
             NotificationType = NotificationType.COMPLIANCE,
             Priority = priority,
             Title = title,
-            Message = $"ComplianceDossier {dossier.DossierCode} has been submitted to an authority.",
+            Message = message ?? $"ComplianceDossier {dossier.DossierCode} has been submitted to an authority.",
             ReferenceType = "ComplianceDossier",
             ReferenceId = dossier.ComplianceDossierId,
             ActionUrl = $"/compliance-dossiers/{dossier.ComplianceDossierId}",
