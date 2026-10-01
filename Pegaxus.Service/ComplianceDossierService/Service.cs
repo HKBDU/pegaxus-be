@@ -11,6 +11,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MediaService;
+using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
@@ -29,11 +30,16 @@ public sealed class Service : IService
 
     private readonly AppDbContext _db;
     private readonly MediaService.IService _mediaService;
+    private readonly NotificationService.IService _notificationService;
 
-    public Service(AppDbContext db, MediaService.IService mediaService)
+    public Service(
+        AppDbContext db,
+        MediaService.IService mediaService,
+        NotificationService.IService notificationService)
     {
         _db = db;
         _mediaService = mediaService;
+        _notificationService = notificationService;
     }
 
     public async Task<Response.DashboardResponse> GetDashboardAsync(
@@ -659,6 +665,7 @@ public sealed class Service : IService
             AddNotification(managerAccountId, dossier, "ComplianceDossier submitted", now);
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
 
         return new Response.AuthoritySubmissionResponse
         {
@@ -819,6 +826,7 @@ public sealed class Service : IService
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
 
         return new Response.AuthorityDecisionResponse
         {
@@ -936,6 +944,7 @@ public sealed class Service : IService
             AddNotification(tsAccountId, dossier, title, now, request.IsHoldback ? NotificationPriority.URGENT : NotificationPriority.NORMAL, message);
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
 
         return proof.QuarantineProofId;
     }
@@ -1100,6 +1109,7 @@ public sealed class Service : IService
                 "The BCP proof was rejected. Please submit a new proof.");
 
             await _db.SaveChangesAsync(cancellationToken);
+            await _notificationService.FlushAsync(cancellationToken);
             return new Response.QuarantineProofFinalizeResponse
             {
                 QuarantineProofId = proof.QuarantineProofId,
@@ -1206,6 +1216,7 @@ public sealed class Service : IService
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
         return new Response.QuarantineProofFinalizeResponse
         {
             QuarantineProofId = proof.QuarantineProofId,
@@ -1327,6 +1338,7 @@ public sealed class Service : IService
             AddNotification(accountIdToNotify, dossier, title, now, priority, message);
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
         return proof.CustomsClearanceProofId;
     }
 
@@ -1613,6 +1625,7 @@ public sealed class Service : IService
                 "The customs proof was rejected. Please submit a new proof.");
 
             await _db.SaveChangesAsync(cancellationToken);
+            await _notificationService.FlushAsync(cancellationToken);
             return new Response.CustomsClearanceProofFinalizeResponse
             {
                 CustomsClearanceProofId = proof.CustomsClearanceProofId,
@@ -1725,6 +1738,7 @@ public sealed class Service : IService
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
         return new Response.CustomsClearanceProofFinalizeResponse
         {
             CustomsClearanceProofId = proof.CustomsClearanceProofId,
@@ -1858,25 +1872,17 @@ public sealed class Service : IService
         NotificationPriority priority = NotificationPriority.NORMAL,
         string? message = null)
     {
-        var notificationId = Guid.NewGuid();
-        _db.Notifications.Add(new Notification
+        _notificationService.Queue(new NotificationService.NotificationCreateRequest
         {
-            NotificationId = notificationId,
+            AccountId = accountId,
             TransportId = dossier.TransportId,
-            NotificationType = NotificationType.COMPLIANCE,
+            Type = NotificationType.COMPLIANCE,
             Priority = priority,
             Title = title,
             Message = message ?? $"ComplianceDossier {dossier.DossierCode} has been submitted to an authority.",
             ReferenceType = "ComplianceDossier",
             ReferenceId = dossier.ComplianceDossierId,
             ActionUrl = $"/compliance-dossiers/{dossier.ComplianceDossierId}",
-            CreatedAt = now
-        });
-        _db.AccountNotifications.Add(new AccountNotification
-        {
-            AccountId = accountId,
-            NotificationId = notificationId,
-            Status = RecipientStatus.PENDING,
             CreatedAt = now
         });
     }
