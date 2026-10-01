@@ -4,6 +4,41 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Response
 {
+    public sealed class TemplateOptionResponse
+    {
+        public Guid DossierTemplateId { get; init; }
+        public string TemplateCode { get; init; } = string.Empty;
+        public string TemplateName { get; init; } = string.Empty;
+        public int VersionNo { get; init; }
+        public int MatchingRequirements { get; init; }
+    }
+
+    public sealed class InitializationResponse
+    {
+        public Guid? ComplianceDossierId { get; init; }
+        public string? DossierCode { get; init; }
+        public Guid BookingId { get; init; }
+        public DateTimeOffset BookingUpdatedAt { get; init; }
+        public Guid TransportId { get; init; }
+        public Guid? DossierTemplateId { get; init; }
+        public string Status { get; init; } = "IN_PREPARATION";
+        public IReadOnlyList<Request.InitializationItemRequest> Items { get; init; } = [];
+        public IReadOnlyList<GeneratedRequirementResponse> Requirements { get; init; } = [];
+    }
+
+    public sealed class GeneratedRequirementResponse
+    {
+        public Guid? DossierRequirementId { get; set; }
+        public Guid ComplianceRequirementId { get; init; }
+        public string RequirementCode { get; init; } = string.Empty;
+        public string RequirementName { get; init; } = string.Empty;
+        public Guid? HorseId { get; init; }
+        public string? HorseName { get; init; }
+        public bool IsMandatory { get; init; }
+        public string? Instruction { get; init; }
+        public DateOnly? ValidUntil { get; init; }
+    }
+
     public class AuthoritySubmissionListResponse
     {
         public IReadOnlyList<AuthoritySubmissionItemResponse> Items { get; init; } = [];

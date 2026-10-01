@@ -69,6 +69,13 @@ public static class JwtExtensions
                 };
                 options.Events = new JwtBearerEvents
                 {
+                    OnMessageReceived = context =>
+                    {
+                        if (context.Request.Path.StartsWithSegments("/hubs/compliance-dossiers") &&
+                            context.Request.Query.TryGetValue("access_token", out var token))
+                            context.Token = token;
+                        return Task.CompletedTask;
+                    },
                     OnChallenge = async context =>
                     {
                         context.HandleResponse();

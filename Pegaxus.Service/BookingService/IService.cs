@@ -2,6 +2,8 @@ namespace Pegaxus.Service.BookingService;
 
 public interface IService
 {
+    Task<Response.NegotiatedBookingResponse> NegotiateAsync(Guid accountId, Guid bookingId, Request.NegotiateBookingRequest request, CancellationToken cancellationToken = default);
+
     Task<Response.BookingDetailResponse> GetAsync(
         Guid accountId,
         Guid bookingId,

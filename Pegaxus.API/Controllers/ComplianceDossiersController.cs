@@ -21,6 +21,28 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
+    [HttpGet("/api/v1/bookings/{bookingId:guid}/dossier-templates")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> GetTemplateOptions(Guid bookingId, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(await _service.GetTemplateOptionsAsync(GetAccountId(), bookingId, cancellationToken),
+            "Available DossierTemplates retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpPost("/api/v1/bookings/{bookingId:guid}/compliance-dossier/preview")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> Preview(Guid bookingId, [FromBody] ComplianceDossierService.Request.InitializeRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(await _service.PreviewAsync(GetAccountId(), bookingId, request, cancellationToken),
+            "ComplianceDossier preview generated successfully.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpPost("/api/v1/bookings/{bookingId:guid}/compliance-dossier")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> Initialize(Guid bookingId, [FromBody] ComplianceDossierService.Request.InitializeRequest request,
+        CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.InitializeAsync(GetAccountId(), bookingId, request, cancellationToken),
+            "ComplianceDossier initialized successfully. DossierRequirements generated for customer.",
+            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
     [HttpGet("{dossierId:guid}/authority-submissions")]
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
     public async Task<IActionResult> GetAuthoritySubmissions(

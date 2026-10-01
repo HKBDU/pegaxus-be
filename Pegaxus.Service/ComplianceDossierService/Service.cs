@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using Pegaxus.Repository;
@@ -9,17 +10,19 @@ using Pegaxus.Service.MediaService;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
-public sealed class Service : IService
+public sealed partial class Service : IService
 {
     private const long MaxProofFileSize = 2 * 1024 * 1024;
 
     private readonly AppDbContext _db;
     private readonly MediaService.IService _mediaService;
+    private readonly IValidator<Request.InitializeRequest> _initializeValidator;
 
-    public Service(AppDbContext db, MediaService.IService mediaService)
+    public Service(AppDbContext db, MediaService.IService mediaService, IValidator<Request.InitializeRequest> initializeValidator)
     {
         _db = db;
         _mediaService = mediaService;
+        _initializeValidator = initializeValidator;
     }
 
     public async Task<Response.AuthoritySubmissionListResponse> GetAuthoritySubmissionsAsync(
