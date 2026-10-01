@@ -21,6 +21,31 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
+    [HttpPost("{dossierId:guid}/requirements")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> AddRequirement(Guid dossierId,
+        [FromBody] ComplianceDossierService.Request.RequirementRequest request, CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.AddRequirementAsync(GetAccountId(), dossierId, request, cancellationToken),
+            "DossierRequirement added to ComplianceDossier successfully.", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
+    [HttpPatch("{dossierId:guid}/requirements/{requirementId:guid}")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> UpdateRequirement(Guid dossierId, Guid requirementId,
+        [FromBody] ComplianceDossierService.Request.UpdateRequirementRequest request, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(await _service.UpdateRequirementAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
+            "DossierRequirement updated successfully.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpDelete("{dossierId:guid}/requirements/{requirementId:guid}")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> RemoveRequirement(Guid dossierId, Guid requirementId,
+        [FromBody] ComplianceDossierService.Request.RemoveRequirementRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _service.RemoveRequirementAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(result, "DossierRequirement removed successfully.",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     [HttpGet("{dossierId:guid}/authority-submissions")]
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
     public async Task<IActionResult> GetAuthoritySubmissions(

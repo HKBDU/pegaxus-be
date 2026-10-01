@@ -1322,8 +1322,13 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex("Status")
                         .HasDatabaseName("DossierRequirement_status_idx");
 
-                    b.HasIndex(new[] { "ComplianceDossierId", "ComplianceRequirementId" }, "DossierRequirement_compliance_dossier_id_compliance_require_idx")
-                        .IsUnique();
+                    b.HasIndex(new[] { "ComplianceDossierId", "ComplianceRequirementId" }, "DossierRequirement_dossier_requirement_global_key")
+                        .IsUnique()
+                        .HasFilter("horse_id IS NULL AND is_deleted = false");
+
+                    b.HasIndex(new[] { "ComplianceDossierId", "ComplianceRequirementId", "HorseId" }, "DossierRequirement_dossier_requirement_horse_key")
+                        .IsUnique()
+                        .HasFilter("horse_id IS NOT NULL AND is_deleted = false");
 
                     b.HasIndex(new[] { "ComplianceDossierId" }, "DossierRequirement_compliance_dossier_id_idx");
 

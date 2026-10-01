@@ -4,6 +4,29 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Response
 {
+    public sealed class RequirementResponse
+    {
+        public Guid DossierRequirementId { get; init; }
+        public Guid ComplianceRequirementId { get; init; }
+        public string RequirementCode { get; init; } = string.Empty;
+        public string RequirementName { get; init; } = string.Empty;
+        public Guid? HorseId { get; init; }
+        public string? HorseName { get; init; }
+        public bool IsMandatory { get; init; }
+        public string Status { get; init; } = string.Empty;
+        public DateOnly? DueDate { get; init; }
+        public int? LeadTimeDays { get; init; }
+        public string? Instruction { get; init; }
+    }
+
+    public sealed class RemovalResponse
+    {
+        public Guid DossierRequirementId { get; init; }
+        public int FulfilledCount { get; init; }
+        public int RequirementCount { get; init; }
+        public decimal CompletionPercent { get; init; }
+    }
+
     public class AuthoritySubmissionListResponse
     {
         public IReadOnlyList<AuthoritySubmissionItemResponse> Items { get; init; } = [];

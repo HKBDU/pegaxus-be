@@ -958,11 +958,11 @@ public partial class AppDbContext : DbContext
 
             entity.HasIndex(e => new { e.ComplianceDossierId, e.ComplianceRequirementId }, "DossierRequirement_dossier_requirement_global_key")
                 .IsUnique()
-                .HasFilter("horse_id IS NULL");
+                .HasFilter("horse_id IS NULL AND is_deleted = false");
 
             entity.HasIndex(e => new { e.ComplianceDossierId, e.ComplianceRequirementId, e.HorseId }, "DossierRequirement_dossier_requirement_horse_key")
                 .IsUnique()
-                .HasFilter("horse_id IS NOT NULL");
+                .HasFilter("horse_id IS NOT NULL AND is_deleted = false");
 
             entity.HasIndex(e => e.ComplianceDossierId, "DossierRequirement_compliance_dossier_id_idx");
 

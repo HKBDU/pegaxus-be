@@ -9,7 +9,7 @@ using Pegaxus.Service.MediaService;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
-public sealed class Service : IService
+public sealed partial class Service : IService
 {
     private const long MaxProofFileSize = 2 * 1024 * 1024;
 
