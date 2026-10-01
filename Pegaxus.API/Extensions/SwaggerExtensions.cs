@@ -210,6 +210,9 @@ public static class SwaggerExtensions
             if (path == "api/v1/compliance-dossiers/dashboard/export")
                 return ("Xuất báo cáo tiến độ hồ sơ", "TS hoặc LM xuất toàn bộ kết quả ComplianceDossier sau khi áp dụng các bộ lọc dưới dạng XLSX hoặc PDF. Endpoint trả file nhị phân, không dùng response envelope.");
 
+            if (path.EndsWith("/audit-history"))
+                return ("Audit history", "TS or LM views append-only ComplianceDossier audit events with action, actor, time filters and pagination.");
+
             if (path.EndsWith("/authority-submissions"))
                 return method switch
                 {

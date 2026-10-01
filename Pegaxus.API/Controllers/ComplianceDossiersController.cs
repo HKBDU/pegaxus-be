@@ -48,6 +48,22 @@ public sealed class ComplianceDossiersController : ControllerBase
         return File(response.Content, response.ContentType, response.FileName);
     }
 
+    [HttpGet("{dossierId:guid}/audit-history")]
+    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
+    public async Task<IActionResult> GetAuditHistory(
+        Guid dossierId,
+        [FromQuery] ComplianceDossierService.Request.AuditHistoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetAuditHistoryAsync(
+            GetAccountId(), dossierId, request, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Audit history retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     [HttpGet("{dossierId:guid}/authority-submissions")]
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
     public async Task<IActionResult> GetAuthoritySubmissions(

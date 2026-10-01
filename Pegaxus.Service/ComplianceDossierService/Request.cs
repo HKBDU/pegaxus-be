@@ -127,4 +127,15 @@ public class Request
     {
         public string Format { get; set; } = string.Empty;
     }
+
+    public sealed class AuditHistoryRequest
+    {
+        public string? ActionType { get; set; }
+        public string? Search { get; set; }
+        public DateTimeOffset? From { get; set; }
+        public DateTimeOffset? To { get; set; }
+        public int PageIndex { get; set; } = 1;
+        public int PageSize { get; set; } = 20;
+        public string? SortBy { get; set; } = "occurredAt:desc";
+    }
 }

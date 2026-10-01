@@ -17,6 +17,15 @@ namespace Pegaxus.Service.ComplianceDossierService;
 public sealed class Service : IService
 {
     private const long MaxProofFileSize = 2 * 1024 * 1024;
+    private static readonly HashSet<string> AuditActionTypes =
+    [
+        "DOSSIER_INITIALIZED", "DOSSIER_STATUS_CHANGED", "DOSSIER_REQUIREMENT_ADDED",
+        "DOSSIER_REQUIREMENT_REMOVED", "DOCUMENT_VERSION_SUBMITTED", "DOCUMENT_REVIEW_APPROVED",
+        "DOCUMENT_REVIEW_REJECTED", "DOCUMENT_REVIEW_REVISION_REQUIRED", "DOCUMENT_REQUEST_CREATED",
+        "DOSSIER_REQUIREMENT_UPDATED", "DOSSIER_REQUIREMENT_WAIVED", "DOSSIER_REQUIREMENT_REMINDED",
+        "AUTHORITY_SUBMITTED", "AUTHORITY_DECISION_UPDATED", "QUARANTINE_PROOF_SUBMITTED",
+        "QUARANTINE_RESULT_FINALIZED", "CUSTOMS_PROOF_SUBMITTED", "CUSTOMS_RESULT_FINALIZED"
+    ];
 
     private readonly AppDbContext _db;
     private readonly MediaService.IService _mediaService;
@@ -320,6 +329,106 @@ public sealed class Service : IService
         public bool IsUrgentRisk { get; init; }
     }
 
+    public async Task<Response.AuditHistoryResponse> GetAuditHistoryAsync(
+        Guid accountId,
+        Guid dossierId,
+        Request.AuditHistoryRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.PageIndex < 1 || request.PageSize is < 1 or > 100)
+            throw new BadRequestException("PageIndex must be at least 1 and PageSize must be between 1 and 100");
+
+        var hasAccess = await _db.Employees.AnyAsync(employee =>
+            employee.AccountId == accountId &&
+            (employee.Role == EmployeeRole.TRANSPORT_SPECIALIST || employee.Role == EmployeeRole.LOGISTICS_MANAGER) &&
+            employee.IsActive && !employee.IsDeleted &&
+            !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE,
+            cancellationToken);
+
+        if (!hasAccess)
+            throw new ForbiddenException("Only Transport Specialists and Logistics Managers can access audit history");
+
+        var dossierExists = await _db.ComplianceDossiers
+            .AsNoTracking()
+            .AnyAsync(dossier => dossier.ComplianceDossierId == dossierId, cancellationToken);
+        if (!dossierExists)
+            throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
+
+        var query = _db.AuditDossiers
+            .AsNoTracking()
+            .Where(audit => audit.ComplianceDossierId == dossierId)
+            .Include(audit => audit.ActorAccount)
+                .ThenInclude(account => account.EmployeeAccount)
+            .Include(audit => audit.ActorAccount)
+                .ThenInclude(account => account.CustomerAccount)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(request.ActionType))
+        {
+            var actionType = request.ActionType.Trim().ToUpperInvariant();
+            if (!AuditActionTypes.Contains(actionType))
+                throw new BadRequestException("The audit action type is invalid", "INVALID_ACTION_TYPE");
+
+            query = query.Where(audit => audit.ActionType == actionType);
+        }
+
+        if (request.From.HasValue)
+            query = query.Where(audit => audit.CreatedAt >= request.From.Value.UtcDateTime);
+
+        if (request.To.HasValue)
+            query = query.Where(audit => audit.CreatedAt <= request.To.Value.UtcDateTime);
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(audit =>
+                (audit.Summary != null && audit.Summary.ToLower().Contains(search)) ||
+                (audit.ActorAccount.EmployeeAccount != null && audit.ActorAccount.EmployeeAccount.FullName.ToLower().Contains(search)) ||
+                (audit.ActorAccount.CustomerAccount != null && audit.ActorAccount.CustomerAccount.FullName.ToLower().Contains(search)));
+        }
+
+        var sortBy = string.IsNullOrWhiteSpace(request.SortBy)
+            ? "occurredat:desc"
+            : request.SortBy.Trim().ToLowerInvariant();
+        query = sortBy switch
+        {
+            "occurredat:desc" => query.OrderByDescending(audit => audit.CreatedAt),
+            "occurredat:asc" => query.OrderBy(audit => audit.CreatedAt),
+            _ => throw new BadRequestException("The sort parameter is invalid", "INVALID_SORT_PARAMETER")
+        };
+
+        var totalItems = await query.CountAsync(cancellationToken);
+        var totalPages = totalItems == 0 ? 0 : (int)Math.Ceiling(totalItems / (double)request.PageSize);
+        var audits = await query
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .ToListAsync(cancellationToken);
+
+        return new Response.AuditHistoryResponse
+        {
+            Items = audits.Select(audit => new Response.AuditHistoryItemResponse
+            {
+                ActionType = audit.ActionType,
+                TargetEntity = audit.TargetEntity,
+                TargetEntityId = audit.TargetId,
+                Actor = new Response.AuditActorResponse
+                {
+                    AccountId = audit.ActorAccountId,
+                    FullName = audit.ActorAccount.EmployeeAccount?.FullName
+                        ?? audit.ActorAccount.CustomerAccount?.FullName
+                        ?? audit.ActorAccount.Email,
+                    Role = audit.ActorAccount.EmployeeAccount?.Role.ToString() ?? "CUSTOMER"
+                },
+                Note = audit.Summary,
+                OccurredAt = ToDateTimeOffset(audit.CreatedAt)!.Value
+            }).ToList(),
+            PageIndex = request.PageIndex,
+            PageSize = request.PageSize,
+            TotalItems = totalItems,
+            TotalPages = totalPages
+        };
+    }
+
     public async Task<Response.AuthoritySubmissionListResponse> GetAuthoritySubmissionsAsync(
         Guid accountId,
         Guid dossierId,
@@ -513,7 +622,7 @@ public sealed class Service : IService
         {
             AuditDossierId = Guid.NewGuid(),
             ComplianceDossierId = dossierId,
-            ActionType = "AUTHORITY_SUBMISSION_RECORDED",
+            ActionType = "AUTHORITY_SUBMITTED",
             TargetEntity = nameof(AuthoritySubmission),
             TargetId = submission.AuthoritySubmissionId,
             ActorAccountId = accountId,
@@ -672,7 +781,7 @@ public sealed class Service : IService
         {
             AuditDossierId = Guid.NewGuid(),
             ComplianceDossierId = dossier.ComplianceDossierId,
-            ActionType = "AUTHORITY_DECISION_RECORDED",
+            ActionType = "AUTHORITY_DECISION_UPDATED",
             TargetEntity = nameof(AuthoritySubmission),
             TargetId = submission.AuthoritySubmissionId,
             ActorAccountId = accountId,
@@ -797,6 +906,14 @@ public sealed class Service : IService
         }
 
         _db.QuarantineProofs.Add(proof);
+
+        AddQuarantineAudit(
+            proof,
+            accountId,
+            "QUARANTINE_PROOF_SUBMITTED",
+            "Quarantine proof submitted",
+            now,
+            new { proof.BcpName, proof.Status });
 
         var tsAccountIds = await _db.Employees
             .Where(employee =>
@@ -969,7 +1086,7 @@ public sealed class Service : IService
             AddQuarantineAudit(
                 proof,
                 accountId,
-                "QUARANTINE_PROOF_REJECTED",
+                "QUARANTINE_RESULT_FINALIZED",
                 $"Quarantine proof rejected: {proof.RejectionReason}",
                 now,
                 new { Action = action, proof.RejectionReason });
@@ -1043,7 +1160,7 @@ public sealed class Service : IService
         AddQuarantineAudit(
             proof,
             accountId,
-            "QUARANTINE_PROOF_FINALIZED",
+            "QUARANTINE_RESULT_FINALIZED",
             $"Quarantine proof finalized as {status.Value}",
             now,
             new { Action = action, Status = status.Value.ToString(), proof.BcpReceiptNumber });
@@ -1183,6 +1300,14 @@ public sealed class Service : IService
         }
 
         _db.CustomsClearanceProofs.Add(proof);
+
+        AddCustomsAudit(
+            proof,
+            accountId,
+            "CUSTOMS_PROOF_SUBMITTED",
+            "Customs clearance proof submitted",
+            now,
+            new { proof.CustomsPortName, proof.Status });
 
         var roles = request.IsHeld
             ? new[] { EmployeeRole.TRANSPORT_SPECIALIST, EmployeeRole.FLEET_ROUTE_COORDINATOR }
@@ -1475,7 +1600,7 @@ public sealed class Service : IService
             AddCustomsAudit(
                 proof,
                 accountId,
-                "CUSTOMS_PROOF_REJECTED",
+                "CUSTOMS_RESULT_FINALIZED",
                 $"Customs proof rejected: {proof.RejectionReason}",
                 now,
                 new { Action = action, proof.RejectionReason });
@@ -1541,7 +1666,7 @@ public sealed class Service : IService
         AddCustomsAudit(
             proof,
             accountId,
-            "CUSTOMS_PROOF_FINALIZED",
+            "CUSTOMS_RESULT_FINALIZED",
             $"Customs proof finalized as {status.Value}",
             now,
             new

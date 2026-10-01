@@ -296,4 +296,30 @@ public class Response
 
         public string FileName { get; init; } = string.Empty;
     }
+
+    public class AuditHistoryResponse
+    {
+        public IReadOnlyList<AuditHistoryItemResponse> Items { get; init; } = [];
+        public int PageIndex { get; init; }
+        public int PageSize { get; init; }
+        public int TotalItems { get; init; }
+        public int TotalPages { get; init; }
+    }
+
+    public class AuditHistoryItemResponse
+    {
+        public string ActionType { get; init; } = string.Empty;
+        public string TargetEntity { get; init; } = string.Empty;
+        public Guid? TargetEntityId { get; init; }
+        public AuditActorResponse Actor { get; init; } = null!;
+        public string? Note { get; init; }
+        public DateTimeOffset OccurredAt { get; init; }
+    }
+
+    public class AuditActorResponse
+    {
+        public Guid AccountId { get; init; }
+        public string FullName { get; init; } = string.Empty;
+        public string Role { get; init; } = string.Empty;
+    }
 }
