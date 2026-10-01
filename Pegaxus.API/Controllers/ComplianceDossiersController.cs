@@ -21,6 +21,33 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
+    [HttpGet("dashboard")]
+    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
+    public async Task<IActionResult> GetDashboard(
+        [FromQuery] ComplianceDossierService.Request.DashboardRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetDashboardAsync(
+            GetAccountId(), request, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Dashboard retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("dashboard/export")]
+    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
+    public async Task<IActionResult> ExportDashboard(
+        [FromQuery] ComplianceDossierService.Request.DashboardExportRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.ExportDashboardAsync(
+            GetAccountId(), request, cancellationToken);
+
+        return File(response.Content, response.ContentType, response.FileName);
+    }
+
     [HttpGet("{dossierId:guid}/authority-submissions")]
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
     public async Task<IActionResult> GetAuthoritySubmissions(

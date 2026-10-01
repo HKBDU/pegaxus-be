@@ -204,6 +204,12 @@ public static class SwaggerExtensions
 
         private static (string Summary, string Description)? ComplianceDocumentation(string method, string path)
         {
+            if (path == "api/v1/compliance-dossiers/dashboard")
+                return ("Dashboard tiến độ hồ sơ", "TS hoặc LM xem KPI, tiến độ DossierRequirement, bộ lọc rủi ro và danh sách ComplianceDossier trên toàn hệ thống.");
+
+            if (path == "api/v1/compliance-dossiers/dashboard/export")
+                return ("Xuất báo cáo tiến độ hồ sơ", "TS hoặc LM xuất toàn bộ kết quả ComplianceDossier sau khi áp dụng các bộ lọc dưới dạng XLSX hoặc PDF. Endpoint trả file nhị phân, không dùng response envelope.");
+
             if (path.EndsWith("/authority-submissions"))
                 return method switch
                 {

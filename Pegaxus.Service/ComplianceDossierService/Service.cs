@@ -1,6 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
+using ClosedXML.Excel;
 using System.Text.Json;
+using System.Text;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -20,6 +22,289 @@ public sealed class Service : IService
     {
         _db = db;
         _mediaService = mediaService;
+    }
+
+    public async Task<Response.DashboardResponse> GetDashboardAsync(
+        Guid accountId,
+        Request.DashboardRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.PageIndex < 1 || request.PageSize is < 1 or > 100)
+            throw new BadRequestException("PageIndex must be at least 1 and PageSize must be between 1 and 100");
+
+        var role = await _db.Employees
+            .Where(employee => employee.AccountId == accountId &&
+                !employee.IsDeleted && employee.IsActive &&
+                !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE)
+            .Select(employee => (EmployeeRole?)employee.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (role is not (EmployeeRole.TRANSPORT_SPECIALIST or EmployeeRole.LOGISTICS_MANAGER))
+            throw new ForbiddenException("Only Transport Specialists and Logistics Managers can access this dashboard");
+
+        var dossiers = await _db.ComplianceDossiers
+            .AsNoTracking()
+            .Include(item => item.Transport)
+                .ThenInclude(item => item.Booking)
+                    .ThenInclude(item => item.Customer)
+            .Include(item => item.DossierRequirements)
+            .ToListAsync(cancellationToken);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var dashboardItems = dossiers.Select(item =>
+        {
+            var requirements = item.DossierRequirements.Where(requirement => !requirement.IsDeleted).ToList();
+            var completed = requirements.Count(requirement =>
+                requirement.Status is DossierRequirementStatus.SATISFIED or DossierRequirementStatus.WAIVED);
+            var progress = requirements.Count == 0
+                ? 100m
+                : Math.Round(completed * 100m / requirements.Count, 1);
+            var isUrgent = item.Transport.Booking.RequestedDepartureDate >= today &&
+                item.Transport.Booking.RequestedDepartureDate <= today.AddDays(7) && progress < 100m;
+
+            return new DashboardProjection
+            {
+                Dossier = item,
+                ProgressPercent = progress,
+                IsUrgentRisk = isUrgent
+            };
+        }).ToList();
+
+        var kpi = new Response.DashboardKpiResponse
+        {
+            TotalActive = dashboardItems.Count(item => item.Dossier.Status is not (ComplianceDossierStatus.APPROVED or ComplianceDossierStatus.CLOSED)),
+            ReadyForDeparture = dashboardItems.Count(item => item.Dossier.Status == ComplianceDossierStatus.READY_FOR_SUBMISSION),
+            ActionRequired = dashboardItems.Count(item => item.Dossier.Status is ComplianceDossierStatus.REJECTED or ComplianceDossierStatus.IN_PREPARATION),
+            SubmittedToAuthorities = dashboardItems.Count(item => item.Dossier.Status is ComplianceDossierStatus.SUBMITTED or ComplianceDossierStatus.PENDING),
+            UrgentRisk = dashboardItems.Count(item => item.IsUrgentRisk)
+        };
+
+        var filtered = dashboardItems.AsEnumerable();
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            if (!Enum.TryParse<ComplianceDossierStatus>(request.Status.Trim(), true, out var status))
+                throw new BadRequestException("Status is invalid", "INVALID_STATUS_PARAMETER");
+            filtered = filtered.Where(item => item.Dossier.Status == status);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Risk))
+        {
+            var risk = request.Risk.Trim().ToUpperInvariant();
+            if (risk is not ("URGENT_RISK" or "NORMAL"))
+                throw new BadRequestException("Risk must be URGENT_RISK or NORMAL", "INVALID_RISK_PARAMETER");
+            filtered = filtered.Where(item => risk == "URGENT_RISK" ? item.IsUrgentRisk : !item.IsUrgentRisk);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.RouteType))
+        {
+            var routeType = request.RouteType.Trim().ToUpperInvariant();
+            if (routeType is not ("DOMESTIC" or "CROSS_BORDER"))
+                throw new BadRequestException("Route type must be DOMESTIC or CROSS_BORDER", "INVALID_ROUTE_TYPE_PARAMETER");
+            filtered = filtered.Where(item => GetRouteType(item.Dossier) == routeType);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            filtered = filtered.Where(item =>
+                item.Dossier.Transport.Booking.BookingCode.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                item.Dossier.DossierCode.Contains(search, StringComparison.OrdinalIgnoreCase) ||
+                item.Dossier.Transport.Booking.Customer.FullName.Contains(search, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var sortBy = string.IsNullOrWhiteSpace(request.SortBy)
+            ? "requestedDepartureDate:asc"
+            : request.SortBy.Trim().ToLowerInvariant();
+        filtered = sortBy switch
+        {
+            "requesteddeparturedate:asc" => filtered.OrderBy(item => item.Dossier.Transport.Booking.RequestedDepartureDate),
+            "requesteddeparturedate:desc" => filtered.OrderByDescending(item => item.Dossier.Transport.Booking.RequestedDepartureDate),
+            "progresspercent:asc" => filtered.OrderBy(item => item.ProgressPercent),
+            _ => throw new BadRequestException("The sort parameter is invalid", "INVALID_SORT_PARAMETER")
+        };
+
+        var filteredItems = filtered.ToList();
+        var totalItems = filteredItems.Count;
+        var totalPages = totalItems == 0 ? 0 : (int)Math.Ceiling(totalItems / (double)request.PageSize);
+        var items = filteredItems
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(item => new Response.DashboardItemResponse
+            {
+                ComplianceDossierId = item.Dossier.ComplianceDossierId,
+                BookingCode = item.Dossier.Transport.Booking.BookingCode,
+                CustomerName = item.Dossier.Transport.Booking.Customer.FullName,
+                OriginCountry = item.Dossier.Transport.Booking.OriginCountry,
+                DestinationCountry = item.Dossier.Transport.Booking.DestinationCountry,
+                RequestedDepartureDate = item.Dossier.Transport.Booking.RequestedDepartureDate,
+                ProgressPercent = item.ProgressPercent,
+                Status = item.Dossier.Status.ToString(),
+                IsUrgentRisk = item.IsUrgentRisk
+            }).ToList();
+
+        return new Response.DashboardResponse
+        {
+            Kpi = kpi,
+            Items = items,
+            PageIndex = request.PageIndex,
+            PageSize = request.PageSize,
+            TotalItems = totalItems,
+            TotalPages = totalPages
+        };
+    }
+
+    public async Task<Response.DashboardExportResponse> ExportDashboardAsync(
+        Guid accountId,
+        Request.DashboardExportRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var format = request.Format.Trim().ToLowerInvariant();
+        if (format is not ("xlsx" or "pdf"))
+            throw new BadRequestException("format must be xlsx or pdf", "INVALID_EXPORT_FORMAT");
+
+        var pageRequest = new Request.DashboardRequest
+        {
+            PageIndex = 1,
+            PageSize = 100,
+            Status = request.Status,
+            Risk = request.Risk,
+            RouteType = request.RouteType,
+            SortBy = request.SortBy,
+            Search = request.Search
+        };
+        var firstPage = await GetDashboardAsync(accountId, pageRequest, cancellationToken);
+        var items = firstPage.Items.ToList();
+
+        for (var pageIndex = 2; pageIndex <= firstPage.TotalPages; pageIndex++)
+        {
+            pageRequest.PageIndex = pageIndex;
+            var page = await GetDashboardAsync(accountId, pageRequest, cancellationToken);
+            items.AddRange(page.Items);
+        }
+
+        if (format == "xlsx")
+        {
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add("ComplianceDossiers");
+            worksheet.Cell(1, 1).Value = "ComplianceDossier Progress Report";
+            worksheet.Cell(2, 1).Value = "Total active";
+            worksheet.Cell(2, 2).Value = firstPage.Kpi.TotalActive;
+            worksheet.Cell(2, 3).Value = "Urgent risk";
+            worksheet.Cell(2, 4).Value = firstPage.Kpi.UrgentRisk;
+
+            var headerRow = 4;
+            var headers = new[]
+            {
+                "ComplianceDossier ID", "Booking Code", "Customer", "Origin Country",
+                "Destination Country", "Requested Departure Date", "Progress Percent",
+                "Status", "Urgent Risk"
+            };
+            for (var column = 0; column < headers.Length; column++)
+                worksheet.Cell(headerRow, column + 1).Value = headers[column];
+
+            for (var index = 0; index < items.Count; index++)
+            {
+                var row = headerRow + index + 1;
+                var item = items[index];
+                worksheet.Cell(row, 1).Value = item.ComplianceDossierId.ToString();
+                worksheet.Cell(row, 2).Value = item.BookingCode;
+                worksheet.Cell(row, 3).Value = item.CustomerName;
+                worksheet.Cell(row, 4).Value = item.OriginCountry;
+                worksheet.Cell(row, 5).Value = item.DestinationCountry;
+                worksheet.Cell(row, 6).Value = item.RequestedDepartureDate.ToString("yyyy-MM-dd");
+                worksheet.Cell(row, 7).Value = item.ProgressPercent;
+                worksheet.Cell(row, 8).Value = item.Status;
+                worksheet.Cell(row, 9).Value = item.IsUrgentRisk ? "URGENT_RISK" : "NORMAL";
+            }
+
+            worksheet.Row(1).Style.Font.Bold = true;
+            worksheet.Row(headerRow).Style.Font.Bold = true;
+            worksheet.Columns().AdjustToContents();
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return new Response.DashboardExportResponse
+            {
+                Content = stream.ToArray(),
+                ContentType = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                FileName = $"compliance-dossiers-{DateTime.UtcNow:yyyyMMddHHmmss}.xlsx"
+            };
+        }
+
+        var pdfLines = new List<string>
+        {
+            "ComplianceDossier Progress Report",
+            $"Total active: {firstPage.Kpi.TotalActive} | Urgent risk: {firstPage.Kpi.UrgentRisk}",
+            "Booking | Customer | Route | Departure | Progress | Status"
+        };
+        pdfLines.AddRange(items.Select(item =>
+            $"{item.BookingCode} | {item.CustomerName} | {item.OriginCountry}-{item.DestinationCountry} | " +
+            $"{item.RequestedDepartureDate:yyyy-MM-dd} | {item.ProgressPercent:0.0}% | {item.Status}"));
+
+        return new Response.DashboardExportResponse
+        {
+            Content = CreateSimplePdf(pdfLines),
+            ContentType = "application/pdf",
+            FileName = $"compliance-dossiers-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf"
+        };
+    }
+
+    private static byte[] CreateSimplePdf(IEnumerable<string> lines)
+    {
+        var content = new StringBuilder("BT\n/F1 8 Tf\n40 760 Td\n");
+        foreach (var line in lines)
+        {
+            var safeLine = new string(line.Select(character =>
+                character is >= ' ' and <= '~' ? character : '?').ToArray())
+                .Replace("\\", "\\\\")
+                .Replace("(", "\\(")
+                .Replace(")", "\\)");
+            content.Append('(').Append(safeLine).Append(") Tj\n0 -12 Td\n");
+        }
+        content.Append("ET");
+
+        var objects = new[]
+        {
+            "<< /Type /Catalog /Pages 2 0 R >>",
+            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+            $"<< /Length {Encoding.ASCII.GetByteCount(content.ToString())} >>\nstream\n{content}\nendstream"
+        };
+
+        using var stream = new MemoryStream();
+        using var writer = new StreamWriter(stream, Encoding.ASCII, 1024, leaveOpen: true);
+        writer.Write("%PDF-1.4\n");
+        writer.Flush();
+        var offsets = new List<long> { 0 };
+        foreach (var pdfObject in objects)
+        {
+            offsets.Add(stream.Position);
+            writer.Write($"{offsets.Count - 1} 0 obj\n{pdfObject}\nendobj\n");
+            writer.Flush();
+        }
+
+        var xrefPosition = stream.Position;
+        writer.Write($"xref\n0 {objects.Length + 1}\n0000000000 65535 f \n");
+        for (var index = 1; index < offsets.Count; index++)
+            writer.Write($"{offsets[index]:D10} 00000 n \n");
+        writer.Write($"trailer\n<< /Size {objects.Length + 1} /Root 1 0 R >>\nstartxref\n{xrefPosition}\n%%EOF");
+        writer.Flush();
+        return stream.ToArray();
+    }
+
+    private static string GetRouteType(ComplianceDossier dossier) =>
+        string.Equals(dossier.Transport.Booking.OriginCountry.Trim(),
+            dossier.Transport.Booking.DestinationCountry.Trim(),
+            StringComparison.OrdinalIgnoreCase)
+            ? "DOMESTIC"
+            : "CROSS_BORDER";
+
+    private sealed class DashboardProjection
+    {
+        public ComplianceDossier Dossier { get; init; } = null!;
+
+        public decimal ProgressPercent { get; init; }
+
+        public bool IsUrgentRisk { get; init; }
     }
 
     public async Task<Response.AuthoritySubmissionListResponse> GetAuthoritySubmissionsAsync(

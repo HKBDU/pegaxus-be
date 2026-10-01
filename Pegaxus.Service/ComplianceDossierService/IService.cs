@@ -2,6 +2,16 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public interface IService
 {
+    Task<Response.DashboardResponse> GetDashboardAsync(
+        Guid accountId,
+        Request.DashboardRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<Response.DashboardExportResponse> ExportDashboardAsync(
+        Guid accountId,
+        Request.DashboardExportRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<Response.AuthoritySubmissionListResponse> GetAuthoritySubmissionsAsync(
         Guid accountId,
         Guid dossierId,
