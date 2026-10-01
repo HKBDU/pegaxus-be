@@ -22,6 +22,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\Pegaxus.API\Pegaxus.API.csproj" />
     <ProjectReference Include="..\Pegaxus.Service\Pegaxus.Service.csproj" />
     <ProjectReference Include="..\Pegaxus.Repository\Pegaxus.Repository.csproj" />
   </ItemGroup>

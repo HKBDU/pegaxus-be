@@ -183,6 +183,7 @@ builder.Services.AddScoped<AccountService.IService, AccountService.Service>();
 builder.Services.AddScoped<HorseService.IService, HorseService.Service>();
 builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
+builder.Services.AddScoped<Pegaxus.Service.ComplianceRequirementService.Service>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
