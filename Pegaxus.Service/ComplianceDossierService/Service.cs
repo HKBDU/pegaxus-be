@@ -1,6 +1,9 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
 using System.Text.Json;
 using System.Text;
 using Pegaxus.Repository;
@@ -229,67 +232,77 @@ public sealed class Service : IService
             };
         }
 
-        var pdfLines = new List<string>
-        {
-            "ComplianceDossier Progress Report",
-            $"Total active: {firstPage.Kpi.TotalActive} | Urgent risk: {firstPage.Kpi.UrgentRisk}",
-            "Booking | Customer | Route | Departure | Progress | Status"
-        };
-        pdfLines.AddRange(items.Select(item =>
-            $"{item.BookingCode} | {item.CustomerName} | {item.OriginCountry}-{item.DestinationCountry} | " +
-            $"{item.RequestedDepartureDate:yyyy-MM-dd} | {item.ProgressPercent:0.0}% | {item.Status}"));
-
         return new Response.DashboardExportResponse
         {
-            Content = CreateSimplePdf(pdfLines),
+            Content = CreateDashboardPdf(firstPage.Kpi, items),
             ContentType = "application/pdf",
             FileName = $"compliance-dossiers-{DateTime.UtcNow:yyyyMMddHHmmss}.pdf"
         };
     }
 
-    private static byte[] CreateSimplePdf(IEnumerable<string> lines)
+    private static byte[] CreateDashboardPdf(
+        Response.DashboardKpiResponse kpi,
+        IReadOnlyList<Response.DashboardItemResponse> items)
     {
-        var content = new StringBuilder("BT\n/F1 8 Tf\n40 760 Td\n");
-        foreach (var line in lines)
+        QuestPDF.Settings.License = LicenseType.Community;
+        return Document.Create(document => document.Page(page =>
         {
-            var safeLine = new string(line.Select(character =>
-                character is >= ' ' and <= '~' ? character : '?').ToArray())
-                .Replace("\\", "\\\\")
-                .Replace("(", "\\(")
-                .Replace(")", "\\)");
-            content.Append('(').Append(safeLine).Append(") Tj\n0 -12 Td\n");
-        }
-        content.Append("ET");
+            page.Margin(30);
+            page.Header().Text("ComplianceDossier Progress Report")
+                .FontSize(18)
+                .Bold();
+            page.Content().Column(column =>
+            {
+                column.Spacing(8);
+                column.Item().Text($"Total active: {kpi.TotalActive} | Ready: {kpi.ReadyForDeparture} | " +
+                    $"Action required: {kpi.ActionRequired} | Submitted: {kpi.SubmittedToAuthorities} | " +
+                    $"Urgent risk: {kpi.UrgentRisk}");
+                column.Item().Table(table =>
+                {
+                    table.ColumnsDefinition(columns =>
+                    {
+                        columns.RelativeColumn(1.2f);
+                        columns.RelativeColumn(1.4f);
+                        columns.RelativeColumn(1.7f);
+                        columns.RelativeColumn(1.2f);
+                        columns.RelativeColumn(1.1f);
+                        columns.RelativeColumn(1.5f);
+                    });
+                    table.Header(header =>
+                    {
+                        header.Cell().Element(PdfHeaderCell).Text("Booking");
+                        header.Cell().Element(PdfHeaderCell).Text("Customer");
+                        header.Cell().Element(PdfHeaderCell).Text("Route");
+                        header.Cell().Element(PdfHeaderCell).Text("Departure");
+                        header.Cell().Element(PdfHeaderCell).Text("Progress");
+                        header.Cell().Element(PdfHeaderCell).Text("Status");
+                    });
 
-        var objects = new[]
-        {
-            "<< /Type /Catalog /Pages 2 0 R >>",
-            "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-            "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-            "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-            $"<< /Length {Encoding.ASCII.GetByteCount(content.ToString())} >>\nstream\n{content}\nendstream"
-        };
-
-        using var stream = new MemoryStream();
-        using var writer = new StreamWriter(stream, Encoding.ASCII, 1024, leaveOpen: true);
-        writer.Write("%PDF-1.4\n");
-        writer.Flush();
-        var offsets = new List<long> { 0 };
-        foreach (var pdfObject in objects)
-        {
-            offsets.Add(stream.Position);
-            writer.Write($"{offsets.Count - 1} 0 obj\n{pdfObject}\nendobj\n");
-            writer.Flush();
-        }
-
-        var xrefPosition = stream.Position;
-        writer.Write($"xref\n0 {objects.Length + 1}\n0000000000 65535 f \n");
-        for (var index = 1; index < offsets.Count; index++)
-            writer.Write($"{offsets[index]:D10} 00000 n \n");
-        writer.Write($"trailer\n<< /Size {objects.Length + 1} /Root 1 0 R >>\nstartxref\n{xrefPosition}\n%%EOF");
-        writer.Flush();
-        return stream.ToArray();
+                    foreach (var item in items)
+                    {
+                        table.Cell().Element(PdfBodyCell).Text(item.BookingCode);
+                        table.Cell().Element(PdfBodyCell).Text(item.CustomerName);
+                        table.Cell().Element(PdfBodyCell).Text($"{item.OriginCountry} - {item.DestinationCountry}");
+                        table.Cell().Element(PdfBodyCell).Text(item.RequestedDepartureDate.ToString("yyyy-MM-dd"));
+                        table.Cell().Element(PdfBodyCell).Text($"{item.ProgressPercent:0.0}%");
+                        table.Cell().Element(PdfBodyCell).Text(item.Status);
+                    }
+                });
+            });
+            page.Footer().AlignCenter().Text(text =>
+            {
+                text.CurrentPageNumber();
+                text.Span(" / ");
+                text.TotalPages();
+            });
+        })).GeneratePdf();
     }
+
+    private static IContainer PdfHeaderCell(IContainer container) =>
+        container.Background(Colors.Blue.Medium).Padding(4).DefaultTextStyle(x => x.FontColor(Colors.White).Bold());
+
+    private static IContainer PdfBodyCell(IContainer container) =>
+        container.BorderBottom(1).BorderColor(Colors.Grey.Lighten2).Padding(4);
 
     private static string GetRouteType(ComplianceDossier dossier) =>
         string.Equals(dossier.Transport.Booking.OriginCountry.Trim(),
