@@ -52,6 +52,12 @@ public static class SwaggerExtensions
             if (path.StartsWith("api/v1/auth/"))
                 return AuthDocumentation(method, path);
 
+            if (path == "api/v1/uploads/signature")
+                return ("Tạo chữ ký upload", "Tạo chữ ký Cloudinary cho file attachment của tài khoản đang đăng nhập. FE dùng thông tin upload trả về để tải file trực tiếp lên Cloudinary.");
+
+            if (path == "api/v1/uploads/confirm")
+                return ("Xác nhận upload", "Xác nhận publicId đã upload thành công và thuộc về tài khoản đang đăng nhập.");
+
             if (path == "api/v1/accounts/me")
             {
                 return method switch

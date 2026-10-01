@@ -3,11 +3,16 @@ using CloudinaryDotNet.Actions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Pegaxus.Service.MediaService;
+using System.Security.Cryptography;
+using System.Text;
+using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.CloudinaryService;
 
 public class Service : IService
 {
+    private const long MaxSignedUploadSize = 5 * 1024 * 1024;
+    private const string AllowedFormats = "jpg,png,pdf";
     private readonly Cloudinary _cloudinary;
     private readonly CloudinaryOptions _cloudinaryOptions = new();
 
@@ -80,5 +85,94 @@ public class Service : IService
 
         if (result.Error != null)
             throw new Exception($"Cloudinary delete failed: {result.Error.Message}");
+    }
+
+    public Task<SignedUploadResult> CreateSignedUploadAsync(
+        Guid accountId,
+        string entity,
+        string contentType,
+        long sizeBytes)
+    {
+        if (!string.Equals(entity?.Trim(), "attachment", StringComparison.OrdinalIgnoreCase))
+            throw new BadRequestException("Entity must be attachment", "INVALID_UPLOAD_ENTITY");
+
+        if (sizeBytes <= 0 || sizeBytes > MaxSignedUploadSize)
+            throw new Pegaxus.Service.Exceptions.Exceptions(
+                "File size must be greater than 0 and must not exceed 5 MB",
+                413,
+                "FILE_TOO_LARGE");
+
+        var normalizedContentType = contentType.Trim().ToLowerInvariant();
+        if (normalizedContentType is not "application/pdf" and not "image/jpeg" and not "image/png")
+            throw new BadRequestException(
+                "Only PDF, JPG, and PNG files are allowed",
+                "INVALID_FILE_TYPE");
+
+        EnsureConfigured();
+        var publicId = $"evidence/{accountId:D}/{Guid.NewGuid():N}";
+        var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
+        var parameters = new SortedDictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["allowed_formats"] = AllowedFormats,
+            ["public_id"] = publicId,
+            ["tags"] = "pending",
+            ["timestamp"] = timestamp,
+            ["type"] = "upload"
+        };
+        var signature = CreateSignature(parameters);
+        parameters["api_key"] = _cloudinaryOptions.ApiKey;
+        parameters["signature"] = signature;
+
+        var orderedResponseParameters = new Dictionary<string, string>
+        {
+            ["api_key"] = _cloudinaryOptions.ApiKey,
+            ["timestamp"] = timestamp,
+            ["signature"] = signature,
+            ["public_id"] = publicId,
+            ["type"] = "upload",
+            ["tags"] = "pending",
+            ["allowed_formats"] = AllowedFormats
+        };
+
+        return Task.FromResult(new SignedUploadResult(
+            publicId,
+            $"https://api.cloudinary.com/v1_1/{_cloudinaryOptions.CloudName}/auto/upload",
+            orderedResponseParameters));
+    }
+
+    public async Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId)
+    {
+        if (string.IsNullOrWhiteSpace(publicId) ||
+            !publicId.StartsWith($"evidence/{accountId:D}/", StringComparison.OrdinalIgnoreCase))
+            throw new BadRequestException("The publicId does not belong to the authenticated account", "INVALID_PUBLIC_ID");
+
+        EnsureConfigured();
+        var result = await _cloudinary.GetResourceAsync(new GetResourceParams(publicId)
+        {
+            ResourceType = ResourceType.Auto
+        });
+
+        if (result.Error is not null || string.IsNullOrWhiteSpace(result.SecureUrl?.ToString()))
+            throw new NotFoundException("Uploaded file was not found on Cloudinary", "UPLOAD_NOT_FOUND");
+
+        return new ConfirmedUploadResult(publicId, result.SecureUrl.ToString());
+    }
+
+    private string CreateSignature(IReadOnlyDictionary<string, string> parameters)
+    {
+        var payload = string.Join("&", parameters
+            .Where(item => !string.IsNullOrWhiteSpace(item.Value))
+            .OrderBy(item => item.Key, StringComparer.Ordinal)
+            .Select(item => $"{item.Key}={item.Value}"));
+        var hash = SHA1.HashData(Encoding.UTF8.GetBytes(payload + _cloudinaryOptions.ApiSecret));
+        return Convert.ToHexString(hash).ToLowerInvariant();
+    }
+
+    private void EnsureConfigured()
+    {
+        if (string.IsNullOrWhiteSpace(_cloudinaryOptions.CloudName) ||
+            string.IsNullOrWhiteSpace(_cloudinaryOptions.ApiKey) ||
+            string.IsNullOrWhiteSpace(_cloudinaryOptions.ApiSecret))
+            throw new Pegaxus.Service.Exceptions.Exceptions("Cloudinary is not configured", 503, "CLOUDINARY_NOT_CONFIGURED");
     }
 }
