@@ -85,6 +85,7 @@ public sealed partial class Service
         {
             throw DossierAlreadyExists();
         }
+        await _notificationService.FlushAsync(cancellationToken);
         return InitializationResponse(booking, request, requirements, dossier);
     }
 

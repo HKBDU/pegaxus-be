@@ -69,6 +69,7 @@ public partial class Service
             AddNotification(recipient, booking.Transport?.TransportId, booking, $"Booking {status}; dossier operations suspended", now);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
         return new Response.NegotiatedBookingResponse
         {
             BookingId = bookingId, Status = status.ToString(), ComplianceDossierId = dossier?.ComplianceDossierId,

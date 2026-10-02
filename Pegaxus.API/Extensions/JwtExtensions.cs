@@ -71,9 +71,15 @@ public static class JwtExtensions
                 {
                     OnMessageReceived = context =>
                     {
-                        if (context.Request.Path.StartsWithSegments("/hubs/compliance-dossiers") &&
-                            context.Request.Query.TryGetValue("access_token", out var token))
-                            context.Token = token;
+                        var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
+                        if (!string.IsNullOrWhiteSpace(accessToken) &&
+                            (path.StartsWithSegments("/hubs/notifications") ||
+                             path.StartsWithSegments("/hubs/compliance-dossiers")))
+                        {
+                            context.Token = accessToken;
+                        }
+
                         return Task.CompletedTask;
                     },
                     OnChallenge = async context =>

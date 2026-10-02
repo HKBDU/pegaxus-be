@@ -5,6 +5,7 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using DossierRequest = Pegaxus.Service.ComplianceDossierService.Request;
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
+using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.Test;
 
@@ -15,13 +16,15 @@ public class DossierInitializationTests
     {
         await using var db = TestSupport.CreateDb();
         var (booking, template, specialist) = await SeedAsync(db);
-        var service = CreateService(db);
+        var realtime = new RecordingRealtimeService();
+        var service = CreateService(db, realtime);
         var request = new DossierRequest.InitializeRequest { DossierTemplateId = template.DossierTemplateId };
         var preview = await service.PreviewAsync(specialist, booking.BookingId, request);
         Assert.Equal(3, preview.Requirements.Count);
         Assert.Equal(2, preview.Items.Count);
         Assert.True(preview.Items[0].AppliesPerHorse);
         Assert.Empty(await db.ComplianceDossiers.ToListAsync());
+        Assert.Empty(realtime.Notifications);
 
         var result = await service.InitializeAsync(specialist, booking.BookingId, request);
         Assert.Equal("IN_PREPARATION", result.Status);
@@ -30,6 +33,9 @@ public class DossierInitializationTests
         Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30), result.Requirements.First().ValidUntil);
         Assert.Equal(template.DossierTemplateId, (await db.ComplianceDossiers.SingleAsync()).DossierTemplateId);
         Assert.Equal(booking.Customer.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
+        var push = Assert.Single(realtime.Notifications);
+        Assert.Equal(booking.Customer.AccountId, push.AccountId);
+        Assert.Equal((await db.Notifications.SingleAsync()).NotificationId, push.Notification.Id);
         Assert.Equal(2, template.DossierTemplateItems.Count);
         await Assert.ThrowsAsync<ConflictException>(() => service.InitializeAsync(specialist, booking.BookingId, request));
     }
@@ -106,13 +112,18 @@ public class DossierInitializationTests
         await CreateService(db).InitializeAsync(specialist, booking.BookingId,
             new() { DossierTemplateId = template.DossierTemplateId });
         var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
-        var service = new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService());
+        var realtime = new RecordingRealtimeService();
+        var service = new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService(),
+            new NotificationService.Service(db, realtime));
         await service.NegotiateAsync(manager.AccountId, booking.BookingId,
             new() { Status = status, Reason = "Customer negotiated a change" });
 
         Assert.Equal(dossierStatus, (await db.ComplianceDossiers.SingleAsync()).Status);
         Assert.All(await db.DossierRequirements.ToListAsync(), item => Assert.True(item.IsDeleted));
         Assert.Contains(await db.AccountNotifications.ToListAsync(), item => item.AccountId == specialist);
+        Assert.Equal(2, realtime.Notifications.Count);
+        Assert.Contains(realtime.Notifications, item => item.AccountId == specialist);
+        Assert.Contains(realtime.Notifications, item => item.AccountId == booking.Customer.AccountId);
         var error = await Assert.ThrowsAsync<ConflictException>(() => CreateService(db).InitializeAsync(
             specialist, booking.BookingId, new() { DossierTemplateId = template.DossierTemplateId, BookingUpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-1) }));
         Assert.Equal("BOOKING_STATUS_CHANGED", error.ErrorCode);
@@ -190,6 +201,19 @@ public class DossierInitializationTests
         return (booking, template, account.AccountId);
     }
 
-    private static DossierService CreateService(AppDbContext db) =>
-        new(db, null!, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator());
+    private static DossierService CreateService(AppDbContext db, NotificationService.INotificationRealtimeService? realtime = null) =>
+        new(db, null!, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
+            new NotificationService.Service(db, realtime ?? new NotificationService.NoopNotificationRealtimeService()));
+
+    private sealed class RecordingRealtimeService : NotificationService.INotificationRealtimeService
+    {
+        public List<(Guid AccountId, NotificationService.NotificationRealtimeDto Notification)> Notifications { get; } = [];
+
+        public Task SendToAccountAsync(Guid accountId, NotificationService.NotificationRealtimeDto notification,
+            CancellationToken cancellationToken = default)
+        {
+            Notifications.Add((accountId, notification));
+            return Task.CompletedTask;
+        }
+    }
 }

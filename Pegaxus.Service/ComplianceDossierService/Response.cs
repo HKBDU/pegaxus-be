@@ -273,4 +273,88 @@ public class Response
 
         public bool IsFinalized { get; init; }
     }
+
+    public class DashboardResponse
+    {
+        public DashboardKpiResponse Kpi { get; init; } = null!;
+
+        public IReadOnlyList<DashboardItemResponse> Items { get; init; } = [];
+
+        public int PageIndex { get; init; }
+
+        public int PageSize { get; init; }
+
+        public int TotalItems { get; init; }
+
+        public int TotalPages { get; init; }
+    }
+
+    public class DashboardKpiResponse
+    {
+        public int TotalActive { get; init; }
+
+        public int ReadyForDeparture { get; init; }
+
+        public int ActionRequired { get; init; }
+
+        public int SubmittedToAuthorities { get; init; }
+
+        public int UrgentRisk { get; init; }
+    }
+
+    public class DashboardItemResponse
+    {
+        public Guid ComplianceDossierId { get; init; }
+
+        public string BookingCode { get; init; } = string.Empty;
+
+        public string CustomerName { get; init; } = string.Empty;
+
+        public string OriginCountry { get; init; } = string.Empty;
+
+        public string DestinationCountry { get; init; } = string.Empty;
+
+        public DateOnly RequestedDepartureDate { get; init; }
+
+        public decimal ProgressPercent { get; init; }
+
+        public string Status { get; init; } = string.Empty;
+
+        public bool IsUrgentRisk { get; init; }
+    }
+
+    public class DashboardExportResponse
+    {
+        public byte[] Content { get; init; } = [];
+
+        public string ContentType { get; init; } = string.Empty;
+
+        public string FileName { get; init; } = string.Empty;
+    }
+
+    public class AuditHistoryResponse
+    {
+        public IReadOnlyList<AuditHistoryItemResponse> Items { get; init; } = [];
+        public int PageIndex { get; init; }
+        public int PageSize { get; init; }
+        public int TotalItems { get; init; }
+        public int TotalPages { get; init; }
+    }
+
+    public class AuditHistoryItemResponse
+    {
+        public string ActionType { get; init; } = string.Empty;
+        public string TargetEntity { get; init; } = string.Empty;
+        public Guid? TargetEntityId { get; init; }
+        public AuditActorResponse Actor { get; init; } = null!;
+        public string? Note { get; init; }
+        public DateTimeOffset OccurredAt { get; init; }
+    }
+
+    public class AuditActorResponse
+    {
+        public Guid AccountId { get; init; }
+        public string FullName { get; init; } = string.Empty;
+        public string Role { get; init; } = string.Empty;
+    }
 }
