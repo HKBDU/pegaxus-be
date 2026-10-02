@@ -15,6 +15,7 @@ using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
+
 public sealed class Service : IService
 {
     private const long MaxProofFileSize = 2 * 1024 * 1024;
