@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+using FluentValidation;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -9,15 +9,17 @@ using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceRequirementService;
 
-public sealed class Service(AppDbContext db)
+public sealed class Service(AppDbContext db,
+    IValidator<Request.ListRequest> listValidator,
+    IValidator<Request.SaveRequest> saveValidator,
+    IValidator<Request.StatusRequest> statusValidator) : IService
 {
-    private static readonly HashSet<string> Countries = ["EU", "GB", "AT", "BE", "BG", "HR", "CY", "CZ", "DK", "EE", "FI", "FR", "DE", "GR", "HU", "IE", "IT", "LV", "LT", "LU", "MT", "NL", "PL", "PT", "RO", "SK", "SI", "ES", "SE"];
     private const string DuplicateMessage = "A ComplianceRequirement with this code already exists. Please use a unique code or edit the existing record.";
     private const string ReferencedMessage = "Cannot delete this ComplianceRequirement because it is currently linked to existing DossierTemplates or active ComplianceDossiers. Please deactivate it instead.";
 
     public async Task<Response.ListResponse> GetListAsync(Request.ListRequest request, CancellationToken cancellationToken = default)
     {
-        Validate(request);
+        Validate(request, listValidator);
         var query = db.ComplianceRequirements.AsNoTracking().Where(item => !item.IsDeleted);
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
@@ -31,7 +33,7 @@ public sealed class Service(AppDbContext db)
         }
         if (!string.IsNullOrWhiteSpace(request.Country))
         {
-            var country = ParseCountry(request.Country);
+            var country = request.Country.Trim().ToUpperInvariant();
             query = query.Where(item => item.Country != null && item.Country.ToUpper() == country);
         }
         if (!string.IsNullOrWhiteSpace(request.BcpCode))
@@ -71,6 +73,7 @@ public sealed class Service(AppDbContext db)
 
     public async Task<Response.DetailResponse> CreateAsync(Request.SaveRequest request, Guid actorAccountId, CancellationToken cancellationToken = default)
     {
+        Validate(request, saveValidator);
         var entity = new ComplianceRequirement { ComplianceRequirementId = Guid.NewGuid(), CreatedAt = UtcNow() };
         await ApplyAsync(entity, request, cancellationToken);
         db.ComplianceRequirements.Add(entity);
@@ -80,6 +83,7 @@ public sealed class Service(AppDbContext db)
 
     public async Task<Response.DetailResponse> UpdateAsync(Guid id, Request.SaveRequest request, Guid actorAccountId, CancellationToken cancellationToken = default)
     {
+        Validate(request, saveValidator);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var entity = await GetForUpdateAsync(id, cancellationToken);
         var detail = await GetAsync(id, cancellationToken);
@@ -94,7 +98,7 @@ public sealed class Service(AppDbContext db)
 
     public async Task UpdateStatusAsync(Guid id, Request.StatusRequest request, Guid actorAccountId, CancellationToken cancellationToken = default)
     {
-        Validate(request);
+        Validate(request, statusValidator);
         var status = ParseStatus(request.Status);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var entity = await GetForUpdateAsync(id, cancellationToken);
@@ -132,12 +136,9 @@ public sealed class Service(AppDbContext db)
 
     private async Task ApplyAsync(ComplianceRequirement entity, Request.SaveRequest request, CancellationToken cancellationToken)
     {
-        Validate(request);
-        if (request.ValidityRequired == true && request.ValidityPeriodDays is null)
-            throw new BadRequestException("ValidityPeriodDays is required when ValidityRequired is true");
         var status = ParseStatus(request.Status);
         var category = ParseCategory(request.Category);
-        var country = string.IsNullOrWhiteSpace(request.Country) ? null : ParseCountry(request.Country);
+        var country = TrimOptional(request.Country)?.ToUpperInvariant();
         var code = request.RequirementCode.Trim().ToUpperInvariant();
         if (await db.ComplianceRequirements.IgnoreQueryFilters().AnyAsync(item =>
             item.ComplianceRequirementId != entity.ComplianceRequirementId && item.RequirementCode.ToUpper() == code, cancellationToken))
@@ -204,30 +205,16 @@ public sealed class Service(AppDbContext db)
         CreatedAt = ToUtcOffset(entity.CreatedAt), UpdatedAt = ToUtcOffset(entity.UpdatedAt)
     });
 
-    private static void Validate(object request)
+    private static void Validate<T>(T request, IValidator<T> validator)
     {
-        var errors = new List<ValidationResult>();
-        if (!Validator.TryValidateObject(request, new ValidationContext(request), errors, true))
-            throw new BadRequestException(string.Join(" ", errors.Select(error => error.ErrorMessage)));
+        var result = validator.Validate(request);
+        if (!result.IsValid)
+            throw new BadRequestException(string.Join(" ", result.Errors.Select(error => error.ErrorMessage)));
     }
 
-    private static ComplianceRequirementStatus ParseStatus(string value) => value.Trim().ToUpperInvariant() switch
-    {
-        "ACTIVE" => ComplianceRequirementStatus.ACTIVE,
-        "INACTIVE" => ComplianceRequirementStatus.INACTIVE,
-        _ => throw new BadRequestException("Status must be ACTIVE or INACTIVE")
-    };
+    private static ComplianceRequirementStatus ParseStatus(string value) => Enum.Parse<ComplianceRequirementStatus>(value.Trim(), true);
 
-    private static ComplianceRequirementCategory ParseCategory(string value) => value.Trim().ToUpperInvariant() switch
-    {
-        "QUARANTINE" => ComplianceRequirementCategory.Quarantine,
-        "CUSTOMS" => ComplianceRequirementCategory.Customs,
-        "TRANSPORT" => ComplianceRequirementCategory.Transport,
-        "HORSE_HEALTH" => ComplianceRequirementCategory.HorseHealth,
-        "HORSE_IDENTITY" => ComplianceRequirementCategory.HorseIdentity,
-        "OTHER" => ComplianceRequirementCategory.Other,
-        _ => throw new BadRequestException("Category must be QUARANTINE, CUSTOMS, TRANSPORT, HORSE_HEALTH, HORSE_IDENTITY or OTHER")
-    };
+    private static ComplianceRequirementCategory ParseCategory(string value) => Enum.Parse<ComplianceRequirementCategory>(value.Trim().Replace("_", ""), true);
 
     private static string CategoryName(ComplianceRequirementCategory category) => category switch
     {
@@ -235,13 +222,6 @@ public sealed class Service(AppDbContext db)
         ComplianceRequirementCategory.HorseIdentity => "HORSE_IDENTITY",
         _ => category.ToString().ToUpperInvariant()
     };
-
-    private static string ParseCountry(string value)
-    {
-        var country = value.Trim().ToUpperInvariant();
-        if (Countries.Contains(country)) return country;
-        throw new BadRequestException("Country must be an EU member ISO code, GB or EU");
-    }
 
     private static string? TrimOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static NotFoundException NotFound() => new("ComplianceRequirement not found");

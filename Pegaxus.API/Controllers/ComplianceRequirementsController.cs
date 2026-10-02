@@ -11,7 +11,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/compliance-requirements")]
-public sealed class ComplianceRequirementsController(Catalog.Service service) : Controller
+public sealed class ComplianceRequirementsController(Catalog.IService service) : Controller
 {
     public override void OnActionExecuting(ActionExecutingContext context)
     {

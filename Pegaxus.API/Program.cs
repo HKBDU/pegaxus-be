@@ -24,6 +24,7 @@ using AccountService = Pegaxus.Service.AccountService;
 using HorseService = Pegaxus.Service.HorseService;
 using EmployeeService = Pegaxus.Service.EmployeeService;
 using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
+using ComplianceRequirementService = Pegaxus.Service.ComplianceRequirementService;
 
 var envDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
 while (envDirectory is not null)
@@ -183,7 +184,10 @@ builder.Services.AddScoped<AccountService.IService, AccountService.Service>();
 builder.Services.AddScoped<HorseService.IService, HorseService.Service>();
 builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
-builder.Services.AddScoped<Pegaxus.Service.ComplianceRequirementService.Service>();
+builder.Services.AddScoped<ComplianceRequirementService.IService, ComplianceRequirementService.Service>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.ListRequest>, ComplianceRequirementService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.SaveRequest>, ComplianceRequirementService.Validator.SaveRequestValidator>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.StatusRequest>, ComplianceRequirementService.Validator.StatusRequestValidator>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();

@@ -11,6 +11,7 @@ using Pegaxus.API.Controllers;
 using Pegaxus.Service.Exceptions;
 using CatalogRequest = Pegaxus.Service.ComplianceRequirementService.Request;
 using CatalogService = Pegaxus.Service.ComplianceRequirementService.Service;
+using Pegaxus.Service.ComplianceRequirementService.Validator;
 
 namespace Pegaxus.Service.Test;
 
@@ -21,7 +22,7 @@ public class ComplianceRequirementServiceTests
     {
         await using var db = TestSupport.CreateDb();
         var (actor, _) = await TestSupport.AddLogisticsManagerAsync(db);
-        var service = new CatalogService(db);
+        var service = CreateService(db);
         var request = ValidRequest();
         var created = await service.CreateAsync(request, actor.AccountId);
         Assert.Equal("CR-EHC-01", created.RequirementCode);
@@ -62,7 +63,7 @@ public class ComplianceRequirementServiceTests
     public async Task DuplicateCode_IsRejectedIncludingReservedHistoricalCodes(string state)
     {
         await using var db = TestSupport.CreateDb();
-        var service = new CatalogService(db);
+        var service = CreateService(db);
         var actor = Guid.NewGuid();
         var first = await service.CreateAsync(ValidRequest(), actor);
         if (state == "INACTIVE") await service.UpdateStatusAsync(first.ComplianceRequirementId, new() { Status = "INACTIVE" }, actor);
@@ -82,7 +83,7 @@ public class ComplianceRequirementServiceTests
     public async Task ReferencedRequirement_CannotBeDeletedButCanBeDeactivated(bool templateReference)
     {
         await using var db = TestSupport.CreateDb();
-        var service = new CatalogService(db);
+        var service = CreateService(db);
         var actor = Guid.NewGuid();
         var created = await service.CreateAsync(ValidRequest(), actor);
         if (templateReference)
@@ -136,10 +137,14 @@ public class ComplianceRequirementServiceTests
     [InlineData("missingValidity")]
     [InlineData("missingValidityRequired")]
     [InlineData("nonEuropeanCountry")]
+    [InlineData("nullStatus")]
+    [InlineData("nullCategory")]
+    [InlineData("nullCode")]
+    [InlineData("issuingAuthority")]
     public async Task InvalidInput_DoesNotWriteData(string field)
     {
         await using var db = TestSupport.CreateDb();
-        var service = new CatalogService(db);
+        var service = CreateService(db);
         var request = ValidRequest();
         switch (field)
         {
@@ -153,7 +158,12 @@ public class ComplianceRequirementServiceTests
             case "missingValidity": request.ValidityPeriodDays = null; break;
             case "missingValidityRequired": request.ValidityRequired = null; break;
             case "nonEuropeanCountry": request.Country = "US"; break;
+            case "nullStatus": request.Status = null!; break;
+            case "nullCategory": request.Category = null!; break;
+            case "nullCode": request.RequirementCode = null!; break;
+            case "issuingAuthority": request.IssuingAuthority = new string('x', 201); break;
         }
+        Assert.False(new SaveRequestValidator().Validate(request).IsValid);
         await Assert.ThrowsAsync<BadRequestException>(() => service.CreateAsync(request, Guid.NewGuid()));
         Assert.Empty(db.ComplianceRequirements);
         Assert.Empty(db.CatalogAuditLogs);
@@ -175,7 +185,7 @@ public class ComplianceRequirementServiceTests
             User = new ClaimsPrincipal(new ClaimsIdentity([new System.Security.Claims.Claim(ClaimTypes.Role, role)], "test"))
         };
         http.Request.Method = method;
-        var controller = new ComplianceRequirementsController(new CatalogService(db)) { ControllerContext = new() { HttpContext = http } };
+        var controller = new ComplianceRequirementsController(CreateService(db)) { ControllerContext = new() { HttpContext = http } };
         var context = new ActionExecutingContext(new ActionContext(http, new RouteData(), new ActionDescriptor()),
             new List<IFilterMetadata>(), new Dictionary<string, object?>(), controller);
         Assert.NotEmpty(typeof(ComplianceRequirementsController).GetCustomAttributes(typeof(AuthorizeAttribute), true));
@@ -187,7 +197,7 @@ public class ComplianceRequirementServiceTests
     public async Task List_FiltersSortsAndPaginates_AndStatusCanReactivate()
     {
         await using var db = TestSupport.CreateDb();
-        var service = new CatalogService(db);
+        var service = CreateService(db);
         var actor = Guid.NewGuid();
         var request = ValidRequest();
         request.Country = null;
@@ -209,6 +219,34 @@ public class ComplianceRequirementServiceTests
         await service.UpdateStatusAsync(first.ComplianceRequirementId, new() { Status = "ACTIVE" }, actor);
         Assert.Equal("ACTIVE", (await service.GetAsync(first.ComplianceRequirementId)).Status);
     }
+
+    [Fact]
+    public async Task Validators_PreserveOptionalFieldsAndNormalizedValues()
+    {
+        await using var db = TestSupport.CreateDb();
+        var request = ValidRequest();
+        request.Country = " ";
+        request.Category = " horse_health ";
+        request.Status = " active ";
+        request.ValidityRequired = false;
+        request.ValidityPeriodDays = null;
+        Assert.True(new SaveRequestValidator().Validate(request).IsValid);
+        var result = await CreateService(db).CreateAsync(request, Guid.NewGuid());
+        Assert.Equal("HORSE_HEALTH", result.Category);
+        Assert.Null(result.Country);
+        Assert.False(result.ValidityRequired);
+        Assert.Null(result.ValidityPeriodDays);
+
+        Assert.True(new ListRequestValidator().Validate(new CatalogRequest.ListRequest
+            { Status = " ", Category = " ", Country = null, PageIndex = int.MaxValue }).IsValid);
+        Assert.False(new ListRequestValidator().Validate(new CatalogRequest.ListRequest { Category = "999" }).IsValid);
+        Assert.False(new ListRequestValidator().Validate(new CatalogRequest.ListRequest { Country = "US" }).IsValid);
+        Assert.False(new StatusRequestValidator().Validate(new CatalogRequest.StatusRequest { Status = null! }).IsValid);
+        Assert.True(new StatusRequestValidator().Validate(new CatalogRequest.StatusRequest { Status = " inactive " }).IsValid);
+    }
+
+    private static Pegaxus.Service.ComplianceRequirementService.IService CreateService(Pegaxus.Repository.AppDbContext db) =>
+        new CatalogService(db, new ListRequestValidator(), new SaveRequestValidator(), new StatusRequestValidator());
 
     private static CatalogRequest.SaveRequest ValidRequest() => new()
     {
