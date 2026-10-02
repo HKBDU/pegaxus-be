@@ -5,6 +5,7 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using DossierRequest = Pegaxus.Service.ComplianceDossierService.Request;
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
+using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.Test;
 
@@ -15,7 +16,8 @@ public class DossierRequirementTests
     {
         await using var db = TestSupport.CreateDb();
         var (booking, dossier, specialist, requirement) = await SeedAsync(db);
-        var service = CreateService(db);
+        var realtime = new RecordingRealtimeService();
+        var service = CreateService(db, realtime);
         var added = await service.AddRequirementAsync(specialist, dossier.ComplianceDossierId, new DossierRequest.RequirementRequest
         {
             ComplianceRequirementId = requirement.ComplianceRequirementId, LeadTimeDays = 5,
@@ -23,18 +25,29 @@ public class DossierRequirementTests
         });
         Assert.Equal(booking.RequestedDepartureDate.AddDays(-5), added.DueDate);
         Assert.Single(await db.AccountNotifications.ToListAsync());
-        Assert.Equal("ADDED", (await db.AuditDossiers.SingleAsync()).ActionType);
+        Assert.Equal(booking.Customer.AccountId, Assert.Single(realtime.Notifications).AccountId);
         var updated = await service.UpdateRequirementAsync(specialist, dossier.ComplianceDossierId,
             added.DossierRequirementId, new DossierRequest.UpdateRequirementRequest
             { LeadTimeDays = 7, Instruction = "Upload revised Modello 4", Reason = "Earlier checkpoint" });
         Assert.Equal(booking.RequestedDepartureDate.AddDays(-7), updated.DueDate);
         Assert.False(updated.IsMandatory);
+        Assert.Equal(2, realtime.Notifications.Count);
 
         var removal = await service.RemoveRequirementAsync(specialist, dossier.ComplianceDossierId, added.DossierRequirementId,
             new DossierRequest.RemoveRequirementRequest { Reason = "Route changed" });
         Assert.Equal(1, removal.RequirementCount);
         Assert.Equal(100m, removal.CompletionPercent);
         Assert.Equal(3, await db.AuditDossiers.CountAsync());
+        Assert.Equal(3, realtime.Notifications.Count);
+        Assert.All(realtime.Notifications, push => Assert.Equal(booking.Customer.AccountId, push.AccountId));
+        Assert.Equal((await db.Notifications.Select(item => item.NotificationId).ToListAsync()).OrderBy(id => id),
+            realtime.Notifications.Select(push => push.Notification.Id).OrderBy(id => id));
+        foreach (var action in new[] { "ADDED", "UPDATED", "REMOVED" })
+        {
+            var history = await service.GetAuditHistoryAsync(specialist, dossier.ComplianceDossierId,
+                new DossierRequest.AuditHistoryRequest { ActionType = $"DOSSIER_REQUIREMENT_{action}" });
+            Assert.Equal(added.DossierRequirementId, Assert.Single(history.Items).TargetEntityId);
+        }
         Assert.True((await db.DossierRequirements.SingleAsync(item => item.DossierRequirementId == added.DossierRequirementId)).IsDeleted);
 
         var replacement = await service.AddRequirementAsync(specialist, dossier.ComplianceDossierId, new DossierRequest.RequirementRequest
@@ -100,6 +113,18 @@ public class DossierRequirementTests
         return (booking, dossier, employeeAccount.AccountId, requirement);
     }
 
-    private static DossierService CreateService(AppDbContext db) =>
-        new(db, null!);
+    private static DossierService CreateService(AppDbContext db, NotificationService.INotificationRealtimeService? realtime = null) =>
+        new(db, null!, new NotificationService.Service(db, realtime ?? new NotificationService.NoopNotificationRealtimeService()));
+
+    private sealed class RecordingRealtimeService : NotificationService.INotificationRealtimeService
+    {
+        public List<(Guid AccountId, NotificationService.NotificationRealtimeDto Notification)> Notifications { get; } = [];
+
+        public Task SendToAccountAsync(Guid accountId, NotificationService.NotificationRealtimeDto notification,
+            CancellationToken cancellationToken = default)
+        {
+            Notifications.Add((accountId, notification));
+            return Task.CompletedTask;
+        }
+    }
 }

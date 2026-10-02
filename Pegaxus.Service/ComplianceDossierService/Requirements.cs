@@ -52,6 +52,7 @@ public sealed partial class Service
         {
             throw new ConflictException("DossierRequirement already exists.", "REQUIREMENT_ALREADY_EXISTS");
         }
+        await _notificationService.FlushAsync(cancellationToken);
         return MapRequirement(item, booking.RequestedDepartureDate);
     }
 
@@ -87,6 +88,7 @@ public sealed partial class Service
         AddNotification(dossier.Transport.Booking.Customer.AccountId, dossier, "DossierRequirement updated", now,
             message: $"DossierRequirement ({item.ComplianceRequirement.RequirementName}) was updated.");
         await _db.SaveChangesAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
         return MapRequirement(item, dossier.Transport.Booking.RequestedDepartureDate);
     }
 
@@ -112,6 +114,7 @@ public sealed partial class Service
         AddNotification(dossier.Transport.Booking.Customer.AccountId, dossier, "DossierRequirement removed", now,
             message: $"DossierRequirement ({item.ComplianceRequirement.RequirementName}) was removed.");
         await _db.SaveChangesAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
         var statuses = await _db.DossierRequirements.AsNoTracking()
             .Where(value => value.ComplianceDossierId == dossierId && !value.IsDeleted)
             .Select(value => value.Status).ToListAsync(cancellationToken);
@@ -168,7 +171,7 @@ public sealed partial class Service
         string reason, DateTime now, object details) => _db.AuditDossiers.Add(new AuditDossier
     {
         AuditDossierId = Guid.NewGuid(), ComplianceDossierId = dossierId, TargetEntity = nameof(DossierRequirement),
-        TargetId = requirementId, ActorAccountId = accountId, ActionType = action, Summary = reason.Trim(),
+        TargetId = requirementId, ActorAccountId = accountId, ActionType = $"DOSSIER_REQUIREMENT_{action}", Summary = reason.Trim(),
         Details = JsonSerializer.SerializeToDocument(details), Visibility = AuditVisibility.Internal, CreatedAt = now
     });
 

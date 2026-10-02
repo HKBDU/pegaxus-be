@@ -21,30 +21,70 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
-    [HttpPost("{dossierId:guid}/requirements")]
-    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
-    public async Task<IActionResult> AddRequirement(Guid dossierId,
-        [FromBody] ComplianceDossierService.Request.RequirementRequest request, CancellationToken cancellationToken) =>
-        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            await _service.AddRequirementAsync(GetAccountId(), dossierId, request, cancellationToken),
-            "DossierRequirement added to ComplianceDossier successfully.", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
-
-    [HttpPatch("{dossierId:guid}/requirements/{requirementId:guid}")]
-    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
-    public async Task<IActionResult> UpdateRequirement(Guid dossierId, Guid requirementId,
-        [FromBody] ComplianceDossierService.Request.UpdateRequirementRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await _service.UpdateRequirementAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
-            "DossierRequirement updated successfully.", traceId: HttpContext.TraceIdentifier));
-
-    [HttpDelete("{dossierId:guid}/requirements/{requirementId:guid}")]
-    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
-    public async Task<IActionResult> RemoveRequirement(Guid dossierId, Guid requirementId,
-        [FromBody] ComplianceDossierService.Request.RemoveRequirementRequest request, CancellationToken cancellationToken)
+    [HttpGet("dashboard")]
+    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
+    public async Task<IActionResult> GetDashboard(
+        [FromQuery] ComplianceDossierService.Request.DashboardRequest request,
+        CancellationToken cancellationToken)
     {
-        var result = await _service.RemoveRequirementAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(result, "DossierRequirement removed successfully.",
+        var response = await _service.GetDashboardAsync(
+            GetAccountId(), request, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Dashboard retrieved successfully",
             traceId: HttpContext.TraceIdentifier));
     }
+
+    [HttpGet("dashboard/export")]
+    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
+    public async Task<IActionResult> ExportDashboard(
+        [FromQuery] ComplianceDossierService.Request.DashboardExportRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.ExportDashboardAsync(
+            GetAccountId(), request, cancellationToken);
+
+        return File(response.Content, response.ContentType, response.FileName);
+    }
+
+    [HttpGet("{dossierId:guid}/audit-history")]
+    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
+    public async Task<IActionResult> GetAuditHistory(
+        Guid dossierId,
+        [FromQuery] ComplianceDossierService.Request.AuditHistoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetAuditHistoryAsync(
+            GetAccountId(), dossierId, request, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Audit history retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("/api/v1/bookings/{bookingId:guid}/dossier-templates")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> GetTemplateOptions(Guid bookingId, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(await _service.GetTemplateOptionsAsync(GetAccountId(), bookingId, cancellationToken),
+            "Available DossierTemplates retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpPost("/api/v1/bookings/{bookingId:guid}/compliance-dossier/preview")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> Preview(Guid bookingId, [FromBody] ComplianceDossierService.Request.InitializeRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(await _service.PreviewAsync(GetAccountId(), bookingId, request, cancellationToken),
+            "ComplianceDossier preview generated successfully.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpPost("/api/v1/bookings/{bookingId:guid}/compliance-dossier")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> Initialize(Guid bookingId, [FromBody] ComplianceDossierService.Request.InitializeRequest request,
+        CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.InitializeAsync(GetAccountId(), bookingId, request, cancellationToken),
+            "ComplianceDossier initialized successfully. DossierRequirements generated for customer.",
+            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
 
     [HttpGet("{dossierId:guid}/authority-submissions")]
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]

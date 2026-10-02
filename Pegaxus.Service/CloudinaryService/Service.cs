@@ -149,8 +149,16 @@ public class Service : IService
         EnsureConfigured();
         var result = await _cloudinary.GetResourceAsync(new GetResourceParams(publicId)
         {
-            ResourceType = ResourceType.Auto
+            ResourceType = ResourceType.Image
         });
+
+        if (result.Error is not null || string.IsNullOrWhiteSpace(result.SecureUrl?.ToString()))
+        {
+            result = await _cloudinary.GetResourceAsync(new GetResourceParams(publicId)
+            {
+                ResourceType = ResourceType.Raw
+            });
+        }
 
         if (result.Error is not null || string.IsNullOrWhiteSpace(result.SecureUrl?.ToString()))
             throw new NotFoundException("Uploaded file was not found on Cloudinary", "UPLOAD_NOT_FOUND");
