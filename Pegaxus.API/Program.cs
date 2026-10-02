@@ -3,11 +3,13 @@ using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.DataProtection;
 using FluentValidation;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Npgsql.NameTranslation;
 using Pegaxus.API.Extensions;
+using Pegaxus.API.Hubs;
 using Pegaxus.API.Middleware;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
@@ -24,6 +26,7 @@ using AccountService = Pegaxus.Service.AccountService;
 using HorseService = Pegaxus.Service.HorseService;
 using EmployeeService = Pegaxus.Service.EmployeeService;
 using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
+using NotificationService = Pegaxus.Service.NotificationService;
 using ComplianceRequirementService = Pegaxus.Service.ComplianceRequirementService;
 
 var envDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
@@ -84,6 +87,8 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IUserIdProvider, AccountUserIdProvider>();
 
 var dataSourceBuilder = new NpgsqlDataSourceBuilder(
     builder.Configuration.GetConnectionString("DefaultConnection"));
@@ -184,6 +189,8 @@ builder.Services.AddScoped<AccountService.IService, AccountService.Service>();
 builder.Services.AddScoped<HorseService.IService, HorseService.Service>();
 builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
+builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
+builder.Services.AddScoped<NotificationService.INotificationRealtimeService, SignalRNotificationRealtimeService>();
 builder.Services.AddScoped<ComplianceRequirementService.IService, ComplianceRequirementService.Service>();
 builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.ListRequest>, ComplianceRequirementService.Validator.ListRequestValidator>();
 builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.SaveRequest>, ComplianceRequirementService.Validator.SaveRequestValidator>();
@@ -227,6 +234,7 @@ app.UseAuthorization();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
 
 app.Run();
 
