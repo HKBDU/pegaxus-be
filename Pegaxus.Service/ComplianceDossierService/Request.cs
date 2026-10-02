@@ -105,4 +105,37 @@ public class Request
 
         public string? RejectionReason { get; set; }
     }
+
+    public class DashboardRequest
+    {
+        public int PageIndex { get; set; } = 1;
+
+        public int PageSize { get; set; } = 20;
+
+        public string? Status { get; set; }
+
+        public string? Risk { get; set; }
+
+        public string? RouteType { get; set; }
+
+        public string? SortBy { get; set; } = "requestedDepartureDate:asc";
+
+        public string? Search { get; set; }
+    }
+
+    public sealed class DashboardExportRequest : DashboardRequest
+    {
+        public string Format { get; set; } = string.Empty;
+    }
+
+    public sealed class AuditHistoryRequest
+    {
+        public string? ActionType { get; set; }
+        public string? Search { get; set; }
+        public DateTimeOffset? From { get; set; }
+        public DateTimeOffset? To { get; set; }
+        public int PageIndex { get; set; } = 1;
+        public int PageSize { get; set; } = 20;
+        public string? SortBy { get; set; } = "occurredAt:desc";
+    }
 }

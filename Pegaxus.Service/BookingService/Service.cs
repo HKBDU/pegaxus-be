@@ -9,6 +9,7 @@ using Pegaxus.Service.Exceptions;
 
 using BookingEntity = Pegaxus.Repository.Entities.Booking;
 using MailService = Pegaxus.Service.MailService;
+using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.BookingService;
 
@@ -16,11 +17,24 @@ public class Service : IService
 {
     private readonly AppDbContext _db;
     private readonly MailService.IService _mailService;
+    private readonly NotificationService.IService _notificationService;
 
-    public Service(AppDbContext db, MailService.IService mailService)
+    public Service(
+        AppDbContext db,
+        MailService.IService mailService,
+        NotificationService.IService notificationService)
     {
         _db = db;
         _mailService = mailService;
+        _notificationService = notificationService;
+    }
+
+    public Service(AppDbContext db, MailService.IService mailService)
+        : this(
+            db,
+            mailService,
+            new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService()))
+    {
     }
 
     public async Task<Response.BookingDetailResponse> GetAsync(
@@ -610,6 +624,7 @@ public class Service : IService
             Body = $"<p>Booking <strong>{WebUtility.HtmlEncode(booking.BookingCode)}</strong> has been approved.</p>"
         });
         await transaction.CommitAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
 
         return new Response.ApproveBookingResponse
         {
@@ -656,6 +671,7 @@ public class Service : IService
             Body = $"<p>Booking <strong>{WebUtility.HtmlEncode(booking.BookingCode)}</strong> has been rejected.</p><p>Reason: {WebUtility.HtmlEncode(reason)}</p>"
         });
         await transaction.CommitAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
     }
 
     private async Task<Customer> GetCustomerAsync(Guid accountId, CancellationToken cancellationToken)
@@ -818,25 +834,17 @@ public class Service : IService
 
     private void AddNotification(Guid accountId, Guid? transportId, BookingEntity booking, string title, DateTime now)
     {
-        var notificationId = Guid.NewGuid();
-        _db.Notifications.Add(new Notification
+        _notificationService.Queue(new NotificationService.NotificationCreateRequest
         {
-            NotificationId = notificationId,
+            AccountId = accountId,
             TransportId = transportId,
-            NotificationType = NotificationType.BOOKING,
+            Type = NotificationType.BOOKING,
             Priority = NotificationPriority.NORMAL,
             Title = title,
             Message = $"Booking {booking.BookingCode}: {title.ToLowerInvariant()}.",
             ReferenceType = "Booking",
             ReferenceId = booking.BookingId,
             ActionUrl = $"/bookings/{booking.BookingId}",
-            CreatedAt = now
-        });
-        _db.AccountNotifications.Add(new AccountNotification
-        {
-            AccountId = accountId,
-            NotificationId = notificationId,
-            Status = RecipientStatus.PENDING,
             CreatedAt = now
         });
     }
