@@ -2,11 +2,10 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
+using System.Reflection;
+using Microsoft.Extensions.DependencyInjection;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
-using Microsoft.AspNetCore.Mvc.Abstractions;
-using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Mvc.Routing;
 using Pegaxus.API.Controllers;
 using Pegaxus.Service.Exceptions;
 using CatalogRequest = Pegaxus.Service.ComplianceRequirementService.Request;
@@ -171,26 +170,21 @@ public class ComplianceRequirementServiceTests
 
     [Theory]
     [InlineData("TransportSpecialist", "POST", true)]
-    [InlineData("Admin", "DELETE", true)]
+    [InlineData("Admin", "DELETE", false)]
     [InlineData("LogisticsManager", "GET", true)]
     [InlineData("LogisticsManager", "PUT", false)]
     [InlineData("Customer", "POST", false)]
     [InlineData("Driver", "PATCH", false)]
     [InlineData("Escort", "DELETE", false)]
-    public void CatalogAuthorization_EnforcesRoles(string role, string method, bool allowed)
+    public async Task CatalogAuthorization_EnforcesPolicies(string role, string method, bool allowed)
     {
-        using var db = TestSupport.CreateDb();
-        var http = new DefaultHttpContext
-        {
-            User = new ClaimsPrincipal(new ClaimsIdentity([new System.Security.Claims.Claim(ClaimTypes.Role, role)], "test"))
-        };
-        http.Request.Method = method;
-        var controller = new ComplianceRequirementsController(CreateService(db)) { ControllerContext = new() { HttpContext = http } };
-        var context = new ActionExecutingContext(new ActionContext(http, new RouteData(), new ActionDescriptor()),
-            new List<IFilterMetadata>(), new Dictionary<string, object?>(), controller);
-        Assert.NotEmpty(typeof(ComplianceRequirementsController).GetCustomAttributes(typeof(AuthorizeAttribute), true));
-        if (allowed) controller.OnActionExecuting(context);
-        else Assert.Equal(403, Assert.Throws<ForbiddenException>(() => controller.OnActionExecuting(context)).StatusCode);
+        using var provider = AuthorizationPolicyTests.CreateProvider();
+        var action = typeof(ComplianceRequirementsController).GetMethods().First(action =>
+            action.GetCustomAttributes<HttpMethodAttribute>().Any(attribute => attribute.HttpMethods.Contains(method)));
+        var policy = action.GetCustomAttribute<AuthorizeAttribute>()!.Policy!;
+        var user = new ClaimsPrincipal(new ClaimsIdentity([new System.Security.Claims.Claim(ClaimTypes.Role, role)], "test"));
+        var authorization = provider.GetRequiredService<IAuthorizationService>();
+        Assert.Equal(allowed, (await authorization.AuthorizeAsync(user, null, policy)).Succeeded);
     }
 
     [Fact]
