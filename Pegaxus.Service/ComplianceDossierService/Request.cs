@@ -4,6 +4,16 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Request
 {
+    public sealed class DocumentUploadRequest
+    {
+        public List<IFormFile> Files { get; set; } = [];
+        public string DocumentNumber { get; set; } = string.Empty;
+        public string IssuingAuthority { get; set; } = string.Empty;
+        public DateOnly? IssuedDate { get; set; }
+        public DateOnly? ExpiryDate { get; set; }
+        public string? UploadNote { get; set; }
+    }
+
     public sealed class RequirementRequest
     {
         public Guid ComplianceRequirementId { get; set; }

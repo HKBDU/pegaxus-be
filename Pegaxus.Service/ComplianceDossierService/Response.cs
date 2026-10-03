@@ -4,6 +4,26 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Response
 {
+    public sealed class DocumentUploadResponse
+    {
+        public Guid DossierRequirementId { get; init; }
+        public Guid ComplianceDocumentId { get; init; }
+        public Guid DocumentVersionId { get; init; }
+        public int VersionNo { get; init; }
+        public string Status { get; init; } = string.Empty;
+        public IReadOnlyList<UploadedDocumentFileResponse> Files { get; init; } = [];
+    }
+
+    public sealed class UploadedDocumentFileResponse
+    {
+        public Guid? DocumentAttachmentId { get; init; }
+        public string FileName { get; init; } = string.Empty;
+        public string MimeType { get; init; } = string.Empty;
+        public long FileSizeBytes { get; init; }
+        public string ReadUrl { get; init; } = string.Empty;
+        public DateTimeOffset ReadUrlExpiresAt { get; init; }
+    }
+
     public sealed class RequirementResponse
     {
         public Guid DossierRequirementId { get; init; }
