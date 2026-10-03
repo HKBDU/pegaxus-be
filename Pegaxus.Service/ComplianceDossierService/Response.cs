@@ -4,6 +4,93 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Response
 {
+    public sealed class OverviewResponse
+    {
+        public bool IsInitialized { get; init; }
+        public string? Message { get; init; }
+        public Guid BookingId { get; init; }
+        public string BookingCode { get; init; } = string.Empty;
+        public Guid? ComplianceDossierId { get; init; }
+        public string? DossierCode { get; init; }
+        public string? Status { get; init; }
+        public int FulfilledCount { get; init; }
+        public int RequirementCount { get; init; }
+        public decimal CompletionPercent { get; init; }
+        public IReadOnlyList<RequirementResponse> TripRequirements { get; init; } = [];
+        public IReadOnlyList<HorseRequirementsResponse> HorseRequirements { get; init; } = [];
+        public ActionsResponse Actions { get; init; } = new();
+    }
+
+    public sealed class HorseRequirementsResponse
+    {
+        public Guid HorseId { get; init; }
+        public string HorseName { get; init; } = string.Empty;
+        public IReadOnlyList<RequirementResponse> Requirements { get; init; } = [];
+    }
+
+    public sealed class ActionsResponse
+    {
+        public bool CanUpload { get; init; }
+        public bool CanReview { get; init; }
+    }
+
+    public sealed class RequirementDetailResponse
+    {
+        public RequirementResponse Requirement { get; init; } = null!;
+        public DateOnly? ValidUntil { get; init; }
+        public DateTime? SatisfiedAt { get; init; }
+        public string? WaivedReason { get; init; }
+        public DocumentResponse? Document { get; init; }
+        public ActionsResponse Actions { get; init; } = new();
+    }
+
+    public sealed class DocumentResponse
+    {
+        public Guid ComplianceDocumentId { get; init; }
+        public string DocumentCode { get; init; } = string.Empty;
+        public string DocumentName { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
+        public string? DocumentNumber { get; init; }
+        public string? IssuingAuthority { get; init; }
+        public DateOnly? IssuedDate { get; init; }
+        public DateOnly? ExpiryDate { get; init; }
+        public string? Note { get; init; }
+        public IReadOnlyList<VersionResponse> Versions { get; init; } = [];
+    }
+
+    public sealed class VersionResponse
+    {
+        public Guid DocumentVersionId { get; init; }
+        public int VersionNo { get; init; }
+        public string FileName { get; init; } = string.Empty;
+        public string PreviewUrl { get; init; } = string.Empty;
+        public string? MimeType { get; init; }
+        public long? FileSizeBytes { get; init; }
+        public string? UploadNote { get; init; }
+        public DateTime UploadedAt { get; init; }
+        public IReadOnlyList<AttachmentResponse> Attachments { get; init; } = [];
+        public IReadOnlyList<ReviewResponse> Reviews { get; init; } = [];
+    }
+
+    public sealed class AttachmentResponse
+    {
+        public Guid DocumentAttachmentId { get; init; }
+        public string FileName { get; init; } = string.Empty;
+        public string PreviewUrl { get; init; } = string.Empty;
+        public string? MimeType { get; init; }
+        public long? FileSizeBytes { get; init; }
+        public int SortOrder { get; init; }
+    }
+
+    public sealed class ReviewResponse
+    {
+        public Guid DocumentReviewId { get; init; }
+        public Guid ReviewedByAccountId { get; init; }
+        public string Result { get; init; } = string.Empty;
+        public string? ReviewComment { get; init; }
+        public DateTime ReviewedAt { get; init; }
+    }
+
     public sealed class RequirementResponse
     {
         public Guid DossierRequirementId { get; init; }

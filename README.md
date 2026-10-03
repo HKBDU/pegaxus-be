@@ -169,6 +169,33 @@ To keep Git history clean and maintain software stability:
 
 ---
 
+## ComplianceDossier Viewing (UC-20)
+
+All read endpoints require a Bearer token and the enum-backed `ComplianceDossierViewerPolicy` (Customer, Transport Specialist, Logistics Manager).
+Customers can read only dossiers belonging to their own bookings; other employee roles receive 403.
+
+| GET endpoint | Result |
+| :--- | :--- |
+| `/api/v1/bookings/{bookingId}/compliance-dossier` | Overview, or `isInitialized: false` with the initialization message |
+| `/api/v1/compliance-dossiers/{dossierId}` | Overview by dossier ID |
+| `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}` | Requirement, document, versions, attachments, review history |
+| `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/versions/{versionId}/preview` | Authenticated PDF/image bytes |
+| `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/versions/{versionId}/attachments/{attachmentId}/preview` | Authenticated attachment bytes |
+
+Overview accepts `status` and `horseId` query filters. `tripRequirements` and `horseRequirements` contain filtered results;
+`fulfilledCount`, `requirementCount` and `completionPercent` always describe the entire dossier, excluding deleted requirements.
+SATISFIED and WAIVED count as fulfilled. Empty dossiers report 0%. `actions.canUpload` is Customer-only;
+`actions.canReview` is Transport Specialist-only. These flags describe role permissions; mutation APIs must enforce their own lifecycle rules.
+
+Use the returned API `previewUrl` with an Authorization header (fetch as a Blob for browser previews), not a token query parameter.
+Preview validates ownership and all nested IDs, permits only the configured Cloudinary cloud, refuses redirects, caps files at 5 MB,
+detects PDF/raster-image types from bytes, and returns no-store responses. The 15-second timeout covers both headers and body.
+
+**Storage limitation:** Existing Cloudinary upload methods use public delivery. The proxy protects API access but cannot revoke
+previously known public storage URLs. Sensitive documents must be uploaded with authenticated/private delivery and existing public
+assets migrated at the storage layer before claiming end-to-end file privacy. No storage migration is performed by this read-only feature.
+The 1.5-second response target still requires measurement against a real PostgreSQL database.
+
 ## 👥 8. License & Academic Attribution
 
 Developed as a capstone software engineering project for **SWP391** (Software Development Project).  
