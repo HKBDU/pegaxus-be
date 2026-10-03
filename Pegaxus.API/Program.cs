@@ -27,6 +27,7 @@ using HorseService = Pegaxus.Service.HorseService;
 using EmployeeService = Pegaxus.Service.EmployeeService;
 using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
 using NotificationService = Pegaxus.Service.NotificationService;
+using ComplianceRequirementService = Pegaxus.Service.ComplianceRequirementService;
 
 var envDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
 while (envDirectory is not null)
@@ -190,6 +191,10 @@ builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
 builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
 builder.Services.AddScoped<NotificationService.INotificationRealtimeService, SignalRNotificationRealtimeService>();
+builder.Services.AddScoped<ComplianceRequirementService.IService, ComplianceRequirementService.Service>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.ListRequest>, ComplianceRequirementService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.SaveRequest>, ComplianceRequirementService.Validator.SaveRequestValidator>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.StatusRequest>, ComplianceRequirementService.Validator.StatusRequestValidator>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
