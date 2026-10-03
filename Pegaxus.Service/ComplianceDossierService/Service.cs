@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using QuestPDF.Fluent;
@@ -15,8 +16,7 @@ using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
-
-public sealed class Service : IService
+public sealed partial class Service : IService
 {
     private const long MaxProofFileSize = 2 * 1024 * 1024;
     private static readonly HashSet<string> AuditActionTypes =
@@ -31,15 +31,18 @@ public sealed class Service : IService
 
     private readonly AppDbContext _db;
     private readonly MediaService.IService _mediaService;
+    private readonly IValidator<Request.InitializeRequest> _initializeValidator;
     private readonly NotificationService.IService _notificationService;
 
     public Service(
         AppDbContext db,
         MediaService.IService mediaService,
+        IValidator<Request.InitializeRequest> initializeValidator,
         NotificationService.IService notificationService)
     {
         _db = db;
         _mediaService = mediaService;
+        _initializeValidator = initializeValidator;
         _notificationService = notificationService;
     }
 

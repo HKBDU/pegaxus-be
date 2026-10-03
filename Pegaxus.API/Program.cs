@@ -192,6 +192,8 @@ builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
 builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
 builder.Services.AddScoped<NotificationService.INotificationRealtimeService, SignalRNotificationRealtimeService>();
+builder.Services.AddScoped<IValidator<ComplianceDossierService.Request.InitializeRequest>, ComplianceDossierService.Validator.InitializeRequestValidator>();
+builder.Services.AddScoped<IValidator<BookingService.Request.NegotiateBookingRequest>, BookingService.Validations.NegotiateBookingRequestValidator>();
 builder.Services.AddScoped<DossierTemplateService.IService, DossierTemplateService.Service>();
 builder.Services.AddScoped<IValidator<DossierTemplateService.Request.ListRequest>, DossierTemplateService.Validator.ListRequestValidator>();
 builder.Services.AddScoped<IValidator<DossierTemplateService.Request.SaveRequest>, DossierTemplateService.Validator.SaveRequestValidator>();
@@ -240,6 +242,8 @@ app.UseAuthorization();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<Pegaxus.API.Hubs.ComplianceDossierHub>("/hubs/compliance-dossiers",
+    options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();
 

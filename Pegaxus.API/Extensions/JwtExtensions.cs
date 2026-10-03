@@ -73,8 +73,10 @@ public static class JwtExtensions
                     OnMessageReceived = context =>
                     {
                         var accessToken = context.Request.Query["access_token"];
+                        var path = context.HttpContext.Request.Path;
                         if (!string.IsNullOrWhiteSpace(accessToken) &&
-                            context.HttpContext.Request.Path.StartsWithSegments("/hubs/notifications"))
+                            (path.StartsWithSegments("/hubs/notifications") ||
+                             path.StartsWithSegments("/hubs/compliance-dossiers")))
                         {
                             context.Token = accessToken;
                         }

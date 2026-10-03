@@ -1,5 +1,6 @@
 using Pegaxus.Service.Models;
 using Pegaxus.Service.Exceptions;
+using Microsoft.EntityFrameworkCore;
 
 namespace Pegaxus.API.Middleware;
 
@@ -42,6 +43,7 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
         return ex switch
         {
             Exceptions appEx => appEx.StatusCode,
+            DbUpdateConcurrencyException => StatusCodes.Status409Conflict,
             ArgumentException => StatusCodes.Status400BadRequest,
             UnauthorizedAccessException => StatusCodes.Status401Unauthorized,
             KeyNotFoundException => StatusCodes.Status404NotFound,
@@ -51,6 +53,8 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
 
     private static string GetErrorMessage(Exception ex, int statusCode)
     {
+        if (ex is DbUpdateConcurrencyException)
+            return "The record changed. Reload it and try again.";
         return statusCode >= StatusCodes.Status500InternalServerError
             ? "A system error occurred. Please try again later"
             : ex.Message;
@@ -66,6 +70,7 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
             StatusCodes.Status400BadRequest => "VALIDATION_ERROR",
             StatusCodes.Status401Unauthorized => "UNAUTHORIZED",
             StatusCodes.Status404NotFound => "NOT_FOUND",
+            StatusCodes.Status409Conflict => "CONCURRENT_UPDATE",
             _ => "SYSTEM_ERROR"
         };
     }

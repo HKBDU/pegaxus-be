@@ -360,6 +360,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("special_requirements");
 
                     b.Property<int>("Status")
+                        .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("booking_status")
                         .HasColumnName("status")

@@ -336,6 +336,7 @@ public partial class AppDbContext : DbContext
         modelBuilder.Entity<Booking>(entity =>
         {
             entity.HasKey(e => e.BookingId).HasName("Booking_pkey");
+            entity.Property(e => e.Status).IsConcurrencyToken();
 
             entity.ToTable("Booking");
 

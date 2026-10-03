@@ -13,7 +13,7 @@ using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.BookingService;
 
-public class Service : IService
+public partial class Service : IService
 {
     private readonly AppDbContext _db;
     private readonly MailService.IService _mailService;

@@ -2,6 +2,8 @@ using System.Security.Claims;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.SignalR;
+using Pegaxus.API.Hubs;
 using Pegaxus.API.Extensions;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.Models;
@@ -20,6 +22,29 @@ public class BookingController : ControllerBase
     public BookingController(BookingService.IService service)
     {
         _service = service;
+    }
+
+    [HttpPatch("{bookingId:guid}/negotiated-status")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> Negotiate(Guid bookingId, [FromBody] BookingService.Request.NegotiateBookingRequest request,
+        [FromServices] IValidator<BookingService.Request.NegotiateBookingRequest> validator,
+        [FromServices] IHubContext<ComplianceDossierHub> hub, [FromServices] ILogger<BookingController> logger,
+        CancellationToken cancellationToken)
+    {
+        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        if (error is not null) return error;
+        var response = await _service.NegotiateAsync(GetAccountId(), bookingId, request, cancellationToken);
+        try
+        {
+            await hub.Clients.All.SendAsync("BookingStatusChanged", response, CancellationToken.None);
+        }
+        catch (Exception exception)
+        {
+            // The status change and durable notifications are already committed.
+            logger.LogWarning(exception, "Unable to broadcast negotiated status for booking {BookingId}", bookingId);
+        }
+        return Ok(ResponseBuilder.SuccessResponse(response, "Booking status changed; dossier operations suspended.",
+            traceId: HttpContext.TraceIdentifier));
     }
 
     [HttpGet]
