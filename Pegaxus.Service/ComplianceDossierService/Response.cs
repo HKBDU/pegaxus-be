@@ -4,6 +4,23 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Response
 {
+    public sealed class DocumentReviewResultResponse
+    {
+        public Guid DocumentVersionId { get; init; }
+        public Guid DossierRequirementId { get; init; }
+        public ReviewResponse Review { get; init; } = null!;
+        public string RequirementStatus { get; init; } = string.Empty;
+        public string DocumentStatus { get; init; } = string.Empty;
+        public string DossierStatus { get; init; } = string.Empty;
+    }
+
+    public sealed class DossierReadinessResponse
+    {
+        public Guid ComplianceDossierId { get; init; }
+        public string Status { get; init; } = string.Empty;
+        public DateTime? ReadyForSubmissionAt { get; init; }
+    }
+
     public sealed class OverviewResponse
     {
         public bool IsInitialized { get; init; }
@@ -55,6 +72,7 @@ public class Response
         public DateOnly? IssuedDate { get; init; }
         public DateOnly? ExpiryDate { get; init; }
         public string? Note { get; init; }
+        public DateTime UpdatedAt { get; init; }
         public IReadOnlyList<VersionResponse> Versions { get; init; } = [];
     }
 

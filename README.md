@@ -196,6 +196,36 @@ previously known public storage URLs. Sensitive documents must be uploaded with 
 assets migrated at the storage layer before claiming end-to-end file privacy. No storage migration is performed by this read-only feature.
 The 1.5-second response target still requires measurement against a real PostgreSQL database.
 
+## DocumentReview (UC-23)
+
+All mutation endpoints require a Bearer token, the enum-backed `TransportSpecialistPolicy`, and an active Transport Specialist account.
+
+| POST endpoint | Result |
+| :--- | :--- |
+| `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/versions/{versionId}/approve` | Append APPROVED review; document APPROVED; requirement SATISFIED |
+| `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/versions/{versionId}/reviews/{reviewId}/revoke` | Append REVOKED review; preserve original approval |
+| `/api/v1/compliance-dossiers/{dossierId}/ready-for-submission` | Explicitly mark dossier READY_FOR_SUBMISSION |
+
+Approval requires `metadataConfirmed: true`, `versionUploadedAt` and `documentUpdatedAt` copied from the requirement-detail response.
+Only the latest provided version is eligible. Changed file/metadata timestamps return 409; reload the detail and repeat verification.
+`reviewNote` is optional. Expiry before departure returns 409 (`EXPIRY_EXCEPTION_REQUIRED`) until a nonblank
+`expiryExceptionReason` is supplied. Both notes are limited to 2000 characters.
+
+Revocation requires the current approval ID, `status` (PROVIDED or REJECTED), and a nonblank `reason` of at most 500 characters.
+Revoking a mandatory requirement clears dossier readiness; optional revocation preserves readiness. Reviews are append-only,
+with reviewer ID, UTC review time, version ID, and a dossier audit record. Approval never automatically readies or submits a dossier.
+Readiness requires all nondeleted mandatory requirements to be SATISFIED or WAIVED, consistent with authority-submission rules.
+Submitted, pending-authority, approved, closed, or uninitialized dossiers cannot be reviewed or marked ready.
+
+Apply migration `20261004000000_AddRevokedDocumentReviewResult` before enabling revocation:
+
+```bash
+dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
+```
+
+The migration adds the native PostgreSQL REVOKED enum value; rollback deliberately refuses to remove immutable review history.
+The one-second API target still requires measurement against a real PostgreSQL database.
+
 ## 👥 8. License & Academic Attribution
 
 Developed as a capstone software engineering project for **SWP391** (Software Development Project).  

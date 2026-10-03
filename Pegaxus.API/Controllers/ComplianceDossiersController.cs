@@ -21,6 +21,31 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
+    [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/versions/{versionId:guid}/approve")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> ApproveDocument(Guid dossierId, Guid requirementId, Guid versionId,
+        [FromBody] ComplianceDossierService.Request.ApproveDocumentRequest request, CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.ApproveDocumentAsync(GetAccountId(), dossierId, requirementId, versionId, request, cancellationToken),
+            "DocumentReview recorded: APPROVED. DossierRequirement status updated to SATISFIED by TS.",
+            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
+    [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/versions/{versionId:guid}/reviews/{reviewId:guid}/revoke")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> RevokeDocumentReview(Guid dossierId, Guid requirementId, Guid versionId, Guid reviewId,
+        [FromBody] ComplianceDossierService.Request.RevokeDocumentReviewRequest request, CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.RevokeDocumentReviewAsync(GetAccountId(), dossierId, requirementId, versionId, reviewId, request, cancellationToken),
+            "DocumentReview revoked successfully. DossierRequirement status updated by TS.",
+            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
+    [HttpPost("{dossierId:guid}/ready-for-submission")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> MarkReadyForSubmission(Guid dossierId, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(
+            await _service.MarkReadyForSubmissionAsync(GetAccountId(), dossierId, cancellationToken),
+            "ComplianceDossier marked READY_FOR_SUBMISSION by TS. No authority submission was created.", traceId: HttpContext.TraceIdentifier));
+
     [HttpGet("/api/v1/bookings/{bookingId:guid}/compliance-dossier")]
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetByBooking(Guid bookingId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,

@@ -57,12 +57,12 @@ public sealed partial class Service
                 ComplianceDocumentId = document.ComplianceDocumentId, DocumentCode = document.DocumentCode,
                 DocumentName = document.DocumentName, Status = document.Status.ToString(), DocumentNumber = document.DocumentNumber,
                 IssuingAuthority = document.IssuingAuthority, IssuedDate = document.IssuedDate, ExpiryDate = document.ExpiryDate,
-                Note = document.Note,
+                Note = document.Note, UpdatedAt = DateTime.SpecifyKind(document.UpdatedAt, DateTimeKind.Utc),
                 Versions = document.DocumentVersions.OrderByDescending(item => item.VersionNo).Select(version => new Response.VersionResponse
                 {
                     DocumentVersionId = version.DocumentVersionId, VersionNo = version.VersionNo, FileName = version.FileName,
                     PreviewUrl = $"{previewBase}/{version.DocumentVersionId}/preview", MimeType = version.MimeType,
-                    FileSizeBytes = version.FileSizeBytes, UploadNote = version.UploadNote, UploadedAt = version.UploadedAt,
+                    FileSizeBytes = version.FileSizeBytes, UploadNote = version.UploadNote, UploadedAt = DateTime.SpecifyKind(version.UploadedAt, DateTimeKind.Utc),
                     Attachments = version.DocumentAttachments.OrderBy(item => item.SortOrder).ThenBy(item => item.DocumentAttachmentId)
                         .Select(attachment => new Response.AttachmentResponse
                         {
@@ -74,7 +74,7 @@ public sealed partial class Service
                         .Select(review => new Response.ReviewResponse
                         {
                             DocumentReviewId = review.DocumentReviewId, ReviewedByAccountId = review.ReviewedByAccountId,
-                            Result = review.Result.ToString(), ReviewComment = review.ReviewComment, ReviewedAt = review.ReviewedAt
+                            Result = review.Result.ToString(), ReviewComment = review.ReviewComment, ReviewedAt = DateTime.SpecifyKind(review.ReviewedAt, DateTimeKind.Utc)
                         }).ToList()
                 }).ToList()
             }

@@ -4,6 +4,21 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Request
 {
+    public sealed class ApproveDocumentRequest
+    {
+        public bool MetadataConfirmed { get; set; }
+        public DateTime VersionUploadedAt { get; set; }
+        public DateTime DocumentUpdatedAt { get; set; }
+        public string? ReviewNote { get; set; }
+        public string? ExpiryExceptionReason { get; set; }
+    }
+
+    public sealed class RevokeDocumentReviewRequest
+    {
+        public Pegaxus.Repository.Enum.DossierRequirementStatus Status { get; set; }
+        public string Reason { get; set; } = string.Empty;
+    }
+
     public sealed class ViewRequest
     {
         public string? Status { get; set; }
