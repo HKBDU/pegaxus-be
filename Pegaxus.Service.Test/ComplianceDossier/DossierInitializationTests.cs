@@ -203,7 +203,8 @@ public class DossierInitializationTests
 
     private static DossierService CreateService(AppDbContext db, NotificationService.INotificationRealtimeService? realtime = null) =>
         new(db, null!, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
-            new NotificationService.Service(db, realtime ?? new NotificationService.NoopNotificationRealtimeService()));
+            new NotificationService.Service(db, realtime ?? new NotificationService.NoopNotificationRealtimeService()),
+            null!, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance);
 
     private sealed class RecordingRealtimeService : NotificationService.INotificationRealtimeService
     {

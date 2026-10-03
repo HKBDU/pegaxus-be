@@ -2,6 +2,16 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public interface IService
 {
+    Task<Response.DocumentUploadResponse> SubmitDocumentVersionAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        Request.DocumentUploadRequest request, CancellationToken cancellationToken = default);
+    Task<Response.DocumentMetadataResponse> UpdateDocumentMetadataAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        Request.DocumentMetadataRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Response.DocumentVersionResponse>> GetDocumentVersionsAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        CancellationToken cancellationToken = default);
+
+    Task<Response.DocumentUploadResponse> UploadDocumentAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        Request.DocumentUploadRequest request, CancellationToken cancellationToken = default);
+
     Task<Response.RequirementResponse> AddRequirementAsync(Guid accountId, Guid dossierId, Request.RequirementRequest request, CancellationToken cancellationToken = default);
     Task<Response.RequirementResponse> UpdateRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.UpdateRequirementRequest request, CancellationToken cancellationToken = default);
     Task<Response.RemovalResponse> RemoveRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.RemoveRequirementRequest request, CancellationToken cancellationToken = default);

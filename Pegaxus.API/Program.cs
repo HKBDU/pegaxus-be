@@ -185,6 +185,7 @@ builder.Services.AddScoped<IValidator<BookingService.Request.CancelBookingReques
 builder.Services.AddScoped<IValidator<BookingService.Request.RejectBookingRequest>, BookingService.Validations.RejectBookingRequestValidator>();
 builder.Services.AddScoped<IPasswordHasher<Account>, PasswordHasher<Account>>();
 builder.Services.AddScoped<MediaService.IService, CloudinaryService.Service>();
+builder.Services.AddScoped<Pegaxus.Service.DocumentStorageService.IService, Pegaxus.Service.DocumentStorageService.Service>();
 builder.Services.AddScoped<MailService.IService, MailService.Service>();
 builder.Services.AddScoped<AccountService.IService, AccountService.Service>();
 builder.Services.AddScoped<HorseService.IService, HorseService.Service>();
