@@ -21,6 +21,23 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
+    [HttpGet("{dossierId:guid}/missing-requirements")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> GetMissingRequirements(Guid dossierId, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(await _service.GetMissingRequirementsAsync(GetAccountId(), dossierId, cancellationToken),
+            "Danh sách giấy tờ còn thiếu.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpPost("{dossierId:guid}/missing-document-reminders")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> RequestMissingDocuments(Guid dossierId,
+        [FromBody] ComplianceDossierService.Request.MissingDocumentsRequest request, CancellationToken cancellationToken)
+    {
+        var result = await _service.RequestMissingDocumentsAsync(GetAccountId(), dossierId, request, cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(result,
+            result.EmailSent ? "Đã gửi thông báo nhắc nộp bổ sung giấy tờ thành công cho khách hàng." :
+                "Đã lưu thông báo Web; email nhắc nộp giấy tờ đang chờ gửi lại.", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+    }
+
     [HttpGet("/api/v1/bookings/{bookingId:guid}/compliance-dossier")]
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetByBooking(Guid bookingId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,

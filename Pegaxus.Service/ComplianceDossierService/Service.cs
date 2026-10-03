@@ -33,17 +33,23 @@ public sealed partial class Service : IService
     private readonly MediaService.IService _mediaService;
     private readonly IValidator<Request.InitializeRequest> _initializeValidator;
     private readonly NotificationService.IService _notificationService;
+    private readonly MailService.IService? _reminderMailService;
+    private readonly TimeProvider _reminderClock;
 
     public Service(
         AppDbContext db,
         MediaService.IService mediaService,
         IValidator<Request.InitializeRequest> initializeValidator,
-        NotificationService.IService notificationService)
+        NotificationService.IService notificationService,
+        MailService.IService? mailService = null,
+        TimeProvider? timeProvider = null)
     {
         _db = db;
         _mediaService = mediaService;
         _initializeValidator = initializeValidator;
         _notificationService = notificationService;
+        _reminderMailService = mailService;
+        _reminderClock = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<Response.DashboardResponse> GetDashboardAsync(

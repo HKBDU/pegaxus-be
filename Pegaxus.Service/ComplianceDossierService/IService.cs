@@ -2,6 +2,12 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public interface IService
 {
+    Task<IReadOnlyList<Response.RequirementResponse>> GetMissingRequirementsAsync(Guid accountId, Guid dossierId, CancellationToken cancellationToken = default);
+    Task<Response.MissingDocumentsResponse> RequestMissingDocumentsAsync(Guid accountId, Guid dossierId,
+        Request.MissingDocumentsRequest request, CancellationToken cancellationToken = default);
+    Task<int> QueueAutomaticMissingDocumentRemindersAsync(CancellationToken cancellationToken = default);
+    Task DeliverPendingMissingDocumentRemindersAsync(CancellationToken cancellationToken = default);
+
     Task<Response.OverviewResponse> GetByBookingAsync(Guid accountId, Guid bookingId, Request.ViewRequest request, CancellationToken cancellationToken = default);
     Task<Response.OverviewResponse> GetDossierAsync(Guid accountId, Guid dossierId, Request.ViewRequest request, CancellationToken cancellationToken = default);
     Task<Response.RequirementDetailResponse> GetRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, CancellationToken cancellationToken = default);

@@ -4,6 +4,13 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Request
 {
+    public sealed class MissingDocumentsRequest
+    {
+        public List<Guid> RequirementIds { get; set; } = [];
+        public DateOnly DueDate { get; set; }
+        public string? Note { get; set; }
+    }
+
     public sealed class ViewRequest
     {
         public string? Status { get; set; }

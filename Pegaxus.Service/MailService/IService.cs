@@ -2,7 +2,7 @@
 
 public interface IService
 {
-    public Task SendMail(MailContent mailContent);
+    public Task SendMail(MailContent mailContent, CancellationToken cancellationToken = default);
 }
 
 public class MailContent

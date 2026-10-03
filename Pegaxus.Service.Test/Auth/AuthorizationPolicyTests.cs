@@ -31,6 +31,8 @@ public class AuthorizationPolicyTests
     [InlineData("AddRequirement", "POST", "{dossierId:guid}/requirements")]
     [InlineData("UpdateRequirement", "PATCH", "{dossierId:guid}/requirements/{requirementId:guid}")]
     [InlineData("RemoveRequirement", "DELETE", "{dossierId:guid}/requirements/{requirementId:guid}")]
+    [InlineData("GetMissingRequirements", "GET", "{dossierId:guid}/missing-requirements")]
+    [InlineData("RequestMissingDocuments", "POST", "{dossierId:guid}/missing-document-reminders")]
     public async Task DossierRequirementActions_UseTransportSpecialistPolicy(string methodName, string verb, string route)
     {
         var method = typeof(ComplianceDossiersController).GetMethod(methodName);

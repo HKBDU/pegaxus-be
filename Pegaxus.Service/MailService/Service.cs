@@ -14,7 +14,7 @@ public class Service : IService
         configuration.GetSection(nameof(MailOptions)).Bind(_mailOptions);
     }
     
-    public async Task SendMail(MailContent mailContent)
+    public async Task SendMail(MailContent mailContent, CancellationToken cancellationToken = default)
     {
         MimeMessage email = new();
         email.Sender = new MailboxAddress(_mailOptions?.DisplayName, _mailOptions!.Mail);
@@ -30,9 +30,9 @@ public class Service : IService
         using SmtpClient smtp = new();
 
         await smtp.ConnectAsync(_mailOptions!.Host, _mailOptions.Port,
-            SecureSocketOptions.StartTls);
-        await smtp.AuthenticateAsync(_mailOptions.Mail, _mailOptions.Password);
-        await smtp.SendAsync(email);
-        await smtp.DisconnectAsync(true);
+            SecureSocketOptions.StartTls, cancellationToken);
+        await smtp.AuthenticateAsync(_mailOptions.Mail, _mailOptions.Password, cancellationToken);
+        await smtp.SendAsync(email, cancellationToken);
+        await smtp.DisconnectAsync(true, cancellationToken);
     }
 }

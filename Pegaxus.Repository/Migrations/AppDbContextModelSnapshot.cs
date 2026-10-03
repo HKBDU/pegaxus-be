@@ -1027,6 +1027,27 @@ namespace Pegaxus.Repository.Migrations
                     b.ToTable("Customer", (string)null);
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.MissingDocumentReminder", b =>
+                {
+                    b.Property<Guid>("MissingDocumentReminderId").ValueGeneratedOnAdd().HasColumnType("uuid").HasColumnName("missing_document_reminder_id");
+                    b.Property<Guid>("ComplianceDossierId").HasColumnType("uuid").HasColumnName("compliance_dossier_id");
+                    b.Property<Guid>("RecipientAccountId").HasColumnType("uuid").HasColumnName("recipient_account_id");
+                    b.Property<Guid[]>("RequirementIds").IsRequired().HasColumnType("uuid[]").HasColumnName("requirement_ids");
+                    b.Property<DateOnly>("DueDate").HasColumnType("date").HasColumnName("due_date");
+                    b.Property<string>("Note").HasMaxLength(2000).HasColumnType("character varying(2000)").HasColumnName("note");
+                    b.Property<DateOnly?>("AutomaticDate").HasColumnType("date").HasColumnName("automatic_date");
+                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp without time zone").HasColumnName("created_at");
+                    b.Property<DateTime?>("LastAttemptAt").HasColumnType("timestamp without time zone").HasColumnName("last_attempt_at");
+                    b.Property<DateTime?>("EmailSentAt").HasColumnType("timestamp without time zone").HasColumnName("email_sent_at");
+                    b.Property<DateTime?>("CancelledAt").HasColumnType("timestamp without time zone").HasColumnName("cancelled_at");
+                    b.Property<int>("EmailAttempts").HasColumnType("integer").HasColumnName("email_attempts");
+                    b.HasKey("MissingDocumentReminderId").HasName("MissingDocumentReminder_pkey");
+                    b.HasIndex(new[] { "ComplianceDossierId", "AutomaticDate" }, "MissingDocumentReminder_daily_key").IsUnique().HasFilter("automatic_date IS NOT NULL");
+                    b.HasIndex(new[] { "EmailSentAt", "CancelledAt", "LastAttemptAt" }, "MissingDocumentReminder_pending_idx");
+                    b.HasIndex(new[] { "RecipientAccountId" }, "MissingDocumentReminder_recipient_idx");
+                    b.ToTable("MissingDocumentReminder");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequest", b =>
                 {
                     b.Property<Guid>("DocumentRequestId")
@@ -3910,6 +3931,18 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("Account");
 
                     b.Navigation("DeletedByAccount");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.MissingDocumentReminder", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.ComplianceDossier", "ComplianceDossier").WithMany()
+                        .HasForeignKey("ComplianceDossierId").IsRequired().OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("MissingDocumentReminder_dossier_fkey");
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "RecipientAccount").WithMany()
+                        .HasForeignKey("RecipientAccountId").IsRequired().OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("MissingDocumentReminder_recipient_fkey");
+                    b.Navigation("ComplianceDossier");
+                    b.Navigation("RecipientAccount");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequest", b =>

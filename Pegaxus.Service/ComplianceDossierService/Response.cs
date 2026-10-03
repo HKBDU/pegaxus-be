@@ -4,6 +4,14 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Response
 {
+    public sealed class MissingDocumentsResponse
+    {
+        public Guid ReminderId { get; init; }
+        public IReadOnlyList<RequirementResponse> Requirements { get; init; } = [];
+        public bool EmailSent { get; set; }
+        public string? DeliveryWarning { get; set; }
+    }
+
     public sealed class OverviewResponse
     {
         public bool IsInitialized { get; init; }
