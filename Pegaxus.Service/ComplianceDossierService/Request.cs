@@ -4,6 +4,24 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Request
 {
+    public enum DocumentErrorCategory { UNCLEAR_IMAGE = 1, EXPIRED, MISSING_STAMP, WRONG_PAGE, METADATA_MISMATCH, OTHER }
+
+    public sealed class RejectDocumentRequest
+    {
+        public DocumentErrorCategory ErrorCategory { get; set; }
+        public string RejectionNote { get; set; } = string.Empty;
+        public DateOnly RevisionDeadline { get; set; }
+        public Pegaxus.Repository.Enum.DossierRequirementStatus RequirementStatus { get; set; } = Pegaxus.Repository.Enum.DossierRequirementStatus.REJECTED;
+        public Pegaxus.Repository.Enum.ComplianceDossierStatus DossierStatus { get; set; } = Pegaxus.Repository.Enum.ComplianceDossierStatus.IN_PREPARATION;
+        public DateTime VersionUploadedAt { get; set; }
+        public DateTime DocumentUpdatedAt { get; set; }
+    }
+
+    public sealed class DocumentRequestCommentRequest
+    {
+        public string Message { get; set; } = string.Empty;
+    }
+
     public sealed class ViewRequest
     {
         public string? Status { get; set; }

@@ -21,6 +21,29 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
+    [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/versions/{versionId:guid}/reject")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> RejectDocument(Guid dossierId, Guid requirementId, Guid versionId,
+        [FromBody] ComplianceDossierService.Request.RejectDocumentRequest request, CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.RejectDocumentAsync(GetAccountId(), dossierId, requirementId, versionId, request, cancellationToken),
+            "DocumentReview (REJECTED) recorded. Status updated by TS. DocumentRequest sent to customer.",
+            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
+    [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/document-requests/{requestId:guid}/comments")]
+    [Authorize(Policy = JwtExtensions.CustomerOrTransportSpecialistPolicy)]
+    public async Task<IActionResult> AddDocumentRequestComment(Guid dossierId, Guid requirementId, Guid requestId,
+        [FromBody] ComplianceDossierService.Request.DocumentRequestCommentRequest request, CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.AddDocumentRequestCommentAsync(GetAccountId(), dossierId, requirementId, requestId, request, cancellationToken),
+            "DocumentRequest comment added successfully.", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
+    [HttpGet("{dossierId:guid}/requirements/{requirementId:guid}/document-requests/{requestId:guid}/comments")]
+    [Authorize(Policy = JwtExtensions.CustomerOrTransportSpecialistPolicy)]
+    public async Task<IActionResult> GetDocumentRequestComments(Guid dossierId, Guid requirementId, Guid requestId, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(await _service.GetDocumentRequestCommentsAsync(GetAccountId(), dossierId, requirementId, requestId, cancellationToken),
+            "DocumentRequest comments retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+
     [HttpGet("/api/v1/bookings/{bookingId:guid}/compliance-dossier")]
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetByBooking(Guid bookingId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,

@@ -196,6 +196,41 @@ previously known public storage URLs. Sensitive documents must be uploaded with 
 assets migrated at the storage layer before claiming end-to-end file privacy. No storage migration is performed by this read-only feature.
 The 1.5-second response target still requires measurement against a real PostgreSQL database.
 
+## Document rejection and re-upload requests (UC-24)
+
+| Endpoint | Policy | Result |
+| :--- | :--- | :--- |
+| POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/versions/{versionId}/reject` | TransportSpecialistPolicy | Immutable REJECTED review, OPEN REUPLOAD request, status updates, web notification and email attempt |
+| POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document-requests/{requestId}/comments` | CustomerOrTransportSpecialistPolicy | Append comment and notify the other participant |
+| GET `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document-requests/{requestId}/comments` | CustomerOrTransportSpecialistPolicy | Ordered conversation history |
+
+All endpoints require a Bearer token and an active account. Customers may discuss only requests belonging to their own booking.
+Logistics Managers can view dossier/request details but cannot reject documents or join request conversations.
+
+Rejection requires `errorCategory` (UNCLEAR_IMAGE, EXPIRED, MISSING_STAMP, WRONG_PAGE, METADATA_MISMATCH or OTHER),
+`rejectionNote` (15–2000 characters after trimming), and `revisionDeadline` (ISO date, today or later in UTC).
+Copy `versionUploadedAt` and the document's `updatedAt` from the requirement-detail response into
+`versionUploadedAt` and `documentUpdatedAt`. Stale snapshots or older versions return 409.
+`requirementStatus` accepts REJECTED (default) or REQUESTED; `dossierStatus` accepts IN_PREPARATION (default) or REJECTED.
+The latest document and requirement must both be PROVIDED. Submitted, pending-authority, approved, closed and uninitialized dossiers are blocked.
+No authority submission is created automatically. Readiness and satisfaction timestamps are cleared by this explicit TS action.
+
+Overview requirement items expose `openDocumentRequest`; requirement detail exposes `documentRequests`.
+Frontend should render the exact plain-text `message` prominently, show `dueDate`, and offer its Upload New DocumentVersion action.
+This backend change does not implement frontend styling or the upload endpoint. Comment `message` accepts 1–2000 characters;
+only OPEN requests accept new comments. Existing comments and reviews remain append-only.
+
+Review, request, audit and web notification are saved atomically before delivery. Email content is HTML-encoded.
+The API exposes `emailSent` and `deliveryWarning`: SMTP failure or a two-second delivery timeout never loses the committed request.
+A timeout means delivery was not confirmed; SMTP may finish afterward. No automatic email retry worker is added.
+The two-second end-to-end target still requires measurement with real PostgreSQL, SMTP and realtime delivery.
+
+Apply migration `20261003000000_AddDocumentRequestRevisions` before using these endpoints:
+
+```bash
+dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
+```
+
 ## 👥 8. License & Academic Attribution
 
 Developed as a capstone software engineering project for **SWP391** (Software Development Project).  

@@ -12,6 +12,12 @@ public partial class DocumentRequest
 {
     public Guid DocumentRequestId { get; set; }
 
+    public Guid? DocumentReviewId { get; set; }
+
+    public string? ErrorCategory { get; set; }
+
+    public virtual DocumentReview? DocumentReview { get; set; }
+
     public Guid DossierRequirementId { get; set; }
 
     public Guid RequestedByAccountId { get; set; }

@@ -170,7 +170,7 @@ public sealed partial class Service
     {
         if (!await _db.Employees.AnyAsync(employee => employee.AccountId == accountId &&
             employee.Role == EmployeeRole.TRANSPORT_SPECIALIST && employee.IsActive && !employee.IsDeleted &&
-            !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE, cancellationToken))
+            !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE && employee.Account.AccountType == AccountType.EMPLOYEE, cancellationToken))
             throw new ForbiddenException("Only an active Transport Specialist can manage ComplianceDossiers.");
     }
 

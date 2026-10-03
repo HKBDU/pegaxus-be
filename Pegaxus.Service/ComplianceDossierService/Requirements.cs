@@ -175,6 +175,9 @@ public sealed partial class Service
         HorseId = item.HorseId, HorseName = item.Horse?.HorseName, IsMandatory = item.IsMandatory,
         Status = item.Status.ToString(), DueDate = item.DueDate,
         LeadTimeDays = item.DueDate.HasValue ? departureDate.DayNumber - item.DueDate.Value.DayNumber : null,
-        Instruction = item.Instruction
+        Instruction = item.Instruction,
+        OpenDocumentRequest = item.DocumentRequests.Where(request => request.Status == DocumentRequestStatus.OPEN)
+            .OrderByDescending(request => request.RequestedAt).ThenByDescending(request => request.DocumentRequestId)
+            .Select(MapDocumentRequest).FirstOrDefault()
     };
 }
