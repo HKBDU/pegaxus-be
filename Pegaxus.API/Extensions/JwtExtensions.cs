@@ -22,6 +22,7 @@ public static class JwtExtensions
     public const string CustomerOrEmployeePolicy = "CustomerOrEmployeePolicy";
     public const string TransportSpecialistOrLogisticsManagerPolicy = "TransportSpecialistOrLogisticsManagerPolicy";
     public const string DriverOrEscortPolicy = "DriverOrEscortPolicy";
+    public const string ComplianceDossierViewerPolicy = "ComplianceDossierViewerPolicy";
 
     public static void AddJwtServices(
         this IServiceCollection services,
@@ -162,6 +163,10 @@ public static class JwtExtensions
 
             options.AddPolicy(DriverOrEscortPolicy, policy =>
                 policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
+
+            options.AddPolicy(ComplianceDossierViewerPolicy, policy =>
+                policy.RequireAuthenticatedUser().RequireRole(JwtServices.GetRoleName(AccountType.CUSTOMER),
+                    JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER)));
         });
     }
 }

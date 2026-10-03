@@ -4,6 +4,12 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Request
 {
+    public sealed class ViewRequest
+    {
+        public string? Status { get; set; }
+        public Guid? HorseId { get; set; }
+    }
+
     public sealed class RequirementRequest
     {
         public Guid ComplianceRequirementId { get; set; }

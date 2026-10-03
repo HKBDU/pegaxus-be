@@ -21,6 +21,40 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
+    [HttpGet("/api/v1/bookings/{bookingId:guid}/compliance-dossier")]
+    [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
+    public async Task<IActionResult> GetByBooking(Guid bookingId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(await _service.GetByBookingAsync(GetAccountId(), bookingId, request, cancellationToken),
+            "ComplianceDossier retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpGet("{dossierId:guid}")]
+    [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
+    public async Task<IActionResult> GetDossier(Guid dossierId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,
+        CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(await _service.GetDossierAsync(GetAccountId(), dossierId, request, cancellationToken),
+            "ComplianceDossier retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpGet("{dossierId:guid}/requirements/{requirementId:guid}")]
+    [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
+    public async Task<IActionResult> GetRequirement(Guid dossierId, Guid requirementId, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(await _service.GetRequirementAsync(GetAccountId(), dossierId, requirementId, cancellationToken),
+            "DossierRequirement retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpGet("{dossierId:guid}/requirements/{requirementId:guid}/versions/{versionId:guid}/preview")]
+    [HttpGet("{dossierId:guid}/requirements/{requirementId:guid}/versions/{versionId:guid}/attachments/{attachmentId:guid}/preview")]
+    [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> GetDocumentPreview(Guid dossierId, Guid requirementId, Guid versionId,
+        Guid? attachmentId, CancellationToken cancellationToken)
+    {
+        var file = await _service.GetDocumentPreviewAsync(GetAccountId(), dossierId, requirementId, versionId, attachmentId, cancellationToken);
+        Response.Headers["X-Content-Type-Options"] = "nosniff";
+        Response.Headers["Content-Security-Policy"] = "sandbox";
+        Response.Headers["Content-Disposition"] = "inline";
+        return File(file.Content, file.ContentType);
+    }
+
     [HttpGet("/api/v1/bookings/{bookingId:guid}/dossier-templates")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> GetTemplateOptions(Guid bookingId, CancellationToken cancellationToken) =>
