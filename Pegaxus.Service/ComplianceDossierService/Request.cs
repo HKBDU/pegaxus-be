@@ -27,6 +27,22 @@ public class Request
         public string Reason { get; set; } = string.Empty;
     }
 
+    public sealed class InitializeRequest
+    {
+        public Guid? DossierTemplateId { get; set; }
+        public DateTimeOffset? BookingUpdatedAt { get; set; }
+        public List<InitializationItemRequest>? Items { get; set; }
+        public string? Note { get; set; }
+    }
+
+    public sealed class InitializationItemRequest
+    {
+        public Guid ComplianceRequirementId { get; set; }
+        public bool IsMandatory { get; set; } = true;
+        public bool AppliesPerHorse { get; set; }
+        public string? Instruction { get; set; }
+    }
+
     public class RecordAuthoritySubmissionRequest
     {
         public string AuthorityName { get; set; } = string.Empty;

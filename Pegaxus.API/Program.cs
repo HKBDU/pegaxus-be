@@ -27,6 +27,8 @@ using HorseService = Pegaxus.Service.HorseService;
 using EmployeeService = Pegaxus.Service.EmployeeService;
 using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
 using NotificationService = Pegaxus.Service.NotificationService;
+using DossierTemplateService = Pegaxus.Service.DossierTemplateService;
+using ComplianceRequirementService = Pegaxus.Service.ComplianceRequirementService;
 
 var envDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
 while (envDirectory is not null)
@@ -190,6 +192,16 @@ builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
 builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
 builder.Services.AddScoped<NotificationService.INotificationRealtimeService, SignalRNotificationRealtimeService>();
+builder.Services.AddScoped<IValidator<ComplianceDossierService.Request.InitializeRequest>, ComplianceDossierService.Validator.InitializeRequestValidator>();
+builder.Services.AddScoped<IValidator<BookingService.Request.NegotiateBookingRequest>, BookingService.Validations.NegotiateBookingRequestValidator>();
+builder.Services.AddScoped<DossierTemplateService.IService, DossierTemplateService.Service>();
+builder.Services.AddScoped<IValidator<DossierTemplateService.Request.ListRequest>, DossierTemplateService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<DossierTemplateService.Request.SaveRequest>, DossierTemplateService.Validator.SaveRequestValidator>();
+builder.Services.AddScoped<IValidator<DossierTemplateService.Request.ChangeStatusRequest>, DossierTemplateService.Validator.ChangeStatusRequestValidator>();
+builder.Services.AddScoped<ComplianceRequirementService.IService, ComplianceRequirementService.Service>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.ListRequest>, ComplianceRequirementService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.SaveRequest>, ComplianceRequirementService.Validator.SaveRequestValidator>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.StatusRequest>, ComplianceRequirementService.Validator.StatusRequestValidator>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
@@ -230,6 +242,8 @@ app.UseAuthorization();
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<Pegaxus.API.Hubs.ComplianceDossierHub>("/hubs/compliance-dossiers",
+    options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();
 

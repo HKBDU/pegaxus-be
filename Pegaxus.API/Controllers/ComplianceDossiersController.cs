@@ -21,49 +21,6 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
-    [HttpGet("dashboard")]
-    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
-    public async Task<IActionResult> GetDashboard(
-        [FromQuery] ComplianceDossierService.Request.DashboardRequest request,
-        CancellationToken cancellationToken)
-    {
-        var response = await _service.GetDashboardAsync(
-            GetAccountId(), request, cancellationToken);
-
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Dashboard retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
-    }
-
-    [HttpGet("dashboard/export")]
-    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
-    public async Task<IActionResult> ExportDashboard(
-        [FromQuery] ComplianceDossierService.Request.DashboardExportRequest request,
-        CancellationToken cancellationToken)
-    {
-        var response = await _service.ExportDashboardAsync(
-            GetAccountId(), request, cancellationToken);
-
-        return File(response.Content, response.ContentType, response.FileName);
-    }
-
-    [HttpGet("{dossierId:guid}/audit-history")]
-    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
-    public async Task<IActionResult> GetAuditHistory(
-        Guid dossierId,
-        [FromQuery] ComplianceDossierService.Request.AuditHistoryRequest request,
-        CancellationToken cancellationToken)
-    {
-        var response = await _service.GetAuditHistoryAsync(
-            GetAccountId(), dossierId, request, cancellationToken);
-
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Audit history retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
-    }
-
     [HttpGet("/api/v1/bookings/{bookingId:guid}/dossier-templates")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> GetTemplateOptions(Guid bookingId, CancellationToken cancellationToken) =>
@@ -85,6 +42,49 @@ public sealed class ComplianceDossiersController : ControllerBase
             await _service.InitializeAsync(GetAccountId(), bookingId, request, cancellationToken),
             "ComplianceDossier initialized successfully. DossierRequirements generated for customer.",
             StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
+    [HttpGet("dashboard")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrLogisticsManagerPolicy)]
+    public async Task<IActionResult> GetDashboard(
+        [FromQuery] ComplianceDossierService.Request.DashboardRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetDashboardAsync(
+            GetAccountId(), request, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Dashboard retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    [HttpGet("dashboard/export")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrLogisticsManagerPolicy)]
+    public async Task<IActionResult> ExportDashboard(
+        [FromQuery] ComplianceDossierService.Request.DashboardExportRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.ExportDashboardAsync(
+            GetAccountId(), request, cancellationToken);
+
+        return File(response.Content, response.ContentType, response.FileName);
+    }
+
+    [HttpGet("{dossierId:guid}/audit-history")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrLogisticsManagerPolicy)]
+    public async Task<IActionResult> GetAuditHistory(
+        Guid dossierId,
+        [FromQuery] ComplianceDossierService.Request.AuditHistoryRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetAuditHistoryAsync(
+            GetAccountId(), dossierId, request, cancellationToken);
+
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Audit history retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
 
     [HttpGet("{dossierId:guid}/authority-submissions")]
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
@@ -136,7 +136,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     }
 
     [HttpPost("/api/v1/compliance-dossiers/{dossierId:guid}/quarantine-proofs")]
-    [Authorize(Roles = "Driver,Escort")]
+    [Authorize(Policy = JwtExtensions.DriverOrEscortPolicy)]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> SubmitQuarantineProof(
         Guid dossierId,
@@ -186,7 +186,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     }
 
     [HttpPost("/api/v1/compliance-dossiers/{dossierId:guid}/customs-clearance-proofs")]
-    [Authorize(Roles = "Driver")]
+    [Authorize(Policy = JwtExtensions.DriverPolicy)]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> SubmitCustomsClearanceProof(
         Guid dossierId,

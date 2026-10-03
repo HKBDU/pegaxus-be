@@ -4,6 +4,15 @@ namespace Pegaxus.Service.BookingService;
 
 public class Response
 {
+    public sealed class NegotiatedBookingResponse
+    {
+        public Guid BookingId { get; init; }
+        public required string Status { get; init; }
+        public Guid? ComplianceDossierId { get; init; }
+        public string? DossierStatus { get; init; }
+        public required string Reason { get; init; }
+    }
+
     public class BookingHistoryResponse
     {
         public Guid HistoryId { get; init; }

@@ -336,6 +336,7 @@ public partial class AppDbContext : DbContext
         modelBuilder.Entity<Booking>(entity =>
         {
             entity.HasKey(e => e.BookingId).HasName("Booking_pkey");
+            entity.Property(e => e.Status).IsConcurrencyToken();
 
             entity.ToTable("Booking");
 
@@ -618,6 +619,13 @@ public partial class AppDbContext : DbContext
             entity.HasIndex(e => e.DossierCode, "ComplianceDossier_dossier_code_key").IsUnique();
 
             entity.HasIndex(e => e.TransportId, "ComplianceDossier_transport_id_key").IsUnique();
+
+            entity.HasIndex(e => e.DossierTemplateId, "ComplianceDossier_dossier_template_id_idx");
+            entity.Property(e => e.DossierTemplateId).HasColumnName("dossier_template_id");
+            entity.HasOne(e => e.DossierTemplate).WithMany()
+                .HasForeignKey(e => e.DossierTemplateId)
+                .OnDelete(DeleteBehavior.Restrict)
+                .HasConstraintName("ComplianceDossier_dossier_template_id_fkey");
 
             entity.Property(e => e.ComplianceDossierId).HasColumnName("compliance_dossier_id");
             entity.Property(e => e.ApprovedAt)
@@ -1226,6 +1234,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
             entity.Property(e => e.VersionNo)
+                .IsConcurrencyToken()
                 .HasDefaultValue(1)
                 .HasColumnName("version_no");
 

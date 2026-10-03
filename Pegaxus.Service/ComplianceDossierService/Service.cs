@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Http;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using ClosedXML.Excel;
 using QuestPDF.Fluent;
@@ -30,15 +31,18 @@ public sealed partial class Service : IService
 
     private readonly AppDbContext _db;
     private readonly MediaService.IService _mediaService;
+    private readonly IValidator<Request.InitializeRequest> _initializeValidator;
     private readonly NotificationService.IService _notificationService;
 
     public Service(
         AppDbContext db,
         MediaService.IService mediaService,
+        IValidator<Request.InitializeRequest> initializeValidator,
         NotificationService.IService notificationService)
     {
         _db = db;
         _mediaService = mediaService;
+        _initializeValidator = initializeValidator;
         _notificationService = notificationService;
     }
 

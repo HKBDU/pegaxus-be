@@ -4,11 +4,30 @@ using System.Security.Cryptography;
 using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
+using Pegaxus.Repository.Enum;
+using AppException = Pegaxus.Service.Exceptions.Exceptions;
 
 namespace Pegaxus.Service.JwtService;
 
 public class JwtServices : IJwtService
 {
+
+    public static string GetRoleName(AccountType accountType) => accountType switch
+    {
+        AccountType.CUSTOMER => "Customer",
+        AccountType.EMPLOYEE => "Employee",
+        _ => throw new AppException("Session has expired. Please sign in again", 401, "REFRESH_TOKEN_INVALID")
+    };
+
+    public static string GetRoleName(EmployeeRole role) => role switch
+    {
+        EmployeeRole.LOGISTICS_MANAGER => "LogisticsManager",
+        EmployeeRole.TRANSPORT_SPECIALIST => "TransportSpecialist",
+        EmployeeRole.FLEET_ROUTE_COORDINATOR => "FleetRouteCoordinator",
+        EmployeeRole.DRIVER => "Driver",
+        EmployeeRole.ESCORT => "Escort",
+        _ => throw new AppException("Session has expired. Please sign in again", 401, "REFRESH_TOKEN_INVALID")
+    };
 
     private readonly JwtOptions _jwtOption = new();
 

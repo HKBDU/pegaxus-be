@@ -137,13 +137,6 @@ public sealed partial class Service
         return dossier;
     }
 
-    private async Task RequireSpecialistAsync(Guid accountId, CancellationToken cancellationToken)
-    {
-        if (!await _db.Employees.AnyAsync(employee => employee.AccountId == accountId &&
-            employee.Role == EmployeeRole.TRANSPORT_SPECIALIST && employee.IsActive && !employee.IsDeleted &&
-            !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE, cancellationToken))
-            throw new ForbiddenException("Only an active Transport Specialist can manage DossierRequirements.");
-    }
 
     private static DateOnly DueDate(DateOnly departure, int leadTimeDays)
     {
