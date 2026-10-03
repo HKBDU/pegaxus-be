@@ -27,6 +27,28 @@ public class AuthorizationPolicyTests
         return services.BuildServiceProvider();
     }
 
+    [Theory]
+    [InlineData("AddRequirement", "POST", "{dossierId:guid}/requirements")]
+    [InlineData("UpdateRequirement", "PATCH", "{dossierId:guid}/requirements/{requirementId:guid}")]
+    [InlineData("RemoveRequirement", "DELETE", "{dossierId:guid}/requirements/{requirementId:guid}")]
+    public async Task DossierRequirementActions_UseTransportSpecialistPolicy(string methodName, string verb, string route)
+    {
+        var method = typeof(ComplianceDossiersController).GetMethod(methodName);
+        Assert.NotNull(method);
+        var endpoint = Assert.Single(method.GetCustomAttributes<HttpMethodAttribute>());
+        Assert.Equal(route, endpoint.Template);
+        Assert.Contains(verb, endpoint.HttpMethods);
+        var policy = Assert.Single(method.GetCustomAttributes<AuthorizeAttribute>()).Policy;
+        Assert.Equal(JwtExtensions.TransportSpecialistPolicy, policy);
+        using var provider = CreateProvider();
+        var authorization = provider.GetRequiredService<IAuthorizationService>();
+        foreach (var role in new[] { "TransportSpecialist", "Customer", "LogisticsManager", "FleetRouteCoordinator", "Driver", "Escort" })
+        {
+            var user = new ClaimsPrincipal(new ClaimsIdentity([new Claim(ClaimTypes.Role, role)], "test"));
+            Assert.Equal(role == "TransportSpecialist", (await authorization.AuthorizeAsync(user, null, policy!)).Succeeded);
+        }
+    }
+
     [Fact]
     public async Task Controllers_UseRegisteredPoliciesInsteadOfInlineRoles()
     {

@@ -1,4 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
+using Pegaxus.API.Controllers;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -67,9 +71,13 @@ public class DossierRequirementTests
         await Assert.ThrowsAsync<ConflictException>(() => service.RemoveRequirementAsync(specialist,
             dossier.ComplianceDossierId, core.DossierRequirementId,
             new DossierRequest.RemoveRequirementRequest { Reason = "Try remove" }));
-        await Assert.ThrowsAsync<ForbiddenException>(() => service.AddRequirementAsync(booking.Customer.AccountId,
+        var denied = await Assert.ThrowsAsync<ForbiddenException>(() => service.AddRequirementAsync(booking.Customer.AccountId,
             dossier.ComplianceDossierId, new DossierRequest.RequirementRequest
             { ComplianceRequirementId = requirement.ComplianceRequirementId, Reason = "Unauthorized" }));
+        Assert.Equal(StatusCodes.Status403Forbidden, denied.StatusCode);
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.UpdateRequirementAsync(booking.Customer.AccountId,
+            dossier.ComplianceDossierId, core.DossierRequirementId,
+            new DossierRequest.UpdateRequirementRequest { Instruction = "Unauthorized change", Reason = "Unauthorized" }));
         await Assert.ThrowsAsync<ForbiddenException>(() => service.RemoveRequirementAsync(booking.Customer.AccountId,
             dossier.ComplianceDossierId, core.DossierRequirementId,
             new DossierRequest.RemoveRequirementRequest { Reason = "Unauthorized" }));
@@ -79,6 +87,121 @@ public class DossierRequirementTests
             dossier.ComplianceDossierId, new DossierRequest.RequirementRequest
             { ComplianceRequirementId = requirement.ComplianceRequirementId, Reason = "Too late" }));
         Assert.Single(await db.DossierRequirements.ToListAsync());
+    }
+
+    [Fact]
+    public async Task ApiLifecycle_ReturnsCreatedAndOk_AndPersistsChanges()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (_, dossier, specialist, requirement) = await SeedAsync(db);
+        var realtime = new RecordingRealtimeService();
+        var controller = new ComplianceDossiersController(CreateService(db, realtime))
+        {
+            ControllerContext = new() { HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new System.Security.Claims.Claim(ClaimTypes.NameIdentifier, specialist.ToString())], "test"))
+            } }
+        };
+        var created = Assert.IsType<ObjectResult>(await controller.AddRequirement(dossier.ComplianceDossierId,
+            new DossierRequest.RequirementRequest
+            {
+                ComplianceRequirementId = requirement.ComplianceRequirementId, IsMandatory = false,
+                LeadTimeDays = 5, Instruction = "Upload Modello 4", Reason = "Italian border crossing"
+            }, CancellationToken.None));
+        Assert.Equal(StatusCodes.Status201Created, created.StatusCode);
+        var added = await db.DossierRequirements.SingleAsync(item => item.ComplianceRequirementId == requirement.ComplianceRequirementId);
+        Assert.IsType<OkObjectResult>(await controller.UpdateRequirement(dossier.ComplianceDossierId, added.DossierRequirementId,
+            new DossierRequest.UpdateRequirementRequest { Instruction = "Revised guidance", Reason = "Checkpoint changed" }, CancellationToken.None));
+        Assert.Equal("Revised guidance", added.Instruction);
+        Assert.IsType<OkObjectResult>(await controller.RemoveRequirement(dossier.ComplianceDossierId, added.DossierRequirementId,
+            new DossierRequest.RemoveRequirementRequest { Reason = "Route changed" }, CancellationToken.None));
+        Assert.True(added.IsDeleted);
+        Assert.Equal(3, realtime.Notifications.Count);
+        var audits = await db.AuditDossiers.ToListAsync();
+        Assert.Equal(3, audits.Count);
+        Assert.All(audits, audit => Assert.Equal(specialist, audit.ActorAccountId));
+        Assert.Contains(audits, audit => audit.Summary == "Route changed" && audit.TargetId == added.DossierRequirementId);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AddMandatoryRequirement_SupportsWholeTripOrBookedHorse(bool appliesToHorse)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (booking, dossier, specialist, requirement) = await SeedAsync(db);
+        Guid? horseId = appliesToHorse ? (await db.BookingHorses.SingleAsync()).HorseId : null;
+        var realtime = new RecordingRealtimeService();
+        var added = await CreateService(db, realtime).AddRequirementAsync(specialist, dossier.ComplianceDossierId,
+            new DossierRequest.RequirementRequest
+            {
+                ComplianceRequirementId = requirement.ComplianceRequirementId, HorseId = horseId,
+                IsMandatory = true, LeadTimeDays = 3, Instruction = " Upload Modello 4 ", Reason = " Italian border crossing "
+            });
+        Assert.True(added.IsMandatory);
+        Assert.Equal(horseId, added.HorseId);
+        Assert.Equal(booking.RequestedDepartureDate.AddDays(-3), added.DueDate);
+        Assert.Equal("Upload Modello 4", added.Instruction);
+        Assert.Equal(booking.Customer.AccountId, Assert.Single(realtime.Notifications).AccountId);
+        var audit = await db.AuditDossiers.SingleAsync();
+        Assert.Equal(specialist, audit.ActorAccountId);
+        Assert.Equal(added.DossierRequirementId, audit.TargetId);
+        Assert.Equal("Italian border crossing", audit.Summary);
+    }
+
+    [Theory]
+    [InlineData(ComplianceDossierStatus.SUBMITTED)]
+    [InlineData(ComplianceDossierStatus.APPROVED)]
+    public async Task SubmittedOrApprovedDossier_BlocksEveryMutation(ComplianceDossierStatus status)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (_, dossier, specialist, requirement) = await SeedAsync(db);
+        var optional = new DossierRequirement
+        {
+            DossierRequirementId = Guid.NewGuid(), ComplianceDossierId = dossier.ComplianceDossierId,
+            ComplianceRequirementId = requirement.ComplianceRequirementId, IsMandatory = false
+        };
+        db.DossierRequirements.Add(optional);
+        dossier.Status = status;
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+        var addError = await Assert.ThrowsAsync<ConflictException>(() => service.AddRequirementAsync(specialist,
+            dossier.ComplianceDossierId, new DossierRequest.RequirementRequest
+            { ComplianceRequirementId = requirement.ComplianceRequirementId, Reason = "Too late" }));
+        var updateError = await Assert.ThrowsAsync<ConflictException>(() => service.UpdateRequirementAsync(specialist,
+            dossier.ComplianceDossierId, optional.DossierRequirementId,
+            new DossierRequest.UpdateRequirementRequest { Instruction = "Late change", Reason = "Too late" }));
+        var removeError = await Assert.ThrowsAsync<ConflictException>(() => service.RemoveRequirementAsync(specialist,
+            dossier.ComplianceDossierId, optional.DossierRequirementId, new DossierRequest.RemoveRequirementRequest { Reason = "Too late" }));
+        Assert.All(new[] { addError, updateError, removeError }, error => Assert.Equal(
+            "Cannot modify DossierRequirements after dossier submission to official authorities.", error.Message));
+        Assert.False(optional.IsDeleted);
+        Assert.Null(optional.Instruction);
+        Assert.Empty(await db.AuditDossiers.ToListAsync());
+        Assert.Empty(await db.Notifications.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(-1, "Italy", 0)]
+    [InlineData(3651, "Italy", 0)]
+    [InlineData(0, "", 0)]
+    [InlineData(0, " ", 0)]
+    [InlineData(0, "Italy", 2001)]
+    public async Task InvalidInput_DoesNotChangeDossier(int leadTimeDays, string reason, int instructionLength)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (_, dossier, specialist, requirement) = await SeedAsync(db);
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => CreateService(db).AddRequirementAsync(specialist,
+            dossier.ComplianceDossierId, new DossierRequest.RequirementRequest
+            {
+                ComplianceRequirementId = requirement.ComplianceRequirementId, LeadTimeDays = leadTimeDays,
+                Instruction = new string('x', instructionLength), Reason = reason
+            }));
+        Assert.Equal(StatusCodes.Status400BadRequest, error.StatusCode);
+        Assert.Single(await db.DossierRequirements.ToListAsync());
+        Assert.Empty(await db.AuditDossiers.ToListAsync());
+        Assert.Empty(await db.Notifications.ToListAsync());
     }
 
     private static async Task<(Booking Booking, Pegaxus.Repository.Entities.ComplianceDossier Dossier,
