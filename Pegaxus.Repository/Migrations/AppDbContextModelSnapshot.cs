@@ -1402,6 +1402,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("updated_at");
 
                     b.Property<int>("VersionNo")
+                        .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(1)

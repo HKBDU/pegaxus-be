@@ -27,6 +27,7 @@ using HorseService = Pegaxus.Service.HorseService;
 using EmployeeService = Pegaxus.Service.EmployeeService;
 using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
 using NotificationService = Pegaxus.Service.NotificationService;
+using DossierTemplateService = Pegaxus.Service.DossierTemplateService;
 using ComplianceRequirementService = Pegaxus.Service.ComplianceRequirementService;
 
 var envDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
@@ -193,6 +194,10 @@ builder.Services.AddScoped<NotificationService.IService, NotificationService.Ser
 builder.Services.AddScoped<NotificationService.INotificationRealtimeService, SignalRNotificationRealtimeService>();
 builder.Services.AddScoped<IValidator<ComplianceDossierService.Request.InitializeRequest>, ComplianceDossierService.Validator.InitializeRequestValidator>();
 builder.Services.AddScoped<IValidator<BookingService.Request.NegotiateBookingRequest>, BookingService.Validations.NegotiateBookingRequestValidator>();
+builder.Services.AddScoped<DossierTemplateService.IService, DossierTemplateService.Service>();
+builder.Services.AddScoped<IValidator<DossierTemplateService.Request.ListRequest>, DossierTemplateService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<DossierTemplateService.Request.SaveRequest>, DossierTemplateService.Validator.SaveRequestValidator>();
+builder.Services.AddScoped<IValidator<DossierTemplateService.Request.ChangeStatusRequest>, DossierTemplateService.Validator.ChangeStatusRequestValidator>();
 builder.Services.AddScoped<ComplianceRequirementService.IService, ComplianceRequirementService.Service>();
 builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.ListRequest>, ComplianceRequirementService.Validator.ListRequestValidator>();
 builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.SaveRequest>, ComplianceRequirementService.Validator.SaveRequestValidator>();

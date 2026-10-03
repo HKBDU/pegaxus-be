@@ -1234,6 +1234,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
             entity.Property(e => e.VersionNo)
+                .IsConcurrencyToken()
                 .HasDefaultValue(1)
                 .HasColumnName("version_no");
 
