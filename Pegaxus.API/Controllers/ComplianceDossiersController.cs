@@ -22,7 +22,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     }
 
     [HttpGet("dashboard")]
-    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrLogisticsManagerPolicy)]
     public async Task<IActionResult> GetDashboard(
         [FromQuery] ComplianceDossierService.Request.DashboardRequest request,
         CancellationToken cancellationToken)
@@ -37,7 +37,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     }
 
     [HttpGet("dashboard/export")]
-    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrLogisticsManagerPolicy)]
     public async Task<IActionResult> ExportDashboard(
         [FromQuery] ComplianceDossierService.Request.DashboardExportRequest request,
         CancellationToken cancellationToken)
@@ -49,7 +49,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     }
 
     [HttpGet("{dossierId:guid}/audit-history")]
-    [Authorize(Roles = "TransportSpecialist,LogisticsManager")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrLogisticsManagerPolicy)]
     public async Task<IActionResult> GetAuditHistory(
         Guid dossierId,
         [FromQuery] ComplianceDossierService.Request.AuditHistoryRequest request,
@@ -114,7 +114,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     }
 
     [HttpPost("/api/v1/compliance-dossiers/{dossierId:guid}/quarantine-proofs")]
-    [Authorize(Roles = "Driver,Escort")]
+    [Authorize(Policy = JwtExtensions.DriverOrEscortPolicy)]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> SubmitQuarantineProof(
         Guid dossierId,
@@ -164,7 +164,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     }
 
     [HttpPost("/api/v1/compliance-dossiers/{dossierId:guid}/customs-clearance-proofs")]
-    [Authorize(Roles = "Driver")]
+    [Authorize(Policy = JwtExtensions.DriverPolicy)]
     [Consumes("multipart/form-data")]
     public async Task<IActionResult> SubmitCustomsClearanceProof(
         Guid dossierId,

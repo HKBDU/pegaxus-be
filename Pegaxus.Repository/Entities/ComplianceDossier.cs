@@ -16,6 +16,10 @@ public partial class ComplianceDossier
 
     public Guid TransportId { get; set; }
 
+    public Guid? DossierTemplateId { get; set; }
+
+    public virtual DossierTemplate? DossierTemplate { get; set; }
+
     public ComplianceDossierStatus Status { get; set; } = ComplianceDossierStatus.DRAFT;
 
     public DateTime OpenedAt { get; set; }

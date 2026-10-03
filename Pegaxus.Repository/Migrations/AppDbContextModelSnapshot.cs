@@ -755,6 +755,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("dossier_code");
 
+                    b.Property<Guid?>("DossierTemplateId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dossier_template_id");
+
                     b.Property<string>("Note")
                         .HasColumnType("text")
                         .HasColumnName("note");
@@ -791,6 +795,8 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasKey("ComplianceDossierId")
                         .HasName("ComplianceDossier_pkey");
+
+                    b.HasIndex(new[] { "DossierTemplateId" }, "ComplianceDossier_dossier_template_id_idx");
 
                     b.HasIndex("Status")
                         .HasDatabaseName("ComplianceDossier_status_idx");
@@ -1395,6 +1401,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("updated_at");
 
                     b.Property<int>("VersionNo")
+                        .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("integer")
                         .HasDefaultValue(1)
@@ -3840,6 +3847,14 @@ namespace Pegaxus.Repository.Migrations
                         .HasForeignKey("Pegaxus.Repository.Entities.ComplianceDossier", "TransportId")
                         .IsRequired()
                         .HasConstraintName("ComplianceDossier_transport_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.DossierTemplate", "DossierTemplate")
+                        .WithMany()
+                        .HasForeignKey("DossierTemplateId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("ComplianceDossier_dossier_template_id_fkey");
+
+                    b.Navigation("DossierTemplate");
 
                     b.Navigation("Transport");
                 });

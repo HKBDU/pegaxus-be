@@ -1,7 +1,7 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.Mvc.Filters;
+using Pegaxus.API.Extensions;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.Models;
 using Catalog = Pegaxus.Service.ComplianceRequirementService;
@@ -13,15 +13,8 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/compliance-requirements")]
 public sealed class ComplianceRequirementsController(Catalog.IService service) : Controller
 {
-    public override void OnActionExecuting(ActionExecutingContext context)
-    {
-        var canRead = HttpMethods.IsGet(Request.Method) && User.IsInRole("LogisticsManager");
-        if (!canRead && !User.IsInRole("TransportSpecialist") && !User.IsInRole("Admin"))
-            throw new ForbiddenException("Access denied. Only Transport Specialists can modify ComplianceRequirements.");
-        base.OnActionExecuting(context);
-    }
-
     [HttpGet]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrLogisticsManagerPolicy)]
     public async Task<IActionResult> GetList([FromQuery] Catalog.Request.ListRequest request, CancellationToken cancellationToken)
     {
         var result = await service.GetListAsync(request, cancellationToken);
@@ -29,6 +22,7 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     }
 
     [HttpGet("{id:guid}")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrLogisticsManagerPolicy)]
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
         var result = await service.GetAsync(id, cancellationToken);
@@ -36,6 +30,7 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     }
 
     [HttpPost]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> Create([FromBody] Catalog.Request.SaveRequest request, CancellationToken cancellationToken)
     {
         var result = await service.CreateAsync(request, GetAccountId(), cancellationToken);
@@ -44,6 +39,7 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     }
 
     [HttpPut("{id:guid}")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> Update(Guid id, [FromBody] Catalog.Request.SaveRequest request, CancellationToken cancellationToken)
     {
         try
@@ -61,6 +57,7 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     }
 
     [HttpPatch("{id:guid}/status")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] Catalog.Request.StatusRequest request, CancellationToken cancellationToken)
     {
         await service.UpdateStatusAsync(id, request, GetAccountId(), cancellationToken);
@@ -70,6 +67,7 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     }
 
     [HttpDelete("{id:guid}")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         await service.DeleteAsync(id, GetAccountId(), cancellationToken);
