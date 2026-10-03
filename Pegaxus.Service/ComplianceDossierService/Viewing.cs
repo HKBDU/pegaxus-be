@@ -34,7 +34,6 @@ public sealed partial class Service
         return await BuildOverviewAsync(dossier, booking, role, request, cancellationToken);
     }
 
-
     public async Task<Response.RequirementDetailResponse> GetRequirementAsync(Guid accountId, Guid dossierId,
         Guid requirementId, CancellationToken cancellationToken = default)
     {
@@ -96,7 +95,9 @@ public sealed partial class Service
             : await versions.Select(item => item.FileUrl).SingleOrDefaultAsync(cancellationToken);
         if (fileUrl is null)
             throw new NotFoundException("Document file not found.", "DOCUMENT_FILE_NOT_FOUND");
-        return await _mediaService.DownloadPreviewAsync(fileUrl, cancellationToken);
+        return fileUrl.StartsWith("s3://", StringComparison.Ordinal)
+            ? await _documentStorage.DownloadPreviewAsync(fileUrl, cancellationToken)
+            : await _mediaService.DownloadPreviewAsync(fileUrl, cancellationToken);
     }
 
     private async Task<(Guid? CustomerId, EmployeeRole? Role)> RequireViewerAsync(Guid accountId, CancellationToken cancellationToken)

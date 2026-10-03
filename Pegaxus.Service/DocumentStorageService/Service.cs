@@ -117,6 +117,51 @@ public class Service : IService, IDisposable
         }
     }
 
+    public async Task<MediaService.PreviewFile> DownloadPreviewAsync(string storageUrl, CancellationToken cancellationToken = default)
+    {
+        EnsureConfigured();
+        var location = StorageLocation(storageUrl);
+        try
+        {
+            using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeout.CancelAfter(TimeSpan.FromSeconds(15));
+            timeout.Token.ThrowIfCancellationRequested();
+            await VerifyPrivateBucketAsync(timeout.Token);
+            using var response = await Client.GetObjectAsync(new GetObjectRequest
+            {
+                BucketName = _options.BucketName, Key = location.Key, VersionId = location.VersionId
+            }, timeout.Token);
+            if (response.ContentLength > MaxFileSize) throw FileTooLarge();
+            using var content = new MemoryStream();
+            var chunk = new byte[65536];
+            int bytesRead;
+            while ((bytesRead = await response.ResponseStream.ReadAsync(chunk, timeout.Token)) != 0)
+            {
+                if (content.Length + bytesRead > MaxFileSize) throw FileTooLarge();
+                content.Write(chunk, 0, bytesRead);
+            }
+            var bytes = content.ToArray();
+            var mimeType = new[] { "application/pdf", "image/jpeg", "image/png" }
+                .FirstOrDefault(type => MatchesFileSignature(bytes, bytes.Length, type)) ?? throw InvalidFormat();
+            return new MediaService.PreviewFile(bytes, mimeType);
+        }
+        catch (AmazonS3Exception error) when (error.StatusCode == HttpStatusCode.NotFound)
+        {
+            throw new NotFoundException("Document file not found.", "DOCUMENT_FILE_NOT_FOUND");
+        }
+        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            throw new Pegaxus.Service.Exceptions.Exceptions("Document preview timed out.", 504, "FILE_STORAGE_TIMEOUT");
+        }
+        catch (Exception error)
+        {
+            if (error is OperationCanceledException && cancellationToken.IsCancellationRequested || error is Pegaxus.Service.Exceptions.Exceptions)
+                throw;
+            _logger.LogError(error, "Secure document preview failed");
+            throw StorageUnavailable();
+        }
+    }
+
     public async Task<SignedDocumentUrl> CreateReadUrlAsync(string storageUrl, CancellationToken cancellationToken = default)
     {
         EnsureConfigured();

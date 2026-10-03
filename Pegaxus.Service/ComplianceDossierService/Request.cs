@@ -12,6 +12,13 @@ public class Request
         public DateOnly? IssuedDate { get; set; }
         public DateOnly? ExpiryDate { get; set; }
         public string? UploadNote { get; set; }
+
+    }
+
+    public sealed class ViewRequest
+    {
+        public string? Status { get; set; }
+        public Guid? HorseId { get; set; }
     }
 
     public sealed class RequirementRequest

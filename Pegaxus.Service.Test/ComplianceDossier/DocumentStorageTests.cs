@@ -236,6 +236,90 @@ public class DocumentStorageTests
         return content.ToArray();
     }
 
+    [Fact]
+    public async Task Preview_ReadsExactPrivateObjectVersionAndSupportsTenMegabytes()
+    {
+        var bytes = new byte[StorageService.MaxFileSize];
+        "%PDF-1.7"u8.CopyTo(bytes);
+        var client = new RecordingS3Client { PreviewContent = bytes };
+        using var service = CreateService(client, 3310);
+        var result = await service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf?versionId=old%2F1");
+        Assert.Equal(bytes, result.Content);
+        Assert.Equal("application/pdf", result.ContentType);
+        var download = Assert.Single(client.Downloads);
+        Assert.Equal("private-bucket", download.BucketName);
+        Assert.Equal("documents/version/00.pdf", download.Key);
+        Assert.Equal("old/1", download.VersionId);
+        Assert.Equal(1, client.BucketChecks);
+    }
+
+    [Theory]
+    [InlineData("iVBORw0KGgo=", "image/png")]
+    [InlineData("/9j/", "image/jpeg")]
+    public async Task Preview_DetectsActualImageType(string content, string mimeType)
+    {
+        var client = new RecordingS3Client { PreviewContent = Convert.FromBase64String(content) };
+        using var service = CreateService(client, 3310);
+        Assert.Equal(mimeType, (await service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf")).ContentType);
+    }
+
+    [Theory]
+    [InlineData("<html><script>alert(1)</script></html>")]
+    [InlineData("<svg xmlns='http://www.w3.org/2000/svg'></svg>")]
+    [InlineData("")]
+    public async Task Preview_RejectsActiveOrUnknownContent(string content)
+    {
+        var client = new RecordingS3Client { PreviewContent = Encoding.UTF8.GetBytes(content) };
+        using var service = CreateService(client, 3310);
+        var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf"));
+        Assert.Equal(415, error.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Preview_RejectsOversizedFilesIncludingMissingLength(bool missingLength)
+    {
+        var client = new RecordingS3Client { PreviewContent = new byte[StorageService.MaxFileSize + 1], PreviewContentLength = missingLength ? 0 : StorageService.MaxFileSize + 1 };
+        using var service = CreateService(client, 3310);
+        var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf"));
+        Assert.Equal(413, error.StatusCode);
+    }
+
+    [Theory]
+    [InlineData(404, 404)]
+    [InlineData(500, 503)]
+    public async Task Preview_TranslatesStorageErrorsWithoutLeakingDetails(int storageStatus, int expectedStatus)
+    {
+        var client = new RecordingS3Client { DownloadFailureStatus = (HttpStatusCode)storageStatus };
+        using var service = CreateService(client, 3310);
+        var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf"));
+        Assert.Equal(expectedStatus, error.StatusCode);
+        Assert.DoesNotContain("sensitive", error.Message);
+    }
+
+    [Fact]
+    public async Task Preview_DeniesForeignBucketAndPublicBucketBeforeDownloading()
+    {
+        var client = new RecordingS3Client { IsPrivate = false };
+        using var service = CreateService(client, 3310);
+        await Assert.ThrowsAsync<BadRequestException>(() => service.DownloadPreviewAsync("s3://another-bucket/documents/version/00.pdf"));
+        var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf"));
+        Assert.Equal(503, error.StatusCode);
+        Assert.Empty(client.Downloads);
+    }
+
+    [Fact]
+    public async Task Preview_PropagatesCallerCancellation()
+    {
+        var client = new RecordingS3Client();
+        using var service = CreateService(client, 3310);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf", cancellation.Token));
+        Assert.Empty(client.Downloads);
+    }
+
     private sealed class TestStorageService(IConfiguration configuration, RecordingS3Client client)
         : StorageService(configuration, NullLogger<StorageService>.Instance)
     {
@@ -246,6 +330,10 @@ public class DocumentStorageTests
     {
         public List<PutObjectRequest> Uploads { get; } = [];
         public List<DeleteObjectRequest> Deletes { get; } = [];
+        public List<GetObjectRequest> Downloads { get; } = [];
+        public byte[] PreviewContent { get; init; } = "%PDF-1.7"u8.ToArray();
+        public long? PreviewContentLength { get; init; }
+        public HttpStatusCode? DownloadFailureStatus { get; init; }
         public byte[]? Content { get; private set; }
         public int BucketChecks { get; private set; }
         public bool IsPrivate { get; init; } = true;
@@ -276,6 +364,16 @@ public class DocumentStorageTests
             {
                 ServerSideEncryptionMethod = AcknowledgeEncryption ? ServerSideEncryptionMethod.AES256 : null, VersionId = ObjectVersionId
             };
+        }
+        public override Task<GetObjectResponse> GetObjectAsync(GetObjectRequest request, CancellationToken cancellationToken = default)
+        {
+            Downloads.Add(request);
+            if (DownloadFailureStatus.HasValue)
+                throw new AmazonS3Exception("sensitive storage details") { StatusCode = DownloadFailureStatus.Value };
+            return Task.FromResult(new GetObjectResponse
+            {
+                ResponseStream = new MemoryStream(PreviewContent), ContentLength = PreviewContentLength ?? PreviewContent.Length
+            });
         }
         public override Task<DeleteObjectResponse> DeleteObjectAsync(DeleteObjectRequest request, CancellationToken cancellationToken = default)
         {
