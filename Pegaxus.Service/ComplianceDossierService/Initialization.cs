@@ -171,7 +171,7 @@ public sealed partial class Service
         if (!await _db.Employees.AnyAsync(employee => employee.AccountId == accountId &&
             employee.Role == EmployeeRole.TRANSPORT_SPECIALIST && employee.IsActive && !employee.IsDeleted &&
             !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE, cancellationToken))
-            throw new ForbiddenException("Only an active Transport Specialist can initialize ComplianceDossiers.");
+            throw new ForbiddenException("Only an active Transport Specialist can manage ComplianceDossiers.");
     }
 
     private static ConflictException DossierAlreadyExists() => new(
