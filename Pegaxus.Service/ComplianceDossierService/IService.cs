@@ -2,6 +2,9 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public interface IService
 {
+    Task<Response.DocumentUploadResponse> UploadDocumentAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        Request.DocumentUploadRequest request, CancellationToken cancellationToken = default);
+
     Task<Response.OverviewResponse> GetByBookingAsync(Guid accountId, Guid bookingId, Request.ViewRequest request, CancellationToken cancellationToken = default);
     Task<Response.OverviewResponse> GetDossierAsync(Guid accountId, Guid dossierId, Request.ViewRequest request, CancellationToken cancellationToken = default);
     Task<Response.RequirementDetailResponse> GetRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, CancellationToken cancellationToken = default);

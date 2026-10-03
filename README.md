@@ -169,6 +169,34 @@ To keep Git history clean and maintain software stability:
 
 ---
 
+## ComplianceDocument Upload (UC-21)
+
+POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document` with a Customer Bearer token and multipart form data:
+`Files` (repeated file field), `DocumentNumber`, `IssuingAuthority`, `IssuedDate`, optional `ExpiryDate` and `UploadNote`.
+Submit 1–10 files, each at most 10 MiB; only PDF, JPG, JPEG and PNG are accepted. Extension, MIME and file signature must agree.
+
+Only the booking owner can upload. The dossier must be IN_PREPARATION or REJECTED; the requirement must be PENDING or REJECTED.
+UC-21 creates the first document/version only. An existing document returns 409 rather than overwriting its version history.
+The first file is stored on DocumentVersion v1; additional pages are DocumentAttachments of that same version.
+Success creates one ComplianceDocument, one DocumentVersion v1, an audit entry, and sets the requirement to PROVIDED.
+
+Document number, issuing authority and issue date are required. Issue date cannot be in the future. Expiry is required when
+the catalog marks validity as required or the requirement has `valid_until`; it must be strictly after departure and at least `valid_until`.
+
+Configure `DocumentStorageOptions` using the variables in `.env.example`. AWS credentials use the SDK's standard credential chain:
+prefer an IAM role; local development may use AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and optional AWS_SESSION_TOKEN.
+Grant s3:PutObject, s3:GetObject, s3:DeleteObject and s3:GetBucketPublicAccessBlock on the configured bucket/prefix;
+versioned buckets also need s3:GetObjectVersion and s3:DeleteObjectVersion. Keep all four bucket Public Access Block settings enabled.
+The implementation verifies private access, requests and checks AES256 server-side encryption, and returns HTTPS GET URLs expiring in five minutes.
+Stable `s3://` references, including object version IDs when available, are stored in the DB; signed URLs are not persisted or logged.
+
+A reachable ClamAV clamd service is mandatory (private network, INSTREAM enabled, StreamMaxLength at least 10 MiB, current virus definitions).
+No clean verdict, missing configuration, scanner failure or insecure bucket means the upload fails closed without DB changes.
+Failures clean uncommitted objects; if the DB commit outcome is unknown, files are retained rather than risking deletion of committed documents.
+The DB write runs in a serializable transaction and revalidates ownership, status and expiry after storage I/O.
+No migration is needed: existing unique indexes protect one document per requirement and one version number per document.
+The 4-second/10-MB target needs measurement with real S3, ClamAV and PostgreSQL; unit tests do not establish throughput.
+
 ## ComplianceDossier Viewing (UC-20)
 
 All read endpoints require a Bearer token and the enum-backed `ComplianceDossierViewerPolicy` (Customer, Transport Specialist, Logistics Manager).
@@ -188,8 +216,9 @@ SATISFIED and WAIVED count as fulfilled. Empty dossiers report 0%. `actions.canU
 `actions.canReview` is Transport Specialist-only. These flags describe role permissions; mutation APIs must enforce their own lifecycle rules.
 
 Use the returned API `previewUrl` with an Authorization header (fetch as a Blob for browser previews), not a token query parameter.
-Preview validates ownership and all nested IDs, permits only the configured Cloudinary cloud, refuses redirects, caps files at 5 MB,
-detects PDF/raster-image types from bytes, and returns no-store responses. The 15-second timeout covers both headers and body.
+Preview validates ownership and all nested IDs. S3 documents use the configured private bucket and exact object version, with a 10 MiB limit.
+Legacy Cloudinary files use only the configured cloud, refuse redirects and retain the 5 MB limit. Both paths detect PDF/raster-image types
+from bytes and return no-store responses. The 15-second timeout covers both headers and body.
 
 **Storage limitation:** Existing Cloudinary upload methods use public delivery. The proxy protects API access but cannot revoke
 previously known public storage URLs. Sensitive documents must be uploaded with authenticated/private delivery and existing public

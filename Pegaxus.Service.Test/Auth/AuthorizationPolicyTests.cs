@@ -14,6 +14,14 @@ namespace Pegaxus.Service.Test;
 
 public class AuthorizationPolicyTests
 {
+    [Fact]
+    public void DocumentUpload_RequiresCustomerPolicy()
+    {
+        var action = typeof(ComplianceDossiersController).GetMethod("UploadDocument");
+        Assert.NotNull(action);
+        Assert.Equal(JwtExtensions.CustomerPolicy, action.GetCustomAttribute<AuthorizeAttribute>()?.Policy);
+    }
+
     internal static ServiceProvider CreateProvider()
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>

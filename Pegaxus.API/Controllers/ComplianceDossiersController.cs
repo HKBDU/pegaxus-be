@@ -21,6 +21,19 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
+    [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/document")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(101 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> UploadDocument(Guid dossierId, Guid requirementId,
+        [FromForm] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.UploadDocumentAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
+            "ComplianceDocument uploaded successfully (Version v1). Pending DocumentReview by Transport Specialist.",
+            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
     [HttpGet("/api/v1/bookings/{bookingId:guid}/compliance-dossier")]
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetByBooking(Guid bookingId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,
