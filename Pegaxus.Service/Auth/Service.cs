@@ -639,23 +639,9 @@ public class Service : IService
             new(ClaimTypes.Email, account.Email),
             new("accountType", account.AccountType.ToString())
         };
-        if (account.AccountType == AccountType.CUSTOMER)
-        {
-            claims.Add(new Claim(ClaimTypes.Role, "Customer"));
-        }
-        else
-        {
-            claims.Add(new Claim(ClaimTypes.Role, "Employee"));
-            claims.Add(new Claim(ClaimTypes.Role, account.EmployeeAccount!.Role switch
-            {
-                EmployeeRole.LOGISTICS_MANAGER => "LogisticsManager",
-                EmployeeRole.TRANSPORT_SPECIALIST => "TransportSpecialist",
-                EmployeeRole.FLEET_ROUTE_COORDINATOR => "FleetRouteCoordinator",
-                EmployeeRole.DRIVER => "Driver",
-                EmployeeRole.ESCORT => "Escort",
-                _ => throw InvalidRefreshToken()
-            }));
-        }
+        claims.Add(new Claim(ClaimTypes.Role, JwtService.JwtServices.GetRoleName(account.AccountType)));
+        if (account.AccountType == AccountType.EMPLOYEE)
+            claims.Add(new Claim(ClaimTypes.Role, JwtService.JwtServices.GetRoleName(account.EmployeeAccount!.Role)));
 
         return claims;
     }

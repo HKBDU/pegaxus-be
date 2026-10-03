@@ -12,7 +12,6 @@ namespace Pegaxus.API.Extensions;
 
 public static class JwtExtensions
 {
-    public const string AdminPolicy = "AdminPolicy";
     public const string CustomerPolicy = "CustomerPolicy";
     public const string EmployeePolicy = "EmployeePolicy";
     public const string LogisticsManagerPolicy = "LogisticsManagerPolicy";
@@ -21,6 +20,8 @@ public static class JwtExtensions
     public const string DriverPolicy = "DriverPolicy";
     public const string EscortPolicy = "EscortPolicy";
     public const string CustomerOrEmployeePolicy = "CustomerOrEmployeePolicy";
+    public const string TransportSpecialistOrLogisticsManagerPolicy = "TransportSpecialistOrLogisticsManagerPolicy";
+    public const string DriverOrEscortPolicy = "DriverOrEscortPolicy";
 
     public static void AddJwtServices(
         this IServiceCollection services,
@@ -130,41 +131,35 @@ public static class JwtExtensions
 
         services.AddAuthorization(options =>
         {
-            // Admin
-            options.AddPolicy(AdminPolicy, policy =>
-                policy.RequireRole("Admin"));
-
-            // Customer
             options.AddPolicy(CustomerPolicy, policy =>
-                policy.RequireRole("Customer"));
+                policy.RequireRole(JwtServices.GetRoleName(AccountType.CUSTOMER)));
 
-            // Employee
             options.AddPolicy(EmployeePolicy, policy =>
-                policy.RequireRole("Employee"));
+                policy.RequireRole(JwtServices.GetRoleName(AccountType.EMPLOYEE)));
 
-            // Logistics Manager
             options.AddPolicy(LogisticsManagerPolicy, policy =>
-                policy.RequireRole("LogisticsManager"));
+                policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER)));
 
-            // Transport Specialist
             options.AddPolicy(TransportSpecialistPolicy, policy =>
-                policy.RequireRole("TransportSpecialist"));
+                policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST)));
 
-            // Fleet & Route Coordinator
             options.AddPolicy(FleetRouteCoordinatorPolicy, policy =>
-                policy.RequireRole("FleetRouteCoordinator"));
+                policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR)));
 
-            // Driver
             options.AddPolicy(DriverPolicy, policy =>
-                policy.RequireRole("Driver"));
+                policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.DRIVER)));
 
-            // Escort
             options.AddPolicy(EscortPolicy, policy =>
-                policy.RequireRole("Escort"));
+                policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.ESCORT)));
 
-            // Customer OR Employee
             options.AddPolicy(CustomerOrEmployeePolicy, policy =>
-                policy.RequireRole("Customer", "Employee"));
+                policy.RequireRole(JwtServices.GetRoleName(AccountType.CUSTOMER), JwtServices.GetRoleName(AccountType.EMPLOYEE)));
+
+            options.AddPolicy(TransportSpecialistOrLogisticsManagerPolicy, policy =>
+                policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER)));
+
+            options.AddPolicy(DriverOrEscortPolicy, policy =>
+                policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
         });
     }
 }

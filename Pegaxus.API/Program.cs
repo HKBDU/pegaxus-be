@@ -28,6 +28,7 @@ using EmployeeService = Pegaxus.Service.EmployeeService;
 using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
 using NotificationService = Pegaxus.Service.NotificationService;
 using DossierTemplateService = Pegaxus.Service.DossierTemplateService;
+using ComplianceRequirementService = Pegaxus.Service.ComplianceRequirementService;
 
 var envDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
 while (envDirectory is not null)
@@ -195,6 +196,10 @@ builder.Services.AddScoped<DossierTemplateService.IService, DossierTemplateServi
 builder.Services.AddScoped<IValidator<DossierTemplateService.Request.ListRequest>, DossierTemplateService.Validator.ListRequestValidator>();
 builder.Services.AddScoped<IValidator<DossierTemplateService.Request.SaveRequest>, DossierTemplateService.Validator.SaveRequestValidator>();
 builder.Services.AddScoped<IValidator<DossierTemplateService.Request.ChangeStatusRequest>, DossierTemplateService.Validator.ChangeStatusRequestValidator>();
+builder.Services.AddScoped<ComplianceRequirementService.IService, ComplianceRequirementService.Service>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.ListRequest>, ComplianceRequirementService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.SaveRequest>, ComplianceRequirementService.Validator.SaveRequestValidator>();
+builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.StatusRequest>, ComplianceRequirementService.Validator.StatusRequestValidator>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();

@@ -2,6 +2,7 @@ using System.Security.Claims;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Pegaxus.API.Extensions;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.Models;
 using DossierTemplateService = Pegaxus.Service.DossierTemplateService;
@@ -10,7 +11,7 @@ namespace Pegaxus.API.Controllers;
 
 [ApiController]
 [Route("api/v1/dossier-templates")]
-[Authorize(Roles = "TransportSpecialist,Admin")]
+[Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
 public sealed class DossierTemplatesController(DossierTemplateService.IService service) : ControllerBase
 {
     [HttpGet]
