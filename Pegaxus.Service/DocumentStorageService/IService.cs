@@ -4,6 +4,7 @@ namespace Pegaxus.Service.DocumentStorageService;
 
 public interface IService
 {
+    Task<MediaService.PreviewFile> DownloadPreviewAsync(string storageUrl, CancellationToken cancellationToken = default);
     Task<StoredDocumentFile> UploadAsync(Guid versionId, int sortOrder, IFormFile file, CancellationToken cancellationToken = default);
     Task<SignedDocumentUrl> CreateReadUrlAsync(string storageUrl, CancellationToken cancellationToken = default);
     Task DeleteAsync(string storageUrl, CancellationToken cancellationToken = default);

@@ -353,6 +353,7 @@ public class DocumentUploadTests
 
     internal sealed class RecordingStorage : Pegaxus.Service.DocumentStorageService.IService
     {
+        public Task<Pegaxus.Service.MediaService.PreviewFile> DownloadPreviewAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public List<StoredDocumentFile> Uploaded { get; } = [];
         public List<string> Deleted { get; } = [];
         public int? FailAtFile { get; init; }

@@ -12,6 +12,11 @@ public interface IService
     Task<Response.DocumentUploadResponse> UploadDocumentAsync(Guid accountId, Guid dossierId, Guid requirementId,
         Request.DocumentUploadRequest request, CancellationToken cancellationToken = default);
 
+    Task<Response.OverviewResponse> GetByBookingAsync(Guid accountId, Guid bookingId, Request.ViewRequest request, CancellationToken cancellationToken = default);
+    Task<Response.OverviewResponse> GetDossierAsync(Guid accountId, Guid dossierId, Request.ViewRequest request, CancellationToken cancellationToken = default);
+    Task<Response.RequirementDetailResponse> GetRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, CancellationToken cancellationToken = default);
+    Task<MediaService.PreviewFile> GetDocumentPreviewAsync(Guid accountId, Guid dossierId, Guid requirementId, Guid versionId, Guid? attachmentId, CancellationToken cancellationToken = default);
+
     Task<Response.RequirementResponse> AddRequirementAsync(Guid accountId, Guid dossierId, Request.RequirementRequest request, CancellationToken cancellationToken = default);
     Task<Response.RequirementResponse> UpdateRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.UpdateRequirementRequest request, CancellationToken cancellationToken = default);
     Task<Response.RemovalResponse> RemoveRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.RemoveRequirementRequest request, CancellationToken cancellationToken = default);

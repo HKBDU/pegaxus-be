@@ -16,6 +16,13 @@ public class Request
         public string? IssuingAuthority { get; set; }
         public DateOnly? IssuedDate { get; set; }
         public DateOnly? ExpiryDate { get; set; }
+
+    }
+
+    public sealed class ViewRequest
+    {
+        public string? Status { get; set; }
+        public Guid? HorseId { get; set; }
     }
 
     public sealed class RequirementRequest

@@ -25,7 +25,7 @@ public class AuthorizationPolicyTests
     [Theory]
     [InlineData("SubmitDocumentVersion", JwtExtensions.CustomerPolicy)]
     [InlineData("UpdateDocumentMetadata", JwtExtensions.CustomerPolicy)]
-    [InlineData("GetDocumentVersions", JwtExtensions.CustomerOrTransportSpecialistOrLogisticsManagerPolicy)]
+    [InlineData("GetDocumentVersions", JwtExtensions.ComplianceDossierViewerPolicy)]
     public void DocumentVersionActions_RequireScopedPolicies(string actionName, string policy)
     {
         var action = typeof(ComplianceDossiersController).GetMethod(actionName);
@@ -104,7 +104,7 @@ public class AuthorizationPolicyTests
             [JwtExtensions.DriverPolicy] = ["Driver"],
             [JwtExtensions.EscortPolicy] = ["Escort"],
             [JwtExtensions.CustomerOrEmployeePolicy] = ["Customer", "Employee"],
-            [JwtExtensions.CustomerOrTransportSpecialistOrLogisticsManagerPolicy] = ["Customer", "TransportSpecialist", "LogisticsManager"],
+            [JwtExtensions.ComplianceDossierViewerPolicy] = ["Customer", "TransportSpecialist", "LogisticsManager"],
             ["TransportSpecialistOrLogisticsManagerPolicy"] = ["TransportSpecialist", "LogisticsManager"],
             ["DriverOrEscortPolicy"] = ["Driver", "Escort"]
         };

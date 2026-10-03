@@ -88,6 +88,8 @@ builder.Services.AddCors(options =>
 });
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
+builder.Services.AddHttpClient(CloudinaryService.Service.PreviewHttpClient)
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IUserIdProvider, AccountUserIdProvider>();
 

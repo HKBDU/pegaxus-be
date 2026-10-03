@@ -13,7 +13,10 @@ public interface IService
         string contentType,
         long sizeBytes);
     Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId);
+    Task<PreviewFile> DownloadPreviewAsync(string fileUrl, CancellationToken cancellationToken = default);
 }
+
+public sealed record PreviewFile(byte[] Content, string ContentType);
 
 public sealed record SignedUploadResult(
     string PublicId,
