@@ -166,12 +166,12 @@ public sealed partial class Service
         return booking;
     }
 
-    private async Task RequireSpecialistAsync(Guid accountId, CancellationToken cancellationToken)
+    private async Task RequireSpecialistAsync(Guid accountId, CancellationToken cancellationToken, string? errorMessage = null)
     {
         if (!await _db.Employees.AnyAsync(employee => employee.AccountId == accountId &&
             employee.Role == EmployeeRole.TRANSPORT_SPECIALIST && employee.IsActive && !employee.IsDeleted &&
-            !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE, cancellationToken))
-            throw new ForbiddenException("Only an active Transport Specialist can manage ComplianceDossiers.");
+            !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE && employee.Account.AccountType == AccountType.EMPLOYEE, cancellationToken))
+            throw new ForbiddenException(errorMessage ?? "Only an active Transport Specialist can manage ComplianceDossiers.");
     }
 
     private static ConflictException DossierAlreadyExists() => new(

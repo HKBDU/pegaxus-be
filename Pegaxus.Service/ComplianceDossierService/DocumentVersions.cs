@@ -110,7 +110,8 @@ public sealed partial class Service
             .FirstOrDefaultAsync(cancellationToken)
             ?? throw new ConflictException("ComplianceDocument has no existing DocumentVersion.");
         if (tracking) await _db.Entry(latest).ReloadAsync(cancellationToken);
-        if (document.Status == ComplianceDocumentStatus.APPROVED || latest.DocumentReviews.Any(item => item.Result == DocumentReviewResult.APPROVED))
+        if (document.Status == ComplianceDocumentStatus.APPROVED ||
+            (await LatestReviewAsync(latest.DocumentVersionId, cancellationToken))?.Result == DocumentReviewResult.APPROVED)
             throw SatisfiedDocument();
         if (document.Status is not (ComplianceDocumentStatus.PROVIDED or ComplianceDocumentStatus.REJECTED))
             throw new ConflictException("Only PROVIDED or REJECTED ComplianceDocuments can be edited.");

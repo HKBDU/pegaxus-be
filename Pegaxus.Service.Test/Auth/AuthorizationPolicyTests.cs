@@ -33,6 +33,17 @@ public class AuthorizationPolicyTests
         Assert.Equal(policy, action.GetCustomAttribute<AuthorizeAttribute>()?.Policy);
     }
 
+    [Theory]
+    [InlineData("ApproveDocument")]
+    [InlineData("RevokeDocumentReview")]
+    [InlineData("MarkReadyForSubmission")]
+    public void DocumentReviewActions_RequireTransportSpecialistPolicy(string actionName)
+    {
+        var action = typeof(ComplianceDossiersController).GetMethod(actionName);
+        Assert.NotNull(action);
+        Assert.Equal(JwtExtensions.TransportSpecialistPolicy, action.GetCustomAttribute<AuthorizeAttribute>()?.Policy);
+    }
+
     internal static ServiceProvider CreateProvider()
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
