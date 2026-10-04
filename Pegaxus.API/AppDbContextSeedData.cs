@@ -9,6 +9,8 @@ namespace Pegaxus.API;
 public static class AppDbContextSeedData
 {
     private const string DefaultPassword = "pegaxusDemo@123";
+    private static readonly DateTime ComplianceRequirementSeedTimestamp =
+        new(2026, 10, 4, 0, 0, 0, DateTimeKind.Unspecified);
 
     public static async Task SeedAsync(AppDbContext db, CancellationToken cancellationToken = default)
     {
@@ -37,6 +39,7 @@ public static class AppDbContextSeedData
             await SeedEmployeeAsync(db, passwordHasher, seed, now, cancellationToken);
         foreach (var seed in customers)
             await SeedCustomerAsync(db, passwordHasher, seed, now, cancellationToken);
+        await SeedComplianceRequirementsAsync(db, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -131,6 +134,58 @@ public static class AppDbContextSeedData
         });
     }
 
+    private static async Task SeedComplianceRequirementsAsync(
+        AppDbContext db,
+        CancellationToken cancellationToken)
+    {
+        var seeds = ComplianceRequirementSeeds;
+        var existingCodes = await db.ComplianceRequirements
+            .Where(item => seeds.Select(seed => seed.RequirementCode).Contains(item.RequirementCode))
+            .Select(item => item.RequirementCode)
+            .ToListAsync(cancellationToken);
+        var existingCodeSet = existingCodes.ToHashSet(StringComparer.Ordinal);
+
+        foreach (var seed in seeds)
+        {
+            if (existingCodeSet.Contains(seed.RequirementCode))
+                continue;
+
+            db.ComplianceRequirements.Add(new ComplianceRequirement
+            {
+                RequirementCode = seed.RequirementCode,
+                RequirementName = seed.RequirementName,
+                Description = seed.Description,
+                Country = seed.Country,
+                Category = seed.Category,
+                IssuingAuthority = seed.IssuingAuthority,
+                BcpCode = seed.BcpCode,
+                LegalBasis = seed.LegalBasis,
+                ValidityRequired = seed.ValidityRequired,
+                ValidityPeriodDays = seed.ValidityPeriodDays,
+                Status = seed.Status,
+                IsDeleted = false,
+                DeletedAt = null,
+                DeletedByAccountId = null,
+                CreatedAt = ComplianceRequirementSeedTimestamp,
+                UpdatedAt = ComplianceRequirementSeedTimestamp
+            });
+        }
+    }
+
+    private static readonly ComplianceRequirementSeed[] ComplianceRequirementSeeds =
+    [
+        new("EQUINE_PASSPORT", "Equine Passport", "Hộ chiếu định danh ngựa, dùng để đối chiếu tên ngựa, số hộ chiếu và microchip.", "EU", ComplianceRequirementCategory.HorseIdentity, "Weatherbys / France Galop / Approved Passport Issuing Organisation", null, "Equine identification and passport control requirements.", true, 365, ComplianceRequirementStatus.ACTIVE),
+        new("EHC_GB_TO_EU_8438", "Export Health Certificate GB to EU — Form 8438", "Chứng thư kiểm dịch thú y xuất khẩu từ GB sang EU.", "GB", ComplianceRequirementCategory.HorseHealth, "APHA / Official Veterinarian", null, "Export health certification for equidae transported from GB to EU.", true, 10, ComplianceRequirementStatus.ACTIVE),
+        new("EHC_EU_TO_GB", "Export Health Certificate EU to GB", "Chứng thư kiểm dịch thú y xuất khẩu từ EU vào GB.", "EU", ComplianceRequirementCategory.HorseHealth, "EU Official Veterinarian / TRACES-NT", null, "Export health certification for equidae transported from EU to GB.", true, 10, ComplianceRequirementStatus.ACTIVE),
+        new("LAB_TEST_EIA_COGGINS", "Laboratory Test Report — EIA Coggins Test", "Kết quả xét nghiệm Coggins/EIA của ngựa, dùng để chứng minh kết quả âm tính khi tuyến yêu cầu.", null, ComplianceRequirementCategory.HorseHealth, "Approved Veterinary Laboratory", null, "Equine infectious anaemia testing requirement for applicable routes.", true, 90, ComplianceRequirementStatus.ACTIVE),
+        new("CHED_A_DOCUMENT", "CHED-A Animal Entry Document", "Tờ khai y tế nhập cảnh động vật trên hệ thống TRACES-NT cho tuyến có kiểm soát BCP.", "EU", ComplianceRequirementCategory.Quarantine, "TRACES-NT / EU Border Control Post", "FRCAL1", "Common Health Entry Document for Animals.", true, 1, ComplianceRequirementStatus.ACTIVE),
+        new("IPAFFS_PRE_NOTIF", "IPAFFS Import Pre-notification", "Khai báo trước khi đưa ngựa vào GB qua hệ thống IPAFFS.", "GB", ComplianceRequirementCategory.Quarantine, "UK Defra IPAFFS", "GBHOL1", "Pre-notification requirement for applicable imports into GB.", true, 1, ComplianceRequirementStatus.ACTIVE),
+        new("ATA_CARNET_EXPORT", "ATA Carnet — Export Voucher", "Sổ ATA Carnet phục vụ thủ tục tạm xuất ngựa và tài sản liên quan.", "GB", ComplianceRequirementCategory.Customs, "Chamber of Commerce / Customs Authority", null, "Temporary admission and re-export customs procedure.", true, 365, ComplianceRequirementStatus.ACTIVE),
+        new("ATA_CARNET_IMPORT", "ATA Carnet — Import Voucher", "Phần chứng từ ATA Carnet phục vụ thủ tục tạm nhập tại nước đến.", "EU", ComplianceRequirementCategory.Customs, "Chamber of Commerce / Customs Authority", null, "Temporary admission customs procedure at destination country.", true, 365, ComplianceRequirementStatus.ACTIVE),
+        new("JOURNEY_LOG_EC1_2005", "EU Animal Transport Journey Log", "Nhật ký hành trình ghi nhận kế hoạch, thời gian di chuyển, thời gian nghỉ và các bất thường.", "EU", ComplianceRequirementCategory.Transport, "Transport Operator / Competent Authority", null, "Animal welfare and journey log requirements for transported equidae.", false, null, ComplianceRequirementStatus.ACTIVE),
+        new("DRIVER_COMPETENCE_CERT", "Driver Competence Certificate", "Chứng chỉ năng lực của tài xế vận chuyển động vật sống.", null, ComplianceRequirementCategory.Transport, "Competent Transport Authority / Approved Training Body", null, "Driver competence requirement for transport of live animals.", true, 365, ComplianceRequirementStatus.INACTIVE)
+    ];
+
     private sealed record EmployeeSeed(
         string FullName,
         string EmployeeCode,
@@ -139,4 +194,17 @@ public static class AppDbContextSeedData
         EmployeeRole Role);
 
     private sealed record CustomerSeed(string FullName, string Email);
+
+    private sealed record ComplianceRequirementSeed(
+        string RequirementCode,
+        string RequirementName,
+        string Description,
+        string? Country,
+        ComplianceRequirementCategory Category,
+        string IssuingAuthority,
+        string? BcpCode,
+        string LegalBasis,
+        bool ValidityRequired,
+        int? ValidityPeriodDays,
+        ComplianceRequirementStatus Status);
 }
