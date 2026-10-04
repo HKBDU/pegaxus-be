@@ -142,7 +142,7 @@ internal static class TestSupport
     {
         internal int Calls { get; private set; }
 
-        public Task SendMail(MailService.MailContent mailContent)
+        public Task SendMail(MailService.MailContent mailContent, CancellationToken cancellationToken = default)
         {
             Calls++;
             return Task.CompletedTask;

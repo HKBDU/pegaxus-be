@@ -227,10 +227,14 @@ public sealed partial class Service
         if (dossier.Status is not (ComplianceDossierStatus.IN_PREPARATION or ComplianceDossierStatus.REJECTED))
             throw new ConflictException("ComplianceDocuments can only be uploaded while the dossier is IN_PREPARATION or REJECTED.");
         if (existing ? requirement.Status is not (DossierRequirementStatus.PROVIDED or DossierRequirementStatus.REJECTED or DossierRequirementStatus.REQUESTED)
-            : requirement.Status is not (DossierRequirementStatus.PENDING or DossierRequirementStatus.REJECTED))
+            : requirement.Status is not (DossierRequirementStatus.PENDING or DossierRequirementStatus.REQUESTED or DossierRequirementStatus.REJECTED))
             throw new ConflictException(existing
                 ? "DocumentVersions can only be submitted for PROVIDED, REJECTED or REQUESTED requirements."
-                : "ComplianceDocuments can only be uploaded for PENDING or REJECTED requirements.");
+                : "ComplianceDocuments can only be uploaded for PENDING, REQUESTED or REJECTED requirements.");
+        if (!existing && requirement.Status == DossierRequirementStatus.REQUESTED &&
+            !await _db.DocumentRequests.AnyAsync(item => item.DossierRequirementId == requirementId &&
+                item.RequestType == DocumentRequestType.MISSING_DOCUMENT && item.Status == DocumentRequestStatus.OPEN, cancellationToken))
+            throw new ConflictException("An OPEN missing-document request is required before uploading a REQUESTED requirement.");
         if (!existing && await _db.ComplianceDocuments.AnyAsync(item => item.DossierRequirementId == requirementId, cancellationToken))
             throw new ConflictException("ComplianceDocument already exists. Submit a new DocumentVersion instead.", "DOCUMENT_ALREADY_EXISTS");
         return (dossier, requirement);

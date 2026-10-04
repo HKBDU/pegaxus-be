@@ -175,7 +175,8 @@ POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/docum
 `Files` (repeated file field), `DocumentNumber`, `IssuingAuthority`, `IssuedDate`, optional `ExpiryDate` and `UploadNote`.
 Submit 1–10 files, each at most 10 MiB; only PDF, JPG, JPEG and PNG are accepted. Extension, MIME and file signature must agree.
 
-Only the booking owner can upload. The dossier must be IN_PREPARATION or REJECTED; the requirement must be PENDING or REJECTED.
+Only the booking owner can upload. The dossier must be IN_PREPARATION or REJECTED; the requirement must be PENDING, REQUESTED or REJECTED.
+REQUESTED requirements need an OPEN MISSING_DOCUMENT request before their first upload.
 UC-21 creates the first document/version only. An existing document returns 409 rather than overwriting its version history.
 The first file is stored on DocumentVersion v1; additional pages are DocumentAttachments of that same version.
 Success creates one ComplianceDocument, one DocumentVersion v1, an audit entry, and sets the requirement to PROVIDED.
@@ -302,6 +303,46 @@ A timeout means delivery was not confirmed; SMTP may finish afterward. No automa
 The two-second end-to-end target still requires measurement with real PostgreSQL, SMTP and realtime delivery.
 
 Apply migration `20261003000000_AddDocumentRequestRevisions` before using these endpoints:
+
+```bash
+dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
+```
+
+## Missing-document reminders (UC-25)
+
+Both endpoints require a Bearer token and the enum-backed `TransportSpecialistPolicy`; the service also requires an active TS account.
+
+| Endpoint | Result |
+| :--- | :--- |
+| GET `/api/v1/compliance-dossiers/{dossierId}/missing-requirements` | Selectable missing requirements |
+| POST `/api/v1/compliance-dossiers/{dossierId}/missing-document-reminders` | Update selected deadlines/statuses and send a customer reminder |
+
+POST accepts `requirementIds` (1–100 distinct IDs belonging to this dossier), `dueDate` (ISO date),
+and optional `note` (at most 2000 characters). The deadline must be today or later in UTC and no later than departure.
+Only IN_PREPARATION dossiers are eligible; cancelled/rejected bookings are excluded.
+Missing means a nondeleted PENDING or REQUESTED requirement with no uploaded file in any document version.
+PROVIDED, SATISFIED, WAIVED and REJECTED requirements are excluded; rejected-document revision belongs to UC-24.
+An invalid or already-uploaded selection rejects the entire operation, without partially changing other items.
+
+The explicit TS action changes selected requirements to REQUESTED, sets their deadlines, creates or updates their OPEN
+MISSING_DOCUMENT requests, and saves audit entries, a web notification and an email outbox record atomically.
+The response contains `reminderId`, updated `requirements`, `emailSent` and any `deliveryWarning`.
+The SMTP attempt has a two-second cancellation budget; failure keeps the durable email queued for retry instead of losing the reminder.
+
+`MissingDocumentReminderWorker` runs on API startup and every minute. Automatic reminders are eligible within 21 days for
+domestic trips (same normalized origin/destination country) or 60 days for cross-border trips; departed trips are excluded.
+At most one automatic reminder per dossier per UTC day is persisted. A manual reminder that day or a pending unsent email
+suppresses another automatic reminder. Existing requirement deadlines appear in the message; a missing deadline defaults to today.
+Automatic reminders send email/web notifications but do not change requirements, deadlines or dossier submission status.
+
+Email failures retry after five minutes, including after API restarts. Retries recheck dossier eligibility and selected missing items;
+obsolete reminders are cancelled, uploaded items are omitted, and no new DocumentRequest or web notification is created for a retry.
+Database uniqueness and row locks protect multi-instance scheduling/delivery. SMTP delivery is at-least-once: a process crash after
+SMTP accepts email but before its database acknowledgement may produce a duplicate email. This does not duplicate the request or notification.
+The under-three-second target still requires measurement with real PostgreSQL, SMTP and realtime delivery.
+
+Apply migration `20261004100000_AddMissingDocumentReminders` before using the API/worker:
+
 ```bash
 dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
 ```

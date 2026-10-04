@@ -375,7 +375,7 @@ public class DocumentRejectionTests
     {
         public List<Mail.MailContent> Sent { get; } = [];
         public bool Fail { get; init; }
-        public Task SendMail(Mail.MailContent content)
+        public Task SendMail(Mail.MailContent content, CancellationToken cancellationToken = default)
         {
             if (Fail) throw new IOException("SMTP unavailable");
             Sent.Add(content);

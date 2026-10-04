@@ -38,6 +38,7 @@ public sealed partial class Service : IService
     private readonly DocumentStorageService.IService _documentStorage;
     private readonly ILogger<Service> _logger;
     private readonly MailService.IService? _mailService;
+    private readonly TimeProvider _reminderClock;
 
     public Service(
         AppDbContext db,
@@ -46,7 +47,8 @@ public sealed partial class Service : IService
         NotificationService.IService notificationService,
         DocumentStorageService.IService documentStorage,
         ILogger<Service> logger,
-        MailService.IService? mailService = null)
+        MailService.IService? mailService = null,
+        TimeProvider? timeProvider = null)
     {
         _db = db;
         _mediaService = mediaService;
@@ -55,6 +57,7 @@ public sealed partial class Service : IService
         _documentStorage = documentStorage;
         _logger = logger;
         _mailService = mailService;
+        _reminderClock = timeProvider ?? TimeProvider.System;
     }
 
     public async Task<Response.DashboardResponse> GetDashboardAsync(

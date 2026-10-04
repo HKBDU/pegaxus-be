@@ -83,6 +83,14 @@ public class Response
         public string? DeliveryWarning { get; set; }
     }
 
+    public sealed class MissingDocumentsResponse
+    {
+        public Guid ReminderId { get; init; }
+        public IReadOnlyList<RequirementResponse> Requirements { get; init; } = [];
+        public bool EmailSent { get; set; }
+        public string? DeliveryWarning { get; set; }
+    }
+
     public sealed class DocumentRequestResponse
     {
         public Guid DocumentRequestId { get; init; }
