@@ -4,6 +4,53 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Request
 {
+    public sealed class DocumentUploadRequest : DocumentMetadataRequest
+    {
+        public List<IFormFile> Files { get; set; } = [];
+        public string? UploadNote { get; set; }
+    }
+
+    public class DocumentMetadataRequest
+    {
+        public string? DocumentNumber { get; set; }
+        public string? IssuingAuthority { get; set; }
+        public DateOnly? IssuedDate { get; set; }
+        public DateOnly? ExpiryDate { get; set; }
+    }
+
+    public sealed class ApproveDocumentRequest
+    {
+        public bool MetadataConfirmed { get; set; }
+        public DateTime VersionUploadedAt { get; set; }
+        public DateTime DocumentUpdatedAt { get; set; }
+        public string? ReviewNote { get; set; }
+        public string? ExpiryExceptionReason { get; set; }
+    }
+
+    public sealed class RevokeDocumentReviewRequest
+    {
+        public Pegaxus.Repository.Enum.DossierRequirementStatus Status { get; set; }
+        public string Reason { get; set; } = string.Empty;
+    }
+
+    public enum DocumentErrorCategory { UNCLEAR_IMAGE = 1, EXPIRED, MISSING_STAMP, WRONG_PAGE, METADATA_MISMATCH, OTHER }
+
+    public sealed class RejectDocumentRequest
+    {
+        public DocumentErrorCategory ErrorCategory { get; set; }
+        public string RejectionNote { get; set; } = string.Empty;
+        public DateOnly RevisionDeadline { get; set; }
+        public Pegaxus.Repository.Enum.DossierRequirementStatus RequirementStatus { get; set; } = Pegaxus.Repository.Enum.DossierRequirementStatus.REJECTED;
+        public Pegaxus.Repository.Enum.ComplianceDossierStatus DossierStatus { get; set; } = Pegaxus.Repository.Enum.ComplianceDossierStatus.IN_PREPARATION;
+        public DateTime VersionUploadedAt { get; set; }
+        public DateTime DocumentUpdatedAt { get; set; }
+    }
+
+    public sealed class DocumentRequestCommentRequest
+    {
+        public string Message { get; set; } = string.Empty;
+    }
+
     public sealed class MissingDocumentsRequest
     {
         public List<Guid> RequirementIds { get; set; } = [];

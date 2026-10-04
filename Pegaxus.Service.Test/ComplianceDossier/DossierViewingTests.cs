@@ -291,6 +291,29 @@ public class DossierViewingTests
                     .Cast<AuthorizeAttribute>().Single().Policy);
     }
 
+    [Fact]
+    public async Task S3Preview_UsesPrivateStorageInsteadOfCloudinary()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, dossier) = await SeedAsync(db);
+        var requirement = dossier.DossierRequirements.First();
+        var version = requirement.ComplianceDocument!.DocumentVersions.First();
+        version.FileUrl = "s3://private-bucket/documents/version/00.pdf?versionId=original";
+        var attachment = version.DocumentAttachments.First();
+        attachment.FileUrl = "s3://private-bucket/documents/version/01.pdf?versionId=page";
+        await db.SaveChangesAsync();
+        var storage = new RecordingDocumentStorage();
+        var media = new RecordingMediaService();
+        var service = CreateService(db, media, storage);
+        var result = await service.GetDocumentPreviewAsync(account.AccountId, dossier.ComplianceDossierId,
+            requirement.DossierRequirementId, version.DocumentVersionId, null);
+        Assert.Equal("application/pdf", result.ContentType);
+        await service.GetDocumentPreviewAsync(account.AccountId, dossier.ComplianceDossierId,
+            requirement.DossierRequirementId, version.DocumentVersionId, attachment.DocumentAttachmentId);
+        Assert.Equal(new[] { version.FileUrl, attachment.FileUrl }, storage.PreviewedUrls);
+        Assert.Empty(media.DownloadedUrls);
+    }
+
     private static async Task<(Account Account, Pegaxus.Repository.Entities.ComplianceDossier Dossier)> SeedAsync(AppDbContext db)
     {
         var (account, customer) = await TestSupport.AddCustomerAsync(db);
@@ -339,8 +362,22 @@ public class DossierViewingTests
         return (account, dossier);
     }
 
-    private static DossierService CreateService(AppDbContext db, RecordingMediaService? media = null) =>
-        new(db, media ?? new RecordingMediaService(), new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!);
+    private static DossierService CreateService(AppDbContext db, RecordingMediaService? media = null, RecordingDocumentStorage? storage = null) =>
+        new(db, media ?? new RecordingMediaService(), new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!,
+            storage ?? new RecordingDocumentStorage(), Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance);
+
+    private sealed class RecordingDocumentStorage : Pegaxus.Service.DocumentStorageService.IService
+    {
+        public List<string> PreviewedUrls { get; } = [];
+        public Task<PreviewFile> DownloadPreviewAsync(string storageUrl, CancellationToken cancellationToken = default)
+        {
+            PreviewedUrls.Add(storageUrl);
+            return Task.FromResult(new PreviewFile("%PDF-1.7"u8.ToArray(), "application/pdf"));
+        }
+        public Task<Pegaxus.Service.DocumentStorageService.StoredDocumentFile> UploadAsync(Guid versionId, int sortOrder, Microsoft.AspNetCore.Http.IFormFile file, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.DocumentStorageService.SignedDocumentUrl> CreateReadUrlAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task DeleteAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+    }
 
     private sealed class RecordingMediaService : Pegaxus.Service.MediaService.IService
     {

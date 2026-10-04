@@ -296,6 +296,32 @@ public class MissingDocumentReminderTests
         Assert.DoesNotContain("DROP TABLE", script);
     }
 
+    [Fact]
+    public async Task ManualReminder_AllowsRequestedInitialUploadWithoutLosingRequest()
+    {
+        await using var db = TestSupport.CreateDb();
+        var seed = await SeedAsync(db, 45);
+        var mail = new RecordingMail();
+        var service = CreateService(db, mail);
+        var requirement = seed.Dossier.DossierRequirements.First();
+        var request = RequestFor(seed);
+        request.RequirementIds = [requirement.DossierRequirementId];
+        await service.RequestMissingDocumentsAsync(seed.Specialist, seed.Dossier.ComplianceDossierId, request);
+        Assert.Equal(DossierRequirementStatus.REQUESTED, requirement.Status);
+        var storage = new DocumentUploadTests.RecordingStorage();
+        service = new DossierService(db, null!, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
+            new Pegaxus.Service.NotificationService.Service(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService()),
+            storage, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance, mail, new FixedTimeProvider(Now));
+        var upload = await service.UploadDocumentAsync(seed.Customer, seed.Dossier.ComplianceDossierId,
+            requirement.DossierRequirementId, DocumentUploadTests.ValidRequest(seed.Dossier));
+        Assert.Equal(1, upload.VersionNo);
+        Assert.Equal(DossierRequirementStatus.PROVIDED, requirement.Status);
+        Assert.Equal(DocumentRequestType.MISSING_DOCUMENT, (await db.DocumentRequests.SingleAsync()).RequestType);
+        Assert.Single(await db.MissingDocumentReminders.ToListAsync());
+        Assert.DoesNotContain(await service.GetMissingRequirementsAsync(seed.Specialist, seed.Dossier.ComplianceDossierId),
+            item => item.DossierRequirementId == requirement.DossierRequirementId);
+    }
+
     private sealed class FailingSaveInterceptor : SaveChangesInterceptor
     {
         public bool Fail { get; set; }
@@ -310,7 +336,8 @@ public class MissingDocumentReminderTests
 
     private static DossierService CreateService(AppDbContext db, RecordingMail mail, FixedTimeProvider? clock = null) => new(db, null!,
         new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
-        new Pegaxus.Service.NotificationService.Service(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService()), mail, clock ?? new FixedTimeProvider(Now));
+        new Pegaxus.Service.NotificationService.Service(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService()),
+        null!, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance, mail, clock ?? new FixedTimeProvider(Now));
 
     private static async Task<(Guid Specialist, Guid Customer, ComplianceDossier Dossier)> SeedAsync(AppDbContext db, int days, bool domestic = false)
     {

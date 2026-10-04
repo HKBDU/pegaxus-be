@@ -2,6 +2,29 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public interface IService
 {
+    Task<Response.DocumentUploadResponse> SubmitDocumentVersionAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        Request.DocumentUploadRequest request, CancellationToken cancellationToken = default);
+    Task<Response.DocumentMetadataResponse> UpdateDocumentMetadataAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        Request.DocumentMetadataRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Response.DocumentVersionResponse>> GetDocumentVersionsAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        CancellationToken cancellationToken = default);
+
+    Task<Response.DocumentUploadResponse> UploadDocumentAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        Request.DocumentUploadRequest request, CancellationToken cancellationToken = default);
+
+    Task<Response.DocumentReviewResultResponse> ApproveDocumentAsync(Guid accountId, Guid dossierId, Guid requirementId, Guid versionId,
+        Request.ApproveDocumentRequest request, CancellationToken cancellationToken = default);
+    Task<Response.DocumentReviewResultResponse> RevokeDocumentReviewAsync(Guid accountId, Guid dossierId, Guid requirementId, Guid versionId,
+        Guid reviewId, Request.RevokeDocumentReviewRequest request, CancellationToken cancellationToken = default);
+    Task<Response.DossierReadinessResponse> MarkReadyForSubmissionAsync(Guid accountId, Guid dossierId, CancellationToken cancellationToken = default);
+
+    Task<Response.DocumentRejectionResponse> RejectDocumentAsync(Guid accountId, Guid dossierId, Guid requirementId, Guid versionId,
+        Request.RejectDocumentRequest request, CancellationToken cancellationToken = default);
+    Task<Response.DocumentRequestCommentResponse> AddDocumentRequestCommentAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        Guid requestId, Request.DocumentRequestCommentRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Response.DocumentRequestCommentResponse>> GetDocumentRequestCommentsAsync(Guid accountId, Guid dossierId,
+        Guid requirementId, Guid requestId, CancellationToken cancellationToken = default);
+
     Task<IReadOnlyList<Response.RequirementResponse>> GetMissingRequirementsAsync(Guid accountId, Guid dossierId, CancellationToken cancellationToken = default);
     Task<Response.MissingDocumentsResponse> RequestMissingDocumentsAsync(Guid accountId, Guid dossierId,
         Request.MissingDocumentsRequest request, CancellationToken cancellationToken = default);

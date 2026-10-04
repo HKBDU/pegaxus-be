@@ -40,6 +40,7 @@ public sealed partial class Service
         var (_, booking, role) = await ViewableDossierAsync(accountId, dossierId, cancellationToken);
         var requirement = await _db.DossierRequirements.AsNoTracking().AsSplitQuery()
             .Include(item => item.ComplianceRequirement).Include(item => item.Horse)
+            .Include(item => item.DocumentRequests)
             .Include(item => item.ComplianceDocument!).ThenInclude(item => item.DocumentVersions).ThenInclude(item => item.DocumentReviews)
             .Include(item => item.ComplianceDocument!).ThenInclude(item => item.DocumentVersions).ThenInclude(item => item.DocumentAttachments)
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId && item.DossierRequirementId == requirementId &&
@@ -52,17 +53,19 @@ public sealed partial class Service
             Requirement = MapRequirement(requirement, booking.RequestedDepartureDate),
             ValidUntil = requirement.ValidUntil, SatisfiedAt = requirement.SatisfiedAt, WaivedReason = requirement.WaivedReason,
             Actions = ViewActions(role),
+            DocumentRequests = requirement.DocumentRequests.OrderByDescending(item => item.RequestedAt)
+                .ThenByDescending(item => item.DocumentRequestId).Select(MapDocumentRequest).ToList(),
             Document = document is null ? null : new Response.DocumentResponse
             {
                 ComplianceDocumentId = document.ComplianceDocumentId, DocumentCode = document.DocumentCode,
                 DocumentName = document.DocumentName, Status = document.Status.ToString(), DocumentNumber = document.DocumentNumber,
                 IssuingAuthority = document.IssuingAuthority, IssuedDate = document.IssuedDate, ExpiryDate = document.ExpiryDate,
-                Note = document.Note,
+                Note = document.Note, UpdatedAt = DateTime.SpecifyKind(document.UpdatedAt, DateTimeKind.Utc),
                 Versions = document.DocumentVersions.OrderByDescending(item => item.VersionNo).Select(version => new Response.VersionResponse
                 {
                     DocumentVersionId = version.DocumentVersionId, VersionNo = version.VersionNo, FileName = version.FileName,
                     PreviewUrl = $"{previewBase}/{version.DocumentVersionId}/preview", MimeType = version.MimeType,
-                    FileSizeBytes = version.FileSizeBytes, UploadNote = version.UploadNote, UploadedAt = version.UploadedAt,
+                    FileSizeBytes = version.FileSizeBytes, UploadNote = version.UploadNote, UploadedAt = DateTime.SpecifyKind(version.UploadedAt, DateTimeKind.Utc),
                     Attachments = version.DocumentAttachments.OrderBy(item => item.SortOrder).ThenBy(item => item.DocumentAttachmentId)
                         .Select(attachment => new Response.AttachmentResponse
                         {
@@ -74,7 +77,7 @@ public sealed partial class Service
                         .Select(review => new Response.ReviewResponse
                         {
                             DocumentReviewId = review.DocumentReviewId, ReviewedByAccountId = review.ReviewedByAccountId,
-                            Result = review.Result.ToString(), ReviewComment = review.ReviewComment, ReviewedAt = review.ReviewedAt
+                            Result = review.Result.ToString(), ReviewComment = review.ReviewComment, ReviewedAt = DateTime.SpecifyKind(review.ReviewedAt, DateTimeKind.Utc)
                         }).ToList()
                 }).ToList()
             }
@@ -95,7 +98,9 @@ public sealed partial class Service
             : await versions.Select(item => item.FileUrl).SingleOrDefaultAsync(cancellationToken);
         if (fileUrl is null)
             throw new NotFoundException("Document file not found.", "DOCUMENT_FILE_NOT_FOUND");
-        return await _mediaService.DownloadPreviewAsync(fileUrl, cancellationToken);
+        return fileUrl.StartsWith("s3://", StringComparison.Ordinal)
+            ? await _documentStorage.DownloadPreviewAsync(fileUrl, cancellationToken)
+            : await _mediaService.DownloadPreviewAsync(fileUrl, cancellationToken);
     }
 
     private async Task<(Guid? CustomerId, EmployeeRole? Role)> RequireViewerAsync(Guid accountId, CancellationToken cancellationToken)
@@ -148,6 +153,14 @@ public sealed partial class Service
                 LeadTimeDays = item.DueDate.HasValue ? booking.RequestedDepartureDate.DayNumber - item.DueDate.Value.DayNumber : null,
                 Instruction = item.Instruction
             }).ToListAsync(cancellationToken);
+        var openRequests = await _db.DocumentRequests.AsNoTracking().Where(item =>
+                item.DossierRequirement.ComplianceDossierId == dossier.ComplianceDossierId && !item.DossierRequirement.IsDeleted &&
+                item.Status == DocumentRequestStatus.OPEN)
+            .OrderByDescending(item => item.RequestedAt).ThenByDescending(item => item.DocumentRequestId).ToListAsync(cancellationToken);
+        var latestRequests = openRequests.GroupBy(item => item.DossierRequirementId)
+            .ToDictionary(group => group.Key, group => MapDocumentRequest(group.First()));
+        foreach (var requirement in requirements)
+            requirement.OpenDocumentRequest = latestRequests.GetValueOrDefault(requirement.DossierRequirementId);
         var fulfilled = requirements.Count(item => item.Status == nameof(DossierRequirementStatus.SATISFIED) ||
             item.Status == nameof(DossierRequirementStatus.WAIVED));
         var filtered = requirements.Where(item => (!status.HasValue || item.Status == status.Value.ToString()) &&

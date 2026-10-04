@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using ClosedXML.Excel;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -22,8 +23,9 @@ public sealed partial class Service : IService
     private static readonly HashSet<string> AuditActionTypes =
     [
         "DOSSIER_INITIALIZED", "DOSSIER_STATUS_CHANGED", "DOSSIER_REQUIREMENT_ADDED",
-        "DOSSIER_REQUIREMENT_REMOVED", "DOCUMENT_VERSION_SUBMITTED", "DOCUMENT_REVIEW_APPROVED",
-        "DOCUMENT_REVIEW_REJECTED", "DOCUMENT_REVIEW_REVISION_REQUIRED", "DOCUMENT_REQUEST_CREATED",
+        "DOSSIER_REQUIREMENT_REMOVED", "DOCUMENT_VERSION_SUBMITTED", "DOCUMENT_VERSION_UPDATED",
+        "DOCUMENT_METADATA_UPDATED", "DOCUMENT_REVIEW_APPROVED",
+        "DOCUMENT_REVIEW_REJECTED", "DOCUMENT_REVIEW_REVISION_REQUIRED", "DOCUMENT_REVIEW_REVOKED", "DOCUMENT_REQUEST_CREATED", "DOCUMENT_REQUEST_COMMENTED",
         "DOSSIER_REQUIREMENT_UPDATED", "DOSSIER_REQUIREMENT_WAIVED", "DOSSIER_REQUIREMENT_REMINDED",
         "AUTHORITY_SUBMITTED", "AUTHORITY_DECISION_UPDATED", "QUARANTINE_PROOF_SUBMITTED",
         "QUARANTINE_RESULT_FINALIZED", "CUSTOMS_PROOF_SUBMITTED", "CUSTOMS_RESULT_FINALIZED"
@@ -33,7 +35,9 @@ public sealed partial class Service : IService
     private readonly MediaService.IService _mediaService;
     private readonly IValidator<Request.InitializeRequest> _initializeValidator;
     private readonly NotificationService.IService _notificationService;
-    private readonly MailService.IService? _reminderMailService;
+    private readonly DocumentStorageService.IService _documentStorage;
+    private readonly ILogger<Service> _logger;
+    private readonly MailService.IService? _mailService;
     private readonly TimeProvider _reminderClock;
 
     public Service(
@@ -41,6 +45,8 @@ public sealed partial class Service : IService
         MediaService.IService mediaService,
         IValidator<Request.InitializeRequest> initializeValidator,
         NotificationService.IService notificationService,
+        DocumentStorageService.IService documentStorage,
+        ILogger<Service> logger,
         MailService.IService? mailService = null,
         TimeProvider? timeProvider = null)
     {
@@ -48,7 +54,9 @@ public sealed partial class Service : IService
         _mediaService = mediaService;
         _initializeValidator = initializeValidator;
         _notificationService = notificationService;
-        _reminderMailService = mailService;
+        _documentStorage = documentStorage;
+        _logger = logger;
+        _mailService = mailService;
         _reminderClock = timeProvider ?? TimeProvider.System;
     }
 
@@ -547,8 +555,12 @@ public sealed partial class Service : IService
         if (employeeId is null)
             throw new ForbiddenException("Only an active Transport Specialist can record authority submissions");
 
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        if (_db.Database.IsRelational())
+            await _db.Database.ExecuteSqlInterpolatedAsync(
+                $"SELECT 1 FROM \"ComplianceDossier\" WHERE compliance_dossier_id = {dossierId} FOR UPDATE", cancellationToken);
+
         var dossier = await _db.ComplianceDossiers
-            .Include(item => item.DossierRequirements)
             .Include(item => item.Transport)
                 .ThenInclude(item => item.Booking)
                     .ThenInclude(item => item.Customer)
@@ -557,14 +569,15 @@ public sealed partial class Service : IService
         if (dossier is null)
             throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
 
+        await _db.Entry(dossier).ReloadAsync(cancellationToken);
         var canSubmit = dossier.Status is
             ComplianceDossierStatus.READY_FOR_SUBMISSION or
             ComplianceDossierStatus.SUBMITTED or
             ComplianceDossierStatus.PENDING;
 
-        var requirementsReady = dossier.DossierRequirements
-            .Where(item => !item.IsDeleted && item.IsMandatory)
-            .All(item => item.Status is DossierRequirementStatus.SATISFIED or DossierRequirementStatus.WAIVED);
+        var requirementsReady = await _db.DossierRequirements
+            .Where(item => item.ComplianceDossierId == dossierId && !item.IsDeleted && item.IsMandatory)
+            .AllAsync(item => item.Status == DossierRequirementStatus.SATISFIED || item.Status == DossierRequirementStatus.WAIVED, cancellationToken);
 
         if (!canSubmit || !requirementsReady)
             throw new ConflictException(
@@ -675,6 +688,7 @@ public sealed partial class Service : IService
             AddNotification(managerAccountId, dossier, "ComplianceDossier submitted", now);
 
         await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
 
         return new Response.AuthoritySubmissionResponse

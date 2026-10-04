@@ -27,7 +27,7 @@ public sealed partial class Service
         Request.MissingDocumentsRequest request, CancellationToken cancellationToken = default)
     {
         await RequireSpecialistAsync(accountId, cancellationToken);
-        if (_reminderMailService is null)
+        if (_mailService is null)
             throw new InvalidOperationException("MailService must be configured for missing-document reminders.");
         var now = ReminderNow();
         var today = DateOnly.FromDateTime(now);
@@ -174,7 +174,7 @@ public sealed partial class Service
 
     private async Task<bool> DeliverMissingReminderAsync(Guid reminderId, CancellationToken cancellationToken)
     {
-        var mail = _reminderMailService ?? throw new InvalidOperationException("MailService must be configured for missing-document reminders.");
+        var mail = _mailService ?? throw new InvalidOperationException("MailService must be configured for missing-document reminders.");
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         var reminders = _db.Database.IsRelational()
             ? _db.MissingDocumentReminders.FromSqlInterpolated($"SELECT * FROM \"MissingDocumentReminder\" WHERE missing_document_reminder_id = {reminderId} FOR UPDATE")
