@@ -169,6 +169,52 @@ To keep Git history clean and maintain software stability:
 
 ---
 
+## ComplianceDocument Upload (UC-21)
+
+POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document` with a Customer Bearer token and multipart form data:
+`Files` (repeated file field), `DocumentNumber`, `IssuingAuthority`, `IssuedDate`, optional `ExpiryDate` and `UploadNote`.
+Submit 1–10 files, each at most 10 MiB; only PDF, JPG, JPEG and PNG are accepted. Extension, MIME and file signature must agree.
+
+Only the booking owner can upload. The dossier must be IN_PREPARATION or REJECTED; the requirement must be PENDING or REJECTED.
+UC-21 creates the first document/version only. An existing document returns 409 rather than overwriting its version history.
+The first file is stored on DocumentVersion v1; additional pages are DocumentAttachments of that same version.
+Success creates one ComplianceDocument, one DocumentVersion v1, an audit entry, and sets the requirement to PROVIDED.
+
+Document number, issuing authority and issue date are required. Issue date cannot be in the future. Expiry is required when
+the catalog marks validity as required or the requirement has `valid_until`; it must be strictly after departure and at least `valid_until`.
+
+Configure `DocumentStorageOptions` using the variables in `.env.example`. AWS credentials use the SDK's standard credential chain:
+prefer an IAM role; local development may use AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and optional AWS_SESSION_TOKEN.
+Grant s3:PutObject, s3:GetObject, s3:DeleteObject and s3:GetBucketPublicAccessBlock on the configured bucket/prefix;
+versioned buckets also need s3:GetObjectVersion and s3:DeleteObjectVersion. Keep all four bucket Public Access Block settings enabled.
+The implementation verifies private access, requests and checks AES256 server-side encryption, and returns HTTPS GET URLs expiring in five minutes.
+Stable `s3://` references, including object version IDs when available, are stored in the DB; signed URLs are not persisted or logged.
+
+A reachable ClamAV clamd service is mandatory (private network, INSTREAM enabled, StreamMaxLength at least 10 MiB, current virus definitions).
+No clean verdict, missing configuration, scanner failure or insecure bucket means the upload fails closed without DB changes.
+Failures clean uncommitted objects; if the DB commit outcome is unknown, files are retained rather than risking deletion of committed documents.
+The DB write runs in a serializable transaction and revalidates ownership, status and expiry after storage I/O.
+No migration is needed: existing unique indexes protect one document per requirement and one version number per document.
+The 4-second/10-MB target needs measurement with real S3, ClamAV and PostgreSQL; unit tests do not establish throughput.
+
+## DocumentVersion Replacement (UC-22)
+
+POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/versions` with a Customer token and multipart form data.
+`Files` replaces the entire current file set (1–10 files; the UC-21 format, size and scanning rules apply). Metadata fields and `UploadNote` are optional.
+Omitted metadata retains its current value; supplied values use the same validation as the first upload.
+
+An unreviewed PROVIDED version is updated in place: its ID and version number stay unchanged. A reviewed or rejected version creates the next number.
+Reviewed versions, attachments and reviews remain immutable. Every replacement uses fresh S3 object keys. Only superseded unreviewed objects are
+deleted after confirmed DB commit; failed or uncertain commits never delete previously committed files. Concurrent replacements return 409.
+
+PATCH `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/metadata` accepts a JSON object with any of
+`DocumentNumber`, `IssuingAuthority`, `IssuedDate`, `ExpiryDate`. It changes document metadata only, preserving version records, files and review status.
+
+GET `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/versions` returns newest-first history, all file URLs and
+reviews attached to their own versions. Only the booking owner, Transport Specialist or Logistics Manager can read it; URLs expire after five minutes.
+Only the booking owner can submit or edit. SATISFIED requirements and dossiers sent to authorities are locked against both file and metadata edits.
+Every edit records its actor and changes in the dossier audit trail. Real PostgreSQL/S3/ClamAV measurement is needed to verify the 2-second DB-write target.
+
 ## ComplianceDossier Viewing (UC-20)
 
 All read endpoints require a Bearer token and the enum-backed `ComplianceDossierViewerPolicy` (Customer, Transport Specialist, Logistics Manager).
@@ -188,13 +234,43 @@ SATISFIED and WAIVED count as fulfilled. Empty dossiers report 0%. `actions.canU
 `actions.canReview` is Transport Specialist-only. These flags describe role permissions; mutation APIs must enforce their own lifecycle rules.
 
 Use the returned API `previewUrl` with an Authorization header (fetch as a Blob for browser previews), not a token query parameter.
-Preview validates ownership and all nested IDs, permits only the configured Cloudinary cloud, refuses redirects, caps files at 5 MB,
-detects PDF/raster-image types from bytes, and returns no-store responses. The 15-second timeout covers both headers and body.
+Preview validates ownership and all nested IDs. S3 documents use the configured private bucket and exact object version, with a 10 MiB limit.
+Legacy Cloudinary files use only the configured cloud, refuse redirects and retain the 5 MB limit. Both paths detect PDF/raster-image types
+from bytes and return no-store responses. The 15-second timeout covers both headers and body.
 
 **Storage limitation:** Existing Cloudinary upload methods use public delivery. The proxy protects API access but cannot revoke
 previously known public storage URLs. Sensitive documents must be uploaded with authenticated/private delivery and existing public
 assets migrated at the storage layer before claiming end-to-end file privacy. No storage migration is performed by this read-only feature.
 The 1.5-second response target still requires measurement against a real PostgreSQL database.
+
+## DocumentReview (UC-23)
+
+All mutation endpoints require a Bearer token, the enum-backed `TransportSpecialistPolicy`, and an active Transport Specialist account.
+
+| POST endpoint | Result |
+| :--- | :--- |
+| `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/versions/{versionId}/approve` | Append APPROVED review; document APPROVED; requirement SATISFIED |
+| `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/versions/{versionId}/reviews/{reviewId}/revoke` | Append REVOKED review; preserve original approval |
+| `/api/v1/compliance-dossiers/{dossierId}/ready-for-submission` | Explicitly mark dossier READY_FOR_SUBMISSION |
+
+Approval requires `metadataConfirmed: true`, `versionUploadedAt` and `documentUpdatedAt` copied from the requirement-detail response.
+Only the latest provided version is eligible. Changed file/metadata timestamps return 409; reload the detail and repeat verification.
+`reviewNote` is optional. Expiry before departure returns 409 (`EXPIRY_EXCEPTION_REQUIRED`) until a nonblank
+`expiryExceptionReason` is supplied. Both notes are limited to 2000 characters.
+
+Revocation requires the current approval ID, `status` (PROVIDED or REJECTED), and a nonblank `reason` of at most 500 characters.
+Revoking a mandatory requirement clears dossier readiness; optional revocation preserves readiness. Reviews are append-only,
+with reviewer ID, UTC review time, version ID, and a dossier audit record. Approval never automatically readies or submits a dossier.
+Readiness requires all nondeleted mandatory requirements to be SATISFIED or WAIVED, consistent with authority-submission rules.
+Submitted, pending-authority, approved, closed, or uninitialized dossiers cannot be reviewed or marked ready.
+
+Apply migration `20261004000000_AddRevokedDocumentReviewResult` before enabling revocation:
+```bash
+dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
+```
+
+The migration adds the native PostgreSQL REVOKED enum value; rollback deliberately refuses to remove immutable review history.
+The one-second API target still requires measurement against a real PostgreSQL database.
 
 ## Document rejection and re-upload requests (UC-24)
 
@@ -217,7 +293,7 @@ No authority submission is created automatically. Readiness and satisfaction tim
 
 Overview requirement items expose `openDocumentRequest`; requirement detail exposes `documentRequests`.
 Frontend should render the exact plain-text `message` prominently, show `dueDate`, and offer its Upload New DocumentVersion action.
-This backend change does not implement frontend styling or the upload endpoint. Comment `message` accepts 1–2000 characters;
+Upload uses the existing DocumentVersion endpoint; frontend styling is not implemented here. Comment `message` accepts 1–2000 characters;
 only OPEN requests accept new comments. Existing comments and reviews remain append-only.
 
 Review, request, audit and web notification are saved atomically before delivery. Email content is HTML-encoded.
@@ -226,7 +302,6 @@ A timeout means delivery was not confirmed; SMTP may finish afterward. No automa
 The two-second end-to-end target still requires measurement with real PostgreSQL, SMTP and realtime delivery.
 
 Apply migration `20261003000000_AddDocumentRequestRevisions` before using these endpoints:
-
 ```bash
 dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
 ```

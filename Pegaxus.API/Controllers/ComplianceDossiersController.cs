@@ -21,6 +21,77 @@ public sealed class ComplianceDossiersController : ControllerBase
         _service = service;
     }
 
+    [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/versions/{versionId:guid}/approve")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> ApproveDocument(Guid dossierId, Guid requirementId, Guid versionId,
+        [FromBody] ComplianceDossierService.Request.ApproveDocumentRequest request, CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.ApproveDocumentAsync(GetAccountId(), dossierId, requirementId, versionId, request, cancellationToken),
+            "DocumentReview recorded: APPROVED. DossierRequirement status updated to SATISFIED by TS.",
+            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
+    [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/versions/{versionId:guid}/reviews/{reviewId:guid}/revoke")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> RevokeDocumentReview(Guid dossierId, Guid requirementId, Guid versionId, Guid reviewId,
+        [FromBody] ComplianceDossierService.Request.RevokeDocumentReviewRequest request, CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.RevokeDocumentReviewAsync(GetAccountId(), dossierId, requirementId, versionId, reviewId, request, cancellationToken),
+            "DocumentReview revoked successfully. DossierRequirement status updated by TS.",
+            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
+    [HttpPost("{dossierId:guid}/ready-for-submission")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> MarkReadyForSubmission(Guid dossierId, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(
+            await _service.MarkReadyForSubmissionAsync(GetAccountId(), dossierId, cancellationToken),
+            "ComplianceDossier marked READY_FOR_SUBMISSION by TS. No authority submission was created.", traceId: HttpContext.TraceIdentifier));
+    [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/document")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(101 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> UploadDocument(Guid dossierId, Guid requirementId,
+        [FromForm] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken) =>
+        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
+            await _service.UploadDocumentAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
+            "ComplianceDocument uploaded successfully (Version v1). Pending DocumentReview by Transport Specialist.",
+            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
+
+    [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/document/versions")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(101 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> SubmitDocumentVersion(Guid dossierId, Guid requirementId,
+        [FromForm] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken)
+    {
+        var response = await _service.SubmitDocumentVersionAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken);
+        var status = response.IsNewVersion ? StatusCodes.Status201Created : StatusCodes.Status200OK;
+        var message = response.IsNewVersion
+            ? $"New DocumentVersion (v{response.VersionNo}) submitted successfully. Pending DocumentReview."
+            : $"DocumentVersion (v{response.VersionNo}) updated successfully. Pending DocumentReview.";
+        return StatusCode(status, ResponseBuilder.SuccessResponse(response, message, status, HttpContext.TraceIdentifier));
+    }
+
+    [HttpPatch("{dossierId:guid}/requirements/{requirementId:guid}/document/metadata")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> UpdateDocumentMetadata(Guid dossierId, Guid requirementId,
+        [FromBody] ComplianceDossierService.Request.DocumentMetadataRequest request, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(
+            await _service.UpdateDocumentMetadataAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
+            "ComplianceDocument metadata updated successfully.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpGet("{dossierId:guid}/requirements/{requirementId:guid}/document/versions")]
+    [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> GetDocumentVersions(Guid dossierId, Guid requirementId, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(
+            await _service.GetDocumentVersionsAsync(GetAccountId(), dossierId, requirementId, cancellationToken),
+            "DocumentVersion history retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+
     [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/versions/{versionId:guid}/reject")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> RejectDocument(Guid dossierId, Guid requirementId, Guid versionId,
@@ -77,7 +148,6 @@ public sealed class ComplianceDossiersController : ControllerBase
         Response.Headers["Content-Disposition"] = "inline";
         return File(file.Content, file.ContentType);
     }
-
     [HttpGet("/api/v1/bookings/{bookingId:guid}/dossier-templates")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> GetTemplateOptions(Guid bookingId, CancellationToken cancellationToken) =>

@@ -291,6 +291,44 @@ public class DocumentRejectionTests
         Assert.DoesNotContain("DROP TABLE", script);
     }
 
+    [Theory]
+    [InlineData(DossierRequirementStatus.REJECTED)]
+    [InlineData(DossierRequirementStatus.REQUESTED)]
+    public async Task Rejection_AllowsCustomerReplacementPreservingReviewAndRequest(DossierRequirementStatus status)
+    {
+        await using var db = TestSupport.CreateDb();
+        var seed = await SeedAsync(db);
+        var mail = new CaptureMailService();
+        var request = RejectRequest(seed.Version);
+        request.RequirementStatus = status;
+        var rejection = await CreateService(db, mail).RejectDocumentAsync(seed.Specialist,
+            seed.Dossier.ComplianceDossierId, seed.Requirement.DossierRequirementId, seed.Version.DocumentVersionId, request);
+        var storage = new DocumentUploadTests.RecordingStorage();
+        var service = new DossierService(db, null!, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
+            new Pegaxus.Service.NotificationService.Service(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService()),
+            storage, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance, mail);
+        var replacement = await service.SubmitDocumentVersionAsync(seed.Customer, seed.Dossier.ComplianceDossierId,
+            seed.Requirement.DossierRequirementId, DocumentUploadTests.ValidRequest(seed.Dossier));
+        Assert.True(replacement.IsNewVersion);
+        Assert.Equal(2, replacement.VersionNo);
+        Assert.Equal(DossierRequirementStatus.PROVIDED, seed.Requirement.Status);
+        Assert.Equal("private-file", seed.Version.FileUrl);
+        var review = await db.DocumentReviews.SingleAsync();
+        Assert.Equal(rejection.Review.DocumentReviewId, review.DocumentReviewId);
+        Assert.Equal(DocumentReviewResult.REJECTED, review.Result);
+        Assert.Equal(rejection.DocumentRequest.DocumentRequestId, (await db.DocumentRequests.SingleAsync()).DocumentRequestId);
+        Assert.Empty(storage.Deleted);
+        var latest = await db.DocumentVersions.SingleAsync(item => item.DocumentVersionId == replacement.DocumentVersionId);
+        await service.ApproveDocumentAsync(seed.Specialist, seed.Dossier.ComplianceDossierId,
+            seed.Requirement.DossierRequirementId, latest.DocumentVersionId, new Request.ApproveDocumentRequest
+            {
+                MetadataConfirmed = true, VersionUploadedAt = latest.UploadedAt,
+                DocumentUpdatedAt = latest.ComplianceDocument.UpdatedAt
+            });
+        Assert.Equal(DossierRequirementStatus.SATISFIED, seed.Requirement.Status);
+        Assert.Equal(2, await db.DocumentReviews.CountAsync());
+    }
+
     private sealed class FailingSaveInterceptor : SaveChangesInterceptor
     {
         public bool Fail { get; set; }
@@ -308,7 +346,8 @@ public class DocumentRejectionTests
 
     private static DossierService CreateService(AppDbContext db, Mail.IService mail) => new(db, null!,
         new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
-        new Pegaxus.Service.NotificationService.Service(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService()), mail);
+        new Pegaxus.Service.NotificationService.Service(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService()),
+        null!, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance, mail);
 
     private static async Task<(Guid Specialist, Guid Customer, ComplianceDossier Dossier, DossierRequirement Requirement, DocumentVersion Version)> SeedAsync(AppDbContext db)
     {

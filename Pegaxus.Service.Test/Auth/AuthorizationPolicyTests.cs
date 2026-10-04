@@ -14,6 +14,36 @@ namespace Pegaxus.Service.Test;
 
 public class AuthorizationPolicyTests
 {
+    [Fact]
+    public void DocumentUpload_RequiresCustomerPolicy()
+    {
+        var action = typeof(ComplianceDossiersController).GetMethod("UploadDocument");
+        Assert.NotNull(action);
+        Assert.Equal(JwtExtensions.CustomerPolicy, action.GetCustomAttribute<AuthorizeAttribute>()?.Policy);
+    }
+
+    [Theory]
+    [InlineData("SubmitDocumentVersion", JwtExtensions.CustomerPolicy)]
+    [InlineData("UpdateDocumentMetadata", JwtExtensions.CustomerPolicy)]
+    [InlineData("GetDocumentVersions", JwtExtensions.ComplianceDossierViewerPolicy)]
+    public void DocumentVersionActions_RequireScopedPolicies(string actionName, string policy)
+    {
+        var action = typeof(ComplianceDossiersController).GetMethod(actionName);
+        Assert.NotNull(action);
+        Assert.Equal(policy, action.GetCustomAttribute<AuthorizeAttribute>()?.Policy);
+    }
+
+    [Theory]
+    [InlineData("ApproveDocument")]
+    [InlineData("RevokeDocumentReview")]
+    [InlineData("MarkReadyForSubmission")]
+    public void DocumentReviewActions_RequireTransportSpecialistPolicy(string actionName)
+    {
+        var action = typeof(ComplianceDossiersController).GetMethod(actionName);
+        Assert.NotNull(action);
+        Assert.Equal(JwtExtensions.TransportSpecialistPolicy, action.GetCustomAttribute<AuthorizeAttribute>()?.Policy);
+    }
+
     internal static ServiceProvider CreateProvider()
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -97,7 +127,7 @@ public class AuthorizationPolicyTests
             [JwtExtensions.EscortPolicy] = ["Escort"],
             [JwtExtensions.CustomerOrEmployeePolicy] = ["Customer", "Employee"],
             [JwtExtensions.CustomerOrTransportSpecialistPolicy] = ["Customer", "TransportSpecialist"],
-            ["ComplianceDossierViewerPolicy"] = ["Customer", "TransportSpecialist", "LogisticsManager"],
+            [JwtExtensions.ComplianceDossierViewerPolicy] = ["Customer", "TransportSpecialist", "LogisticsManager"],
             ["TransportSpecialistOrLogisticsManagerPolicy"] = ["TransportSpecialist", "LogisticsManager"],
             ["DriverOrEscortPolicy"] = ["Driver", "Escort"]
         };

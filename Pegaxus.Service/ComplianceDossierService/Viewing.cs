@@ -60,12 +60,12 @@ public sealed partial class Service
                 ComplianceDocumentId = document.ComplianceDocumentId, DocumentCode = document.DocumentCode,
                 DocumentName = document.DocumentName, Status = document.Status.ToString(), DocumentNumber = document.DocumentNumber,
                 IssuingAuthority = document.IssuingAuthority, IssuedDate = document.IssuedDate, ExpiryDate = document.ExpiryDate,
-                Note = document.Note, UpdatedAt = RevisionTimestamp(document.UpdatedAt),
+                Note = document.Note, UpdatedAt = DateTime.SpecifyKind(document.UpdatedAt, DateTimeKind.Utc),
                 Versions = document.DocumentVersions.OrderByDescending(item => item.VersionNo).Select(version => new Response.VersionResponse
                 {
                     DocumentVersionId = version.DocumentVersionId, VersionNo = version.VersionNo, FileName = version.FileName,
                     PreviewUrl = $"{previewBase}/{version.DocumentVersionId}/preview", MimeType = version.MimeType,
-                    FileSizeBytes = version.FileSizeBytes, UploadNote = version.UploadNote, UploadedAt = RevisionTimestamp(version.UploadedAt),
+                    FileSizeBytes = version.FileSizeBytes, UploadNote = version.UploadNote, UploadedAt = DateTime.SpecifyKind(version.UploadedAt, DateTimeKind.Utc),
                     Attachments = version.DocumentAttachments.OrderBy(item => item.SortOrder).ThenBy(item => item.DocumentAttachmentId)
                         .Select(attachment => new Response.AttachmentResponse
                         {
@@ -77,7 +77,7 @@ public sealed partial class Service
                         .Select(review => new Response.ReviewResponse
                         {
                             DocumentReviewId = review.DocumentReviewId, ReviewedByAccountId = review.ReviewedByAccountId,
-                            Result = review.Result.ToString(), ReviewComment = review.ReviewComment, ReviewedAt = RevisionTimestamp(review.ReviewedAt)
+                            Result = review.Result.ToString(), ReviewComment = review.ReviewComment, ReviewedAt = DateTime.SpecifyKind(review.ReviewedAt, DateTimeKind.Utc)
                         }).ToList()
                 }).ToList()
             }
@@ -98,7 +98,9 @@ public sealed partial class Service
             : await versions.Select(item => item.FileUrl).SingleOrDefaultAsync(cancellationToken);
         if (fileUrl is null)
             throw new NotFoundException("Document file not found.", "DOCUMENT_FILE_NOT_FOUND");
-        return await _mediaService.DownloadPreviewAsync(fileUrl, cancellationToken);
+        return fileUrl.StartsWith("s3://", StringComparison.Ordinal)
+            ? await _documentStorage.DownloadPreviewAsync(fileUrl, cancellationToken)
+            : await _mediaService.DownloadPreviewAsync(fileUrl, cancellationToken);
     }
 
     private async Task<(Guid? CustomerId, EmployeeRole? Role)> RequireViewerAsync(Guid accountId, CancellationToken cancellationToken)

@@ -34,7 +34,7 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "compliance_requirement_status", new[] { "ACTIVE", "INACTIVE" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "document_request_status", new[] { "OPEN", "FULFILLED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "document_request_type", new[] { "MISSING_DOCUMENT", "REVISION", "REUPLOAD", "ADDITIONAL_INFORMATION" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "document_review_result", new[] { "APPROVED", "REJECTED", "REVISION_REQUIRED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "document_review_result", new[] { "APPROVED", "REJECTED", "REVISION_REQUIRED", "REVOKED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "dossier_requirement_status", new[] { "PENDING", "REQUESTED", "PROVIDED", "SATISFIED", "REJECTED", "WAIVED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "dossier_template_status", new[] { "DRAFT", "ACTIVE", "INACTIVE" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "emergency_cost_category", new[] { "VETERINARY", "MEDICATION", "VEHICLE_REPAIR", "TOWING", "REPLACEMENT_VEHICLE", "EMERGENCY_STABLE", "ROUTE_CHANGE", "ACCOMMODATION", "OTHER" });

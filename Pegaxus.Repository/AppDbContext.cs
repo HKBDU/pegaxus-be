@@ -140,7 +140,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("customs_lane", new[] { "GreenLane", "OrangeLane", "RedLane" })
             .HasPostgresEnum("document_request_status", new[] { "OPEN", "FULFILLED", "CANCELLED" })
             .HasPostgresEnum("document_request_type", new[] { "MISSING_DOCUMENT", "REVISION", "REUPLOAD", "ADDITIONAL_INFORMATION" })
-            .HasPostgresEnum("document_review_result", new[] { "APPROVED", "REJECTED", "REVISION_REQUIRED" })
+            .HasPostgresEnum("document_review_result", new[] { "APPROVED", "REJECTED", "REVISION_REQUIRED", "REVOKED" })
             .HasPostgresEnum("dossier_requirement_status", new[] { "PENDING", "REQUESTED", "PROVIDED", "SATISFIED", "REJECTED", "WAIVED" })
             .HasPostgresEnum("dossier_template_status", new[] { "DRAFT", "ACTIVE", "INACTIVE" })
             .HasPostgresEnum("emergency_cost_category", new[] { "VETERINARY", "MEDICATION", "VEHICLE_REPAIR", "TOWING", "REPLACEMENT_VEHICLE", "EMERGENCY_STABLE", "ROUTE_CHANGE", "ACCOMMODATION", "OTHER" })
