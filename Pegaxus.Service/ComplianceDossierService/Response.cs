@@ -72,6 +72,39 @@ public class Response
         public DateTime? ReadyForSubmissionAt { get; init; }
     }
 
+    public sealed class DocumentRejectionResponse
+    {
+        public ReviewResponse Review { get; init; } = null!;
+        public DocumentRequestResponse DocumentRequest { get; init; } = null!;
+        public string RequirementStatus { get; init; } = string.Empty;
+        public string DocumentStatus { get; init; } = string.Empty;
+        public string DossierStatus { get; init; } = string.Empty;
+        public bool EmailSent { get; set; }
+        public string? DeliveryWarning { get; set; }
+    }
+
+    public sealed class DocumentRequestResponse
+    {
+        public Guid DocumentRequestId { get; init; }
+        public Guid? DocumentReviewId { get; init; }
+        public Guid DossierRequirementId { get; init; }
+        public Guid RequestedByAccountId { get; init; }
+        public string RequestCode { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
+        public string? ErrorCategory { get; init; }
+        public string Message { get; init; } = string.Empty;
+        public DateOnly? DueDate { get; init; }
+        public DateTime RequestedAt { get; init; }
+    }
+
+    public sealed class DocumentRequestCommentResponse
+    {
+        public Guid DocumentRequestCommentId { get; init; }
+        public Guid AuthorAccountId { get; init; }
+        public string Message { get; init; } = string.Empty;
+        public DateTime CreatedAt { get; init; }
+    }
+
     public sealed class OverviewResponse
     {
         public bool IsInitialized { get; init; }
@@ -109,6 +142,7 @@ public class Response
         public DateTime? SatisfiedAt { get; init; }
         public string? WaivedReason { get; init; }
         public DocumentResponse? Document { get; init; }
+        public IReadOnlyList<DocumentRequestResponse> DocumentRequests { get; init; } = [];
         public ActionsResponse Actions { get; init; } = new();
     }
 
@@ -173,6 +207,7 @@ public class Response
         public DateOnly? DueDate { get; init; }
         public int? LeadTimeDays { get; init; }
         public string? Instruction { get; init; }
+        public DocumentRequestResponse? OpenDocumentRequest { get; set; }
     }
 
     public sealed class RemovalResponse

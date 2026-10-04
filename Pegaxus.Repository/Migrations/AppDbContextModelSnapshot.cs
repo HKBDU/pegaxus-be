@@ -1034,6 +1034,15 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("document_request_id");
 
+                    b.Property<Guid?>("DocumentReviewId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_review_id");
+
+                    b.Property<string>("ErrorCategory")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("error_category");
+
                     b.Property<string>("CancellationReason")
                         .HasColumnType("text")
                         .HasColumnName("cancellation_reason");
@@ -1090,6 +1099,9 @@ namespace Pegaxus.Repository.Migrations
                     b.HasKey("DocumentRequestId")
                         .HasName("DocumentRequest_pkey");
 
+                    b.HasIndex(new[] { "DocumentReviewId" }, "DocumentRequest_document_review_id_key")
+                        .IsUnique();
+
                     b.HasIndex("RequestType")
                         .HasDatabaseName("DocumentRequest_request_type_idx");
 
@@ -1107,6 +1119,19 @@ namespace Pegaxus.Repository.Migrations
                         {
                             t.HasComment("DocumentRequest: Yêu cầu gửi tới Customer để cung cấp, sửa, upload lại hoặc bổ sung thông tin cho một DossierRequirement.");
                         });
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequestComment", b =>
+                {
+                    b.Property<Guid>("DocumentRequestCommentId").ValueGeneratedOnAdd().HasColumnType("uuid").HasColumnName("document_request_comment_id");
+                    b.Property<Guid>("DocumentRequestId").HasColumnType("uuid").HasColumnName("document_request_id");
+                    b.Property<Guid>("AuthorAccountId").HasColumnType("uuid").HasColumnName("author_account_id");
+                    b.Property<string>("Message").IsRequired().HasMaxLength(2000).HasColumnType("character varying(2000)").HasColumnName("message");
+                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp without time zone").HasColumnName("created_at");
+                    b.HasKey("DocumentRequestCommentId").HasName("DocumentRequestComment_pkey");
+                    b.HasIndex(new[] { "DocumentRequestId", "CreatedAt" }, "DocumentRequestComment_request_created_idx");
+                    b.HasIndex(new[] { "AuthorAccountId" }, "DocumentRequestComment_author_account_id_idx");
+                    b.ToTable("DocumentRequestComment");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentReview", b =>
@@ -3912,6 +3937,18 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("DeletedByAccount");
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequestComment", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.DocumentRequest", "DocumentRequest").WithMany()
+                        .HasForeignKey("DocumentRequestId").IsRequired().OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("DocumentRequestComment_document_request_id_fkey");
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "AuthorAccount").WithMany()
+                        .HasForeignKey("AuthorAccountId").IsRequired().OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("DocumentRequestComment_author_account_id_fkey");
+                    b.Navigation("DocumentRequest");
+                    b.Navigation("AuthorAccount");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequest", b =>
                 {
                     b.HasOne("Pegaxus.Repository.Entities.DossierRequirement", "DossierRequirement")
@@ -3919,6 +3956,11 @@ namespace Pegaxus.Repository.Migrations
                         .HasForeignKey("DossierRequirementId")
                         .IsRequired()
                         .HasConstraintName("DocumentRequest_dossier_requirement_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.DocumentReview", "DocumentReview").WithMany()
+                        .HasForeignKey("DocumentReviewId").OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("DocumentRequest_document_review_id_fkey");
+                    b.Navigation("DocumentReview");
 
                     b.Navigation("DossierRequirement");
                 });

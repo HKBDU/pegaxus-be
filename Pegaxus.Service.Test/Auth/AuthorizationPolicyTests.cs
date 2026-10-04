@@ -79,6 +79,17 @@ public class AuthorizationPolicyTests
         }
     }
 
+    [Theory]
+    [InlineData("RejectDocument", JwtExtensions.TransportSpecialistPolicy)]
+    [InlineData("AddDocumentRequestComment", JwtExtensions.CustomerOrTransportSpecialistPolicy)]
+    [InlineData("GetDocumentRequestComments", JwtExtensions.CustomerOrTransportSpecialistPolicy)]
+    public void DocumentRequestActions_UseExpectedPolicies(string action, string policy)
+    {
+        var method = typeof(ComplianceDossiersController).GetMethod(action);
+        Assert.NotNull(method);
+        Assert.Equal(policy, Assert.Single(method.GetCustomAttributes<AuthorizeAttribute>()).Policy);
+    }
+
     [Fact]
     public async Task Controllers_UseRegisteredPoliciesInsteadOfInlineRoles()
     {
@@ -115,6 +126,7 @@ public class AuthorizationPolicyTests
             [JwtExtensions.DriverPolicy] = ["Driver"],
             [JwtExtensions.EscortPolicy] = ["Escort"],
             [JwtExtensions.CustomerOrEmployeePolicy] = ["Customer", "Employee"],
+            [JwtExtensions.CustomerOrTransportSpecialistPolicy] = ["Customer", "TransportSpecialist"],
             [JwtExtensions.ComplianceDossierViewerPolicy] = ["Customer", "TransportSpecialist", "LogisticsManager"],
             ["TransportSpecialistOrLogisticsManagerPolicy"] = ["TransportSpecialist", "LogisticsManager"],
             ["DriverOrEscortPolicy"] = ["Driver", "Escort"]

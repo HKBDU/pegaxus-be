@@ -265,13 +265,46 @@ Readiness requires all nondeleted mandatory requirements to be SATISFIED or WAIV
 Submitted, pending-authority, approved, closed, or uninitialized dossiers cannot be reviewed or marked ready.
 
 Apply migration `20261004000000_AddRevokedDocumentReviewResult` before enabling revocation:
-
 ```bash
 dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
 ```
 
 The migration adds the native PostgreSQL REVOKED enum value; rollback deliberately refuses to remove immutable review history.
 The one-second API target still requires measurement against a real PostgreSQL database.
+
+## Document rejection and re-upload requests (UC-24)
+
+| Endpoint | Policy | Result |
+| :--- | :--- | :--- |
+| POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/versions/{versionId}/reject` | TransportSpecialistPolicy | Immutable REJECTED review, OPEN REUPLOAD request, status updates, web notification and email attempt |
+| POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document-requests/{requestId}/comments` | CustomerOrTransportSpecialistPolicy | Append comment and notify the other participant |
+| GET `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document-requests/{requestId}/comments` | CustomerOrTransportSpecialistPolicy | Ordered conversation history |
+
+All endpoints require a Bearer token and an active account. Customers may discuss only requests belonging to their own booking.
+Logistics Managers can view dossier/request details but cannot reject documents or join request conversations.
+
+Rejection requires `errorCategory` (UNCLEAR_IMAGE, EXPIRED, MISSING_STAMP, WRONG_PAGE, METADATA_MISMATCH or OTHER),
+`rejectionNote` (15–2000 characters after trimming), and `revisionDeadline` (ISO date, today or later in UTC).
+Copy `versionUploadedAt` and the document's `updatedAt` from the requirement-detail response into
+`versionUploadedAt` and `documentUpdatedAt`. Stale snapshots or older versions return 409.
+`requirementStatus` accepts REJECTED (default) or REQUESTED; `dossierStatus` accepts IN_PREPARATION (default) or REJECTED.
+The latest document and requirement must both be PROVIDED. Submitted, pending-authority, approved, closed and uninitialized dossiers are blocked.
+No authority submission is created automatically. Readiness and satisfaction timestamps are cleared by this explicit TS action.
+
+Overview requirement items expose `openDocumentRequest`; requirement detail exposes `documentRequests`.
+Frontend should render the exact plain-text `message` prominently, show `dueDate`, and offer its Upload New DocumentVersion action.
+Upload uses the existing DocumentVersion endpoint; frontend styling is not implemented here. Comment `message` accepts 1–2000 characters;
+only OPEN requests accept new comments. Existing comments and reviews remain append-only.
+
+Review, request, audit and web notification are saved atomically before delivery. Email content is HTML-encoded.
+The API exposes `emailSent` and `deliveryWarning`: SMTP failure or a two-second delivery timeout never loses the committed request.
+A timeout means delivery was not confirmed; SMTP may finish afterward. No automatic email retry worker is added.
+The two-second end-to-end target still requires measurement with real PostgreSQL, SMTP and realtime delivery.
+
+Apply migration `20261003000000_AddDocumentRequestRevisions` before using these endpoints:
+```bash
+dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
+```
 
 ## 👥 8. License & Academic Attribution
 

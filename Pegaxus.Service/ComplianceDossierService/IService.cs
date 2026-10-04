@@ -18,6 +18,13 @@ public interface IService
         Guid reviewId, Request.RevokeDocumentReviewRequest request, CancellationToken cancellationToken = default);
     Task<Response.DossierReadinessResponse> MarkReadyForSubmissionAsync(Guid accountId, Guid dossierId, CancellationToken cancellationToken = default);
 
+    Task<Response.DocumentRejectionResponse> RejectDocumentAsync(Guid accountId, Guid dossierId, Guid requirementId, Guid versionId,
+        Request.RejectDocumentRequest request, CancellationToken cancellationToken = default);
+    Task<Response.DocumentRequestCommentResponse> AddDocumentRequestCommentAsync(Guid accountId, Guid dossierId, Guid requirementId,
+        Guid requestId, Request.DocumentRequestCommentRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Response.DocumentRequestCommentResponse>> GetDocumentRequestCommentsAsync(Guid accountId, Guid dossierId,
+        Guid requirementId, Guid requestId, CancellationToken cancellationToken = default);
+
     Task<Response.OverviewResponse> GetByBookingAsync(Guid accountId, Guid bookingId, Request.ViewRequest request, CancellationToken cancellationToken = default);
     Task<Response.OverviewResponse> GetDossierAsync(Guid accountId, Guid dossierId, Request.ViewRequest request, CancellationToken cancellationToken = default);
     Task<Response.RequirementDetailResponse> GetRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, CancellationToken cancellationToken = default);

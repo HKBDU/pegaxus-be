@@ -25,7 +25,7 @@ public sealed partial class Service : IService
         "DOSSIER_INITIALIZED", "DOSSIER_STATUS_CHANGED", "DOSSIER_REQUIREMENT_ADDED",
         "DOSSIER_REQUIREMENT_REMOVED", "DOCUMENT_VERSION_SUBMITTED", "DOCUMENT_VERSION_UPDATED",
         "DOCUMENT_METADATA_UPDATED", "DOCUMENT_REVIEW_APPROVED",
-        "DOCUMENT_REVIEW_REJECTED", "DOCUMENT_REVIEW_REVISION_REQUIRED", "DOCUMENT_REVIEW_REVOKED", "DOCUMENT_REQUEST_CREATED",
+        "DOCUMENT_REVIEW_REJECTED", "DOCUMENT_REVIEW_REVISION_REQUIRED", "DOCUMENT_REVIEW_REVOKED", "DOCUMENT_REQUEST_CREATED", "DOCUMENT_REQUEST_COMMENTED",
         "DOSSIER_REQUIREMENT_UPDATED", "DOSSIER_REQUIREMENT_WAIVED", "DOSSIER_REQUIREMENT_REMINDED",
         "AUTHORITY_SUBMITTED", "AUTHORITY_DECISION_UPDATED", "QUARANTINE_PROOF_SUBMITTED",
         "QUARANTINE_RESULT_FINALIZED", "CUSTOMS_PROOF_SUBMITTED", "CUSTOMS_RESULT_FINALIZED"
@@ -37,6 +37,7 @@ public sealed partial class Service : IService
     private readonly NotificationService.IService _notificationService;
     private readonly DocumentStorageService.IService _documentStorage;
     private readonly ILogger<Service> _logger;
+    private readonly MailService.IService? _mailService;
 
     public Service(
         AppDbContext db,
@@ -44,7 +45,8 @@ public sealed partial class Service : IService
         IValidator<Request.InitializeRequest> initializeValidator,
         NotificationService.IService notificationService,
         DocumentStorageService.IService documentStorage,
-        ILogger<Service> logger)
+        ILogger<Service> logger,
+        MailService.IService? mailService = null)
     {
         _db = db;
         _mediaService = mediaService;
@@ -52,6 +54,7 @@ public sealed partial class Service : IService
         _notificationService = notificationService;
         _documentStorage = documentStorage;
         _logger = logger;
+        _mailService = mailService;
     }
 
     public async Task<Response.DashboardResponse> GetDashboardAsync(

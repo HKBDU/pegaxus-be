@@ -44,6 +44,7 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<Customer> Customers { get; set; }
 
     public virtual DbSet<DocumentRequest> DocumentRequests { get; set; }
+    public virtual DbSet<DocumentRequestComment> DocumentRequestComments { get; set; }
 
     public virtual DbSet<DocumentReview> DocumentReviews { get; set; }
 
@@ -806,6 +807,11 @@ public partial class AppDbContext : DbContext
 
         modelBuilder.Entity<DocumentRequest>(entity =>
         {
+            entity.Property(e => e.DocumentReviewId).HasColumnName("document_review_id");
+            entity.Property(e => e.ErrorCategory).HasMaxLength(40).HasColumnName("error_category");
+            entity.HasIndex(e => e.DocumentReviewId, "DocumentRequest_document_review_id_key").IsUnique();
+            entity.HasOne(e => e.DocumentReview).WithMany().HasForeignKey(e => e.DocumentReviewId)
+                .OnDelete(DeleteBehavior.Restrict).HasConstraintName("DocumentRequest_document_review_id_fkey");
             entity.HasKey(e => e.DocumentRequestId).HasName("DocumentRequest_pkey");
 
             entity.ToTable("DocumentRequest", tb => tb.HasComment("DocumentRequest: Yêu cầu gửi tới Customer để cung cấp, sửa, upload lại hoặc bổ sung thông tin cho một DossierRequirement."));
@@ -849,6 +855,23 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.RequestedByAccountId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("DocumentRequest_requested_by_account_id_fkey");
+        });
+
+        modelBuilder.Entity<DocumentRequestComment>(entity =>
+        {
+            entity.ToTable("DocumentRequestComment");
+            entity.HasKey(e => e.DocumentRequestCommentId).HasName("DocumentRequestComment_pkey");
+            entity.Property(e => e.DocumentRequestCommentId).HasColumnName("document_request_comment_id");
+            entity.Property(e => e.DocumentRequestId).HasColumnName("document_request_id");
+            entity.Property(e => e.AuthorAccountId).HasColumnName("author_account_id");
+            entity.Property(e => e.Message).HasMaxLength(2000).HasColumnName("message");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.HasIndex(e => new { e.DocumentRequestId, e.CreatedAt }, "DocumentRequestComment_request_created_idx");
+            entity.HasIndex(e => e.AuthorAccountId, "DocumentRequestComment_author_account_id_idx");
+            entity.HasOne(e => e.DocumentRequest).WithMany().HasForeignKey(e => e.DocumentRequestId)
+                .OnDelete(DeleteBehavior.Restrict).HasConstraintName("DocumentRequestComment_document_request_id_fkey");
+            entity.HasOne(e => e.AuthorAccount).WithMany().HasForeignKey(e => e.AuthorAccountId)
+                .OnDelete(DeleteBehavior.Restrict).HasConstraintName("DocumentRequestComment_author_account_id_fkey");
         });
 
         modelBuilder.Entity<DocumentReview>(entity =>
