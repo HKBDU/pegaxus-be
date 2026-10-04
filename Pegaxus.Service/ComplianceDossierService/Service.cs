@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Http;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using ClosedXML.Excel;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
@@ -22,7 +23,8 @@ public sealed partial class Service : IService
     private static readonly HashSet<string> AuditActionTypes =
     [
         "DOSSIER_INITIALIZED", "DOSSIER_STATUS_CHANGED", "DOSSIER_REQUIREMENT_ADDED",
-        "DOSSIER_REQUIREMENT_REMOVED", "DOCUMENT_VERSION_SUBMITTED", "DOCUMENT_REVIEW_APPROVED",
+        "DOSSIER_REQUIREMENT_REMOVED", "DOCUMENT_VERSION_SUBMITTED", "DOCUMENT_VERSION_UPDATED",
+        "DOCUMENT_METADATA_UPDATED", "DOCUMENT_REVIEW_APPROVED",
         "DOCUMENT_REVIEW_REJECTED", "DOCUMENT_REVIEW_REVISION_REQUIRED", "DOCUMENT_REVIEW_REVOKED", "DOCUMENT_REQUEST_CREATED",
         "DOSSIER_REQUIREMENT_UPDATED", "DOSSIER_REQUIREMENT_WAIVED", "DOSSIER_REQUIREMENT_REMINDED",
         "AUTHORITY_SUBMITTED", "AUTHORITY_DECISION_UPDATED", "QUARANTINE_PROOF_SUBMITTED",
@@ -33,17 +35,23 @@ public sealed partial class Service : IService
     private readonly MediaService.IService _mediaService;
     private readonly IValidator<Request.InitializeRequest> _initializeValidator;
     private readonly NotificationService.IService _notificationService;
+    private readonly DocumentStorageService.IService _documentStorage;
+    private readonly ILogger<Service> _logger;
 
     public Service(
         AppDbContext db,
         MediaService.IService mediaService,
         IValidator<Request.InitializeRequest> initializeValidator,
-        NotificationService.IService notificationService)
+        NotificationService.IService notificationService,
+        DocumentStorageService.IService documentStorage,
+        ILogger<Service> logger)
     {
         _db = db;
         _mediaService = mediaService;
         _initializeValidator = initializeValidator;
         _notificationService = notificationService;
+        _documentStorage = documentStorage;
+        _logger = logger;
     }
 
     public async Task<Response.DashboardResponse> GetDashboardAsync(

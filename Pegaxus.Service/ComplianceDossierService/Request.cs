@@ -4,6 +4,20 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public class Request
 {
+    public sealed class DocumentUploadRequest : DocumentMetadataRequest
+    {
+        public List<IFormFile> Files { get; set; } = [];
+        public string? UploadNote { get; set; }
+    }
+
+    public class DocumentMetadataRequest
+    {
+        public string? DocumentNumber { get; set; }
+        public string? IssuingAuthority { get; set; }
+        public DateOnly? IssuedDate { get; set; }
+        public DateOnly? ExpiryDate { get; set; }
+    }
+
     public sealed class ApproveDocumentRequest
     {
         public bool MetadataConfirmed { get; set; }

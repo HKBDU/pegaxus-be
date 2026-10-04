@@ -328,6 +328,38 @@ public class DocumentReviewTests
         Assert.Equal(ComplianceDocumentStatus.PROVIDED, (await db.ComplianceDocuments.AsNoTracking().SingleAsync()).Status);
     }
 
+    [Fact]
+    public async Task RevokedApproval_AllowsMetadataAndNewVersionWithoutRemovingReviewHistory()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (specialist, dossier, requirement, version) = await SeedAsync(db);
+        var service = CreateService(db);
+        var approval = await service.ApproveDocumentAsync(specialist, dossier.ComplianceDossierId,
+            requirement.DossierRequirementId, version.DocumentVersionId, Approval(version));
+        await service.RevokeDocumentReviewAsync(specialist, dossier.ComplianceDossierId, requirement.DossierRequirementId,
+            version.DocumentVersionId, approval.Review.DocumentReviewId,
+            new Request.RevokeDocumentReviewRequest { Status = DossierRequirementStatus.PROVIDED, Reason = "Replace incorrect file" });
+        var storage = new DocumentUploadTests.RecordingStorage();
+        service = new DossierService(db, null!, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
+            null!, storage, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance);
+        var customerId = version.UploadedByAccountId;
+        var metadata = await service.UpdateDocumentMetadataAsync(customerId, dossier.ComplianceDossierId,
+            requirement.DossierRequirementId, new Request.DocumentMetadataRequest { DocumentNumber = "EHC-101" });
+        Assert.Equal("EHC-101", metadata.DocumentNumber);
+        var replacement = await service.SubmitDocumentVersionAsync(customerId, dossier.ComplianceDossierId,
+            requirement.DossierRequirementId, DocumentUploadTests.ValidRequest(dossier));
+        Assert.True(replacement.IsNewVersion);
+        Assert.Equal(2, replacement.VersionNo);
+        Assert.Equal("private-file", version.FileUrl);
+        Assert.Equal(2, await db.DocumentReviews.CountAsync());
+        Assert.Empty(storage.Deleted);
+        var latest = await db.DocumentVersions.SingleAsync(item => item.DocumentVersionId == replacement.DocumentVersionId);
+        await service.ApproveDocumentAsync(specialist, dossier.ComplianceDossierId, requirement.DossierRequirementId,
+            latest.DocumentVersionId, Approval(latest));
+        Assert.Equal(DossierRequirementStatus.SATISFIED, requirement.Status);
+        Assert.Equal(3, await db.DocumentReviews.CountAsync());
+    }
+
     private sealed class FailingReviewSaveInterceptor : SaveChangesInterceptor
     {
         public bool FailSave { get; set; }
@@ -380,5 +412,6 @@ public class DocumentReviewTests
     }
 
     private static DossierService CreateService(AppDbContext db) => new(db, null!,
-        new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!);
+        new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!, null!,
+        Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance);
 }
