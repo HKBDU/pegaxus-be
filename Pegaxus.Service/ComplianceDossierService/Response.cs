@@ -10,6 +10,7 @@ public class Response
         public Guid ComplianceDocumentId { get; init; }
         public Guid DocumentVersionId { get; init; }
         public int VersionNo { get; init; }
+        public bool IsNewVersion { get; init; }
         public string Status { get; init; } = string.Empty;
         public IReadOnlyList<UploadedDocumentFileResponse> Files { get; init; } = [];
     }
@@ -22,7 +23,36 @@ public class Response
         public long FileSizeBytes { get; init; }
         public string ReadUrl { get; init; } = string.Empty;
         public DateTimeOffset ReadUrlExpiresAt { get; init; }
+    }
 
+    public sealed class DocumentMetadataResponse
+    {
+        public Guid ComplianceDocumentId { get; init; }
+        public string? DocumentNumber { get; init; }
+        public string? IssuingAuthority { get; init; }
+        public DateOnly? IssuedDate { get; init; }
+        public DateOnly? ExpiryDate { get; init; }
+        public string Status { get; init; } = string.Empty;
+    }
+
+    public sealed class DocumentVersionResponse
+    {
+        public Guid DocumentVersionId { get; init; }
+        public int VersionNo { get; init; }
+        public Guid UploadedByAccountId { get; init; }
+        public DateTime UploadedAt { get; init; }
+        public string? UploadNote { get; init; }
+        public IReadOnlyList<UploadedDocumentFileResponse> Files { get; init; } = [];
+        public IReadOnlyList<DocumentReviewResponse> Reviews { get; init; } = [];
+    }
+
+    public sealed class DocumentReviewResponse
+    {
+        public Guid DocumentReviewId { get; init; }
+        public Guid ReviewedByAccountId { get; init; }
+        public string Result { get; init; } = string.Empty;
+        public string? ReviewComment { get; init; }
+        public DateTime ReviewedAt { get; init; }
     }
 
     public sealed class OverviewResponse

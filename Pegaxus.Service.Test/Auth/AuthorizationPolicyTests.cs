@@ -22,6 +22,17 @@ public class AuthorizationPolicyTests
         Assert.Equal(JwtExtensions.CustomerPolicy, action.GetCustomAttribute<AuthorizeAttribute>()?.Policy);
     }
 
+    [Theory]
+    [InlineData("SubmitDocumentVersion", JwtExtensions.CustomerPolicy)]
+    [InlineData("UpdateDocumentMetadata", JwtExtensions.CustomerPolicy)]
+    [InlineData("GetDocumentVersions", JwtExtensions.ComplianceDossierViewerPolicy)]
+    public void DocumentVersionActions_RequireScopedPolicies(string actionName, string policy)
+    {
+        var action = typeof(ComplianceDossiersController).GetMethod(actionName);
+        Assert.NotNull(action);
+        Assert.Equal(policy, action.GetCustomAttribute<AuthorizeAttribute>()?.Policy);
+    }
+
     internal static ServiceProvider CreateProvider()
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
@@ -93,7 +104,7 @@ public class AuthorizationPolicyTests
             [JwtExtensions.DriverPolicy] = ["Driver"],
             [JwtExtensions.EscortPolicy] = ["Escort"],
             [JwtExtensions.CustomerOrEmployeePolicy] = ["Customer", "Employee"],
-            ["ComplianceDossierViewerPolicy"] = ["Customer", "TransportSpecialist", "LogisticsManager"],
+            [JwtExtensions.ComplianceDossierViewerPolicy] = ["Customer", "TransportSpecialist", "LogisticsManager"],
             ["TransportSpecialistOrLogisticsManagerPolicy"] = ["TransportSpecialist", "LogisticsManager"],
             ["DriverOrEscortPolicy"] = ["Driver", "Escort"]
         };

@@ -34,6 +34,40 @@ public sealed class ComplianceDossiersController : ControllerBase
             "ComplianceDocument uploaded successfully (Version v1). Pending DocumentReview by Transport Specialist.",
             StatusCodes.Status201Created, HttpContext.TraceIdentifier));
 
+
+    [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/document/versions")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    [Consumes("multipart/form-data")]
+    [RequestSizeLimit(101 * 1024 * 1024)]
+    [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> SubmitDocumentVersion(Guid dossierId, Guid requirementId,
+        [FromForm] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken)
+    {
+        var response = await _service.SubmitDocumentVersionAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken);
+        var status = response.IsNewVersion ? StatusCodes.Status201Created : StatusCodes.Status200OK;
+        var message = response.IsNewVersion
+            ? $"New DocumentVersion (v{response.VersionNo}) submitted successfully. Pending DocumentReview."
+            : $"DocumentVersion (v{response.VersionNo}) updated successfully. Pending DocumentReview.";
+        return StatusCode(status, ResponseBuilder.SuccessResponse(response, message, status, HttpContext.TraceIdentifier));
+    }
+
+    [HttpPatch("{dossierId:guid}/requirements/{requirementId:guid}/document/metadata")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> UpdateDocumentMetadata(Guid dossierId, Guid requirementId,
+        [FromBody] ComplianceDossierService.Request.DocumentMetadataRequest request, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(
+            await _service.UpdateDocumentMetadataAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
+            "ComplianceDocument metadata updated successfully.", traceId: HttpContext.TraceIdentifier));
+
+    [HttpGet("{dossierId:guid}/requirements/{requirementId:guid}/document/versions")]
+    [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
+    public async Task<IActionResult> GetDocumentVersions(Guid dossierId, Guid requirementId, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(
+            await _service.GetDocumentVersionsAsync(GetAccountId(), dossierId, requirementId, cancellationToken),
+            "DocumentVersion history retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+
     [HttpGet("/api/v1/bookings/{bookingId:guid}/compliance-dossier")]
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetByBooking(Guid bookingId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,
@@ -67,7 +101,6 @@ public sealed class ComplianceDossiersController : ControllerBase
         Response.Headers["Content-Disposition"] = "inline";
         return File(file.Content, file.ContentType);
     }
-
     [HttpGet("/api/v1/bookings/{bookingId:guid}/dossier-templates")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> GetTemplateOptions(Guid bookingId, CancellationToken cancellationToken) =>

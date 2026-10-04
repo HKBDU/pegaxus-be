@@ -197,6 +197,24 @@ The DB write runs in a serializable transaction and revalidates ownership, statu
 No migration is needed: existing unique indexes protect one document per requirement and one version number per document.
 The 4-second/10-MB target needs measurement with real S3, ClamAV and PostgreSQL; unit tests do not establish throughput.
 
+## DocumentVersion Replacement (UC-22)
+
+POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/versions` with a Customer token and multipart form data.
+`Files` replaces the entire current file set (1–10 files; the UC-21 format, size and scanning rules apply). Metadata fields and `UploadNote` are optional.
+Omitted metadata retains its current value; supplied values use the same validation as the first upload.
+
+An unreviewed PROVIDED version is updated in place: its ID and version number stay unchanged. A reviewed or rejected version creates the next number.
+Reviewed versions, attachments and reviews remain immutable. Every replacement uses fresh S3 object keys. Only superseded unreviewed objects are
+deleted after confirmed DB commit; failed or uncertain commits never delete previously committed files. Concurrent replacements return 409.
+
+PATCH `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/metadata` accepts a JSON object with any of
+`DocumentNumber`, `IssuingAuthority`, `IssuedDate`, `ExpiryDate`. It changes document metadata only, preserving version records, files and review status.
+
+GET `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/versions` returns newest-first history, all file URLs and
+reviews attached to their own versions. Only the booking owner, Transport Specialist or Logistics Manager can read it; URLs expire after five minutes.
+Only the booking owner can submit or edit. SATISFIED requirements and dossiers sent to authorities are locked against both file and metadata edits.
+Every edit records its actor and changes in the dossier audit trail. Real PostgreSQL/S3/ClamAV measurement is needed to verify the 2-second DB-write target.
+
 ## ComplianceDossier Viewing (UC-20)
 
 All read endpoints require a Bearer token and the enum-backed `ComplianceDossierViewerPolicy` (Customer, Transport Specialist, Logistics Manager).

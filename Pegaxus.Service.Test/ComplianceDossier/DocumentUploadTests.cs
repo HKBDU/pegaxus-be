@@ -308,13 +308,13 @@ public class DocumentUploadTests
         Assert.Single(await db.DocumentVersions.AsNoTracking().ToListAsync());
     }
 
-    private static DossierRequest.DocumentUploadRequest ValidRequest(Pegaxus.Repository.Entities.ComplianceDossier dossier) => new()
+    internal static DossierRequest.DocumentUploadRequest ValidRequest(Pegaxus.Repository.Entities.ComplianceDossier dossier) => new()
     {
         Files = [File("passport.pdf", "application/pdf")], DocumentNumber = " REF-100 ", IssuingAuthority = " Weatherbys ",
         IssuedDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1), ExpiryDate = dossier.Transport.Booking.RequestedDepartureDate.AddDays(30)
     };
 
-    private static IFormFile File(string name, string mimeType, long? length = null)
+    internal static IFormFile File(string name, string mimeType, long? length = null)
     {
         var bytes = "%PDF-1.7 test"u8.ToArray();
         if (length is > 0 and <= Pegaxus.Service.DocumentStorageService.Service.MaxFileSize)
@@ -325,7 +325,7 @@ public class DocumentUploadTests
         return new FormFile(new MemoryStream(bytes), 0, length ?? bytes.Length, "Files", name) { Headers = new HeaderDictionary(), ContentType = mimeType };
     }
 
-    private static async Task<(Account Account, Pegaxus.Repository.Entities.ComplianceDossier Dossier, DossierRequirement Requirement)> SeedAsync(AppDbContext db)
+    internal static async Task<(Account Account, Pegaxus.Repository.Entities.ComplianceDossier Dossier, DossierRequirement Requirement)> SeedAsync(AppDbContext db)
     {
         var (account, customer) = await TestSupport.AddCustomerAsync(db);
         var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer, withHorse: true);
@@ -348,10 +348,10 @@ public class DocumentUploadTests
         return (account, dossier, requirement);
     }
 
-    private static DossierService CreateService(AppDbContext db, RecordingStorage storage) => new(db, null!,
+    internal static DossierService CreateService(AppDbContext db, RecordingStorage storage) => new(db, null!,
         new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!, storage, NullLogger<DossierService>.Instance);
 
-    private sealed class RecordingStorage : Pegaxus.Service.DocumentStorageService.IService
+    internal sealed class RecordingStorage : Pegaxus.Service.DocumentStorageService.IService
     {
         public Task<Pegaxus.Service.MediaService.PreviewFile> DownloadPreviewAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public List<StoredDocumentFile> Uploaded { get; } = [];
@@ -375,7 +375,7 @@ public class DocumentUploadTests
         }
     }
 
-    private sealed class LostCommitTransactionManager : IDbContextTransactionManager
+    internal sealed class LostCommitTransactionManager : IDbContextTransactionManager
     {
         public LostCommitTransactionManager() { }
         public IDbContextTransaction? CurrentTransaction { get; private set; }
@@ -400,7 +400,7 @@ public class DocumentUploadTests
         public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 
-    private sealed class FailingSaveInterceptor : SaveChangesInterceptor
+    internal sealed class FailingSaveInterceptor : SaveChangesInterceptor
     {
         public bool Fail { get; set; }
         public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData,
