@@ -3,6 +3,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.OutboxService;
 
 namespace Pegaxus.Service.NotificationService;
 
@@ -44,7 +45,7 @@ public sealed class Service : IService
             CreatedAt = request.CreatedAt
         });
 
-        _pendingPushes.Add((request.AccountId, new NotificationRealtimeDto
+        var realtimeNotification = new NotificationRealtimeDto
         {
             Id = notificationId,
             Type = request.Type.ToString(),
@@ -55,11 +56,21 @@ public sealed class Service : IService
             CreatedAt = ToDateTimeOffset(request.CreatedAt),
             ReferenceType = request.ReferenceType,
             ReferenceId = request.ReferenceId
-        }));
+        };
+
+        if (OutboxQueue.IsEnabled(_db))
+            OutboxQueue.AddSignalRAccount(_db, request.AccountId, realtimeNotification, request.CreatedAt);
+        else
+            _pendingPushes.Add((request.AccountId, realtimeNotification));
     }
 
     public async Task FlushAsync(CancellationToken cancellationToken = default)
     {
+        // Relational deployments deliver these messages through the outbox worker
+        // after the business transaction commits.
+        if (OutboxQueue.IsEnabled(_db))
+            return;
+
         if (_pendingPushes.Count == 0)
             return;
 

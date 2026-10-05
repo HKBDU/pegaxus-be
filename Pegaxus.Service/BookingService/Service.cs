@@ -6,6 +6,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.OutboxService;
 
 using BookingEntity = Pegaxus.Repository.Entities.Booking;
 using MailService = Pegaxus.Service.MailService;
@@ -704,13 +705,17 @@ public partial class Service : IService
         _db.Transports.Add(transport);
         AddHistory(bookingId, accountId, BookingHistoryType.APPROVE, BookingStatus.PENDING, BookingStatus.APPROVED, null, now);
         AddNotification(booking.Customer.AccountId, transport.TransportId, booking, "Booking approved", now);
-        await _db.SaveChangesAsync(cancellationToken);
-        await _mailService.SendMail(new MailService.MailContent
+        var approvalMail = new MailService.MailContent
         {
             To = booking.Customer.Account.Email,
             Subject = "Booking approved",
             Body = $"<p>Booking <strong>{WebUtility.HtmlEncode(booking.BookingCode)}</strong> has been approved.</p>"
-        });
+        };
+        if (OutboxQueue.IsEnabled(_db))
+            OutboxQueue.AddEmail(_db, approvalMail, now);
+        await _db.SaveChangesAsync(cancellationToken);
+        if (!OutboxQueue.IsEnabled(_db))
+            await _mailService.SendMail(approvalMail, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
 
@@ -751,13 +756,17 @@ public partial class Service : IService
         booking.UpdatedAt = now;
         AddHistory(bookingId, accountId, BookingHistoryType.REJECT, BookingStatus.PENDING, BookingStatus.REJECTED, reason, now);
         AddNotification(booking.Customer.AccountId, null, booking, "Booking rejected", now);
-        await _db.SaveChangesAsync(cancellationToken);
-        await _mailService.SendMail(new MailService.MailContent
+        var rejectionMail = new MailService.MailContent
         {
             To = booking.Customer.Account.Email,
             Subject = "Booking rejected",
             Body = $"<p>Booking <strong>{WebUtility.HtmlEncode(booking.BookingCode)}</strong> has been rejected.</p><p>Reason: {WebUtility.HtmlEncode(reason)}</p>"
-        });
+        };
+        if (OutboxQueue.IsEnabled(_db))
+            OutboxQueue.AddEmail(_db, rejectionMail, now);
+        await _db.SaveChangesAsync(cancellationToken);
+        if (!OutboxQueue.IsEnabled(_db))
+            await _mailService.SendMail(rejectionMail, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
     }
