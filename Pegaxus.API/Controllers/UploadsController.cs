@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
 using Pegaxus.Service.MediaService;
 using Pegaxus.Service.Models;
+using Pegaxus.Service.Exceptions;
 using UploadService = Pegaxus.Service.UploadService;
 
 namespace Pegaxus.API.Controllers;
@@ -20,6 +21,16 @@ public sealed class UploadsController : ControllerBase
         _mediaService = mediaService;
     }
 
+    /// <summary>
+    /// Create an attachment upload signature.
+    /// </summary>
+    /// <remarks>Returns signed Cloudinary upload parameters. The frontend uploads the attachment directly to Cloudinary; this endpoint does not receive the file.</remarks>
+    /// <param name="request">The attachment entity, content type, and file size in bytes.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with publicId, the upload URL, and signed parameters.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="UnauthorizedAccessException">The authenticated account identifier is invalid.</exception>
+    /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("signature")]
     public async Task<IActionResult> CreateSignature(
         [FromBody] UploadService.Request.CreateUploadSignatureRequest request,
@@ -42,6 +53,17 @@ public sealed class UploadsController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Confirm an attachment upload.
+    /// </summary>
+    /// <remarks>Verifies that the uploaded publicId belongs to the authenticated account.</remarks>
+    /// <param name="request">The publicId of the uploaded attachment.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the confirmed publicId and file URL.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="UnauthorizedAccessException">The authenticated account identifier is invalid.</exception>
+    /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("confirm")]
     public async Task<IActionResult> Confirm(
         [FromBody] UploadService.Request.ConfirmUploadRequest request,

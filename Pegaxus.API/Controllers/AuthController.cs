@@ -25,6 +25,11 @@ public sealed class AuthController : ControllerBase
         _configuration = configuration;
     }
 
+    /// <summary>
+    /// Start Google sign-in.
+    /// </summary>
+    /// <remarks>Challenges the browser with Google OAuth. Returns 503 if Google authentication is not configured.</remarks>
+    /// <returns>A Google authentication challenge or a configuration error.</returns>
     [HttpGet("google/login")]
     [AllowAnonymous]
     public IActionResult GoogleLogin()
@@ -42,6 +47,12 @@ public sealed class AuthController : ControllerBase
         return Challenge(properties, GoogleDefaults.AuthenticationScheme);
     }
 
+    /// <summary>
+    /// Complete Google sign-in.
+    /// </summary>
+    /// <remarks>Uses the external authentication cookie and redirects to the frontend with a one-time exchange code or an error code.</remarks>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>A redirect to the frontend Google callback.</returns>
     [HttpGet("google/complete")]
     [AllowAnonymous]
     public async Task<IActionResult> GoogleComplete(CancellationToken cancellationToken)
@@ -83,6 +94,14 @@ public sealed class AuthController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Exchange a Google login code for tokens.
+    /// </summary>
+    /// <remarks>Consumes the one-time code issued by the Google callback.</remarks>
+    /// <param name="request">The one-time Google login code.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with access and refresh tokens.</returns>
+    /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("google/exchange")]
     [AllowAnonymous]
     public async Task<IActionResult> ExchangeGoogleLogin(
@@ -103,6 +122,17 @@ public sealed class AuthController : ControllerBase
     private IActionResult RedirectGoogleError(string errorCode) =>
         Redirect($"{GetFrontendCallbackUrl()}?error={Uri.EscapeDataString(errorCode)}");
 
+    /// <summary>
+    /// Sign in with email and password.
+    /// </summary>
+    /// <remarks>Returns access and refresh tokens for an active, verified account. Invalid request fields return 400.</remarks>
+    /// <param name="request">The account email and password.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the authenticated account and tokens.</returns>
+    /// <exception cref="UnauthorizedException">The authentication session or credentials are invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="TooManyRequestsException">Too many failed login attempts have been recorded.</exception>
     [HttpPost("login")]
     public async Task<IActionResult> Login(
         AuthService.Request.LoginRequest request,
@@ -117,6 +147,15 @@ public sealed class AuthController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(response, "Login successful. Welcome back!", traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Register a customer account.
+    /// </summary>
+    /// <remarks>Creates a customer account and sends an email verification OTP. Invalid request fields return 400.</remarks>
+    /// <param name="request">The customer registration details and password confirmation.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>201 Created with the new account identifiers.</returns>
+    /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("register")]
     public async Task<IActionResult> Register(
         AuthService.Request.RegisterRequest request,
@@ -132,6 +171,15 @@ public sealed class AuthController : ControllerBase
             201));
     }
 
+    /// <summary>
+    /// Request a password reset OTP.
+    /// </summary>
+    /// <remarks>Returns the same success message whether or not the email exists to avoid exposing account registration.</remarks>
+    /// <param name="request">The email address that should receive a password reset OTP.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK acknowledging the request.</returns>
+    /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("forgot-password")]
     public async Task<IActionResult> ForgotPassword(
         AuthService.Request.ForgotPasswordRequest request,
@@ -144,6 +192,15 @@ public sealed class AuthController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(null, "If the email exists, an OTP has been sent"));
     }
 
+    /// <summary>
+    /// Verify an account email.
+    /// </summary>
+    /// <remarks>Checks the email verification OTP before marking the account email as verified.</remarks>
+    /// <param name="request">The account email and verification OTP.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK after email verification.</returns>
+    /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("verify-email")]
     public async Task<IActionResult> VerifyEmail(
         AuthService.Request.VerifyEmailRequest request,
@@ -156,6 +213,15 @@ public sealed class AuthController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(null, "Email verified successfully"));
     }
 
+    /// <summary>
+    /// Resend an authentication OTP.
+    /// </summary>
+    /// <remarks>Supports email verification and password reset purposes. Requests are subject to a resend cooldown.</remarks>
+    /// <param name="request">The account email and OTP purpose.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the OTP expiration time.</returns>
+    /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("resend-otp")]
     public async Task<IActionResult> ResendOtp(
         AuthService.Request.ResendOtpRequest request,
@@ -168,6 +234,15 @@ public sealed class AuthController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(response, "OTP has been resent"));
     }
 
+    /// <summary>
+    /// Refresh authentication tokens.
+    /// </summary>
+    /// <remarks>Rotates a valid refresh token and issues a new access token.</remarks>
+    /// <param name="request">The refresh token to rotate.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with replacement access and refresh tokens.</returns>
+    /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("refresh-token")]
     public async Task<IActionResult> RefreshToken(
         AuthService.Request.RefreshTokenRequest request,
@@ -180,6 +255,15 @@ public sealed class AuthController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(response, "Token refreshed successfully"));
     }
 
+    /// <summary>
+    /// Reset an account password.
+    /// </summary>
+    /// <remarks>Validates the password reset OTP before updating the password.</remarks>
+    /// <param name="request">The account email, OTP, new password, and confirmation.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK after the password is reset.</returns>
+    /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("reset-password")]
     public async Task<IActionResult> ResetPassword(
         AuthService.Request.ResetPasswordRequest request,
@@ -192,6 +276,15 @@ public sealed class AuthController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(null, "Password reset successfully. Please sign in again"));
     }
 
+    /// <summary>
+    /// Sign out the current account.
+    /// </summary>
+    /// <remarks>Revokes the submitted refresh token for the authenticated account.</remarks>
+    /// <param name="request">The refresh token to revoke.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK after sign-out.</returns>
+    /// <exception cref="UnauthorizedException">The authentication session or credentials are invalid.</exception>
     [Authorize]
     [HttpPost("logout")]
     public async Task<IActionResult> Logout(

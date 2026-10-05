@@ -244,7 +244,9 @@ app.Use(async (context, next) =>
 app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapGet("/health", () => Results.Ok(new { status = "healthy" }));
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
+    .WithSummary("Check deployment health.")
+    .WithDescription("Reports application availability as JSON with status = healthy. Does not check databases or external services.");
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapHub<Pegaxus.API.Hubs.ComplianceDossierHub>("/hubs/compliance-dossiers",

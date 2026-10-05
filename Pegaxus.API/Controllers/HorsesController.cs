@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.Service.Models;
+using Pegaxus.Service.Exceptions;
 
 using HorseService = Pegaxus.Service.HorseService;
 
@@ -19,6 +20,15 @@ public sealed class HorsesController : ControllerBase
         _service = service;
     }
 
+    /// <summary>
+    /// List the current customer's horses.
+    /// </summary>
+    /// <remarks>Only customer accounts may access their horse list.</remarks>
+    /// <param name="request">The horse search and pagination parameters.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with a paginated horse list.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
     [HttpGet]
     public async Task<IActionResult> GetCustomerHorses(
         [FromQuery] HorseService.Request.HorseListRequest request,
@@ -44,6 +54,14 @@ public sealed class HorsesController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Get horse details.
+    /// </summary>
+    /// <remarks>Customers see owned horses; Logistics Managers may view horses across customers.</remarks>
+    /// <param name="horseId">The horse identifier (UUID).</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with horse details.</returns>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
     [HttpGet("{horseId:guid}")]
     public async Task<IActionResult> GetHorse(
         Guid horseId,
@@ -70,6 +88,16 @@ public sealed class HorsesController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Create a horse profile.
+    /// </summary>
+    /// <remarks>Creates a horse owned by the authenticated customer. Microchip and passport identifiers must be valid and unique.</remarks>
+    /// <param name="request">The horse identity, physical details, passport, and microchip information.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>201 Created with the new horse identifier.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
     [HttpPost]
     public async Task<IActionResult> CreateHorse(
         HorseService.Request.CreateHorseRequest request,
@@ -96,6 +124,17 @@ public sealed class HorsesController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Update a horse profile.
+    /// </summary>
+    /// <remarks>Replaces an owned horse's profile. Horses belonging to APPROVED bookings cannot be updated.</remarks>
+    /// <param name="horseId">The horse identifier (UUID).</param>
+    /// <param name="request">The complete replacement horse profile.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK after the horse profile is updated.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
     [HttpPut("{horseId:guid}")]
     public async Task<IActionResult> UpdateHorse(
         Guid horseId,
@@ -122,6 +161,15 @@ public sealed class HorsesController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Delete a horse profile.
+    /// </summary>
+    /// <remarks>Soft-deletes an owned horse. Horses belonging to APPROVED bookings cannot be deleted.</remarks>
+    /// <param name="horseId">The horse identifier (UUID).</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK after the horse is soft-deleted.</returns>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
     [HttpDelete("{horseId:guid}")]
     public async Task<IActionResult> DeleteHorse(
         Guid horseId,
