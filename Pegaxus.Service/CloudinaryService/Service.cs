@@ -257,25 +257,90 @@ public class Service : IService
         }
     }
 
-    private (string ResourceType, string DeliveryType, string PublicId, string? Format) StorageLocation(string fileUrl)
+    private (string ResourceType, string DeliveryType, string PublicId, string? Format)
+    StorageLocation(string fileUrl)
+{
+    if (
+        !Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri) ||
+        uri.Scheme != Uri.UriSchemeHttps ||
+        !string.Equals(uri.Host, "res.cloudinary.com", StringComparison.OrdinalIgnoreCase) ||
+        uri.Port != 443 ||
+        !string.IsNullOrEmpty(uri.UserInfo) ||
+        !string.IsNullOrEmpty(uri.Fragment) ||
+        !string.IsNullOrEmpty(uri.Query)
+    )
     {
-        if (!Uri.TryCreate(fileUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps ||
-            !string.Equals(uri.Host, "res.cloudinary.com", StringComparison.OrdinalIgnoreCase) || uri.Port != 443 ||
-            !string.IsNullOrEmpty(uri.UserInfo) || !string.IsNullOrEmpty(uri.Fragment) || !string.IsNullOrEmpty(uri.Query))
-            throw new BadRequestException("Document file storage URL is invalid.", "INVALID_FILE_URL");
-        var segments = uri.GetComponents(UriComponents.Path, UriFormat.Unescaped).Split('/');
-        if (segments.Length < 4 || segments[0] != _cloudinaryOptions.CloudName ||
-            segments[1] is not ("image" or "raw") || segments[2] is not ("upload" or "authenticated" or "private") ||
-            segments.Any(segment => segment is "." or ".." || segment.Contains('\\') || segment.Any(char.IsControl)))
-            throw new BadRequestException("Document file storage URL is invalid.", "INVALID_FILE_URL");
-        var offset = segments[3].StartsWith('v') && long.TryParse(segments[3][1..], out _) ? 4 : 3;
-        var publicId = string.Join('/', segments.Skip(offset));
-        if (string.IsNullOrWhiteSpace(publicId))
-            throw new BadRequestException("Document file storage URL is invalid.", "INVALID_FILE_URL");
-        var format = segments[1] == "image" ? Path.GetExtension(publicId).TrimStart('.') : null;
-        if (!string.IsNullOrEmpty(format)) publicId = publicId[..^(format.Length + 1)];
-        return (segments[1], segments[2], publicId, format);
+        throw new BadRequestException(
+            "Document file storage URL is invalid.",
+            "INVALID_FILE_URL"
+        );
     }
+
+    var segments = uri
+        .GetComponents(UriComponents.Path, UriFormat.Unescaped)
+        .Split('/');
+
+    if (
+        segments.Length < 4 ||
+        segments[0] != _cloudinaryOptions.CloudName ||
+        segments[1] is not ("image" or "raw") ||
+        segments[2] is not ("upload" or "authenticated" or "private") ||
+        segments.Any(segment =>
+            segment is "." or ".." ||
+            segment.Contains('\\') ||
+            segment.Any(char.IsControl))
+    )
+    {
+        throw new BadRequestException(
+            "Document file storage URL is invalid.",
+            "INVALID_FILE_URL"
+        );
+    }
+
+    var offset = 3;
+    if (
+        offset < segments.Length &&
+        segments[offset].StartsWith("s--", StringComparison.Ordinal) &&
+        segments[offset].EndsWith("--", StringComparison.Ordinal)
+    )
+    {
+        offset++;
+    }
+    if (
+        offset < segments.Length &&
+        segments[offset].StartsWith('v') &&
+        long.TryParse(segments[offset][1..], out _)
+    )
+    {
+        offset++;
+    }
+
+    var publicId = string.Join('/', segments.Skip(offset));
+
+    if (string.IsNullOrWhiteSpace(publicId))
+    {
+        throw new BadRequestException(
+            "Document file storage URL is invalid.",
+            "INVALID_FILE_URL"
+        );
+    }
+
+    var format = segments[1] == "image"
+        ? Path.GetExtension(publicId).TrimStart('.')
+        : null;
+
+    if (!string.IsNullOrEmpty(format))
+    {
+        publicId = publicId[..^(format.Length + 1)];
+    }
+
+    return (
+        segments[1],
+        segments[2],
+        publicId,
+        format
+    );
+}
 
     private static string PreviewContentType(byte[] content)
     {
