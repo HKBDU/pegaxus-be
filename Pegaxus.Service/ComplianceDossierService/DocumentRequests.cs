@@ -7,6 +7,7 @@ using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.OutboxService;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
@@ -108,6 +109,13 @@ public sealed partial class Service
                 AddNotification(dossier.Transport.Booking.Customer.AccountId, dossier, "DocumentRequest: re-upload required", now,
                     message: $"{revision.RequestCode}: {note} Revision deadline: {request.RevisionDeadline:yyyy-MM-dd}.");
                 customerEmail = dossier.Transport.Booking.Customer.Account.Email;
+                if (OutboxQueue.IsEnabled(_db))
+                    OutboxQueue.AddEmail(_db, new MailService.MailContent
+                    {
+                        To = customerEmail,
+                        Subject = $"DocumentRequest {revision.RequestCode}: re-upload required",
+                        Body = $"<p>{WebUtility.HtmlEncode(note)}</p><p>{WebUtility.HtmlEncode(note).Replace("\n", "<br>")}</p><p>Revision deadline: {request.RevisionDeadline:yyyy-MM-dd}</p>"
+                    }, now);
                 await _db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
                 response = new Response.DocumentRejectionResponse
@@ -127,6 +135,11 @@ public sealed partial class Service
             }
         }
         await _notificationService.FlushAsync(CancellationToken.None);
+        if (OutboxQueue.IsEnabled(_db))
+        {
+            response.EmailSent = true;
+            return response;
+        }
         try
         {
             var revision = response.DocumentRequest;

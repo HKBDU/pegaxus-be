@@ -46,4 +46,7 @@ public interface IService
     Task CancelAsync(Guid accountId, Guid bookingId, Request.CancelBookingRequest request, CancellationToken cancellationToken = default);
     Task<Response.ApproveBookingResponse> ApproveAsync(Guid accountId, Guid bookingId, CancellationToken cancellationToken = default);
     Task RejectAsync(Guid accountId, Guid bookingId, Request.RejectBookingRequest request, CancellationToken cancellationToken = default);
+    Task<IReadOnlyList<Response.BookingAssignmentResponse>> GetAssignmentsAsync(Guid accountId, Guid bookingId, CancellationToken cancellationToken = default);
+    Task<Response.BookingAssignmentResponse> AssignEmployeeAsync(Guid accountId, Guid bookingId, Request.AssignBookingEmployeeRequest request, CancellationToken cancellationToken = default);
+    Task<Response.BookingAssignmentResponse> RevokeAssignmentAsync(Guid accountId, Guid bookingId, Guid assignmentId, CancellationToken cancellationToken = default);
 }

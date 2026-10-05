@@ -178,4 +178,18 @@ public class Response
         public TransportStatus Status { get; set; }
     }
 
+    public sealed class BookingAssignmentResponse
+    {
+        public Guid AssignmentId { get; init; }
+        public Guid BookingId { get; init; }
+        public Guid EmployeeId { get; init; }
+        public required string EmployeeName { get; init; }
+        public required string Role { get; init; }
+        public required string Status { get; init; }
+        public Guid AssignedByEmployeeId { get; init; }
+        public DateTimeOffset AssignedAt { get; init; }
+        public DateTimeOffset? RevokedAt { get; init; }
+        public string? Note { get; init; }
+    }
+
 }

@@ -22,6 +22,7 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<AuthoritySubmissionEvidenceFile> AuthoritySubmissionEvidenceFiles { get; set; }
 
     public virtual DbSet<Booking> Bookings { get; set; }
+    public virtual DbSet<BookingEmployeeAssignment> BookingEmployeeAssignments { get; set; }
 
     public virtual DbSet<BookingHorse> BookingHorses { get; set; }
 
@@ -95,6 +96,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<Notification> Notifications { get; set; }
 
+    public virtual DbSet<OutboxMessage> OutboxMessages { get; set; }
+
     public virtual DbSet<Receipt> Receipts { get; set; }
 
     public virtual DbSet<RefreshToken> RefreshTokens { get; set; }
@@ -129,6 +132,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("authority_evidence_type", new[] { "Acceptance", "Rejection", "AdditionalInformation", "Other" })
             .HasPostgresEnum("audit_visibility", new[] { "Public", "Internal" })
             .HasPostgresEnum("booking_history_type", new[] { "SUBMIT", "APPROVE", "REJECT", "CANCEL" })
+            .HasPostgresEnum("booking_assignment_status", new[] { "ACTIVE", "REVOKED" })
             .HasPostgresEnum("booking_status", new[] { "DRAFT", "PENDING", "APPROVED", "REJECTED", "CANCELLED" })
             .HasPostgresEnum("claim_resolution_type", new[] { "COMPENSATION", "PARTIAL_COMPENSATION", "REFUND", "SERVICE_RECOVERY", "NO_COMPENSATION", "OTHER" })
             .HasPostgresEnum("claim_status", new[] { "PENDING", "APPROVED", "REJECTED", "RESOLVED", "CANCELLED" })
@@ -170,7 +174,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("receipt_status", new[] { "PENDING", "CONFIRMED", "FAILED", "REFUNDED" })
             .HasPostgresEnum("recipient_status", new[] { "PENDING", "DELIVERED", "READ", "FAILED" })
             .HasPostgresEnum("route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED" })
-            .HasPostgresEnum("route_type", new[] { "PRIMARY", "BACKUP" })
+            .HasPostgresEnum("route_type", new[] { "PRIMARY", "BACKUP", "RETURN" })
             .HasPostgresEnum("transport_mode", new[] { "ROAD", "SEA", "AIR" })
             .HasPostgresEnum("transport_plan_status", new[] { "DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED" })
             .HasPostgresEnum("transport_status", new[] { "CREATED", "PLANNING", "READY", "IN_TRANSIT", "COMPLETED", "CANCELLED" })
@@ -401,6 +405,34 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.CustomerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("Booking_customer_id_fkey");
+        });
+
+        modelBuilder.Entity<BookingEmployeeAssignment>(entity =>
+        {
+            entity.HasKey(e => e.BookingEmployeeAssignmentId).HasName("BookingEmployeeAssignment_pkey");
+            entity.ToTable("BookingEmployeeAssignment");
+            entity.HasIndex(e => new { e.BookingId, e.AssignmentRole }, "BookingEmployeeAssignment_active_role_idx")
+                .HasFilter("status = 'ACTIVE'").IsUnique();
+            entity.HasIndex(e => e.EmployeeId, "BookingEmployeeAssignment_employee_id_idx");
+            entity.HasIndex(e => e.AssignedByEmployeeId, "BookingEmployeeAssignment_assigned_by_employee_id_idx");
+            entity.Property(e => e.BookingEmployeeAssignmentId).HasColumnName("booking_employee_assignment_id");
+            entity.Property(e => e.BookingId).HasColumnName("booking_id");
+            entity.Property(e => e.EmployeeId).HasColumnName("employee_id");
+            entity.Property(e => e.AssignmentRole).HasColumnName("assignment_role");
+            entity.Property(e => e.AssignedByEmployeeId).HasColumnName("assigned_by_employee_id");
+            entity.Property(e => e.Status).HasColumnName("status");
+            entity.Property(e => e.AssignedAt).HasColumnType("timestamp without time zone").HasColumnName("assigned_at");
+            entity.Property(e => e.RevokedAt).HasColumnType("timestamp without time zone").HasColumnName("revoked_at");
+            entity.Property(e => e.Note).HasColumnName("note");
+            entity.HasOne(e => e.Booking).WithMany(e => e.EmployeeAssignments)
+                .HasForeignKey(e => e.BookingId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("BookingEmployeeAssignment_booking_id_fkey");
+            entity.HasOne(e => e.Employee).WithMany(e => e.BookingAssignments)
+                .HasForeignKey(e => e.EmployeeId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("BookingEmployeeAssignment_employee_id_fkey");
+            entity.HasOne(e => e.AssignedByEmployee).WithMany(e => e.CreatedBookingAssignments)
+                .HasForeignKey(e => e.AssignedByEmployeeId).OnDelete(DeleteBehavior.ClientSetNull)
+                .HasConstraintName("BookingEmployeeAssignment_assigned_by_employee_id_fkey");
         });
 
         modelBuilder.Entity<BookingHorse>(entity =>
@@ -2128,6 +2160,25 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.TransportId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("Notification_transport_id_fkey");
+        });
+
+        modelBuilder.Entity<OutboxMessage>(entity =>
+        {
+            entity.HasKey(e => e.OutboxMessageId).HasName("OutboxMessage_pkey");
+            entity.ToTable("OutboxMessage");
+            entity.HasIndex(e => new { e.Status, e.AvailableAt }, "OutboxMessage_pending_idx");
+            entity.HasIndex(e => e.CreatedAt, "OutboxMessage_created_at_idx");
+            entity.Property(e => e.OutboxMessageId).HasColumnName("outbox_message_id");
+            entity.Property(e => e.MessageType).HasMaxLength(100).HasColumnName("message_type");
+            entity.Property(e => e.Payload).HasColumnName("payload");
+            entity.Property(e => e.Status).HasMaxLength(20).HasColumnName("status");
+            entity.Property(e => e.Attempts).HasColumnName("attempts");
+            entity.Property(e => e.AvailableAt).HasColumnType("timestamp without time zone").HasColumnName("available_at");
+            entity.Property(e => e.LockedAt).HasColumnType("timestamp without time zone").HasColumnName("locked_at");
+            entity.Property(e => e.ProcessedAt).HasColumnType("timestamp without time zone").HasColumnName("processed_at");
+            entity.Property(e => e.LastError).HasColumnName("last_error");
+            entity.Property(e => e.CreatedAt).HasColumnType("timestamp without time zone").HasColumnName("created_at");
+            entity.Property(e => e.UpdatedAt).HasColumnType("timestamp without time zone").HasColumnName("updated_at");
         });
 
         modelBuilder.Entity<Receipt>(entity =>

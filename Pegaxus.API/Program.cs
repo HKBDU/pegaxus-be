@@ -195,6 +195,7 @@ builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddHostedService<Pegaxus.API.Services.MissingDocumentReminderWorker>();
+builder.Services.AddHostedService<Pegaxus.API.Services.TransactionalOutboxWorker>();
 builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
 builder.Services.AddScoped<NotificationService.INotificationRealtimeService, SignalRNotificationRealtimeService>();
 builder.Services.AddScoped<IValidator<ComplianceDossierService.Request.InitializeRequest>, ComplianceDossierService.Validator.InitializeRequestValidator>();

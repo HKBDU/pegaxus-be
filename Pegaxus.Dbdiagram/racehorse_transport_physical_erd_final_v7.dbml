@@ -113,6 +113,7 @@ Enum transport_mode {
 Enum route_type {
   PRIMARY
   BACKUP
+  RETURN
 }
 
 Enum location_type {
@@ -394,6 +395,12 @@ Enum document_review_result {
   APPROVED
   REJECTED
   REVISION_REQUIRED
+  REVOKED
+}
+
+Enum booking_assignment_status {
+  ACTIVE
+  REVOKED
 }
 
 Enum document_request_type {
@@ -691,6 +698,28 @@ Table Booking {
     assigned_employee_id
     status
     requested_departure_date
+  }
+}
+
+
+Table BookingEmployeeAssignment {
+  Note: 'BookingEmployeeAssignment: LM phân công Transport Specialist phụ trách ComplianceDossier hoặc Fleet Route Coordinator phụ trách TransportPlan/RoutePlan. Giữ lịch sử khi thu hồi hoặc thay người.'
+
+  booking_employee_assignment_id uuid [pk]
+  booking_id uuid [not null]
+  employee_id uuid [not null]
+  assignment_role employee_role [not null]
+  assigned_by_employee_id uuid [not null]
+  status booking_assignment_status [not null, default: 'ACTIVE']
+  assigned_at timestamp [not null]
+  revoked_at timestamp
+  note text
+
+  indexes {
+    (booking_id, assignment_role) [unique, name: 'BookingEmployeeAssignment_active_role_idx']
+    employee_id
+    assigned_by_employee_id
+    status
   }
 }
 
@@ -1972,9 +2001,13 @@ Table DocumentReview {
 Table DocumentRequest {
   Note: 'DocumentRequest: Yêu cầu gửi tới Customer để cung cấp, sửa, upload lại hoặc bổ sung thông tin cho một DossierRequirement.'
 
-  document_request_id bigint [pk, increment]
+  document_request_id uuid [pk]
 
-  dossier_requirement_id bigint [not null]
+  document_review_id uuid [unique]
+
+  dossier_requirement_id uuid [not null]
+
+  error_category varchar(40)
 
   request_code varchar(50) [not null, unique]
 
@@ -1993,7 +2026,7 @@ Table DocumentRequest {
   cancelled_at timestamp
   cancellation_reason text
 
-  requested_by_account_id bigint [not null]
+  requested_by_account_id uuid [not null]
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -2003,6 +2036,58 @@ Table DocumentRequest {
     request_type
     status
     requested_at
+  }
+}
+
+
+Table DocumentRequestComment {
+  Note: 'DocumentRequestComment: Trao đổi giữa Customer và Transport Specialist trong phạm vi một DocumentRequest.'
+
+  document_request_comment_id uuid [pk]
+
+  document_request_id uuid [not null]
+
+  author_account_id uuid [not null]
+
+  message varchar(2000) [not null]
+
+  created_at timestamp [not null]
+
+  indexes {
+    (document_request_id, created_at)
+    author_account_id
+  }
+}
+
+
+Table MissingDocumentReminder {
+  Note: 'MissingDocumentReminder: Hàng đợi durable cho email nhắc Customer bổ sung hồ sơ còn thiếu; được worker xử lý và retry.'
+
+  missing_document_reminder_id uuid [pk]
+
+  compliance_dossier_id uuid [not null]
+
+  recipient_account_id uuid [not null]
+
+  requirement_ids uuid[] [not null]
+
+  due_date date [not null]
+
+  note varchar(2000)
+
+  automatic_date date
+
+  created_at timestamp [not null]
+
+  last_attempt_at timestamp
+  email_sent_at timestamp
+  cancelled_at timestamp
+  email_attempts int [not null, default: 0]
+
+  indexes {
+    (compliance_dossier_id, automatic_date) [unique]
+    (email_sent_at, cancelled_at, last_attempt_at)
+    recipient_account_id
   }
 }
 
@@ -2325,6 +2410,32 @@ Table AccountNotification {
 
 
 //////////////////////////////////////////////////////////////
+// FLOW 9 - TRANSACTIONAL OUTBOX
+//////////////////////////////////////////////////////////////
+
+Table OutboxMessage {
+  Note: 'OutboxMessage: Sự kiện cần xử lý sau khi transaction nghiệp vụ commit. Worker gửi email hoặc SignalR, retry khi lỗi và giữ DEAD để theo dõi.'
+
+  outbox_message_id uuid [pk]
+  message_type varchar(100) [not null]
+  payload text [not null]
+  status varchar(20) [not null, default: 'PENDING']
+  attempts int [not null, default: 0]
+  available_at timestamp [not null]
+  locked_at timestamp
+  processed_at timestamp
+  last_error text
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (status, available_at)
+    created_at
+  }
+}
+
+
+//////////////////////////////////////////////////////////////
 // RELATIONSHIPS - SOFT DELETE
 //////////////////////////////////////////////////////////////
 
@@ -2358,6 +2469,9 @@ Ref: Horse.customer_id > Customer.customer_id
 
 Ref: Booking.customer_id > Customer.customer_id
 Ref: Booking.assigned_employee_id > Employee.employee_id
+Ref: BookingEmployeeAssignment.booking_id > Booking.booking_id
+Ref: BookingEmployeeAssignment.employee_id > Employee.employee_id
+Ref: BookingEmployeeAssignment.assigned_by_employee_id > Employee.employee_id
 
 Ref: BookingHorse.booking_id > Booking.booking_id
 Ref: BookingHorse.horse_id > Horse.horse_id
@@ -2480,6 +2594,7 @@ Ref: DossierRequirement.compliance_requirement_id > ComplianceRequirement.compli
 Ref: DossierRequirement.horse_id > Horse.horse_id
 
 Ref: DocumentRequest.dossier_requirement_id > DossierRequirement.dossier_requirement_id
+Ref: DocumentRequest.document_review_id - DocumentReview.document_review_id
 
 Ref: ComplianceDocument.dossier_requirement_id - DossierRequirement.dossier_requirement_id
 
@@ -2494,6 +2609,10 @@ Ref: DocumentReview.document_version_id > DocumentVersion.document_version_id
 Ref: DocumentReview.reviewed_by_account_id > Account.account_id
 
 Ref: DocumentRequest.requested_by_account_id > Account.account_id
+Ref: DocumentRequestComment.document_request_id > DocumentRequest.document_request_id
+Ref: DocumentRequestComment.author_account_id > Account.account_id
+Ref: MissingDocumentReminder.compliance_dossier_id > ComplianceDossier.compliance_dossier_id
+Ref: MissingDocumentReminder.recipient_account_id > Account.account_id
 
 Ref: AuthoritySubmission.compliance_dossier_id > ComplianceDossier.compliance_dossier_id
 Ref: AuthoritySubmission.submitted_by_account_id > Account.account_id
@@ -2628,6 +2747,19 @@ Ref: AccountNotification.notification_id > Notification.notification_id
 //     Their physical files are stored in ProofAttachment. Each ProofAttachment
 //     must reference exactly one of the two Proof tables; this XOR rule is
 //     enforced by migration/database constraint and application validation.
+
+// 24) DocumentRequest may be created from one DocumentReview at most once.
+//     DocumentRequestComment stores the conversation between the customer and
+//     Transport Specialist for a request.
+
+// 25) MissingDocumentReminder is a durable email reminder queue. Its worker
+//     retries delivery and updates last_attempt_at, email_sent_at,
+//     cancelled_at and email_attempts.
+
+// 26) OutboxMessage is written in the same transaction as business changes.
+//     EMAIL and SIGNALR_ACCOUNT messages are processed after commit by the
+//     TransactionalOutboxWorker. Failed messages retry and eventually become
+//     DEAD; payload contains the integration-specific JSON data.
 
 // 19) PostgreSQL note: if unique values should be reusable after soft deletion,
 //     implement partial unique indexes with WHERE is_deleted = false where needed.

@@ -13,6 +13,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.OutboxService;
 using MailService = Pegaxus.Service.MailService;
 using JwtService = Pegaxus.Service.JwtService;
 using Claim = System.Security.Claims.Claim;
@@ -509,7 +510,7 @@ public class Service : IService
         try
         {
             var isVerification = purpose == EmailVerification;
-            await _mailService.SendMail(new MailService.MailContent
+            var mail = new MailService.MailContent
             {
                 To = email,
                 Subject = isVerification ? "Verify your Pegaxus account" : "Reset your Pegaxus password",
@@ -539,7 +540,14 @@ public class Service : IService
                     </body>
                     </html>
                     """
-            });
+            };
+            if (OutboxQueue.IsEnabled(_db))
+            {
+                OutboxQueue.AddEmail(_db, mail, UtcNow());
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+            else
+                await _mailService.SendMail(mail, cancellationToken);
         }
         catch
         {
