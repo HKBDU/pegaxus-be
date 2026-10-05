@@ -83,7 +83,9 @@ public sealed partial class Service
     private async Task<Response.UploadedDocumentFileResponse> ReadDocumentFileAsync(Guid? attachmentId, string name, string url,
         string? mimeType, long? size, CancellationToken cancellationToken)
     {
-        var signed = await _documentStorage.CreateReadUrlAsync(url, cancellationToken);
+        var signed = url.StartsWith("s3://", StringComparison.Ordinal)
+            ? await _documentStorage.CreateReadUrlAsync(url, cancellationToken)
+            : await _mediaService.CreateReadUrlAsync(url, cancellationToken);
         return new Response.UploadedDocumentFileResponse
         {
             DocumentAttachmentId = attachmentId, FileName = name, MimeType = mimeType ?? string.Empty, FileSizeBytes = size ?? 0,

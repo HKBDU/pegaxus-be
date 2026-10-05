@@ -87,7 +87,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     /// <summary>
     /// Upload documents for a dossier requirement.
     /// </summary>
-    /// <remarks>Customers submit 1-10 files using multipart/form-data, at most 10 MiB per file. Uploading does not approve the requirement. Each value.files[] item includes a presigned GET readUrl and readUrlExpiresAt; URLs expire after five minutes.</remarks>
+    /// <remarks>Customers upload each file through /uploads/signature and /uploads/confirm, then submit JSON with 1-10 ordered files containing publicId only. The backend verifies ownership and Cloudinary metadata, scans file content, and returns signed read URLs expiring after five minutes.</remarks>
     /// <param name="dossierId">The compliance dossier identifier (UUID).</param>
     /// <param name="requirementId">The dossier requirement identifier (UUID).</param>
     /// <param name="request">The files, document metadata, and optional upload note.</param>
@@ -100,12 +100,10 @@ public sealed class ComplianceDossiersController : ControllerBase
     /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/document")]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
-    [Consumes("multipart/form-data")]
-    [RequestSizeLimit(101 * 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
+    [Consumes("application/json")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> UploadDocument(Guid dossierId, Guid requirementId,
-        [FromForm] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken) =>
+        [FromBody] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken) =>
         StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
             await _service.UploadDocumentAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
             "ComplianceDocument uploaded successfully (Version v1). Pending DocumentReview by Transport Specialist.",
@@ -115,7 +113,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     /// <summary>
     /// Update or replace uploaded documents.
     /// </summary>
-    /// <remarks>Customers submit 1-10 files using multipart/form-data, at most 10 MiB per file. An unreviewed version is replaced; reviewed versions are preserved and a new version is created. Each value.files[] item includes readUrl and readUrlExpiresAt; presigned GET URLs expire after five minutes.</remarks>
+    /// <remarks>Customers submit JSON with 1-10 ordered Cloudinary publicId references, never file binaries or client-provided URLs. An unreviewed version is replaced; reviewed versions are preserved and a new version is created. Signed read URLs expire after five minutes.</remarks>
     /// <param name="dossierId">The compliance dossier identifier (UUID).</param>
     /// <param name="requirementId">The dossier requirement identifier (UUID).</param>
     /// <param name="request">The replacement files, document metadata, and optional upload note.</param>
@@ -128,12 +126,10 @@ public sealed class ComplianceDossiersController : ControllerBase
     /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("{dossierId:guid}/requirements/{requirementId:guid}/document/versions")]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
-    [Consumes("multipart/form-data")]
-    [RequestSizeLimit(101 * 1024 * 1024)]
-    [RequestFormLimits(MultipartBodyLengthLimit = 100 * 1024 * 1024)]
+    [Consumes("application/json")]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> SubmitDocumentVersion(Guid dossierId, Guid requirementId,
-        [FromForm] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken)
+        [FromBody] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken)
     {
         var response = await _service.SubmitDocumentVersionAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken);
         var status = response.IsNewVersion ? StatusCodes.Status201Created : StatusCodes.Status200OK;

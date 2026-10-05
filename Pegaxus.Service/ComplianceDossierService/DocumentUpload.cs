@@ -31,22 +31,30 @@ public sealed partial class Service
         var expectedFileUrl = previous?.FileUrl;
         if (request.Files is null || request.Files.Count is < 1 or > 10)
             throw new BadRequestException("Submit between 1 and 10 document files in one version.");
-        foreach (var file in request.Files) DocumentStorageService.Service.ValidateFileMetadata(file);
+        if (request.Files.Any(file => file is null || string.IsNullOrWhiteSpace(file.PublicId)) ||
+            request.Files.Select(file => file.PublicId).Distinct(StringComparer.Ordinal).Count() != request.Files.Count)
+            throw new BadRequestException("Provide distinct non-empty publicIds for all document files.", "INVALID_PUBLIC_ID");
         ValidateDocumentMetadata(ResolveDocumentMetadata(request, document), dossier, requirement);
         var storageId = Guid.NewGuid();
         var uploaded = new List<StoredDocumentFile>();
         var readUrls = new List<SignedDocumentUrl>();
         var supersededUrls = new List<string>();
-        var databaseWriteStarted = false;
         var commitAttempted = false;
         var committed = false;
-        var rollbackConfirmed = false;
         try
         {
-            for (var index = 0; index < request.Files.Count; index++)
-                uploaded.Add(await _documentStorage.UploadAsync(storageId, index, request.Files[index], cancellationToken));
+            foreach (var reference in request.Files)
+            {
+                var asset = await _mediaService.ConfirmUploadAsync(accountId, reference.PublicId, cancellationToken);
+                DocumentStorageService.Service.ValidateFileMetadata(asset.FileName, asset.MimeType, asset.SizeBytes);
+                var content = await _mediaService.DownloadPreviewAsync(asset.FileUrl, cancellationToken);
+                if (content.Content.Length != asset.SizeBytes || content.ContentType != asset.MimeType)
+                    throw new BadRequestException("Uploaded file content does not match its metadata.", "INVALID_FILE_TYPE");
+                await _documentStorage.ValidateContentAsync(content, cancellationToken);
+                uploaded.Add(new StoredDocumentFile(asset.FileUrl, asset.FileName, asset.MimeType, asset.SizeBytes));
+            }
             foreach (var file in uploaded)
-                readUrls.Add(await _documentStorage.CreateReadUrlAsync(file.StorageUrl, cancellationToken));
+                readUrls.Add(await _mediaService.CreateReadUrlAsync(file.StorageUrl, cancellationToken));
             DocumentVersion version;
             bool newVersion;
             await using (var transaction = _db.Database.IsRelational()
@@ -63,7 +71,6 @@ public sealed partial class Service
                     ValidateDocumentMetadata(metadata, dossier, requirement);
                     newVersion = previous is null || previous.DocumentReviews.Count != 0 || document?.Status == ComplianceDocumentStatus.REJECTED;
                     var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
-                    databaseWriteStarted = true;
                     if (document is null)
                     {
                         document = new ComplianceDocument
@@ -130,7 +137,6 @@ public sealed partial class Service
                     try
                     {
                         await transaction.RollbackAsync(CancellationToken.None);
-                        rollbackConfirmed = true;
                     }
                     catch (Exception rollbackError)
                     {
@@ -154,9 +160,7 @@ public sealed partial class Service
         }
         catch (Exception error)
         {
-            if (!committed && (!databaseWriteStarted || rollbackConfirmed && !commitAttempted))
-                await CleanupDocumentFilesAsync(uploaded.Select(item => item.StorageUrl), storageId);
-            else if (!committed)
+            if (!committed && commitAttempted)
                 _logger.LogError(error, "Document commit outcome is unknown for {StorageId}; files retained to prevent data loss", storageId);
             if (error is DbUpdateConcurrencyException ||
                 error is DbUpdateException { InnerException: PostgresException { SqlState: "23505" or "40001" or "40P01" } } ||
@@ -168,7 +172,7 @@ public sealed partial class Service
 
     private async Task CleanupDocumentFilesAsync(IEnumerable<string> urls, Guid storageId)
     {
-        foreach (var url in urls)
+        foreach (var url in urls.Where(url => url.StartsWith("s3://", StringComparison.Ordinal)))
         {
             try
             {

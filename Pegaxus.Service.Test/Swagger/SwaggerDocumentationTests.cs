@@ -13,6 +13,20 @@ namespace Pegaxus.Service.Test;
 
 public class SwaggerDocumentationTests
 {
+    [Theory]
+    [InlineData("UploadDocument")]
+    [InlineData("SubmitDocumentVersion")]
+    public void DocumentSubmission_AcceptsJsonAssetReferencesInsteadOfMultipart(string actionName)
+    {
+        var action = typeof(ComplianceDossiersController).GetMethod(actionName)!;
+        Assert.Equal("application/json", Assert.Single(action.GetCustomAttribute<ConsumesAttribute>()!.ContentTypes));
+        var request = action.GetParameters().Single(parameter => parameter.Name == "request");
+        Assert.NotNull(request.GetCustomAttribute<FromBodyAttribute>());
+        Assert.Null(request.GetCustomAttribute<FromFormAttribute>());
+        Assert.Equal(typeof(List<Pegaxus.Service.UploadService.Request.UploadedAssetReference>),
+            request.ParameterType.GetProperty("Files")!.PropertyType);
+    }
+
     [Fact]
     public void AllControllerEndpoints_HaveSummaryDescriptionAndAuthenticationNotes()
     {

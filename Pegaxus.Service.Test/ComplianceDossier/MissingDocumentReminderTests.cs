@@ -309,7 +309,7 @@ public class MissingDocumentReminderTests
         await service.RequestMissingDocumentsAsync(seed.Specialist, seed.Dossier.ComplianceDossierId, request);
         Assert.Equal(DossierRequirementStatus.REQUESTED, requirement.Status);
         var storage = new DocumentUploadTests.RecordingStorage();
-        service = new DossierService(db, null!, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
+        service = new DossierService(db, storage, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
             new Pegaxus.Service.NotificationService.Service(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService()),
             storage, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance, mail, new FixedTimeProvider(Now));
         var upload = await service.UploadDocumentAsync(seed.Customer, seed.Dossier.ComplianceDossierId,

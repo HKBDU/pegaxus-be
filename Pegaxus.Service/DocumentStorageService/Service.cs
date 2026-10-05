@@ -15,7 +15,7 @@ namespace Pegaxus.Service.DocumentStorageService;
 
 public class Service : IService, IDisposable
 {
-    public const long MaxFileSize = 10 * 1024 * 1024;
+    public const long MaxFileSize = 5 * 1024 * 1024;
     private readonly DocumentStorageOptions _options = new();
     private readonly ILogger<Service> _logger;
     private IAmazonS3? _client;
@@ -31,15 +31,32 @@ public class Service : IService, IDisposable
     private IAmazonS3 Client => _client ??= CreateClient();
     public void Dispose() => _client?.Dispose();
 
+    public async Task ValidateContentAsync(MediaService.PreviewFile file, CancellationToken cancellationToken = default)
+    {
+        if (file.Content.Length > MaxFileSize) throw FileTooLarge();
+        if (!MatchesFileSignature(file.Content, file.Content.Length, file.ContentType)) throw InvalidFormat();
+        if (string.IsNullOrWhiteSpace(_options.ClamAvHost) || _options.ClamAvPort is < 1 or > 65535)
+            throw new Pegaxus.Service.Exceptions.Exceptions("Document virus scanning must be configured.", 503, "DOCUMENT_STORAGE_NOT_CONFIGURED");
+        using var content = new MemoryStream(file.Content);
+        await ScanAsync(content, cancellationToken);
+    }
+
     public static string ValidateFileMetadata(IFormFile file)
     {
-        if (file is null || file.Length <= 0)
+        if (file is null)
             throw new BadRequestException("At least one non-empty document file is required.");
-        if (file.Length > MaxFileSize)
+        return ValidateFileMetadata(file.FileName, file.ContentType, file.Length);
+    }
+
+    public static string ValidateFileMetadata(string fileName, string contentType, long sizeBytes)
+    {
+        if (sizeBytes <= 0)
+            throw new BadRequestException("At least one non-empty document file is required.");
+        if (sizeBytes > MaxFileSize)
             throw FileTooLarge();
-        if (string.IsNullOrWhiteSpace(file.FileName))
+        if (string.IsNullOrWhiteSpace(fileName))
             throw new BadRequestException("Document file name is invalid.");
-        var name = Path.GetFileName(file.FileName.Replace('\\', '/'));
+        var name = Path.GetFileName(fileName.Replace('\\', '/'));
         if (string.IsNullOrWhiteSpace(name) || name.Length > 255 || name.Any(char.IsControl))
             throw new BadRequestException("Document file name is invalid.");
         var mimeType = Path.GetExtension(name).ToLowerInvariant() switch
@@ -49,7 +66,7 @@ public class Service : IService, IDisposable
             ".png" => "image/png",
             _ => throw InvalidFormat()
         };
-        if (!string.Equals(file.ContentType?.Trim(), mimeType, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(contentType?.Trim(), mimeType, StringComparison.OrdinalIgnoreCase))
             throw InvalidFormat();
         return mimeType;
     }
@@ -278,7 +295,7 @@ public class Service : IService, IDisposable
     };
 
     private static Pegaxus.Service.Exceptions.Exceptions FileTooLarge() => new(
-        "File size exceeds the maximum limit of 10MB. Please compress your file.", 413, "FILE_TOO_LARGE");
+        "File size exceeds the maximum limit of 5MB. Please compress your file.", 413, "FILE_TOO_LARGE");
     private static Pegaxus.Service.Exceptions.Exceptions InvalidFormat() => new(
         "Invalid file format. Only PDF, JPG, JPEG, and PNG files are accepted for DocumentVersion.", 415, "INVALID_FILE_TYPE");
     private static Pegaxus.Service.Exceptions.Exceptions StorageUnavailable() => new(
