@@ -15,7 +15,7 @@ namespace Pegaxus.Service.DocumentStorageService;
 
 public class Service : IService, IDisposable
 {
-    public const long MaxFileSize = 10 * 1024 * 1024;
+    public const long MaxFileSize = 5 * 1024 * 1024;
     private readonly DocumentStorageOptions _options = new();
     private readonly ILogger<Service> _logger;
     private IAmazonS3? _client;
@@ -295,7 +295,7 @@ public class Service : IService, IDisposable
     };
 
     private static Pegaxus.Service.Exceptions.Exceptions FileTooLarge() => new(
-        "File size exceeds the maximum limit of 10MB. Please compress your file.", 413, "FILE_TOO_LARGE");
+        "File size exceeds the maximum limit of 5MB. Please compress your file.", 413, "FILE_TOO_LARGE");
     private static Pegaxus.Service.Exceptions.Exceptions InvalidFormat() => new(
         "Invalid file format. Only PDF, JPG, JPEG, and PNG files are accepted for DocumentVersion.", 415, "INVALID_FILE_TYPE");
     private static Pegaxus.Service.Exceptions.Exceptions StorageUnavailable() => new(

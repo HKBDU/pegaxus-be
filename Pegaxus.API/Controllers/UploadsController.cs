@@ -24,7 +24,7 @@ public sealed class UploadsController : ControllerBase
     /// <summary>
     /// Create an attachment upload signature.
     /// </summary>
-    /// <remarks>Returns signed parameters for an authenticated Cloudinary upload of a PDF/JPG/PNG file up to 10 MiB. The frontend uploads directly to Cloudinary with overwrite disabled; this endpoint does not receive the file.</remarks>
+    /// <remarks>Returns signed parameters for an authenticated Cloudinary upload of a PDF/JPG/PNG file up to 5 MiB. The frontend uploads directly to Cloudinary with overwrite disabled; this endpoint does not receive the file.</remarks>
     /// <param name="request">The attachment entity, content type, and file size in bytes.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with publicId, the upload URL, and signed parameters.</returns>

@@ -192,7 +192,7 @@ The trimmed reason, acting specialist, audit entry and Customer notification are
 
 ## ComplianceDocument Upload (UC-21)
 
-For each PDF/JPG/JPEG/PNG file (up to 10 MiB), call POST `/api/v1/uploads/signature` with
+For each PDF/JPG/JPEG/PNG file (up to 5 MiB), call POST `/api/v1/uploads/signature` with
 `entity: "attachment"`, `contentType`, and `sizeBytes`. Upload the binary directly to the returned Cloudinary URL
 using every returned parameter, then call POST `/api/v1/uploads/confirm` with `publicId`.
 Signatures enforce authenticated delivery and disable overwrites. Confirmation checks actual Cloudinary metadata
@@ -232,13 +232,13 @@ The version-history endpoint regenerates read URLs after authorization. A Cloudi
 an expiry is not used; the SDK's private-download API signs an explicit expiration.
 Legacy S3 documents remain readable using the existing private-bucket configuration and AWS credential chain.
 
-A reachable ClamAV clamd service is mandatory (private network, INSTREAM enabled, StreamMaxLength at least 10 MiB, current virus definitions).
+A reachable ClamAV clamd service is mandatory (private network, INSTREAM enabled, StreamMaxLength at least 5 MiB, current virus definitions).
 No clean verdict, missing configuration, or scanner failure means document submission fails closed without DB changes.
 Already-uploaded Cloudinary assets are not deleted on failed submissions or replacement: another version may reference them.
 No orphan-asset cleanup worker or storage migration is added. Legacy superseded unreviewed S3 objects are deleted only after confirmed commit.
 The DB write runs in a serializable transaction and revalidates ownership, status and expiry after storage I/O.
 No migration is needed: existing unique indexes protect one document per requirement and one version number per document.
-The 4-second/10-MB target needs measurement with real Cloudinary, ClamAV and PostgreSQL; unit tests do not establish throughput.
+The 4-second/5-MB target needs measurement with real Cloudinary, ClamAV and PostgreSQL; unit tests do not establish throughput.
 
 ## DocumentVersion Replacement (UC-22)
 
@@ -277,8 +277,8 @@ SATISFIED and WAIVED count as fulfilled. Empty dossiers report 0%. `actions.canU
 `actions.canReview` is Transport Specialist-only. These flags describe role permissions; mutation APIs must enforce their own lifecycle rules.
 
 Use the returned API `previewUrl` with an Authorization header (fetch as a Blob for browser previews), not a token query parameter.
-Preview validates ownership and all nested IDs. S3 documents use the configured private bucket and exact object version, with a 10 MiB limit.
-Authenticated Cloudinary files use expiring private-download URLs with a 10 MiB limit. Legacy public Cloudinary files retain the 5 MB limit.
+Preview validates ownership and all nested IDs. S3 documents use the configured private bucket and exact object version, with a 5 MiB limit.
+Authenticated Cloudinary files use expiring private-download URLs with a 5 MiB limit. Legacy public Cloudinary files retain the 5 MB limit.
 Both storage providers use only configured locations, refuse redirects and detect PDF/raster-image types
 from bytes and return no-store responses. The 15-second timeout covers both headers and body.
 

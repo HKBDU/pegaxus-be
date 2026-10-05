@@ -154,7 +154,7 @@ public class DocumentStorageTests
     }
 
     [Fact]
-    public async Task TenMegabytes_IsAcceptedAfterFullScan()
+    public async Task FiveMegabytes_IsAcceptedAfterFullScan()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);
         listener.Start();
@@ -291,14 +291,14 @@ public class DocumentStorageTests
     }
 
     [Fact]
-    public async Task Preview_ReadsExactPrivateObjectVersionAndSupportsTenMegabytes()
+    public async Task Preview_ReadsExactPrivateObjectVersionAndSupportsFiveMegabytes()
     {
         var bytes = new byte[StorageService.MaxFileSize];
         "%PDF-1.7"u8.CopyTo(bytes);
         var client = new RecordingS3Client { PreviewContent = bytes };
         using var service = CreateService(client, 3310);
         var result = await service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf?versionId=old%2F1");
-        Assert.Equal(bytes, result.Content);
+        Assert.True(bytes.AsSpan().SequenceEqual(result.Content));
         Assert.Equal("application/pdf", result.ContentType);
         var download = Assert.Single(client.Downloads);
         Assert.Equal("private-bucket", download.BucketName);

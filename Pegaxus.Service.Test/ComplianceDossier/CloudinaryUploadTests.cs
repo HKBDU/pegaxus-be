@@ -14,14 +14,23 @@ public class CloudinaryUploadTests
     private static readonly string PublicId = $"evidence/{AccountId:D}/{Guid.NewGuid():N}";
 
     [Fact]
-    public async Task Signature_SupportsTenMegabytesAndPreventsPublicDeliveryOrOverwrite()
+    public async Task Signature_SupportsFiveMegabytesAndPreventsPublicDeliveryOrOverwrite()
     {
-        var result = await new TestCloudinary().CreateSignedUploadAsync(AccountId, "attachment", "application/pdf", 10 * 1024 * 1024);
+        var result = await new TestCloudinary().CreateSignedUploadAsync(AccountId, "attachment", "application/pdf", 5 * 1024 * 1024);
         Assert.StartsWith($"evidence/{AccountId:D}/", result.PublicId);
         Assert.Equal("authenticated", result.Parameters["type"]);
         Assert.Equal("false", result.Parameters["overwrite"]);
         Assert.NotEmpty(result.Parameters["signature"]);
         Assert.DoesNotContain("test-secret", string.Join(',', result.Parameters.Values));
+    }
+
+    [Fact]
+    public async Task Signature_RejectsFilesLargerThanFiveMegabytes()
+    {
+        var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() =>
+            new TestCloudinary().CreateSignedUploadAsync(AccountId, "attachment", "application/pdf", 5 * 1024 * 1024 + 1));
+        Assert.Equal(413, error.StatusCode);
+        Assert.Equal("FILE_TOO_LARGE", error.ErrorCode);
     }
 
     [Fact]
@@ -73,7 +82,7 @@ public class CloudinaryUploadTests
         var resource = Resource();
         switch (invalid)
         {
-            case "oversized": resource.Bytes = 10 * 1024 * 1024 + 1; break;
+            case "oversized": resource.Bytes = 5 * 1024 * 1024 + 1; break;
             case "empty": resource.Bytes = 0; break;
             case "format": resource.Format = "exe"; break;
             case "public": resource.Type = "upload"; break;

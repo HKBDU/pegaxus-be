@@ -12,8 +12,7 @@ namespace Pegaxus.Service.CloudinaryService;
 public class Service : IService
 {
     public const string PreviewHttpClient = "ComplianceDocumentPreview";
-    private const long MaxSignedUploadSize = 10 * 1024 * 1024;
-    private const long MaxLegacyPreviewSize = 5 * 1024 * 1024;
+    private const long MaxSignedUploadSize = DocumentStorageService.Service.MaxFileSize;
     private const string AllowedFormats = "jpg,jpeg,png,pdf";
     private readonly Cloudinary _cloudinary;
     private readonly CloudinaryOptions _cloudinaryOptions = new();
@@ -102,7 +101,7 @@ public class Service : IService
 
         if (sizeBytes <= 0 || sizeBytes > MaxSignedUploadSize)
             throw new Pegaxus.Service.Exceptions.Exceptions(
-                "File size must be greater than 0 and must not exceed 10 MB",
+                "File size must be greater than 0 and must not exceed 5 MB",
                 413,
                 "FILE_TOO_LARGE");
 
@@ -186,7 +185,7 @@ public class Service : IService
         if (result.PublicId != publicId || result.Type != "authenticated" || result.ResourceType is not (ResourceType.Image or ResourceType.Raw))
             throw new BadRequestException("Uploaded file metadata is invalid", "INVALID_FILE_TYPE");
         if (result.Bytes <= 0 || result.Bytes > MaxSignedUploadSize)
-            throw new Pegaxus.Service.Exceptions.Exceptions("File must not be empty or exceed 10 MB", 413, "FILE_TOO_LARGE");
+            throw new Pegaxus.Service.Exceptions.Exceptions("File must not be empty or exceed 5 MB", 413, "FILE_TOO_LARGE");
         var format = (string.IsNullOrWhiteSpace(result.Format) ? Path.GetExtension(publicId).TrimStart('.') : result.Format).ToLowerInvariant();
         var mimeType = format switch
         {
@@ -222,7 +221,6 @@ public class Service : IService
     {
         EnsureConfigured();
         var location = StorageLocation(fileUrl);
-        var maxSize = location.DeliveryType == "upload" ? MaxLegacyPreviewSize : MaxSignedUploadSize;
         var downloadUrl = location.DeliveryType == "upload" ? fileUrl : (await CreateReadUrlAsync(fileUrl, cancellationToken)).Url;
         try
         {
@@ -234,7 +232,7 @@ public class Service : IService
                 throw new NotFoundException("Document file not found.", "DOCUMENT_FILE_NOT_FOUND");
             if (!response.IsSuccessStatusCode)
                 throw new Pegaxus.Service.Exceptions.Exceptions("Document file storage is unavailable.", 502, "FILE_STORAGE_UNAVAILABLE");
-            if (response.Content.Headers.ContentLength > maxSize)
+            if (response.Content.Headers.ContentLength > MaxSignedUploadSize)
                 throw new Pegaxus.Service.Exceptions.Exceptions("Preview file exceeds the size limit.", 413, "FILE_TOO_LARGE");
             await using var stream = await response.Content.ReadAsStreamAsync(timeout.Token);
             using var buffer = new MemoryStream();
@@ -242,7 +240,7 @@ public class Service : IService
             int bytesRead;
             while ((bytesRead = await stream.ReadAsync(chunk, timeout.Token)) != 0)
             {
-                if (buffer.Length + bytesRead > maxSize)
+                if (buffer.Length + bytesRead > MaxSignedUploadSize)
                     throw new Pegaxus.Service.Exceptions.Exceptions("Preview file exceeds the size limit.", 413, "FILE_TOO_LARGE");
                 buffer.Write(chunk, 0, bytesRead);
             }
