@@ -16,6 +16,7 @@ public class Request
         public long SizeBytes { get; set; }
     }
 
+
     public sealed class ConfirmUploadRequest
     {
         public string PublicId { get; set; } = string.Empty;
