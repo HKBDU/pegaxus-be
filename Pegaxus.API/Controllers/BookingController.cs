@@ -24,6 +24,21 @@ public class BookingController : ControllerBase
         _service = service;
     }
 
+    /// <summary>
+    /// Record a negotiated booking status.
+    /// </summary>
+    /// <remarks>A Logistics Manager may change an APPROVED booking to DRAFT or CANCELLED with a required reason. Related dossier operations are suspended and durable notifications are recorded.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="request">The negotiated status and required reason.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="hub">The injected hub used to broadcast booking status changes.</param>
+    /// <param name="logger">The injected logger for notification broadcast failures.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the updated booking and dossier statuses.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
     [HttpPatch("{bookingId:guid}/negotiated-status")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Negotiate(Guid bookingId, [FromBody] BookingService.Request.NegotiateBookingRequest request,
@@ -47,6 +62,15 @@ public class BookingController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// List bookings.
+    /// </summary>
+    /// <remarks>Customers see their own bookings; Logistics Managers see non-draft bookings across customers.</remarks>
+    /// <param name="request">The search, status, sorting, and pagination filters.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with a paginated booking list.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
     [HttpGet]
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
     public async Task<IActionResult> GetList(
@@ -60,6 +84,14 @@ public class BookingController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Get booking details.
+    /// </summary>
+    /// <remarks>Customers may only view their own bookings. Logistics Managers may view non-draft bookings across customers.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with booking, horse, customer, and transport details.</returns>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
     [HttpGet("{bookingId:guid}")]
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
     public async Task<IActionResult> Get(Guid bookingId, CancellationToken cancellationToken)
@@ -71,6 +103,14 @@ public class BookingController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Get booking status history.
+    /// </summary>
+    /// <remarks>Returns status changes from oldest to newest for a booking visible to the caller.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the booking status history.</returns>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
     [HttpGet("{bookingId:guid}/histories")]
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
     public async Task<IActionResult> GetHistories(Guid bookingId, CancellationToken cancellationToken)
@@ -82,6 +122,17 @@ public class BookingController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Add a horse to a booking.
+    /// </summary>
+    /// <remarks>The customer may add an owned horse only while the booking is editable.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="request">The owned horse identifier and optional handling notes.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>201 Created after the horse is added.</returns>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
     [HttpPost("{bookingId:guid}/horses")]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> AddHorse(
@@ -97,6 +148,19 @@ public class BookingController : ControllerBase
             HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Update horse handling notes in a booking.
+    /// </summary>
+    /// <remarks>Changes the booking-specific handling notes without modifying the horse profile.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="horseId">The horse identifier (UUID).</param>
+    /// <param name="request">The replacement special handling notes.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK after the handling notes are updated.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
     [HttpPatch("{bookingId:guid}/horses/{horseId:guid}")]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> UpdateHorseNotes(
@@ -118,6 +182,17 @@ public class BookingController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Remove a horse from a booking.
+    /// </summary>
+    /// <remarks>Removes the horse from an editable booking without deleting its profile.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="horseId">The horse identifier (UUID).</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK after the horse is removed.</returns>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
     [HttpDelete("{bookingId:guid}/horses/{horseId:guid}")]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> RemoveHorse(
@@ -137,6 +212,19 @@ public class BookingController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Change a booking between draft and pending.
+    /// </summary>
+    /// <remarks>Only DRAFT and PENDING are supported. Submitting a booking requires at least one horse.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="request">The target DRAFT or PENDING status.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK after the booking status is changed.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
+    /// <exception cref="UnprocessableEntityException">The booking does not contain the horses required for this operation.</exception>
     [HttpPatch("{bookingId:guid}/status")]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> ChangeStatus(
@@ -156,6 +244,17 @@ public class BookingController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>
+    /// Create a booking.
+    /// </summary>
+    /// <remarks>Creates a transport request using horses owned by the authenticated customer.</remarks>
+    /// <param name="request">The route, dates, horses, notes, and initial booking status.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>201 Created with the booking identifiers and status.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
     [HttpPost]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> Create(
@@ -169,6 +268,19 @@ public class BookingController : ControllerBase
         return StatusCode(201, ResponseBuilder.SuccessResponse(response, "Booking created successfully", 201));
     }
 
+    /// <summary>
+    /// Update a booking.
+    /// </summary>
+    /// <remarks>Customers may update supplied fields only while the booking is DRAFT.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="request">The booking fields to update.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the updated booking identifiers and status.</returns>
+    /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
     [HttpPatch("{bookingId:guid}")]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> Update(
@@ -183,6 +295,18 @@ public class BookingController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(response, "Booking updated successfully"));
     }
 
+    /// <summary>
+    /// Cancel a booking.
+    /// </summary>
+    /// <remarks>Customers may cancel a booking only in a status that permits cancellation.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="request">The booking cancellation reason.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK after the booking is cancelled.</returns>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
     [HttpPost("{bookingId:guid}/cancel")]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> Cancel(
@@ -197,6 +321,17 @@ public class BookingController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(null, "Booking cancelled successfully"));
     }
 
+    /// <summary>
+    /// Approve a booking.
+    /// </summary>
+    /// <remarks>A Logistics Manager approves a pending request and creates its transport. The request must contain at least one horse.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the approved booking and transport.</returns>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
+    /// <exception cref="UnprocessableEntityException">The booking does not contain the horses required for this operation.</exception>
     [HttpPost("{bookingId:guid}/approve")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Approve(Guid bookingId, CancellationToken cancellationToken)
@@ -205,6 +340,18 @@ public class BookingController : ControllerBase
         return Ok(ResponseBuilder.SuccessResponse(response, "Booking approved successfully"));
     }
 
+    /// <summary>
+    /// Reject a booking.
+    /// </summary>
+    /// <remarks>A Logistics Manager rejects a pending request and records the rejection reason.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="request">The reason for rejecting the booking.</param>
+    /// <param name="validator">The injected validator for the request.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK after the booking is rejected.</returns>
+    /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
+    /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
+    /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
     [HttpPost("{bookingId:guid}/reject")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Reject(
