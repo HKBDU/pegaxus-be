@@ -25,6 +25,7 @@ public class Response
         public DateTimeOffset ReadUrlExpiresAt { get; init; }
     }
 
+
     public sealed class DocumentMetadataResponse
     {
         public Guid ComplianceDocumentId { get; init; }
