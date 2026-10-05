@@ -85,6 +85,28 @@ public class BookingController : ControllerBase
     }
 
     /// <summary>
+    /// List approved bookings for transport planning and compliance work.
+    /// </summary>
+    /// <remarks>Transport Specialists and Fleet Route Coordinators can search, filter, sort, and paginate bookings. The response includes the latest transport plan route and compliance dossier summaries when available.</remarks>
+    /// <param name="request">The status, search, sorting, and pagination filters.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with a paginated list of bookings and related planning summaries.</returns>
+    /// <exception cref="ForbiddenException">The caller is not a Transport Specialist or Fleet Route Coordinator.</exception>
+    /// <exception cref="BadRequestException">The query fields or status filter are invalid.</exception>
+    [HttpGet("approved")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrFleetRouteCoordinatorPolicy)]
+    public async Task<IActionResult> GetApprovedList(
+        [FromQuery] BookingService.Request.BookingListRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetApprovedListAsync(GetAccountId(), request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Bookings retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    /// <summary>
     /// Get booking details.
     /// </summary>
     /// <remarks>Customers may only view their own bookings. Logistics Managers may view non-draft bookings across customers.</remarks>

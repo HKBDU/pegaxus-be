@@ -21,6 +21,7 @@ public static class JwtExtensions
     public const string EscortPolicy = "EscortPolicy";
     public const string CustomerOrEmployeePolicy = "CustomerOrEmployeePolicy";
     public const string CustomerOrTransportSpecialistPolicy = "CustomerOrTransportSpecialistPolicy";
+    public const string TransportSpecialistOrFleetRouteCoordinatorPolicy = "TransportSpecialistOrFleetRouteCoordinatorPolicy";
     public const string TransportSpecialistOrLogisticsManagerPolicy = "TransportSpecialistOrLogisticsManagerPolicy";
     public const string DriverOrEscortPolicy = "DriverOrEscortPolicy";
     public const string ComplianceDossierViewerPolicy = "ComplianceDossierViewerPolicy";
@@ -171,6 +172,9 @@ public static class JwtExtensions
             options.AddPolicy(CustomerOrTransportSpecialistPolicy, policy =>
                 policy.RequireAuthenticatedUser().RequireRole(JwtServices.GetRoleName(AccountType.CUSTOMER),
                     JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST)));
+            options.AddPolicy(TransportSpecialistOrFleetRouteCoordinatorPolicy, policy =>
+                policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST),
+                    JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR)));
         });
     }
 }

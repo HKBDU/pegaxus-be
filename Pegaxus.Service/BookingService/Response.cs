@@ -116,6 +116,44 @@ public class Response
         public DateTimeOffset CreatedAt { get; init; }
     }
 
+    public class ApprovedBookingListResponse
+    {
+        public required IReadOnlyList<ApprovedBookingListItemResponse> Items { get; init; }
+        public int PageIndex { get; init; }
+        public int PageSize { get; init; }
+        public int TotalItems { get; init; }
+        public int TotalPages { get; init; }
+    }
+
+    public class ApprovedBookingListItemResponse
+    {
+        public Guid BookingId { get; init; }
+        public required string BookingCode { get; init; }
+        public required string Status { get; init; }
+        public required string StatusName { get; init; }
+        public required string CustomerName { get; init; }
+        public required string OriginCountry { get; init; }
+        public required string DestinationCountry { get; init; }
+        public DateOnly RequestedDepartureDate { get; init; }
+        public int TotalHorses { get; init; }
+        public DateTimeOffset CreatedAt { get; init; }
+        public ComplianceDossierSummary? ComplianceDossier { get; init; }
+        public RoutePlanSummary? RoutePlan { get; init; }
+    }
+
+    public class ComplianceDossierSummary
+    {
+        public Guid ComplianceDossierId { get; init; }
+        public required string Status { get; init; }
+    }
+
+    public class RoutePlanSummary
+    {
+        public Guid RoutePlanId { get; init; }
+        public required string RoutePlanCode { get; init; }
+        public required string Status { get; init; }
+    }
+
     public class CreateBookingResponse
     {
         public Guid BookingId { get; set; }

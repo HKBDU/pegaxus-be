@@ -276,6 +276,94 @@ public partial class Service : IService
         };
     }
 
+    public async Task<Response.ApprovedBookingListResponse> GetApprovedListAsync(
+        Guid accountId,
+        Request.BookingListRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (request.PageIndex < 1)
+            throw new BadRequestException("PageIndex must be greater than or equal to 1");
+        if (request.PageSize < 1 || request.PageSize > 100)
+            throw new BadRequestException("PageSize must be between 1 and 100");
+
+        var role = await _db.Employees
+            .Where(employee => employee.AccountId == accountId && !employee.IsDeleted && employee.IsActive &&
+                !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE)
+            .Select(employee => (EmployeeRole?)employee.Role)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (role is not (EmployeeRole.TRANSPORT_SPECIALIST or EmployeeRole.FLEET_ROUTE_COORDINATOR))
+            throw new ForbiddenException("Only Transport Specialists and Fleet Route Coordinators can access approved bookings");
+
+        var query = _db.Bookings.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            if (!Enum.TryParse<BookingStatus>(request.Status.Trim(), true, out var status))
+                throw new BadRequestException("Booking status is invalid", "INVALID_STATUS");
+            query = query.Where(booking => booking.Status == status);
+        }
+        else
+        {
+            query = query.Where(booking => booking.Status == BookingStatus.APPROVED);
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(booking =>
+                booking.BookingCode.ToLower().Contains(search) ||
+                booking.Customer.FullName.ToLower().Contains(search));
+        }
+
+        query = ApplySorting(query, request.SortBy);
+        var totalItems = await query.CountAsync(cancellationToken);
+        var items = await query
+            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Take(request.PageSize)
+            .Select(booking => new Response.ApprovedBookingListItemResponse
+            {
+                BookingId = booking.BookingId,
+                BookingCode = booking.BookingCode,
+                Status = booking.Status.ToString(),
+                StatusName = GetStatusName(booking.Status),
+                CustomerName = booking.Customer.FullName,
+                OriginCountry = booking.OriginCountry,
+                DestinationCountry = booking.DestinationCountry,
+                RequestedDepartureDate = booking.RequestedDepartureDate,
+                TotalHorses = booking.BookingHorses.Count,
+                CreatedAt = AsUtc(booking.CreatedAt),
+                ComplianceDossier = booking.Transport != null && booking.Transport.ComplianceDossier != null
+                    ? new Response.ComplianceDossierSummary
+                    {
+                        ComplianceDossierId = booking.Transport.ComplianceDossier.ComplianceDossierId,
+                        Status = booking.Transport.ComplianceDossier.Status.ToString()
+                    }
+                    : null,
+                RoutePlan = booking.Transport == null
+                    ? null
+                    : booking.Transport.TransportPlans
+                        .OrderByDescending(plan => plan.CreatedAt)
+                        .Select(plan => plan.RoutePlan == null
+                            ? null
+                            : new Response.RoutePlanSummary
+                            {
+                                RoutePlanId = plan.RoutePlan.RoutePlanId,
+                                RoutePlanCode = plan.RoutePlan.RoutePlanCode,
+                                Status = plan.RoutePlan.Status.ToString()
+                            })
+                        .FirstOrDefault()
+            })
+            .ToListAsync(cancellationToken);
+
+        return new Response.ApprovedBookingListResponse
+        {
+            Items = items,
+            PageIndex = request.PageIndex,
+            PageSize = request.PageSize,
+            TotalItems = totalItems,
+            TotalPages = (int)Math.Ceiling(totalItems / (double)request.PageSize)
+        };
+    }
+
     public async Task AddHorseIntoBookingAsync(
         Guid accountId,
         Guid bookingId,

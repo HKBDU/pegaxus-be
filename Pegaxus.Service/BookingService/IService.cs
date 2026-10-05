@@ -16,6 +16,10 @@ public interface IService
         Guid accountId,
         Request.BookingListRequest request,
         CancellationToken cancellationToken = default);
+    Task<Response.ApprovedBookingListResponse> GetApprovedListAsync(
+        Guid accountId,
+        Request.BookingListRequest request,
+        CancellationToken cancellationToken = default);
     Task AddHorseIntoBookingAsync(
         Guid accountId,
         Guid bookingId,
