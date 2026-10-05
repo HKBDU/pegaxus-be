@@ -11,6 +11,7 @@ public static class SwaggerExtensions
         services.AddSwaggerGen(options =>
         {
             options.SwaggerDoc("v1", new OpenApiInfo() { Title = "Pegaxus APIs", Version = "v1" });
+            options.CustomSchemaIds(type => type.FullName!.Replace("+", "."));
 
             options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
             {
