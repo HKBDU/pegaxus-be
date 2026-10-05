@@ -304,7 +304,7 @@
 | `route_plan_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `RoutePlan.route_plan_id`. |
 | `route_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Route.route_id`. |
 | `sequence_no` | `int` |  | Yes | Thứ tự chặng trong RoutePlan; duy nhất trong cùng một RoutePlan. |
-| `route_type` | `route_type` |  | Yes | Vai trò của Route trong RoutePlanRoute, ví dụ PRIMARY/BACKUP. Enum `route_type`: PRIMARY, BACKUP. |
+| `route_type` | `route_type` |  | Yes | Vai trò của Route trong RoutePlanRoute. Enum `route_type`: PRIMARY, BACKUP, RETURN. `RETURN` dùng cho chặng quay về. |
 | `driver_employee_id` | `bigint` | FK | No | Driver phụ trách chặng này. Có thể NULL khi RoutePlan còn DRAFT; phải là Employee có role=DRIVER trước CONFIRMED/ACTIVE. |
 | `planned_departure_at` | `timestamp` |  | No | Thời điểm dự kiến khởi hành của chặng. |
 | `planned_arrival_at` | `timestamp` |  | No | Thời điểm dự kiến đến của chặng. |
@@ -914,7 +914,7 @@
 |---|---|---|---|---|
 | `document_review_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `DocumentReview`. |
 | `document_version_id` | `bigint` | FK | Yes | DocumentVersion được kiểm tra. |
-| `result` | `document_review_result` |  | Yes | Kết quả review của DocumentVersion. Enum `document_review_result`: APPROVED, REJECTED, REVISION_REQUIRED. |
+| `result` | `document_review_result` |  | Yes | Kết quả review của DocumentVersion. Enum `document_review_result`: APPROVED, REJECTED, REVISION_REQUIRED, REVOKED. |
 | `review_comment` | `text` |  | No | Nhận xét của lần review. |
 | `reviewed_by_account_id` | `bigint` | FK | Yes | Account thực hiện review; theo contract là Transport Specialist. |
 | `reviewed_at` | `timestamp` |  | Yes | Thời điểm review. |
@@ -927,7 +927,9 @@
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
 | `document_request_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `DocumentRequest`. |
+| `document_review_id` | `uuid` | FK, UQ | No | DocumentReview tạo ra yêu cầu này; một review chỉ gắn tối đa một DocumentRequest. |
 | `dossier_requirement_id` | `bigint` | FK | Yes | DossierRequirement cần Customer bổ sung/sửa giấy tờ. |
+| `error_category` | `varchar(40)` |  | No | Nhóm lỗi của giấy tờ bị từ chối hoặc cần chỉnh sửa. |
 | `request_code` | `varchar(50)` |  | Yes | Mã yêu cầu bổ sung/sửa giấy tờ. |
 | `request_type` | `document_request_type` |  | Yes | Loại yêu cầu gửi Customer. Enum `document_request_type`: MISSING_DOCUMENT, REVISION, REUPLOAD, ADDITIONAL_INFORMATION. |
 | `status` | `document_request_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `document_request_status`: OPEN, FULFILLED, CANCELLED. |
@@ -1128,6 +1130,73 @@
 | `read_at` | `timestamp` |  | No | Thời điểm Account đọc Notification. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 
+# 53. `DocumentRequestComment`
+
+**Ý nghĩa bảng:** Lưu trao đổi giữa Customer và Transport Specialist trong phạm vi một `DocumentRequest`.
+
+| Field | Type | Key | Required | Ý nghĩa |
+|---|---|---|---|---|
+| `document_request_comment_id` | `uuid` | PK | No | Khóa chính của bình luận. |
+| `document_request_id` | `uuid` | FK | Yes | DocumentRequest mà bình luận thuộc về. |
+| `author_account_id` | `uuid` | FK | Yes | Account tạo bình luận. |
+| `message` | `varchar(2000)` |  | Yes | Nội dung trao đổi. |
+| `created_at` | `timestamp` |  | Yes | Thời điểm tạo bình luận. |
+
+# 54. `MissingDocumentReminder`
+
+**Ý nghĩa bảng:** Hàng đợi durable cho email nhắc Customer bổ sung hồ sơ còn thiếu. Worker cập nhật trạng thái gửi và retry khi lỗi.
+
+| Field | Type | Key | Required | Ý nghĩa |
+|---|---|---|---|---|
+| `missing_document_reminder_id` | `uuid` | PK | No | Khóa chính của reminder. |
+| `compliance_dossier_id` | `uuid` | FK | Yes | ComplianceDossier có tài liệu còn thiếu. |
+| `recipient_account_id` | `uuid` | FK | Yes | Account nhận email nhắc. |
+| `requirement_ids` | `uuid[]` |  | Yes | Danh sách DossierRequirement còn thiếu. |
+| `due_date` | `date` |  | Yes | Hạn bổ sung hồ sơ. |
+| `note` | `varchar(2000)` |  | No | Ghi chú trong reminder. |
+| `automatic_date` | `date` |  | No | Ngày reminder tự động được tạo. |
+| `created_at` | `timestamp` |  | Yes | Thời điểm tạo reminder. |
+| `last_attempt_at` | `timestamp` |  | No | Lần gửi email gần nhất. |
+| `email_sent_at` | `timestamp` |  | No | Thời điểm gửi email thành công. |
+| `cancelled_at` | `timestamp` |  | No | Thời điểm reminder bị hủy. |
+| `email_attempts` | `int` |  | Yes | Số lần worker thử gửi email. |
+
+# 55. `OutboxMessage`
+
+**Ý nghĩa bảng:** Lưu integration event trong cùng transaction với thay đổi nghiệp vụ. Worker xử lý sau commit cho email và SignalR.
+
+| Field | Type | Key | Required | Ý nghĩa |
+|---|---|---|---|---|
+| `outbox_message_id` | `uuid` | PK | No | Khóa chính của outbox message. |
+| `message_type` | `varchar(100)` |  | Yes | Loại message, hiện gồm `EMAIL` và `SIGNALR_ACCOUNT`. |
+| `payload` | `text` |  | Yes | Payload JSON dành cho integration tương ứng. |
+| `status` | `varchar(20)` |  | Yes | Trạng thái xử lý: `PENDING`, `PROCESSING`, `FAILED`, `PROCESSED`, `DEAD`. |
+| `attempts` | `int` |  | Yes | Số lần xử lý thất bại. |
+| `available_at` | `timestamp` |  | Yes | Thời điểm message đủ điều kiện xử lý/retry. |
+| `locked_at` | `timestamp` |  | No | Thời điểm worker claim message. |
+| `processed_at` | `timestamp` |  | No | Thời điểm xử lý thành công. |
+| `last_error` | `text` |  | No | Lỗi gần nhất khi xử lý. |
+| `created_at` | `timestamp` |  | Yes | Thời điểm tạo message trong transaction nghiệp vụ. |
+| `updated_at` | `timestamp` |  | Yes | Thời điểm cập nhật message gần nhất. |
+
+# 56. `BookingEmployeeAssignment`
+
+**Ý nghĩa bảng:** Lưu phân công của Logistics Manager cho nhân sự xử lý một Booking. Transport Specialist phụ trách hồ sơ pháp lý; Fleet Route Coordinator phụ trách kế hoạch vận chuyển và lộ trình.
+
+| Field | Type | Key | Required | Ý nghĩa |
+|---|---|---|---|---|
+| `booking_employee_assignment_id` | `uuid` | PK | No | Khóa chính của assignment. |
+| `booking_id` | `uuid` | FK | Yes | Booking được phân công. |
+| `employee_id` | `uuid` | FK | Yes | Nhân sự được phân công; phải là TS hoặc Fleet Route Coordinator đúng với `assignment_role`. |
+| `assignment_role` | `employee_role` |  | Yes | Vai trò xử lý: `TRANSPORT_SPECIALIST` hoặc `FLEET_ROUTE_COORDINATOR`. |
+| `assigned_by_employee_id` | `uuid` | FK | Yes | Logistics Manager thực hiện phân công. |
+| `status` | `booking_assignment_status` |  | Yes | Trạng thái: `ACTIVE` hoặc `REVOKED`. |
+| `assigned_at` | `timestamp` |  | Yes | Thời điểm phân công. |
+| `revoked_at` | `timestamp` |  | No | Thời điểm thu hồi assignment. |
+| `note` | `text` |  | No | Ghi chú phân công. |
+
+**Business rule:** Một Booking chỉ có tối đa một assignment `ACTIVE` cho mỗi role. Khi đổi người, assignment cũ chuyển `REVOKED` để giữ lịch sử.
+
 # Appendix A — Các business rule V7 cần backend kiểm tra
 
 1. `Vehicle.transport_mode` phải phù hợp với `Route.transport_mode` của chặng được gán qua `RoutePlanRouteVehicle`.
@@ -1170,6 +1239,6 @@
 | `ProofAttachment` | File vật lý của QuarantineProof hoặc CustomsClearanceProof; một proof có thể có nhiều file. |
 | `AuditDossier` | Nhật ký audit append-only cho các thay đổi trong compliance dossier. |
 
-**Tổng số bảng:** 51
-**Tổng số enum:** 54
-**Tổng số field được mô tả:** 664
+**Tổng số bảng:** 56
+**Tổng số enum:** 55
+**Tổng số field được mô tả:** 702

@@ -113,6 +113,7 @@ Enum transport_mode {
 Enum route_type {
   PRIMARY
   BACKUP
+  RETURN
 }
 
 Enum location_type {
@@ -394,6 +395,11 @@ Enum document_review_result {
   APPROVED
   REJECTED
   REVISION_REQUIRED
+  REVOKED
+}
+
+Enum booking_assignment_status {
+  ACTIVE
   REVOKED
 }
 
@@ -692,6 +698,28 @@ Table Booking {
     assigned_employee_id
     status
     requested_departure_date
+  }
+}
+
+
+Table BookingEmployeeAssignment {
+  Note: 'BookingEmployeeAssignment: LM phân công Transport Specialist phụ trách ComplianceDossier hoặc Fleet Route Coordinator phụ trách TransportPlan/RoutePlan. Giữ lịch sử khi thu hồi hoặc thay người.'
+
+  booking_employee_assignment_id uuid [pk]
+  booking_id uuid [not null]
+  employee_id uuid [not null]
+  assignment_role employee_role [not null]
+  assigned_by_employee_id uuid [not null]
+  status booking_assignment_status [not null, default: 'ACTIVE']
+  assigned_at timestamp [not null]
+  revoked_at timestamp
+  note text
+
+  indexes {
+    (booking_id, assignment_role) [unique, name: 'BookingEmployeeAssignment_active_role_idx']
+    employee_id
+    assigned_by_employee_id
+    status
   }
 }
 
@@ -2441,6 +2469,9 @@ Ref: Horse.customer_id > Customer.customer_id
 
 Ref: Booking.customer_id > Customer.customer_id
 Ref: Booking.assigned_employee_id > Employee.employee_id
+Ref: BookingEmployeeAssignment.booking_id > Booking.booking_id
+Ref: BookingEmployeeAssignment.employee_id > Employee.employee_id
+Ref: BookingEmployeeAssignment.assigned_by_employee_id > Employee.employee_id
 
 Ref: BookingHorse.booking_id > Booking.booking_id
 Ref: BookingHorse.horse_id > Horse.horse_id

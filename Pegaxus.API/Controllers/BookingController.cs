@@ -107,6 +107,51 @@ public class BookingController : ControllerBase
     }
 
     /// <summary>
+    /// List booking employee assignments.
+    /// </summary>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with active and historical assignments.</returns>
+    [HttpGet("{bookingId:guid}/assignments")]
+    [Authorize(Policy = JwtExtensions.BookingAssignmentViewerPolicy)]
+    public async Task<IActionResult> GetAssignments(Guid bookingId, CancellationToken cancellationToken)
+    {
+        var response = await _service.GetAssignmentsAsync(GetAccountId(), bookingId, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(response, "Booking assignments retrieved successfully", traceId: HttpContext.TraceIdentifier));
+    }
+
+    /// <summary>
+    /// Assign a Transport Specialist or Fleet Route Coordinator to a booking.
+    /// </summary>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="request">The target employee and assignment role.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the active assignment.</returns>
+    [HttpPut("{bookingId:guid}/assignments")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> AssignEmployee(Guid bookingId, [FromBody] BookingService.Request.AssignBookingEmployeeRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.AssignEmployeeAsync(GetAccountId(), bookingId, request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(response, "Booking employee assigned successfully", traceId: HttpContext.TraceIdentifier));
+    }
+
+    /// <summary>
+    /// Revoke a booking employee assignment.
+    /// </summary>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="assignmentId">The assignment identifier (UUID).</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the revoked assignment.</returns>
+    [HttpDelete("{bookingId:guid}/assignments/{assignmentId:guid}")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> RevokeAssignment(Guid bookingId, Guid assignmentId, CancellationToken cancellationToken)
+    {
+        var response = await _service.RevokeAssignmentAsync(GetAccountId(), bookingId, assignmentId, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(response, "Booking employee assignment revoked successfully", traceId: HttpContext.TraceIdentifier));
+    }
+
+    /// <summary>
     /// Get booking details.
     /// </summary>
     /// <remarks>Customers may only view their own bookings. Logistics Managers may view non-draft bookings across customers.</remarks>
