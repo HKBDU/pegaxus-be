@@ -37,6 +37,7 @@ public interface IService
     Task<MediaService.PreviewFile> GetDocumentPreviewAsync(Guid accountId, Guid dossierId, Guid requirementId, Guid versionId, Guid? attachmentId, CancellationToken cancellationToken = default);
 
     Task<Response.RequirementResponse> AddRequirementAsync(Guid accountId, Guid dossierId, Request.RequirementRequest request, CancellationToken cancellationToken = default);
+    Task<Response.RequirementResponse> WaiveRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.WaiveRequirementRequest request, CancellationToken cancellationToken = default);
     Task<Response.RequirementResponse> UpdateRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.UpdateRequirementRequest request, CancellationToken cancellationToken = default);
     Task<Response.RemovalResponse> RemoveRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.RemoveRequirementRequest request, CancellationToken cancellationToken = default);
 

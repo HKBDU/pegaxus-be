@@ -169,6 +169,27 @@ To keep Git history clean and maintain software stability:
 
 ---
 
+## Manual DossierRequirement management (D3, D6)
+
+Both endpoints require a Bearer token and `TransportSpecialistPolicy`. IDs use the existing UUID schema, not numeric IDs.
+
+POST `/api/v1/compliance-dossiers/{dossierId}/requirements` requires `complianceRequirementId` and `isMandatory`.
+Optional fields: `horseId`, `dueDate` (ISO date), `instruction`. A null `horseId` applies to the whole trip.
+An omitted `dueDate` remains null. Legacy `leadTimeDays` and `reason` are still accepted but are not required;
+do not supply both `dueDate` and `leadTimeDays`. Success returns 201, a PENDING requirement, an audit entry and a Customer notification.
+
+PATCH `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/waive` accepts `waivedReason` (required, up to 2000 characters).
+Success returns 200 with status WAIVED. The requirement stays in the checklist, retains `isMandatory`, and counts as fulfilled.
+The trimmed reason, acting specialist, audit entry and Customer notification are saved without submitting the dossier automatically.
+
+| HTTP | errorCode | Condition |
+| :--- | :--- | :--- |
+| 409 | `DR_DUPLICATE` | The dossier/catalog/horse combination already exists, including null horse IDs |
+| 409 | `DOSSIER_LOCKED` | The dossier no longer allows requirement changes |
+| 400 | `REQUIREMENT_INACTIVE` | The catalog requirement is missing, deleted or not ACTIVE |
+| 400 | `HORSE_NOT_IN_BOOKING` | The horse does not belong to the dossier's booking |
+| 400 | `WAIVE_REASON_REQUIRED` | The waiver reason is missing or blank |
+
 ## ComplianceDocument Upload (UC-21)
 
 POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document` with a Customer Bearer token and multipart form data:

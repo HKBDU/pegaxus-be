@@ -14,33 +14,39 @@ public sealed partial class Service
     {
         await RequireSpecialistAsync(accountId, cancellationToken);
         ValidateRequirement(request.LeadTimeDays, request.Instruction, request.Reason);
+        if (request.ComplianceRequirementId == Guid.Empty)
+            throw new BadRequestException("ComplianceRequirementId is required.");
+        if (request.DueDate.HasValue && request.LeadTimeDays.HasValue)
+            throw new BadRequestException("Provide DueDate or LeadTimeDays, not both.");
         var dossier = await EditableDossierAsync(dossierId, cancellationToken);
         var booking = dossier.Transport.Booking;
         var requirement = await _db.ComplianceRequirements.SingleOrDefaultAsync(item =>
             item.ComplianceRequirementId == request.ComplianceRequirementId && !item.IsDeleted &&
             item.Status == ComplianceRequirementStatus.ACTIVE, cancellationToken)
-            ?? throw new BadRequestException("Select an existing ACTIVE ComplianceRequirement.");
+            ?? throw new BadRequestException("The ComplianceRequirement is not ACTIVE", "REQUIREMENT_INACTIVE");
         var horse = request.HorseId.HasValue ? await _db.BookingHorses
             .Where(value => value.BookingId == booking.BookingId && value.HorseId == request.HorseId && !value.Horse.IsDeleted)
             .Select(value => value.Horse).SingleOrDefaultAsync(cancellationToken) : null;
         if (request.HorseId.HasValue && horse is null)
-            throw new BadRequestException("Horse must belong to this Booking.");
+            throw new BadRequestException("horseId does not belong to the booking of this dossier", "HORSE_NOT_IN_BOOKING");
         if (await _db.DossierRequirements.AnyAsync(item => item.ComplianceDossierId == dossierId &&
             item.ComplianceRequirementId == request.ComplianceRequirementId && item.HorseId == request.HorseId &&
             !item.IsDeleted, cancellationToken))
-            throw new ConflictException("DossierRequirement already exists.", "REQUIREMENT_ALREADY_EXISTS");
+            throw new ConflictException("This ComplianceRequirement is already required for this dossier/horse combination", "DR_DUPLICATE");
 
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         var item = new DossierRequirement
         {
             DossierRequirementId = Guid.NewGuid(), ComplianceDossierId = dossierId,
             ComplianceRequirementId = requirement.ComplianceRequirementId, HorseId = request.HorseId,
-            IsMandatory = request.IsMandatory, DueDate = DueDate(booking.RequestedDepartureDate, request.LeadTimeDays),
+            IsMandatory = request.IsMandatory, DueDate = request.DueDate ?? (request.LeadTimeDays.HasValue
+                ? DueDate(booking.RequestedDepartureDate, request.LeadTimeDays.Value) : null),
             Instruction = request.Instruction?.Trim(), Status = DossierRequirementStatus.PENDING,
             CreatedAt = now, UpdatedAt = now, ComplianceRequirement = requirement, Horse = horse
         };
         _db.DossierRequirements.Add(item);
-        AuditRequirement(dossierId, item.DossierRequirementId, accountId, "ADDED", request.Reason, now,
+        AuditRequirement(dossierId, item.DossierRequirementId, accountId, "ADDED",
+            string.IsNullOrWhiteSpace(request.Reason) ? "DossierRequirement added" : request.Reason, now,
             new { item.ComplianceRequirementId, item.HorseId, item.IsMandatory, item.DueDate, item.Instruction });
         AddNotification(booking.Customer.AccountId, dossier, "DossierRequirement added", now,
             message: $"A new DossierRequirement ({requirement.RequirementName}) was added to your ComplianceDossier.");
@@ -50,10 +56,39 @@ public sealed partial class Service
                 ConstraintName: "DossierRequirement_dossier_requirement_global_key" or
                     "DossierRequirement_dossier_requirement_horse_key" })
         {
-            throw new ConflictException("DossierRequirement already exists.", "REQUIREMENT_ALREADY_EXISTS");
+            throw new ConflictException("This ComplianceRequirement is already required for this dossier/horse combination", "DR_DUPLICATE");
         }
         await _notificationService.FlushAsync(cancellationToken);
         return MapRequirement(item, booking.RequestedDepartureDate);
+    }
+
+    public async Task<Response.RequirementResponse> WaiveRequirementAsync(Guid accountId, Guid dossierId,
+        Guid requirementId, Request.WaiveRequirementRequest request, CancellationToken cancellationToken = default)
+    {
+        await RequireSpecialistAsync(accountId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(request.WaivedReason))
+            throw new BadRequestException("Please provide the reason for waiving this DossierRequirement", "WAIVE_REASON_REQUIRED");
+        if (request.WaivedReason.Length > 2000)
+            throw new BadRequestException("WaivedReason must not exceed 2000 characters.");
+        var dossier = await EditableDossierAsync(dossierId, cancellationToken);
+        var item = await _db.DossierRequirements.Include(value => value.ComplianceRequirement).Include(value => value.Horse)
+            .SingleOrDefaultAsync(value => value.DossierRequirementId == requirementId &&
+                value.ComplianceDossierId == dossierId && !value.IsDeleted, cancellationToken)
+            ?? throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+        var before = new { item.Status, item.WaivedReason, item.SatisfiedAt };
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        item.Status = DossierRequirementStatus.WAIVED;
+        item.WaivedReason = request.WaivedReason.Trim();
+        item.SatisfiedAt = null;
+        item.UpdatedAt = now;
+        dossier.UpdatedAt = now;
+        AuditRequirement(dossierId, requirementId, accountId, "WAIVED", item.WaivedReason, now,
+            new { Before = before, After = new { item.Status, item.WaivedReason, item.SatisfiedAt } });
+        AddNotification(dossier.Transport.Booking.Customer.AccountId, dossier, "DossierRequirement waived", now,
+            message: $"DossierRequirement ({item.ComplianceRequirement.RequirementName}) was waived.");
+        await _db.SaveChangesAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
+        return MapRequirement(item, dossier.Transport.Booking.RequestedDepartureDate);
     }
 
     public async Task<Response.RequirementResponse> UpdateRequirementAsync(Guid accountId, Guid dossierId,
@@ -133,7 +168,7 @@ public sealed partial class Service
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)
             ?? throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
         if (dossier.Status is not (ComplianceDossierStatus.DRAFT or ComplianceDossierStatus.IN_PREPARATION or ComplianceDossierStatus.READY_FOR_SUBMISSION))
-            throw new ConflictException("Cannot modify DossierRequirements after dossier submission to official authorities.");
+            throw new ConflictException("Cannot modify DossierRequirements after dossier submission to official authorities.", "DOSSIER_LOCKED");
         return dossier;
     }
 
@@ -145,13 +180,13 @@ public sealed partial class Service
         return departure.AddDays(-leadTimeDays);
     }
 
-    private static void ValidateRequirement(int leadTimeDays, string? instruction, string reason)
+    private static void ValidateRequirement(int? leadTimeDays, string? instruction, string reason)
     {
         if (leadTimeDays is < 0 or > 3650)
             throw new BadRequestException("LeadTimeDays must be between 0 and 3650.");
         if (instruction?.Length > 2000)
             throw new BadRequestException("Instruction must not exceed 2000 characters.");
-        ValidateReason(reason);
+        if (!string.IsNullOrWhiteSpace(reason)) ValidateReason(reason);
     }
 
     private static void ValidateReason(string reason)
