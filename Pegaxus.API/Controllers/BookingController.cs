@@ -84,6 +84,19 @@ public class BookingController : ControllerBase
             traceId: HttpContext.TraceIdentifier));
     }
 
+    [HttpGet("approved")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrFleetRouteCoordinatorPolicy)]
+    public async Task<IActionResult> GetApprovedList(
+        [FromQuery] BookingService.Request.BookingListRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.GetApprovedListAsync(GetAccountId(), request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Bookings retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     /// <summary>
     /// Get booking details.
     /// </summary>
