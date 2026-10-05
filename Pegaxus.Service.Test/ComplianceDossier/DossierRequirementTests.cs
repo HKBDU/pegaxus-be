@@ -185,8 +185,6 @@ public class DossierRequirementTests
     [Theory]
     [InlineData(-1, "Italy", 0)]
     [InlineData(3651, "Italy", 0)]
-    [InlineData(0, "", 0)]
-    [InlineData(0, " ", 0)]
     [InlineData(0, "Italy", 2001)]
     public async Task InvalidInput_DoesNotChangeDossier(int leadTimeDays, string reason, int instructionLength)
     {
@@ -202,6 +200,178 @@ public class DossierRequirementTests
         Assert.Single(await db.DossierRequirements.ToListAsync());
         Assert.Empty(await db.AuditDossiers.ToListAsync());
         Assert.Empty(await db.Notifications.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task ManualAdd_AcceptsDueDateWithoutReasonOrLeadTime(bool perHorse, bool hasDueDate)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (booking, dossier, specialist, requirement) = await SeedAsync(db);
+        Guid? horseId = perHorse ? (await db.BookingHorses.SingleAsync()).HorseId : null;
+        DateOnly? dueDate = hasDueDate ? booking.RequestedDepartureDate.AddDays(-2) : null;
+        var request = System.Text.Json.JsonSerializer.Deserialize<DossierRequest.RequirementRequest>(
+            System.Text.Json.JsonSerializer.Serialize(new
+            {
+                complianceRequirementId = requirement.ComplianceRequirementId, horseId, isMandatory = false,
+                dueDate, instruction = " Color scan "
+            }), new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+        var realtime = new RecordingRealtimeService();
+        var added = await CreateService(db, realtime).AddRequirementAsync(specialist, dossier.ComplianceDossierId, request);
+        Assert.Equal("PENDING", added.Status);
+        Assert.Equal(dueDate, added.DueDate);
+        Assert.Equal(horseId, added.HorseId);
+        Assert.False(added.IsMandatory);
+        Assert.Equal("Color scan", added.Instruction);
+        Assert.Equal(booking.Customer.AccountId, Assert.Single(realtime.Notifications).AccountId);
+        Assert.Single(await db.AuditDossiers.ToListAsync());
+    }
+
+    [Fact]
+    public void ManualAdd_RequiresIsMandatoryInJson()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(new { complianceRequirementId = Guid.NewGuid() });
+        Assert.Throws<System.Text.Json.JsonException>(() =>
+            System.Text.Json.JsonSerializer.Deserialize<DossierRequest.RequirementRequest>(json,
+                new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web)));
+    }
+
+    [Theory]
+    [InlineData("duplicate-global", "DR_DUPLICATE", 409)]
+    [InlineData("duplicate-horse", "DR_DUPLICATE", 409)]
+    [InlineData("inactive", "REQUIREMENT_INACTIVE", 400)]
+    [InlineData("foreign-horse", "HORSE_NOT_IN_BOOKING", 400)]
+    [InlineData("locked", "DOSSIER_LOCKED", 409)]
+    public async Task ManualAdd_ReturnsDocumentedErrorsWithoutWriting(string scenario, string errorCode, int statusCode)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (_, dossier, specialist, requirement) = await SeedAsync(db);
+        var request = new DossierRequest.RequirementRequest
+        {
+            ComplianceRequirementId = requirement.ComplianceRequirementId, IsMandatory = false, Reason = "Manual addition"
+        };
+        if (scenario.StartsWith("duplicate", StringComparison.Ordinal))
+        {
+            if (scenario == "duplicate-horse") request.HorseId = (await db.BookingHorses.SingleAsync()).HorseId;
+            db.DossierRequirements.Add(new DossierRequirement
+            {
+                DossierRequirementId = Guid.NewGuid(), ComplianceDossierId = dossier.ComplianceDossierId,
+                ComplianceRequirementId = requirement.ComplianceRequirementId, HorseId = request.HorseId
+            });
+        }
+        if (scenario == "inactive") requirement.Status = ComplianceRequirementStatus.INACTIVE;
+        if (scenario == "foreign-horse") request.HorseId = Guid.NewGuid();
+        if (scenario == "locked") dossier.Status = ComplianceDossierStatus.SUBMITTED;
+        await db.SaveChangesAsync();
+        var count = await db.DossierRequirements.CountAsync();
+        var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() =>
+            CreateService(db).AddRequirementAsync(specialist, dossier.ComplianceDossierId, request));
+        Assert.Equal(errorCode, error.ErrorCode);
+        Assert.Equal(statusCode, error.StatusCode);
+        Assert.Equal(count, await db.DossierRequirements.CountAsync());
+        Assert.Empty(await db.AuditDossiers.ToListAsync());
+        Assert.Empty(await db.Notifications.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Waive_KeepsMandatoryRequirementAndCountsItAsComplete()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (booking, dossier, specialist, requirement) = await SeedAsync(db);
+        var realtime = new RecordingRealtimeService();
+        var service = CreateService(db, realtime);
+        var added = await service.AddRequirementAsync(specialist, dossier.ComplianceDossierId,
+            new DossierRequest.RequirementRequest { ComplianceRequirementId = requirement.ComplianceRequirementId, IsMandatory = true });
+        Assert.Equal(50m, (await service.GetDossierAsync(booking.Customer.AccountId, dossier.ComplianceDossierId, new())).CompletionPercent);
+        var controller = new ComplianceDossiersController(service)
+        {
+            ControllerContext = new() { HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity(
+                    [new System.Security.Claims.Claim(ClaimTypes.NameIdentifier, specialist.ToString())], "test"))
+            } }
+        };
+        var response = Assert.IsType<OkObjectResult>(await controller.WaiveRequirement(dossier.ComplianceDossierId,
+            added.DossierRequirementId, new DossierRequest.WaiveRequirementRequest { WaivedReason = " Veterinary exemption " }, CancellationToken.None));
+        var envelope = Assert.IsType<Pegaxus.Service.Models.ApiResponse>(response.Value);
+        Assert.Equal("DossierRequirement waived successfully", envelope.Message);
+        Assert.Equal(200, envelope.Code);
+        var waived = Assert.IsType<Pegaxus.Service.ComplianceDossierService.Response.RequirementResponse>(envelope.Value);
+        Assert.Equal(added.DossierRequirementId, waived.DossierRequirementId);
+        Assert.Equal("WAIVED", waived.Status);
+        var stored = await db.DossierRequirements.SingleAsync(item => item.DossierRequirementId == added.DossierRequirementId);
+        Assert.False(stored.IsDeleted);
+        Assert.True(stored.IsMandatory);
+        Assert.Equal("Veterinary exemption", stored.WaivedReason);
+        Assert.Null(stored.SatisfiedAt);
+        var overview = await service.GetDossierAsync(booking.Customer.AccountId, dossier.ComplianceDossierId, new());
+        Assert.Equal(100m, overview.CompletionPercent);
+        Assert.Equal(2, overview.RequirementCount);
+        var audit = await db.AuditDossiers.SingleAsync(item => item.ActionType == "DOSSIER_REQUIREMENT_WAIVED");
+        Assert.Equal(specialist, audit.ActorAccountId);
+        Assert.Equal(stored.DossierRequirementId, audit.TargetId);
+        Assert.Equal(2, realtime.Notifications.Count);
+        Assert.All(realtime.Notifications, push => Assert.Equal(booking.Customer.AccountId, push.AccountId));
+        var action = typeof(ComplianceDossiersController).GetMethod(nameof(ComplianceDossiersController.WaiveRequirement))!;
+        var authorization = Assert.IsType<Microsoft.AspNetCore.Authorization.AuthorizeAttribute>(
+            Assert.Single(action.GetCustomAttributes(typeof(Microsoft.AspNetCore.Authorization.AuthorizeAttribute), true)));
+        Assert.Equal(Pegaxus.API.Extensions.JwtExtensions.TransportSpecialistPolicy, authorization.Policy);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData(" ")]
+    public async Task Waive_RequiresReasonWithoutWriting(string? reason)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (_, dossier, specialist, _) = await SeedAsync(db);
+        var item = await db.DossierRequirements.SingleAsync();
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => CreateService(db).WaiveRequirementAsync(specialist,
+            dossier.ComplianceDossierId, item.DossierRequirementId, new DossierRequest.WaiveRequirementRequest { WaivedReason = reason }));
+        Assert.Equal("WAIVE_REASON_REQUIRED", error.ErrorCode);
+        Assert.Equal("Please provide the reason for waiving this DossierRequirement", error.Message);
+        Assert.Equal(DossierRequirementStatus.SATISFIED, item.Status);
+        Assert.Null(item.WaivedReason);
+        Assert.Empty(await db.AuditDossiers.ToListAsync());
+        Assert.Empty(await db.Notifications.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(ComplianceDossierStatus.SUBMITTED)]
+    [InlineData(ComplianceDossierStatus.PENDING)]
+    [InlineData(ComplianceDossierStatus.APPROVED)]
+    [InlineData(ComplianceDossierStatus.CLOSED)]
+    public async Task Waive_RejectsSubmittedDossier(ComplianceDossierStatus status)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (_, dossier, specialist, _) = await SeedAsync(db);
+        dossier.Status = status;
+        await db.SaveChangesAsync();
+        var item = await db.DossierRequirements.SingleAsync();
+        var error = await Assert.ThrowsAsync<ConflictException>(() => CreateService(db).WaiveRequirementAsync(specialist,
+            dossier.ComplianceDossierId, item.DossierRequirementId, new DossierRequest.WaiveRequirementRequest { WaivedReason = "Exemption" }));
+        Assert.Equal("DOSSIER_LOCKED", error.ErrorCode);
+        Assert.Equal(DossierRequirementStatus.SATISFIED, item.Status);
+        Assert.Empty(await db.AuditDossiers.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Waive_RejectsCustomersAndOtherEmployees(bool customer)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (booking, dossier, _, _) = await SeedAsync(db);
+        var actor = customer ? booking.Customer.AccountId : (await TestSupport.AddLogisticsManagerAsync(db)).Account.AccountId;
+        var item = await db.DossierRequirements.SingleAsync();
+        await Assert.ThrowsAsync<ForbiddenException>(() => CreateService(db).WaiveRequirementAsync(actor,
+            dossier.ComplianceDossierId, item.DossierRequirementId, new DossierRequest.WaiveRequirementRequest { WaivedReason = "Exemption" }));
+        Assert.Equal(DossierRequirementStatus.SATISFIED, item.Status);
+        Assert.Empty(await db.AuditDossiers.ToListAsync());
     }
 
     private static async Task<(Booking Booking, Pegaxus.Repository.Entities.ComplianceDossier Dossier,

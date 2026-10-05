@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Microsoft.AspNetCore.Http;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -66,12 +67,20 @@ public class Request
 
     public sealed class RequirementRequest
     {
+        [JsonRequired]
         public Guid ComplianceRequirementId { get; set; }
         public Guid? HorseId { get; set; }
-        public bool IsMandatory { get; set; } = true;
-        public int LeadTimeDays { get; set; }
+        [JsonRequired]
+        public bool IsMandatory { get; set; }
+        public DateOnly? DueDate { get; set; }
+        public int? LeadTimeDays { get; set; }
         public string? Instruction { get; set; }
         public string Reason { get; set; } = string.Empty;
+    }
+
+    public sealed class WaiveRequirementRequest
+    {
+        public string? WaivedReason { get; set; }
     }
 
     public sealed class UpdateRequirementRequest

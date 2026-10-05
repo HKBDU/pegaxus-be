@@ -193,7 +193,15 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken) =>
         StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
             await _service.AddRequirementAsync(GetAccountId(), dossierId, request, cancellationToken),
-            "DossierRequirement added to ComplianceDossier successfully.", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+            "DossierRequirement added successfully", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+
+    [HttpPatch("{dossierId:guid}/requirements/{requirementId:guid}/waive")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> WaiveRequirement(Guid dossierId, Guid requirementId,
+        [FromBody] ComplianceDossierService.Request.WaiveRequirementRequest request, CancellationToken cancellationToken) =>
+        Ok(ResponseBuilder.SuccessResponse(
+            await _service.WaiveRequirementAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
+            "DossierRequirement waived successfully", traceId: HttpContext.TraceIdentifier));
 
     [HttpPatch("{dossierId:guid}/requirements/{requirementId:guid}")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
