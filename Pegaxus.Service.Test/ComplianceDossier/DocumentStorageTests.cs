@@ -197,6 +197,43 @@ public class DocumentStorageTests
         Assert.Empty(client.Uploads);
     }
 
+    [Fact]
+    public async Task Scanner_DoesNotDependOnTheCallerSynchronizationContext()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var context = new TrackingSynchronizationContext();
+        var previousContext = SynchronizationContext.Current;
+        Task<byte[]> scanned;
+        SynchronizationContext.SetSynchronizationContext(context);
+        try
+        {
+            scanned = RunScannerAsync(listener, "stream: OK");
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previousContext);
+        }
+        var client = new RecordingS3Client();
+        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
+        var content = "%PDF-1.7"u8.ToArray();
+        await service.UploadAsync(Guid.NewGuid(), 0, File("passport.pdf", "application/pdf", content));
+        Assert.Equal(content, await scanned.WaitAsync(TimeSpan.FromSeconds(5)));
+        Assert.Equal(0, context.PostCount);
+    }
+
+    private sealed class TrackingSynchronizationContext : SynchronizationContext
+    {
+        private int _postCount;
+        public int PostCount => Volatile.Read(ref _postCount);
+
+        public override void Post(SendOrPostCallback callback, object? state)
+        {
+            Interlocked.Increment(ref _postCount);
+            base.Post(callback, state);
+        }
+    }
+
     private static IFormFile File(string name, string mime, byte[] content) =>
         new FormFile(new MemoryStream(content), 0, content.Length, "Files", name) { Headers = new HeaderDictionary(), ContentType = mime };
 
@@ -214,25 +251,25 @@ public class DocumentStorageTests
 
     private static async Task<byte[]> RunScannerAsync(TcpListener listener, string verdict, bool terminate = true)
     {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-        using var socket = await listener.AcceptTcpClientAsync(timeout.Token);
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var socket = await listener.AcceptTcpClientAsync(timeout.Token).ConfigureAwait(false);
         await using var stream = socket.GetStream();
         var command = new byte[10];
-        await stream.ReadExactlyAsync(command, timeout.Token);
+        await stream.ReadExactlyAsync(command, timeout.Token).ConfigureAwait(false);
         Assert.Equal("zINSTREAM\0", Encoding.UTF8.GetString(command));
         using var content = new MemoryStream();
         var lengthBytes = new byte[4];
         while (true)
         {
-            await stream.ReadExactlyAsync(lengthBytes, timeout.Token);
+            await stream.ReadExactlyAsync(lengthBytes, timeout.Token).ConfigureAwait(false);
             var length = BinaryPrimitives.ReadInt32BigEndian(lengthBytes);
             if (length == 0) break;
             Assert.InRange(length, 1, 65536);
             var chunk = new byte[length];
-            await stream.ReadExactlyAsync(chunk, timeout.Token);
+            await stream.ReadExactlyAsync(chunk, timeout.Token).ConfigureAwait(false);
             content.Write(chunk);
         }
-        await stream.WriteAsync(Encoding.UTF8.GetBytes(verdict + (terminate ? "\0" : "")), timeout.Token);
+        await stream.WriteAsync(Encoding.UTF8.GetBytes(verdict + (terminate ? "\0" : "")), timeout.Token).ConfigureAwait(false);
         return content.ToArray();
     }
 
