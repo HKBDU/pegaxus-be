@@ -594,6 +594,9 @@ public partial class AppDbContext : DbContext
 
         modelBuilder.Entity<ComplianceDocument>(entity =>
         {
+            entity.Property(e => e.CreatedByAccountId).HasColumnName("created_by_account_id");
+
+            entity.Property(e => e.UpdatedByAccountId).HasColumnName("updated_by_account_id");
             entity.HasKey(e => e.ComplianceDocumentId).HasName("ComplianceDocument_pkey");
 
             entity.ToTable("ComplianceDocument", tb => tb.HasComment("ComplianceDocument: Giấy tờ thực tế được cung cấp để đáp ứng một DossierRequirement. Đây là document logic, không phải từng file upload."));
