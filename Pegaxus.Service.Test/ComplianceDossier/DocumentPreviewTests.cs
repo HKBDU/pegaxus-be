@@ -9,6 +9,21 @@ public class DocumentPreviewTests
 {
     private const string FileUrl = "https://res.cloudinary.com/test-cloud/raw/upload/ehc.pdf";
 
+    [Fact]
+    public async Task AuthenticatedPreview_SupportsTenMegabytesAndUsesExpiringPrivateDownload()
+    {
+        var bytes = new byte[10 * 1024 * 1024];
+        "%PDF-1.7"u8.CopyTo(bytes);
+        var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
+        var result = await CreateService(handler).DownloadPreviewAsync(
+            "https://res.cloudinary.com/test-cloud/image/authenticated/v1/evidence/account/asset.pdf");
+        Assert.Equal("application/pdf", result.ContentType);
+        Assert.Equal(bytes, result.Content);
+        Assert.Equal("api.cloudinary.com", new Uri(handler.LastUrl!).Host);
+        Assert.Contains("expires_at=", handler.LastUrl);
+        Assert.Contains("signature=", handler.LastUrl);
+    }
+
     [Theory]
     [InlineData("http://res.cloudinary.com/test-cloud/raw/upload/ehc.pdf")]
     [InlineData("https://localhost/test-cloud/raw/upload/ehc.pdf")]

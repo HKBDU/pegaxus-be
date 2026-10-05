@@ -192,9 +192,29 @@ The trimmed reason, acting specialist, audit entry and Customer notification are
 
 ## ComplianceDocument Upload (UC-21)
 
-POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document` with a Customer Bearer token and multipart form data:
-`Files` (repeated file field), `DocumentNumber`, `IssuingAuthority`, `IssuedDate`, optional `ExpiryDate` and `UploadNote`.
-Submit 1–10 files, each at most 10 MiB; only PDF, JPG, JPEG and PNG are accepted. Extension, MIME and file signature must agree.
+For each PDF/JPG/JPEG/PNG file (up to 10 MiB), call POST `/api/v1/uploads/signature` with
+`entity: "attachment"`, `contentType`, and `sizeBytes`. Upload the binary directly to the returned Cloudinary URL
+using every returned parameter, then call POST `/api/v1/uploads/confirm` with `publicId`.
+Signatures enforce authenticated delivery and disable overwrites. Confirmation checks actual Cloudinary metadata
+and returns `publicId`, `fileName`, `mimeType`, `sizeBytes`, and a signed `fileUrl` with `fileUrlExpiresAt`.
+
+POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document` with a Customer Bearer token and JSON:
+
+```json
+{
+  "files": [{ "publicId": "evidence/<accountId>/<assetId>" }],
+  "documentNumber": "PASS-100",
+  "issuingAuthority": "Passport Authority",
+  "issuedDate": "2026-10-01",
+  "expiryDate": "2027-10-01",
+  "uploadNote": "Full color scan"
+}
+```
+
+Submit 1–10 distinct asset references in the intended page order. Do not send binary files, file URLs, MIME types,
+sizes, or filenames to UC21/UC22. The service reuses MediaService to reverify account ownership and existence
+and resolve trusted metadata for every publicId; a previous frontend confirmation is not trusted as proof.
+Actual file bytes are downloaded by the backend for format checks and virus scanning, not uploaded again by the frontend.
 
 Only the booking owner can upload. The dossier must be IN_PREPARATION or REJECTED; the requirement must be PENDING, REQUESTED or REJECTED.
 REQUESTED requirements need an OPEN MISSING_DOCUMENT request before their first upload.
@@ -205,29 +225,30 @@ Success creates one ComplianceDocument, one DocumentVersion v1, an audit entry, 
 Document number, issuing authority and issue date are required. Issue date cannot be in the future. Expiry is required when
 the catalog marks validity as required or the requirement has `valid_until`; it must be strictly after departure and at least `valid_until`.
 
-Configure `DocumentStorageOptions` using the variables in `.env.example`. AWS credentials use the SDK's standard credential chain:
-prefer an IAM role; local development may use AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and optional AWS_SESSION_TOKEN.
-Grant s3:PutObject, s3:GetObject, s3:DeleteObject and s3:GetBucketPublicAccessBlock on the configured bucket/prefix;
-versioned buckets also need s3:GetObjectVersion and s3:DeleteObjectVersion. Keep all four bucket Public Access Block settings enabled.
-The implementation verifies private access, requests and checks AES256 server-side encryption, and returns HTTPS GET URLs expiring in five minutes.
-Stable `s3://` references, including object version IDs when available, are stored in the DB; signed URLs are not persisted or logged.
+Configure `CloudinaryOptions` and the ClamAV settings in `DocumentStorageOptions` using `.env.example`.
+New versions store stable authenticated Cloudinary URLs resolved by the backend; signed URLs are not persisted.
+Each response `value.files[]` contains `readUrl` and `readUrlExpiresAt`, expiring after five minutes.
+The version-history endpoint regenerates read URLs after authorization. A Cloudinary signed delivery URL without
+an expiry is not used; the SDK's private-download API signs an explicit expiration.
+Legacy S3 documents remain readable using the existing private-bucket configuration and AWS credential chain.
 
 A reachable ClamAV clamd service is mandatory (private network, INSTREAM enabled, StreamMaxLength at least 10 MiB, current virus definitions).
-No clean verdict, missing configuration, scanner failure or insecure bucket means the upload fails closed without DB changes.
-Failures clean uncommitted objects; if the DB commit outcome is unknown, files are retained rather than risking deletion of committed documents.
+No clean verdict, missing configuration, or scanner failure means document submission fails closed without DB changes.
+Already-uploaded Cloudinary assets are not deleted on failed submissions or replacement: another version may reference them.
+No orphan-asset cleanup worker or storage migration is added. Legacy superseded unreviewed S3 objects are deleted only after confirmed commit.
 The DB write runs in a serializable transaction and revalidates ownership, status and expiry after storage I/O.
 No migration is needed: existing unique indexes protect one document per requirement and one version number per document.
-The 4-second/10-MB target needs measurement with real S3, ClamAV and PostgreSQL; unit tests do not establish throughput.
+The 4-second/10-MB target needs measurement with real Cloudinary, ClamAV and PostgreSQL; unit tests do not establish throughput.
 
 ## DocumentVersion Replacement (UC-22)
 
-POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/versions` with a Customer token and multipart form data.
-`Files` replaces the entire current file set (1–10 files; the UC-21 format, size and scanning rules apply). Metadata fields and `UploadNote` are optional.
+POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/versions` with a Customer token and the same JSON asset-reference contract.
+`files` replaces the entire current file set (1–10 ordered publicIds; the UC-21 verification and scanning rules apply). Metadata fields and `uploadNote` are optional.
 Omitted metadata retains its current value; supplied values use the same validation as the first upload.
 
 An unreviewed PROVIDED version is updated in place: its ID and version number stay unchanged. A reviewed or rejected version creates the next number.
-Reviewed versions, attachments and reviews remain immutable. Every replacement uses fresh S3 object keys. Only superseded unreviewed objects are
-deleted after confirmed DB commit; failed or uncertain commits never delete previously committed files. Concurrent replacements return 409.
+Reviewed versions, attachments and reviews remain immutable. Direct uploads cannot overwrite existing Cloudinary assets.
+Failed or uncertain commits never delete submitted Cloudinary assets or previously committed files. Concurrent replacements return 409.
 
 PATCH `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/metadata` accepts a JSON object with any of
 `DocumentNumber`, `IssuingAuthority`, `IssuedDate`, `ExpiryDate`. It changes document metadata only, preserving version records, files and review status.
@@ -257,10 +278,11 @@ SATISFIED and WAIVED count as fulfilled. Empty dossiers report 0%. `actions.canU
 
 Use the returned API `previewUrl` with an Authorization header (fetch as a Blob for browser previews), not a token query parameter.
 Preview validates ownership and all nested IDs. S3 documents use the configured private bucket and exact object version, with a 10 MiB limit.
-Legacy Cloudinary files use only the configured cloud, refuse redirects and retain the 5 MB limit. Both paths detect PDF/raster-image types
+Authenticated Cloudinary files use expiring private-download URLs with a 10 MiB limit. Legacy public Cloudinary files retain the 5 MB limit.
+Both storage providers use only configured locations, refuse redirects and detect PDF/raster-image types
 from bytes and return no-store responses. The 15-second timeout covers both headers and body.
 
-**Storage limitation:** Existing Cloudinary upload methods use public delivery. The proxy protects API access but cannot revoke
+**Storage limitation:** Legacy server-side Cloudinary upload methods use public delivery. The proxy protects API access but cannot revoke
 previously known public storage URLs. Sensitive documents must be uploaded with authenticated/private delivery and existing public
 assets migrated at the storage layer before claiming end-to-end file privacy. No storage migration is performed by this read-only feature.
 The 1.5-second response target still requires measurement against a real PostgreSQL database.

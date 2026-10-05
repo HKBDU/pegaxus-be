@@ -22,5 +22,9 @@ public class Response
         public string PublicId { get; init; } = string.Empty;
 
         public string FileUrl { get; init; } = string.Empty;
+        public DateTimeOffset FileUrlExpiresAt { get; init; }
+        public string FileName { get; init; } = string.Empty;
+        public string MimeType { get; init; } = string.Empty;
+        public long SizeBytes { get; init; }
     }
 }

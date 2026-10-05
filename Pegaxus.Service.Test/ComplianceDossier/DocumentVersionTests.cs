@@ -14,7 +14,7 @@ namespace Pegaxus.Service.Test;
 public class DocumentVersionTests
 {
     [Fact]
-    public async Task UnreviewedVersion_ReplacesAllFilesInPlaceUsingFreshStorageKeys()
+    public async Task UnreviewedVersion_ReplacesAllFilesInPlaceUsingVerifiedAssets()
     {
         await using var db = TestSupport.CreateDb();
         var (account, dossier, requirement) = await SeedAsync(db);
@@ -33,7 +33,7 @@ public class DocumentVersionTests
         Assert.Equal("new.pdf", version.FileName);
         Assert.Equal("clearer scan", version.UploadNote);
         Assert.Equal(2, await db.DocumentAttachments.CountAsync());
-        Assert.Equal(oldUrls, storage.Deleted);
+        Assert.Empty(storage.Deleted);
         Assert.DoesNotContain(version.FileUrl, oldUrls);
         Assert.Equal("REF-100", (await db.ComplianceDocuments.SingleAsync()).DocumentNumber);
         Assert.Equal("DOCUMENT_VERSION_UPDATED", (await db.AuditDossiers.OrderBy(item => item.CreatedAt).LastAsync()).ActionType);
@@ -195,12 +195,12 @@ public class DocumentVersionTests
         await Assert.ThrowsAsync<ConflictException>(() => CreateService(db, storage).SubmitDocumentVersionAsync(account.AccountId,
             dossier.ComplianceDossierId, requirement.DossierRequirementId, ValidRequest(dossier)));
         Assert.Equal(winnerStorage.Uploaded.Single().StorageUrl, (await db.DocumentVersions.AsNoTracking().SingleAsync()).FileUrl);
-        Assert.Equal(storage.Uploaded.Single().StorageUrl, Assert.Single(storage.Deleted));
+        Assert.Empty(storage.Deleted);
         Assert.DoesNotContain(winnerStorage.Uploaded.Single().StorageUrl, storage.Deleted);
     }
 
     [Fact]
-    public async Task FailedReplacement_RetainsOriginalFilesAndCleansOnlyNewObjects()
+    public async Task FailedReplacement_RetainsOriginalAndDirectlyUploadedAssets()
     {
         var interceptor = new FailingSaveInterceptor();
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
@@ -217,7 +217,7 @@ public class DocumentVersionTests
             dossier.ComplianceDossierId, requirement.DossierRequirementId, ValidRequest(dossier)));
         Assert.Equal(initialStorage.Uploaded[0].StorageUrl, (await db.DocumentVersions.AsNoTracking().SingleAsync()).FileUrl);
         Assert.Equal(initialStorage.Uploaded[1].StorageUrl, (await db.DocumentAttachments.AsNoTracking().SingleAsync()).FileUrl);
-        Assert.Equal(storage.Uploaded.Single().StorageUrl, Assert.Single(storage.Deleted));
+        Assert.Empty(storage.Deleted);
     }
 
     [Fact]
@@ -291,7 +291,7 @@ public class DocumentVersionTests
     }
 
     [Fact]
-    public async Task ApprovalDuringStorage_BlocksCommitAndCleansOnlyNewFiles()
+    public async Task ApprovalDuringVerification_BlocksCommitWithoutDeletingAssets()
     {
         await using var db = TestSupport.CreateDb();
         var (account, dossier, requirement) = await SeedAsync(db);
@@ -302,7 +302,7 @@ public class DocumentVersionTests
         await Assert.ThrowsAsync<ConflictException>(() => CreateService(db, storage).SubmitDocumentVersionAsync(account.AccountId,
             dossier.ComplianceDossierId, requirement.DossierRequirementId, ValidRequest(dossier)));
         Assert.Equal(oldUrl, (await db.DocumentVersions.SingleAsync()).FileUrl);
-        Assert.Equal(storage.Uploaded.Select(item => item.StorageUrl), storage.Deleted);
+        Assert.Empty(storage.Deleted);
         Assert.DoesNotContain(oldUrl, storage.Deleted);
     }
 }

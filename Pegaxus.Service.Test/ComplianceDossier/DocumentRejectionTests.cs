@@ -304,7 +304,7 @@ public class DocumentRejectionTests
         var rejection = await CreateService(db, mail).RejectDocumentAsync(seed.Specialist,
             seed.Dossier.ComplianceDossierId, seed.Requirement.DossierRequirementId, seed.Version.DocumentVersionId, request);
         var storage = new DocumentUploadTests.RecordingStorage();
-        var service = new DossierService(db, null!, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
+        var service = new DossierService(db, storage, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
             new Pegaxus.Service.NotificationService.Service(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService()),
             storage, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance, mail);
         var replacement = await service.SubmitDocumentVersionAsync(seed.Customer, seed.Dossier.ComplianceDossierId,

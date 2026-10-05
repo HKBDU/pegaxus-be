@@ -7,7 +7,7 @@ public class Request
 {
     public sealed class DocumentUploadRequest : DocumentMetadataRequest
     {
-        public List<IFormFile> Files { get; set; } = [];
+        public List<UploadService.Request.UploadedAssetReference> Files { get; set; } = [];
         public string? UploadNote { get; set; }
     }
 

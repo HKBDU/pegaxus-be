@@ -2,6 +2,11 @@ namespace Pegaxus.Service.UploadService;
 
 public class Request
 {
+    public sealed class UploadedAssetReference
+    {
+        public string PublicId { get; set; } = string.Empty;
+    }
+
     public sealed class CreateUploadSignatureRequest
     {
         public string Entity { get; set; } = string.Empty;

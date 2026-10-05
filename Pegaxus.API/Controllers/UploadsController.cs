@@ -24,7 +24,7 @@ public sealed class UploadsController : ControllerBase
     /// <summary>
     /// Create an attachment upload signature.
     /// </summary>
-    /// <remarks>Returns signed Cloudinary upload parameters. The frontend uploads the attachment directly to Cloudinary; this endpoint does not receive the file.</remarks>
+    /// <remarks>Returns signed parameters for an authenticated Cloudinary upload of a PDF/JPG/PNG file up to 10 MiB. The frontend uploads directly to Cloudinary with overwrite disabled; this endpoint does not receive the file.</remarks>
     /// <param name="request">The attachment entity, content type, and file size in bytes.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with publicId, the upload URL, and signed parameters.</returns>
@@ -56,27 +56,33 @@ public sealed class UploadsController : ControllerBase
     /// <summary>
     /// Confirm an attachment upload.
     /// </summary>
-    /// <remarks>Verifies that the uploaded publicId belongs to the authenticated account.</remarks>
+    /// <remarks>Verifies ownership, existence, actual size, and format using Cloudinary metadata. Returns trusted file metadata and a signed download URL expiring after five minutes. UC21/UC22 reverify publicIds before saving documents.</remarks>
     /// <param name="request">The publicId of the uploaded attachment.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
-    /// <returns>200 OK with the confirmed publicId and file URL.</returns>
+    /// <returns>200 OK with publicId, trusted file metadata, fileUrl, and fileUrlExpiresAt.</returns>
     /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
     /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
     /// <exception cref="UnauthorizedAccessException">The authenticated account identifier is invalid.</exception>
     /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("confirm")]
+    [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> Confirm(
         [FromBody] UploadService.Request.ConfirmUploadRequest request,
         CancellationToken cancellationToken)
     {
         var result = await _mediaService.ConfirmUploadAsync(
-            GetAccountId(), request.PublicId);
+            GetAccountId(), request.PublicId, cancellationToken);
+        var signed = await _mediaService.CreateReadUrlAsync(result.FileUrl, cancellationToken);
 
         return Ok(ResponseBuilder.SuccessResponse(
             new UploadService.Response.ConfirmUploadResponse
             {
                 PublicId = result.PublicId,
-                FileUrl = result.FileUrl
+                FileUrl = signed.Url,
+                FileUrlExpiresAt = signed.ExpiresAt,
+                FileName = result.FileName,
+                MimeType = result.MimeType,
+                SizeBytes = result.SizeBytes
             },
             "Upload confirmed successfully",
             traceId: HttpContext.TraceIdentifier));

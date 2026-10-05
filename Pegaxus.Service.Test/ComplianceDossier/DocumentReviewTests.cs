@@ -340,7 +340,7 @@ public class DocumentReviewTests
             version.DocumentVersionId, approval.Review.DocumentReviewId,
             new Request.RevokeDocumentReviewRequest { Status = DossierRequirementStatus.PROVIDED, Reason = "Replace incorrect file" });
         var storage = new DocumentUploadTests.RecordingStorage();
-        service = new DossierService(db, null!, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
+        service = new DossierService(db, storage, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
             null!, storage, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance);
         var customerId = version.UploadedByAccountId;
         var metadata = await service.UpdateDocumentMetadataAsync(customerId, dossier.ComplianceDossierId,

@@ -17,6 +17,23 @@ namespace Pegaxus.Service.Test;
 public class DocumentStorageTests
 {
     [Fact]
+    public async Task DirectUploadContent_IsScannedWithoutS3ConfigurationOrAnotherUpload()
+    {
+        using var listener = new TcpListener(IPAddress.Loopback, 0);
+        listener.Start();
+        var scanned = RunScannerAsync(listener, "stream: OK");
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["DocumentStorageOptions:ClamAvHost"] = "127.0.0.1",
+            ["DocumentStorageOptions:ClamAvPort"] = ((IPEndPoint)listener.LocalEndpoint).Port.ToString()
+        }).Build();
+        using var service = new StorageService(configuration, NullLogger<StorageService>.Instance);
+        var bytes = "%PDF-1.7 content"u8.ToArray();
+        await service.ValidateContentAsync(new Pegaxus.Service.MediaService.PreviewFile(bytes, "application/pdf"));
+        Assert.Equal(bytes, await scanned.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Fact]
     public async Task CleanFile_IsScannedEncryptedAndSignedForFiveMinutes()
     {
         using var listener = new TcpListener(IPAddress.Loopback, 0);

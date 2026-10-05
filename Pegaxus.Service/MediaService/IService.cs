@@ -12,7 +12,8 @@ public interface IService
         string entity,
         string contentType,
         long sizeBytes);
-    Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId);
+    Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default);
+    Task<DocumentStorageService.SignedDocumentUrl> CreateReadUrlAsync(string fileUrl, CancellationToken cancellationToken = default);
     Task<PreviewFile> DownloadPreviewAsync(string fileUrl, CancellationToken cancellationToken = default);
 }
 
@@ -25,4 +26,7 @@ public sealed record SignedUploadResult(
 
 public sealed record ConfirmedUploadResult(
     string PublicId,
-    string FileUrl);
+    string FileUrl,
+    string FileName,
+    string MimeType,
+    long SizeBytes);

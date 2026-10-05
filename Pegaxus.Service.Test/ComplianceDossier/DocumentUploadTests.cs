@@ -1,4 +1,6 @@
 using Microsoft.AspNetCore.Http;
+using System.Collections.Concurrent;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -16,6 +18,59 @@ namespace Pegaxus.Service.Test;
 
 public class DocumentUploadTests
 {
+    [Fact]
+    public async Task ClientMetadataAndUrls_AreIgnoredAndResolvedByPublicId()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, dossier, requirement) = await SeedAsync(db);
+        var reference = File("trusted.pdf", "application/pdf");
+        var request = ValidRequest(dossier);
+        request.Files = JsonSerializer.Deserialize<DossierRequest.DocumentUploadRequest>($$"""
+            {"files":[{"publicId":"{{reference.PublicId}}","fileUrl":"https://attacker.example/file.exe","mimeType":"application/zip","sizeBytes":1,"fileName":"fake.exe"}]}
+            """, new JsonSerializerOptions(JsonSerializerDefaults.Web))!.Files;
+        var storage = new RecordingStorage();
+        var result = await CreateService(db, storage).UploadDocumentAsync(account.AccountId, dossier.ComplianceDossierId,
+            requirement.DossierRequirementId, request);
+        var version = await db.DocumentVersions.SingleAsync();
+        Assert.Equal("trusted.pdf", version.FileName);
+        Assert.Equal("application/pdf", version.MimeType);
+        Assert.EndsWith(reference.PublicId, version.FileUrl);
+        Assert.DoesNotContain("attacker", version.FileUrl);
+        Assert.Equal("trusted.pdf", result.Files.Single().FileName);
+    }
+
+    [Theory]
+    [InlineData("duplicate")]
+    [InlineData("blank")]
+    [InlineData("null")]
+    public async Task InvalidAssetReferences_AreRejectedBeforeVerification(string invalid)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, dossier, requirement) = await SeedAsync(db);
+        var request = ValidRequest(dossier);
+        if (invalid == "duplicate") request.Files.Add(request.Files[0]);
+        else if (invalid == "blank") request.Files[0].PublicId = " ";
+        else request.Files[0] = null!;
+        var storage = new RecordingStorage();
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => CreateService(db, storage).UploadDocumentAsync(account.AccountId,
+            dossier.ComplianceDossierId, requirement.DossierRequirementId, request));
+        Assert.Equal("INVALID_PUBLIC_ID", error.ErrorCode);
+        Assert.Empty(storage.Uploaded);
+        Assert.Empty(await db.DocumentVersions.ToListAsync());
+    }
+
+    [Fact]
+    public async Task VirusScannerFailure_NeverPersistsOrDeletesDirectlyUploadedAssets()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, dossier, requirement) = await SeedAsync(db);
+        var storage = new RecordingStorage { ContentFailure = new BadRequestException("Malware detected", "MALWARE_DETECTED") };
+        await Assert.ThrowsAsync<BadRequestException>(() => CreateService(db, storage).UploadDocumentAsync(account.AccountId,
+            dossier.ComplianceDossierId, requirement.DossierRequirementId, ValidRequest(dossier)));
+        Assert.Empty(await db.DocumentVersions.ToListAsync());
+        Assert.Empty(storage.Deleted);
+    }
+
     [Theory]
     [InlineData(ComplianceDossierStatus.IN_PREPARATION, DossierRequirementStatus.PENDING)]
     [InlineData(ComplianceDossierStatus.IN_PREPARATION, DossierRequirementStatus.REJECTED)]
@@ -44,7 +99,7 @@ public class DocumentUploadTests
         Assert.Equal(document.ComplianceDocumentId, version.ComplianceDocumentId);
         Assert.Equal(1, version.VersionNo);
         Assert.Equal(4 * 1024 * 1024, version.FileSizeBytes);
-        Assert.StartsWith("s3://", version.FileUrl);
+        Assert.StartsWith("https://res.cloudinary.com/", version.FileUrl);
         Assert.DoesNotContain("signature", version.FileUrl);
         Assert.Empty(await db.DocumentAttachments.ToListAsync());
         Assert.Equal(DossierRequirementStatus.PROVIDED, requirement.Status);
@@ -238,7 +293,7 @@ public class DocumentUploadTests
     }
 
     [Fact]
-    public async Task FailedAdditionalUpload_CleansEarlierObjectsAndLeavesRequirementPending()
+    public async Task FailedAdditionalVerification_RetainsAssetsAndLeavesRequirementPending()
     {
         await using var db = TestSupport.CreateDb();
         var (account, dossier, requirement) = await SeedAsync(db);
@@ -247,7 +302,7 @@ public class DocumentUploadTests
         var storage = new RecordingStorage { FailAtFile = 1 };
         await Assert.ThrowsAsync<IOException>(() => CreateService(db, storage).UploadDocumentAsync(account.AccountId,
             dossier.ComplianceDossierId, requirement.DossierRequirementId, request));
-        Assert.Equal(storage.Uploaded.Select(item => item.StorageUrl), storage.Deleted);
+        Assert.Empty(storage.Deleted);
         Assert.Empty(await db.ComplianceDocuments.ToListAsync());
         Assert.Empty(await db.DocumentVersions.ToListAsync());
         Assert.Empty(await db.AuditDossiers.ToListAsync());
@@ -255,7 +310,7 @@ public class DocumentUploadTests
     }
 
     [Fact]
-    public async Task DossierChangedDuringUpload_IsRevalidatedAndObjectsAreRemoved()
+    public async Task DossierChangedDuringVerification_IsRevalidatedAndAssetsAreRetained()
     {
         await using var db = TestSupport.CreateDb();
         var (account, dossier, requirement) = await SeedAsync(db);
@@ -271,12 +326,12 @@ public class DocumentUploadTests
         };
         await Assert.ThrowsAsync<ConflictException>(() => CreateService(db, storage).UploadDocumentAsync(account.AccountId,
             dossier.ComplianceDossierId, requirement.DossierRequirementId, ValidRequest(dossier)));
-        Assert.Single(storage.Deleted);
+        Assert.Empty(storage.Deleted);
         Assert.Empty(await db.ComplianceDocuments.ToListAsync());
     }
 
     [Fact]
-    public async Task DatabaseFailure_RollsBackAndCleansUploadedObjects()
+    public async Task DatabaseFailure_RollsBackWithoutDeletingReferencedAssets()
     {
         var interceptor = new FailingSaveInterceptor();
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
@@ -287,7 +342,7 @@ public class DocumentUploadTests
         var storage = new RecordingStorage();
         await Assert.ThrowsAsync<DbUpdateException>(() => CreateService(db, storage).UploadDocumentAsync(account.AccountId,
             dossier.ComplianceDossierId, requirement.DossierRequirementId, ValidRequest(dossier)));
-        Assert.Single(storage.Deleted);
+        Assert.Empty(storage.Deleted);
         Assert.Empty(await db.ComplianceDocuments.AsNoTracking().ToListAsync());
         Assert.Empty(await db.DocumentVersions.AsNoTracking().ToListAsync());
         Assert.Equal(DossierRequirementStatus.PENDING, (await db.DossierRequirements.AsNoTracking().SingleAsync()).Status);
@@ -314,15 +369,25 @@ public class DocumentUploadTests
         IssuedDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1), ExpiryDate = dossier.Transport.Booking.RequestedDepartureDate.AddDays(30)
     };
 
-    internal static IFormFile File(string name, string mimeType, long? length = null)
+    private static readonly ConcurrentDictionary<string, (string Name, string MimeType, long Size, byte[] Content)> Assets = new();
+
+    internal static Pegaxus.Service.UploadService.Request.UploadedAssetReference File(string name, string mimeType, long? length = null)
     {
-        var bytes = "%PDF-1.7 test"u8.ToArray();
+        var bytes = mimeType switch
+        {
+            "image/png" => Convert.FromBase64String("iVBORw0KGgo="),
+            "image/jpeg" => Convert.FromBase64String("/9j/"),
+            _ => "%PDF-1.7 test"u8.ToArray()
+        };
         if (length is > 0 and <= Pegaxus.Service.DocumentStorageService.Service.MaxFileSize)
         {
-            bytes = new byte[length.Value];
-            "%PDF-1.7 test"u8.CopyTo(bytes);
+            var content = new byte[length.Value];
+            bytes.AsSpan(0, Math.Min(bytes.Length, content.Length)).CopyTo(content);
+            bytes = content;
         }
-        return new FormFile(new MemoryStream(bytes), 0, length ?? bytes.Length, "Files", name) { Headers = new HeaderDictionary(), ContentType = mimeType };
+        var publicId = Guid.NewGuid().ToString("N");
+        Assets[publicId] = (name, mimeType, length ?? bytes.Length, bytes);
+        return new() { PublicId = publicId };
     }
 
     internal static async Task<(Account Account, Pegaxus.Repository.Entities.ComplianceDossier Dossier, DossierRequirement Requirement)> SeedAsync(AppDbContext db)
@@ -348,26 +413,39 @@ public class DocumentUploadTests
         return (account, dossier, requirement);
     }
 
-    internal static DossierService CreateService(AppDbContext db, RecordingStorage storage) => new(db, null!,
+    internal static DossierService CreateService(AppDbContext db, RecordingStorage storage) => new(db, storage,
         new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!, storage, NullLogger<DossierService>.Instance);
 
-    internal sealed class RecordingStorage : Pegaxus.Service.DocumentStorageService.IService
+    internal sealed class RecordingStorage : Pegaxus.Service.DocumentStorageService.IService, Pegaxus.Service.MediaService.IService
     {
-        public Task<Pegaxus.Service.MediaService.PreviewFile> DownloadPreviewAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Exception? ContentFailure { get; init; }
+        public Task ValidateContentAsync(Pegaxus.Service.MediaService.PreviewFile file, CancellationToken cancellationToken = default) =>
+            ContentFailure is null ? Task.CompletedTask : Task.FromException(ContentFailure);
         public List<StoredDocumentFile> Uploaded { get; } = [];
         public List<string> Deleted { get; } = [];
         public int? FailAtFile { get; init; }
         public Func<Task>? AfterUpload { get; init; }
-        public async Task<StoredDocumentFile> UploadAsync(Guid versionId, int sortOrder, IFormFile file, CancellationToken cancellationToken = default)
+        public Task<StoredDocumentFile> UploadAsync(Guid versionId, int sortOrder, IFormFile file, CancellationToken cancellationToken = default) => throw new NotSupportedException("UC21/UC22 must not upload binary files again.");
+        public Task<string> UploadImageAsync(IFormFile file) => throw new NotSupportedException();
+        public Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file) => throw new NotSupportedException();
+        public Task DeleteFileAsync(string publicId) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.MediaService.SignedUploadResult> CreateSignedUploadAsync(Guid accountId, string entity, string contentType, long sizeBytes) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.MediaService.ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default)
         {
-            if (sortOrder == FailAtFile) throw new IOException("Planned upload failure");
-            var result = new StoredDocumentFile($"s3://private-bucket/documents/{versionId}/{sortOrder}", file.FileName, file.ContentType, file.Length);
-            Uploaded.Add(result);
+            if (!Assets.TryGetValue(publicId, out var asset)) throw new NotFoundException("Upload not found", "UPLOAD_NOT_FOUND");
+            return Task.FromResult(new Pegaxus.Service.MediaService.ConfirmedUploadResult(publicId,
+                $"https://res.cloudinary.com/test-cloud/raw/authenticated/{publicId}", asset.Name, asset.MimeType, asset.Size));
+        }
+        public async Task<Pegaxus.Service.MediaService.PreviewFile> DownloadPreviewAsync(string storageUrl, CancellationToken cancellationToken = default)
+        {
+            if (Uploaded.Count == FailAtFile) throw new IOException("Planned verification failure");
+            var asset = Assets[storageUrl.Split('/').Last()];
+            Uploaded.Add(new StoredDocumentFile(storageUrl, asset.Name, asset.MimeType, asset.Size));
             if (AfterUpload is not null) await AfterUpload();
-            return result;
+            return new(asset.Content, asset.MimeType);
         }
         public Task<SignedDocumentUrl> CreateReadUrlAsync(string storageUrl, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SignedDocumentUrl("https://private-bucket.s3.amazonaws.com/document?signature=test", DateTimeOffset.UtcNow.AddMinutes(5)));
+            Task.FromResult(new SignedDocumentUrl("https://api.cloudinary.com/v1_1/test-cloud/raw/download?signature=test", DateTimeOffset.UtcNow.AddMinutes(5)));
         public Task DeleteAsync(string storageUrl, CancellationToken cancellationToken = default)
         {
             Deleted.Add(storageUrl);
