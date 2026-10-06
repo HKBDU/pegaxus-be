@@ -832,7 +832,9 @@ Table RoutePlan {
 
   route_plan_id bigint [pk, increment]
 
-  transport_plan_id bigint [not null, unique]
+  // Một TransportPlan có thể có nhiều RoutePlan (PRIMARY/BACKUP/RETURN).
+  // Không đặt UNIQUE trên transport_plan_id; ràng buộc loại route và số lượng route active do business rule kiểm soát.
+  transport_plan_id bigint [not null]
 
   route_plan_code varchar(50) [not null, unique]
 
@@ -926,7 +928,7 @@ Table Route {
 
 
 Table RoutePlanRoute {
-  Note: 'RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver phụ trách và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.'
+  Note: 'RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver/Escort phụ trách, provider thuê ngoài và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.'
 
   route_plan_route_id bigint [pk, increment]
 
@@ -940,6 +942,14 @@ Table RoutePlanRoute {
   // Nullable khi plan còn DRAFT; phải có trước khi RoutePlan CONFIRMED/ACTIVE.
   // Business rule: Employee được gán phải có role = DRIVER.
   driver_employee_id bigint
+
+  // Nullable; bắt buộc với chặng nội bộ khi RoutePlan được phân công đầy đủ.
+  // Business rule: Employee được gán phải có role = ESCORT.
+  escort_employee_id bigint
+
+  // Nullable; có giá trị khi chặng được thuê ngoài.
+  // Khi có provider thì chặng không được gán vehicle/driver/escort nội bộ.
+  transport_provider_id bigint
 
   planned_departure_at timestamp
   planned_arrival_at timestamp
@@ -957,6 +967,8 @@ Table RoutePlanRoute {
     route_id
     route_type
     driver_employee_id
+    escort_employee_id
+    transport_provider_id
 
     (route_plan_id, sequence_no) [unique]
   }
@@ -2489,7 +2501,7 @@ Ref: Transport.booking_id - Booking.booking_id
 Ref: TransportPlan.transport_id > Transport.transport_id
 Ref: TransportPlan.approved_by_employee_id > Employee.employee_id
 
-Ref: RoutePlan.transport_plan_id - TransportPlan.transport_plan_id
+Ref: RoutePlan.transport_plan_id > TransportPlan.transport_plan_id
 
 Ref: Route.from_location_id > Location.location_id
 Ref: Route.to_location_id > Location.location_id
@@ -2497,6 +2509,8 @@ Ref: Route.to_location_id > Location.location_id
 Ref: RoutePlanRoute.route_plan_id > RoutePlan.route_plan_id
 Ref: RoutePlanRoute.route_id > Route.route_id
 Ref: RoutePlanRoute.driver_employee_id > Employee.employee_id
+Ref: RoutePlanRoute.escort_employee_id > Employee.employee_id
+Ref: RoutePlanRoute.transport_provider_id > TransportProvider.transport_provider_id
 
 // RoutePlanRoute N - N Vehicle
 Ref: RoutePlanRouteVehicle.route_plan_route_id > RoutePlanRoute.route_plan_route_id

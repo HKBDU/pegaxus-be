@@ -47,4 +47,6 @@ public partial class TransportProvider
     public virtual Account? DeletedByAccount { get; set; }
 
     public virtual ICollection<TransportPlanProvider> TransportPlanProviders { get; set; } = new List<TransportPlanProvider>();
+
+    public virtual ICollection<RoutePlanRoute> RoutePlanRoutes { get; set; } = new List<RoutePlanRoute>();
 }

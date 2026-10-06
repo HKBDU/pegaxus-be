@@ -343,14 +343,14 @@ public partial class Service : IService
                     ? null
                     : booking.Transport.TransportPlans
                         .OrderByDescending(plan => plan.CreatedAt)
-                        .Select(plan => plan.RoutePlan == null
-                            ? null
-                            : new Response.RoutePlanSummary
+                        .SelectMany(plan => plan.RoutePlans
+                            .OrderByDescending(routePlan => routePlan.CreatedAt)
+                            .Select(routePlan => new Response.RoutePlanSummary
                             {
-                                RoutePlanId = plan.RoutePlan.RoutePlanId,
-                                RoutePlanCode = plan.RoutePlan.RoutePlanCode,
-                                Status = plan.RoutePlan.Status.ToString()
-                            })
+                                RoutePlanId = routePlan.RoutePlanId,
+                                RoutePlanCode = routePlan.RoutePlanCode,
+                                Status = routePlan.Status.ToString()
+                            }))
                         .FirstOrDefault()
             })
             .ToListAsync(cancellationToken);
