@@ -18,10 +18,20 @@ public partial class AlignRoutePlanningWithDbV7 : Migration
         migrationBuilder.CreateIndex("RoutePlanRoute_escort_employee_id_idx", "RoutePlanRoute", "escort_employee_id");
         migrationBuilder.CreateIndex("RoutePlanRoute_transport_provider_id_idx", "RoutePlanRoute", "transport_provider_id");
 
-        migrationBuilder.AddForeignKey("RoutePlanRoute_escort_employee_id_fkey", "RoutePlanRoute", "escort_employee_id",
-            "Employee", "employee_id", onDelete: ReferentialAction.NoAction);
-        migrationBuilder.AddForeignKey("RoutePlanRoute_transport_provider_id_fkey", "RoutePlanRoute", "transport_provider_id",
-            "TransportProvider", "transport_provider_id", onDelete: ReferentialAction.NoAction);
+        migrationBuilder.AddForeignKey(
+            name: "RoutePlanRoute_escort_employee_id_fkey",
+            table: "RoutePlanRoute",
+            column: "escort_employee_id",
+            principalTable: "Employee",
+            principalColumn: "employee_id",
+            onDelete: ReferentialAction.NoAction);
+        migrationBuilder.AddForeignKey(
+            name: "RoutePlanRoute_transport_provider_id_fkey",
+            table: "RoutePlanRoute",
+            column: "transport_provider_id",
+            principalTable: "TransportProvider",
+            principalColumn: "transport_provider_id",
+            onDelete: ReferentialAction.NoAction);
     }
 
     protected override void Down(MigrationBuilder migrationBuilder)
