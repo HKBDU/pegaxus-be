@@ -22,6 +22,10 @@ public partial class RoutePlanRoute
 
     public Guid? DriverEmployeeId { get; set; }
 
+    public Guid? EscortEmployeeId { get; set; }
+
+    public Guid? TransportProviderId { get; set; }
+
     public DateTime? PlannedDepartureAt { get; set; }
 
     public DateTime? PlannedArrivalAt { get; set; }
@@ -38,6 +42,8 @@ public partial class RoutePlanRoute
 
     public virtual Employee? DriverEmployee { get; set; }
 
+    public virtual Employee? EscortEmployee { get; set; }
+
     public virtual ICollection<HandoverRecord> HandoverRecordFromRoutePlanRoutes { get; set; } = new List<HandoverRecord>();
 
     public virtual ICollection<HandoverRecord> HandoverRecordToRoutePlanRoutes { get; set; } = new List<HandoverRecord>();
@@ -45,6 +51,8 @@ public partial class RoutePlanRoute
     public virtual Route Route { get; set; } = null!;
 
     public virtual RoutePlan RoutePlan { get; set; } = null!;
+
+    public virtual TransportProvider? TransportProvider { get; set; }
 
     public virtual ICollection<RoutePlanRouteVehicle> RoutePlanRouteVehicles { get; set; } = new List<RoutePlanRouteVehicle>();
 }

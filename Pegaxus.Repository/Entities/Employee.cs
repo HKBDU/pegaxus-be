@@ -67,5 +67,7 @@ public partial class Employee
 
     public virtual ICollection<RoutePlanRoute> RoutePlanRoutes { get; set; } = new List<RoutePlanRoute>();
 
+    public virtual ICollection<RoutePlanRoute> EscortRoutePlanRoutes { get; set; } = new List<RoutePlanRoute>();
+
     public virtual ICollection<TransportPlan> TransportPlans { get; set; } = new List<TransportPlan>();
 }

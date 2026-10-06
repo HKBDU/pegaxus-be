@@ -231,12 +231,14 @@
 
 # 11. `RoutePlan`
 
-**Ý nghĩa bảng:** RoutePlan: Kế hoạch tuyến đường của một TransportPlan. Đây là tập hợp các Route được sắp xếp nối tiếp từ điểm đầu đến điểm cuối.
+**Ý nghĩa bảng:** RoutePlan: Một phương án kế hoạch tuyến đường thuộc một TransportPlan. Một TransportPlan có thể có nhiều RoutePlan, ví dụ phương án PRIMARY, BACKUP hoặc RETURN. Mỗi RoutePlan là tập hợp các RoutePlanRoute được sắp xếp nối tiếp từ điểm đầu đến điểm cuối.
+
+**Business rule quan trọng:** `RoutePlan.transport_plan_id` không unique; quan hệ là `TransportPlan 1-N RoutePlan`. Việc giới hạn số lượng PRIMARY/BACKUP/RETURN đang hoạt động được kiểm tra ở business layer hoặc bằng constraint/index phù hợp, không bằng unique đơn trên `transport_plan_id`.
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
 | `route_plan_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `RoutePlan`. |
-| `transport_plan_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `TransportPlan.transport_plan_id`. |
+| `transport_plan_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `TransportPlan.transport_plan_id`. Một TransportPlan có thể được tham chiếu bởi nhiều RoutePlan. |
 | `route_plan_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `RoutePlan`. |
 | `status` | `route_plan_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `route_plan_status`: DRAFT, CONFIRMED, ACTIVE, COMPLETED, CANCELLED. |
 | `total_distance_km` | `decimal(10,2)` |  | No | Tổng khoảng cách của RoutePlan, đơn vị km. |
@@ -294,9 +296,14 @@
 
 # 14. `RoutePlanRoute`
 
-**Ý nghĩa bảng:** RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver phụ trách và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.
+**Ý nghĩa bảng:** RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver/Escort phụ trách, provider thuê ngoài và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.
 
-**Business rule quan trọng:** `driver_employee_id` có thể NULL khi plan còn `DRAFT`, nhưng phải được gán trước khi RoutePlan `CONFIRMED/ACTIVE`; Employee được gán phải có `role = DRIVER`.
+**Business rule quan trọng:**
+
+- `driver_employee_id` và `escort_employee_id` có thể NULL khi plan còn `DRAFT`.
+- Chặng nội bộ khi được phân công phải có Driver và Escort đúng role.
+- `transport_provider_id` có thể NULL với chặng nội bộ; nếu có giá trị thì chặng là outsource và không được gán vehicle/driver/escort nội bộ.
+- Thiết kế hiện tại hỗ trợ một Driver, một Escort và một Provider cho mỗi chặng. Nếu nghiệp vụ cần nhiều người/provider trên cùng chặng, cần tách thành các bảng assignment N-N.
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
@@ -306,6 +313,8 @@
 | `sequence_no` | `int` |  | Yes | Thứ tự chặng trong RoutePlan; duy nhất trong cùng một RoutePlan. |
 | `route_type` | `route_type` |  | Yes | Vai trò của Route trong RoutePlanRoute. Enum `route_type`: PRIMARY, BACKUP, RETURN. `RETURN` dùng cho chặng quay về. |
 | `driver_employee_id` | `bigint` | FK | No | Driver phụ trách chặng này. Có thể NULL khi RoutePlan còn DRAFT; phải là Employee có role=DRIVER trước CONFIRMED/ACTIVE. |
+| `escort_employee_id` | `bigint` | FK | No | Escort phụ trách chặng này. Phải là Employee có role=ESCORT khi chặng nội bộ được phân công. |
+| `transport_provider_id` | `bigint` | FK | No | Provider thực hiện chặng thuê ngoài. NULL nghĩa là chặng nội bộ; có giá trị thì không gán vehicle/driver/escort nội bộ. |
 | `planned_departure_at` | `timestamp` |  | No | Thời điểm dự kiến khởi hành của chặng. |
 | `planned_arrival_at` | `timestamp` |  | No | Thời điểm dự kiến đến của chặng. |
 | `actual_departure_at` | `timestamp` |  | No | Thời điểm khởi hành thực tế. |

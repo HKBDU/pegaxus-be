@@ -2346,7 +2346,7 @@ public partial class AppDbContext : DbContext
 
             entity.HasIndex(e => e.RoutePlanCode, "RoutePlan_route_plan_code_key").IsUnique();
 
-            entity.HasIndex(e => e.TransportPlanId, "RoutePlan_transport_plan_id_key").IsUnique();
+            entity.HasIndex(e => e.TransportPlanId, "RoutePlan_transport_plan_id_idx");
 
             entity.Property(e => e.RoutePlanId).HasColumnName("route_plan_id");
             entity.Property(e => e.CreatedAt)
@@ -2365,8 +2365,8 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
 
-            entity.HasOne(d => d.TransportPlan).WithOne(p => p.RoutePlan)
-                .HasForeignKey<RoutePlan>(d => d.TransportPlanId)
+            entity.HasOne(d => d.TransportPlan).WithMany(p => p.RoutePlans)
+                .HasForeignKey(d => d.TransportPlanId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("RoutePlan_transport_plan_id_fkey");
         });
@@ -2378,6 +2378,10 @@ public partial class AppDbContext : DbContext
             entity.ToTable("RoutePlanRoute", tb => tb.HasComment("RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver phụ trách và thời gian dự kiến/thực tế của chính lần sử dụng Route đó."));
 
             entity.HasIndex(e => e.DriverEmployeeId, "RoutePlanRoute_driver_employee_id_idx");
+
+            entity.HasIndex(e => e.EscortEmployeeId, "RoutePlanRoute_escort_employee_id_idx");
+
+            entity.HasIndex(e => e.TransportProviderId, "RoutePlanRoute_transport_provider_id_idx");
 
             entity.HasIndex(e => e.RouteId, "RoutePlanRoute_route_id_idx");
 
@@ -2396,6 +2400,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("created_at");
             entity.Property(e => e.DriverEmployeeId).HasColumnName("driver_employee_id");
+            entity.Property(e => e.EscortEmployeeId).HasColumnName("escort_employee_id");
             entity.Property(e => e.Note).HasColumnName("note");
             entity.Property(e => e.PlannedArrivalAt)
                 .HasColumnType("timestamp without time zone")
@@ -2405,6 +2410,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnName("planned_departure_at");
             entity.Property(e => e.RouteId).HasColumnName("route_id");
             entity.Property(e => e.RoutePlanId).HasColumnName("route_plan_id");
+            entity.Property(e => e.TransportProviderId).HasColumnName("transport_provider_id");
             entity.Property(e => e.SequenceNo).HasColumnName("sequence_no");
             entity.Property(e => e.UpdatedAt)
                 .HasColumnType("timestamp without time zone")
@@ -2413,6 +2419,10 @@ public partial class AppDbContext : DbContext
             entity.HasOne(d => d.DriverEmployee).WithMany(p => p.RoutePlanRoutes)
                 .HasForeignKey(d => d.DriverEmployeeId)
                 .HasConstraintName("RoutePlanRoute_driver_employee_id_fkey");
+
+            entity.HasOne(d => d.EscortEmployee).WithMany(p => p.EscortRoutePlanRoutes)
+                .HasForeignKey(d => d.EscortEmployeeId)
+                .HasConstraintName("RoutePlanRoute_escort_employee_id_fkey");
 
             entity.HasOne(d => d.Route).WithMany(p => p.RoutePlanRoutes)
                 .HasForeignKey(d => d.RouteId)
@@ -2423,6 +2433,10 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.RoutePlanId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("RoutePlanRoute_route_plan_id_fkey");
+
+            entity.HasOne(d => d.TransportProvider).WithMany(p => p.RoutePlanRoutes)
+                .HasForeignKey(d => d.TransportProviderId)
+                .HasConstraintName("RoutePlanRoute_transport_provider_id_fkey");
         });
 
         modelBuilder.Entity<RoutePlanRouteVehicle>(entity =>
