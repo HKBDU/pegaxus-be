@@ -60,11 +60,11 @@ public class DocumentUploadTests
     }
 
     [Fact]
-    public async Task VirusScannerFailure_NeverPersistsOrDeletesDirectlyUploadedAssets()
+    public async Task ContentValidationFailure_NeverPersistsOrDeletesDirectlyUploadedAssets()
     {
         await using var db = TestSupport.CreateDb();
         var (account, dossier, requirement) = await SeedAsync(db);
-        var storage = new RecordingStorage { ContentFailure = new BadRequestException("Malware detected", "MALWARE_DETECTED") };
+        var storage = new RecordingStorage { ContentFailure = new BadRequestException("Invalid file content", "INVALID_FILE_TYPE") };
         await Assert.ThrowsAsync<BadRequestException>(() => CreateService(db, storage).UploadDocumentAsync(account.AccountId,
             dossier.ComplianceDossierId, requirement.DossierRequirementId, ValidRequest(dossier)));
         Assert.Empty(await db.DocumentVersions.ToListAsync());

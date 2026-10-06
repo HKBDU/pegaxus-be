@@ -1,7 +1,4 @@
-using System.Buffers.Binary;
 using System.Net;
-using System.Net.Sockets;
-using System.Text;
 using Amazon;
 using Amazon.S3;
 using Amazon.S3.Model;
@@ -31,14 +28,12 @@ public class Service : IService, IDisposable
     private IAmazonS3 Client => _client ??= CreateClient();
     public void Dispose() => _client?.Dispose();
 
-    public async Task ValidateContentAsync(MediaService.PreviewFile file, CancellationToken cancellationToken = default)
+    public Task ValidateContentAsync(MediaService.PreviewFile file, CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         if (file.Content.Length > MaxFileSize) throw FileTooLarge();
         if (!MatchesFileSignature(file.Content, file.Content.Length, file.ContentType)) throw InvalidFormat();
-        if (string.IsNullOrWhiteSpace(_options.ClamAvHost) || _options.ClamAvPort is < 1 or > 65535)
-            throw new Pegaxus.Service.Exceptions.Exceptions("Document virus scanning must be configured.", 503, "DOCUMENT_STORAGE_NOT_CONFIGURED");
-        using var content = new MemoryStream(file.Content);
-        await ScanAsync(content, cancellationToken);
+        return Task.CompletedTask;
     }
 
     public static string ValidateFileMetadata(IFormFile file)
@@ -90,8 +85,6 @@ public class Service : IService, IDisposable
         }
         if (content.Length != file.Length || !MatchesFileSignature(content.GetBuffer(), (int)content.Length, mimeType))
             throw InvalidFormat();
-        content.Position = 0;
-        await ScanAsync(content, cancellationToken);
         content.Position = 0;
         var name = Path.GetFileName(file.FileName.Replace('\\', '/'));
         var key = $"documents/{versionId:N}/{sortOrder:D2}{Path.GetExtension(name).ToLowerInvariant()}";
@@ -224,48 +217,6 @@ public class Service : IService, IDisposable
         _privateBucketVerified = true;
     }
 
-    private async Task ScanAsync(Stream content, CancellationToken cancellationToken)
-    {
-        using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeout.CancelAfter(TimeSpan.FromSeconds(15));
-        try
-        {
-            using var socket = new TcpClient();
-            await socket.ConnectAsync(_options.ClamAvHost, _options.ClamAvPort, timeout.Token);
-            await using var stream = socket.GetStream();
-            await stream.WriteAsync("zINSTREAM\0"u8.ToArray(), timeout.Token);
-            var chunk = new byte[65536];
-            var length = new byte[4];
-            int bytesRead;
-            while ((bytesRead = await content.ReadAsync(chunk, timeout.Token)) != 0)
-            {
-                BinaryPrimitives.WriteInt32BigEndian(length, bytesRead);
-                await stream.WriteAsync(length, timeout.Token);
-                await stream.WriteAsync(chunk.AsMemory(0, bytesRead), timeout.Token);
-            }
-            await stream.WriteAsync(new byte[4], timeout.Token);
-            using var response = new MemoryStream();
-            var singleByte = new byte[1];
-            var terminated = false;
-            while (response.Length < 1024 && await stream.ReadAsync(singleByte, timeout.Token) != 0)
-            {
-                if (singleByte[0] == 0) { terminated = true; break; }
-                response.WriteByte(singleByte[0]);
-            }
-            var verdict = Encoding.UTF8.GetString(response.ToArray());
-            if (verdict.EndsWith(" FOUND", StringComparison.Ordinal))
-                throw new BadRequestException("Malware detected in uploaded file.", "MALWARE_DETECTED");
-            if (!terminated || verdict != "stream: OK")
-                throw new Pegaxus.Service.Exceptions.Exceptions("Document virus scanning is unavailable.", 503, "VIRUS_SCANNER_UNAVAILABLE");
-        }
-        catch (Exception error) when (error is not Pegaxus.Service.Exceptions.Exceptions &&
-            !(error is OperationCanceledException && cancellationToken.IsCancellationRequested))
-        {
-            _logger.LogError(error, "Document virus scan failed");
-            throw new Pegaxus.Service.Exceptions.Exceptions("Document virus scanning is unavailable.", 503, "VIRUS_SCANNER_UNAVAILABLE");
-        }
-    }
-
     private (string Key, string? VersionId) StorageLocation(string storageUrl)
     {
         if (!Uri.TryCreate(storageUrl, UriKind.Absolute, out var uri) || uri.Scheme != "s3" ||
@@ -281,9 +232,8 @@ public class Service : IService, IDisposable
 
     private void EnsureConfigured()
     {
-        if (string.IsNullOrWhiteSpace(_options.BucketName) || string.IsNullOrWhiteSpace(_options.Region) ||
-            string.IsNullOrWhiteSpace(_options.ClamAvHost) || _options.ClamAvPort is < 1 or > 65535)
-            throw new Pegaxus.Service.Exceptions.Exceptions("Secure document storage and virus scanning must be configured.", 503, "DOCUMENT_STORAGE_NOT_CONFIGURED");
+        if (string.IsNullOrWhiteSpace(_options.BucketName) || string.IsNullOrWhiteSpace(_options.Region))
+            throw new Pegaxus.Service.Exceptions.Exceptions("Secure document storage must be configured.", 503, "DOCUMENT_STORAGE_NOT_CONFIGURED");
     }
 
     private static bool MatchesFileSignature(byte[] content, int length, string mimeType) => mimeType switch

@@ -214,7 +214,7 @@ POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/docum
 Submit 1–10 distinct asset references in the intended page order. Do not send binary files, file URLs, MIME types,
 sizes, or filenames to UC21/UC22. The service reuses MediaService to reverify account ownership and existence
 and resolve trusted metadata for every publicId; a previous frontend confirmation is not trusted as proof.
-Actual file bytes are downloaded by the backend for format checks and virus scanning, not uploaded again by the frontend.
+Actual file bytes are downloaded by the backend for format and size checks, not uploaded again by the frontend.
 
 Only the booking owner can upload. The dossier must be IN_PREPARATION or REJECTED; the requirement must be PENDING, REQUESTED or REJECTED.
 REQUESTED requirements need an OPEN MISSING_DOCUMENT request before their first upload.
@@ -225,25 +225,25 @@ Success creates one ComplianceDocument, one DocumentVersion v1, an audit entry, 
 Document number, issuing authority and issue date are required. Issue date cannot be in the future. Expiry is required when
 the catalog marks validity as required or the requirement has `valid_until`; it must be strictly after departure and at least `valid_until`.
 
-Configure `CloudinaryOptions` and the ClamAV settings in `DocumentStorageOptions` using `.env.example`.
+Configure `CloudinaryOptions` using `.env.example`.
 New versions store stable authenticated Cloudinary URLs resolved by the backend; signed URLs are not persisted.
 Each response `value.files[]` contains `readUrl` and `readUrlExpiresAt`, expiring after five minutes.
 The version-history endpoint regenerates read URLs after authorization. A Cloudinary signed delivery URL without
 an expiry is not used; the SDK's private-download API signs an explicit expiration.
 Legacy S3 documents remain readable using the existing private-bucket configuration and AWS credential chain.
 
-A reachable ClamAV clamd service is mandatory (private network, INSTREAM enabled, StreamMaxLength at least 5 MiB, current virus definitions).
-No clean verdict, missing configuration, or scanner failure means document submission fails closed without DB changes.
+Document submissions validate file metadata, actual file signatures and the 5 MiB size limit; antivirus scanning is not performed.
+Failed content validation means document submission fails without DB changes.
 Already-uploaded Cloudinary assets are not deleted on failed submissions or replacement: another version may reference them.
 No orphan-asset cleanup worker or storage migration is added. Legacy superseded unreviewed S3 objects are deleted only after confirmed commit.
 The DB write runs in a serializable transaction and revalidates ownership, status and expiry after storage I/O.
 No migration is needed: existing unique indexes protect one document per requirement and one version number per document.
-The 4-second/5-MB target needs measurement with real Cloudinary, ClamAV and PostgreSQL; unit tests do not establish throughput.
+The 4-second/5-MB target needs measurement with real Cloudinary and PostgreSQL; unit tests do not establish throughput.
 
 ## DocumentVersion Replacement (UC-22)
 
 POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/versions` with a Customer token and the same JSON asset-reference contract.
-`files` replaces the entire current file set (1–10 ordered publicIds; the UC-21 verification and scanning rules apply). Metadata fields and `uploadNote` are optional.
+`files` replaces the entire current file set (1–10 ordered publicIds; the UC-21 verification and content-validation rules apply). Metadata fields and `uploadNote` are optional.
 Omitted metadata retains its current value; supplied values use the same validation as the first upload.
 
 An unreviewed PROVIDED version is updated in place: its ID and version number stay unchanged. A reviewed or rejected version creates the next number.
@@ -256,7 +256,7 @@ PATCH `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/docu
 GET `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/versions` returns newest-first history, all file URLs and
 reviews attached to their own versions. Only the booking owner, Transport Specialist or Logistics Manager can read it; URLs expire after five minutes.
 Only the booking owner can submit or edit. SATISFIED requirements and dossiers sent to authorities are locked against both file and metadata edits.
-Every edit records its actor and changes in the dossier audit trail. Real PostgreSQL/S3/ClamAV measurement is needed to verify the 2-second DB-write target.
+Every edit records its actor and changes in the dossier audit trail. Real PostgreSQL/Cloudinary/S3 measurement is needed to verify the 2-second DB-write target.
 
 ## ComplianceDossier Viewing (UC-20)
 
