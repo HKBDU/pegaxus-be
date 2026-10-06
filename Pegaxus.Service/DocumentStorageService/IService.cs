@@ -18,6 +18,4 @@ public sealed class DocumentStorageOptions
 {
     public string BucketName { get; set; } = string.Empty;
     public string Region { get; set; } = string.Empty;
-    public string ClamAvHost { get; set; } = string.Empty;
-    public int ClamAvPort { get; set; } = 3310;
 }

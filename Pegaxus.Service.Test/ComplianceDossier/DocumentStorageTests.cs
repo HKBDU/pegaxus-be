@@ -1,6 +1,4 @@
-using System.Buffers.Binary;
 using System.Net;
-using System.Net.Sockets;
 using System.Text;
 using Amazon;
 using Amazon.Runtime;
@@ -17,34 +15,33 @@ namespace Pegaxus.Service.Test;
 public class DocumentStorageTests
 {
     [Fact]
-    public async Task DirectUploadContent_IsScannedWithoutS3ConfigurationOrAnotherUpload()
+    public async Task DirectUploadContent_IsValidatedWithoutStorageConfiguration()
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var scanned = RunScannerAsync(listener, "stream: OK");
-        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
-        {
-            ["DocumentStorageOptions:ClamAvHost"] = "127.0.0.1",
-            ["DocumentStorageOptions:ClamAvPort"] = ((IPEndPoint)listener.LocalEndpoint).Port.ToString()
-        }).Build();
-        using var service = new StorageService(configuration, NullLogger<StorageService>.Instance);
+        using var service = new StorageService(new ConfigurationBuilder().Build(), NullLogger<StorageService>.Instance);
         var bytes = "%PDF-1.7 content"u8.ToArray();
         await service.ValidateContentAsync(new Pegaxus.Service.MediaService.PreviewFile(bytes, "application/pdf"));
-        Assert.Equal(bytes, await scanned.WaitAsync(TimeSpan.FromSeconds(5)));
+    }
+
+    [Theory]
+    [InlineData(0, 415)]
+    [InlineData(10, 415)]
+    [InlineData(StorageService.MaxFileSize + 1, 413)]
+    public async Task DirectUploadContent_RejectsInvalidOrOversizedContent(long size, int statusCode)
+    {
+        using var service = new StorageService(new ConfigurationBuilder().Build(), NullLogger<StorageService>.Instance);
+        var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.ValidateContentAsync(
+            new Pegaxus.Service.MediaService.PreviewFile(new byte[size], "application/pdf")));
+        Assert.Equal(statusCode, error.StatusCode);
     }
 
     [Fact]
-    public async Task CleanFile_IsScannedEncryptedAndSignedForFiveMinutes()
+    public async Task ValidFile_IsEncryptedAndSignedForFiveMinutes()
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var scanned = RunScannerAsync(listener, "stream: OK");
         var client = new RecordingS3Client();
-        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var service = CreateService(client);
         var content = "%PDF-1.7 content"u8.ToArray();
         var versionId = Guid.NewGuid();
         var stored = await service.UploadAsync(versionId, 0, File("passport.pdf", "application/pdf", content));
-        Assert.Equal(content, await scanned.WaitAsync(TimeSpan.FromSeconds(5)));
         var put = Assert.Single(client.Uploads);
         Assert.Equal(ServerSideEncryptionMethod.AES256, put.ServerSideEncryptionMethod);
         Assert.Equal("*", put.IfNoneMatch);
@@ -62,26 +59,6 @@ public class DocumentStorageTests
     }
 
     [Theory]
-    [InlineData("stream: Eicar-Test-Signature FOUND", 400, "MALWARE_DETECTED")]
-    [InlineData("stream: INSTREAM size limit exceeded. ERROR", 503, "VIRUS_SCANNER_UNAVAILABLE")]
-    [InlineData("unknown", 503, "VIRUS_SCANNER_UNAVAILABLE")]
-    public async Task UnsafeOrFailedScan_NeverUploadsToStorage(string verdict, int statusCode, string errorCode)
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var scanned = RunScannerAsync(listener, verdict);
-        var client = new RecordingS3Client();
-        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
-        var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.UploadAsync(Guid.NewGuid(), 0,
-            File("passport.pdf", "application/pdf", "%PDF-1.7 content"u8.ToArray())));
-        await scanned.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal(statusCode, error.StatusCode);
-        Assert.Equal(errorCode, error.ErrorCode);
-        Assert.Empty(client.Uploads);
-        Assert.Equal(0, client.BucketChecks);
-    }
-
-    [Theory]
     [InlineData("passport.pdf", "application/pdf", "<html>not a PDF</html>")]
     [InlineData("passport.jpg", "image/jpeg", "%PDF-1.7 content")]
     [InlineData("passport.exe", "application/pdf", "%PDF-1.7 content")]
@@ -89,7 +66,7 @@ public class DocumentStorageTests
     public async Task ExtensionMimeAndActualContent_MustAgree(string name, string mime, string content)
     {
         var client = new RecordingS3Client();
-        using var service = CreateService(client, 1);
+        using var service = CreateService(client);
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.UploadAsync(Guid.NewGuid(), 0,
             File(name, mime, Encoding.UTF8.GetBytes(content))));
         Assert.Equal(415, error.StatusCode);
@@ -100,15 +77,11 @@ public class DocumentStorageTests
     [Theory]
     [InlineData("jpeg", "image/jpeg", "/9j/")]
     [InlineData("png", "image/png", "iVBORw0KGgo=")]
-    public async Task AllowedImages_AreScannedAndUploaded(string extension, string mime, string base64)
+    public async Task AllowedImages_AreUploaded(string extension, string mime, string base64)
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var scanned = RunScannerAsync(listener, "stream: OK");
         var client = new RecordingS3Client();
-        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var service = CreateService(client);
         var stored = await service.UploadAsync(Guid.NewGuid(), 0, File($"page.{extension}", mime, Convert.FromBase64String(base64)));
-        await scanned.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal(mime, stored.MimeType);
         Assert.Single(client.Uploads);
     }
@@ -116,14 +89,10 @@ public class DocumentStorageTests
     [Fact]
     public async Task PublicBucket_IsRejectedBeforeObjectCreation()
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var scanned = RunScannerAsync(listener, "stream: OK");
         var client = new RecordingS3Client { IsPrivate = false };
-        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var service = CreateService(client);
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.UploadAsync(Guid.NewGuid(), 0,
             File("passport.pdf", "application/pdf", "%PDF-1.7 content"u8.ToArray())));
-        await scanned.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal("INSECURE_DOCUMENT_STORAGE", error.ErrorCode);
         Assert.Empty(client.Uploads);
     }
@@ -131,14 +100,10 @@ public class DocumentStorageTests
     [Fact]
     public async Task MissingEncryptionAcknowledgment_RemovesTheNewObject()
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var scanned = RunScannerAsync(listener, "stream: OK");
         var client = new RecordingS3Client { AcknowledgeEncryption = false };
-        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var service = CreateService(client);
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.UploadAsync(Guid.NewGuid(), 0,
             File("passport.pdf", "application/pdf", "%PDF-1.7 content"u8.ToArray())));
-        await scanned.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Equal("DOCUMENT_STORAGE_UNAVAILABLE", error.ErrorCode);
         Assert.Single(client.Deletes);
     }
@@ -154,17 +119,13 @@ public class DocumentStorageTests
     }
 
     [Fact]
-    public async Task FiveMegabytes_IsAcceptedAfterFullScan()
+    public async Task FiveMegabytes_IsAccepted()
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var scanned = RunScannerAsync(listener, "stream: OK");
         var client = new RecordingS3Client();
-        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var service = CreateService(client);
         var bytes = new byte[StorageService.MaxFileSize];
         "%PDF-1.7"u8.CopyTo(bytes);
         var stored = await service.UploadAsync(Guid.NewGuid(), 0, File("passport.pdf", "application/pdf", bytes));
-        Assert.Equal(bytes.Length, (await scanned.WaitAsync(TimeSpan.FromSeconds(5))).Length);
         Assert.Equal(bytes.Length, stored.SizeBytes);
         Assert.Equal(bytes.Length, client.Content!.Length);
     }
@@ -172,13 +133,9 @@ public class DocumentStorageTests
     [Fact]
     public async Task VersionedObjects_KeepTheirExactStorageVersionForReadAndCleanup()
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var scanned = RunScannerAsync(listener, "stream: OK");
         var client = new RecordingS3Client { ObjectVersionId = "s3-object-1" };
-        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var service = CreateService(client);
         var stored = await service.UploadAsync(Guid.NewGuid(), 0, File("passport.pdf", "application/pdf", "%PDF-1.7"u8.ToArray()));
-        await scanned.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.EndsWith("?versionId=s3-object-1", stored.StorageUrl);
         Assert.Contains("versionId=s3-object-1", (await service.CreateReadUrlAsync(stored.StorageUrl)).Url);
         await service.DeleteAsync(stored.StorageUrl);
@@ -188,106 +145,24 @@ public class DocumentStorageTests
     [Fact]
     public async Task ExistingObjectCollision_NeverDeletesThePreviousObject()
     {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var scanned = RunScannerAsync(listener, "stream: OK");
         var client = new RecordingS3Client { UploadFailureStatus = HttpStatusCode.PreconditionFailed };
-        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
+        using var service = CreateService(client);
         await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.UploadAsync(Guid.NewGuid(), 0,
             File("passport.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())));
-        await scanned.WaitAsync(TimeSpan.FromSeconds(5));
         Assert.Empty(client.Deletes);
-    }
-
-    [Fact]
-    public async Task ScannerConnectionEndingWithoutTerminator_IsRejected()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var scanned = RunScannerAsync(listener, "stream: OK", terminate: false);
-        var client = new RecordingS3Client();
-        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
-        var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.UploadAsync(Guid.NewGuid(), 0,
-            File("passport.pdf", "application/pdf", "%PDF-1.7"u8.ToArray())));
-        await scanned.WaitAsync(TimeSpan.FromSeconds(5));
-        Assert.Equal("VIRUS_SCANNER_UNAVAILABLE", error.ErrorCode);
-        Assert.Empty(client.Uploads);
-    }
-
-    [Fact]
-    public async Task Scanner_DoesNotDependOnTheCallerSynchronizationContext()
-    {
-        using var listener = new TcpListener(IPAddress.Loopback, 0);
-        listener.Start();
-        var context = new TrackingSynchronizationContext();
-        var previousContext = SynchronizationContext.Current;
-        Task<byte[]> scanned;
-        SynchronizationContext.SetSynchronizationContext(context);
-        try
-        {
-            scanned = RunScannerAsync(listener, "stream: OK");
-        }
-        finally
-        {
-            SynchronizationContext.SetSynchronizationContext(previousContext);
-        }
-        var client = new RecordingS3Client();
-        using var service = CreateService(client, ((IPEndPoint)listener.LocalEndpoint).Port);
-        var content = "%PDF-1.7"u8.ToArray();
-        await service.UploadAsync(Guid.NewGuid(), 0, File("passport.pdf", "application/pdf", content));
-        Assert.Equal(content, await scanned.WaitAsync(TimeSpan.FromSeconds(5)));
-        Assert.Equal(0, context.PostCount);
-    }
-
-    private sealed class TrackingSynchronizationContext : SynchronizationContext
-    {
-        private int _postCount;
-        public int PostCount => Volatile.Read(ref _postCount);
-
-        public override void Post(SendOrPostCallback callback, object? state)
-        {
-            Interlocked.Increment(ref _postCount);
-            base.Post(callback, state);
-        }
     }
 
     private static IFormFile File(string name, string mime, byte[] content) =>
         new FormFile(new MemoryStream(content), 0, content.Length, "Files", name) { Headers = new HeaderDictionary(), ContentType = mime };
 
-    private static TestStorageService CreateService(RecordingS3Client client, int scannerPort)
+    private static TestStorageService CreateService(RecordingS3Client client)
     {
         var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["DocumentStorageOptions:BucketName"] = "private-bucket",
-            ["DocumentStorageOptions:Region"] = "us-east-1",
-            ["DocumentStorageOptions:ClamAvHost"] = "127.0.0.1",
-            ["DocumentStorageOptions:ClamAvPort"] = scannerPort.ToString()
+            ["DocumentStorageOptions:Region"] = "us-east-1"
         }).Build();
         return new TestStorageService(configuration, client);
-    }
-
-    private static async Task<byte[]> RunScannerAsync(TcpListener listener, string verdict, bool terminate = true)
-    {
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        using var socket = await listener.AcceptTcpClientAsync(timeout.Token).ConfigureAwait(false);
-        await using var stream = socket.GetStream();
-        var command = new byte[10];
-        await stream.ReadExactlyAsync(command, timeout.Token).ConfigureAwait(false);
-        Assert.Equal("zINSTREAM\0", Encoding.UTF8.GetString(command));
-        using var content = new MemoryStream();
-        var lengthBytes = new byte[4];
-        while (true)
-        {
-            await stream.ReadExactlyAsync(lengthBytes, timeout.Token).ConfigureAwait(false);
-            var length = BinaryPrimitives.ReadInt32BigEndian(lengthBytes);
-            if (length == 0) break;
-            Assert.InRange(length, 1, 65536);
-            var chunk = new byte[length];
-            await stream.ReadExactlyAsync(chunk, timeout.Token).ConfigureAwait(false);
-            content.Write(chunk);
-        }
-        await stream.WriteAsync(Encoding.UTF8.GetBytes(verdict + (terminate ? "\0" : "")), timeout.Token).ConfigureAwait(false);
-        return content.ToArray();
     }
 
     [Fact]
@@ -296,7 +171,7 @@ public class DocumentStorageTests
         var bytes = new byte[StorageService.MaxFileSize];
         "%PDF-1.7"u8.CopyTo(bytes);
         var client = new RecordingS3Client { PreviewContent = bytes };
-        using var service = CreateService(client, 3310);
+        using var service = CreateService(client);
         var result = await service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf?versionId=old%2F1");
         Assert.True(bytes.AsSpan().SequenceEqual(result.Content));
         Assert.Equal("application/pdf", result.ContentType);
@@ -313,7 +188,7 @@ public class DocumentStorageTests
     public async Task Preview_DetectsActualImageType(string content, string mimeType)
     {
         var client = new RecordingS3Client { PreviewContent = Convert.FromBase64String(content) };
-        using var service = CreateService(client, 3310);
+        using var service = CreateService(client);
         Assert.Equal(mimeType, (await service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf")).ContentType);
     }
 
@@ -324,7 +199,7 @@ public class DocumentStorageTests
     public async Task Preview_RejectsActiveOrUnknownContent(string content)
     {
         var client = new RecordingS3Client { PreviewContent = Encoding.UTF8.GetBytes(content) };
-        using var service = CreateService(client, 3310);
+        using var service = CreateService(client);
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf"));
         Assert.Equal(415, error.StatusCode);
     }
@@ -335,7 +210,7 @@ public class DocumentStorageTests
     public async Task Preview_RejectsOversizedFilesIncludingMissingLength(bool missingLength)
     {
         var client = new RecordingS3Client { PreviewContent = new byte[StorageService.MaxFileSize + 1], PreviewContentLength = missingLength ? 0 : StorageService.MaxFileSize + 1 };
-        using var service = CreateService(client, 3310);
+        using var service = CreateService(client);
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf"));
         Assert.Equal(413, error.StatusCode);
     }
@@ -346,7 +221,7 @@ public class DocumentStorageTests
     public async Task Preview_TranslatesStorageErrorsWithoutLeakingDetails(int storageStatus, int expectedStatus)
     {
         var client = new RecordingS3Client { DownloadFailureStatus = (HttpStatusCode)storageStatus };
-        using var service = CreateService(client, 3310);
+        using var service = CreateService(client);
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf"));
         Assert.Equal(expectedStatus, error.StatusCode);
         Assert.DoesNotContain("sensitive", error.Message);
@@ -356,7 +231,7 @@ public class DocumentStorageTests
     public async Task Preview_DeniesForeignBucketAndPublicBucketBeforeDownloading()
     {
         var client = new RecordingS3Client { IsPrivate = false };
-        using var service = CreateService(client, 3310);
+        using var service = CreateService(client);
         await Assert.ThrowsAsync<BadRequestException>(() => service.DownloadPreviewAsync("s3://another-bucket/documents/version/00.pdf"));
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf"));
         Assert.Equal(503, error.StatusCode);
@@ -367,7 +242,7 @@ public class DocumentStorageTests
     public async Task Preview_PropagatesCallerCancellation()
     {
         var client = new RecordingS3Client();
-        using var service = CreateService(client, 3310);
+        using var service = CreateService(client);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.DownloadPreviewAsync("s3://private-bucket/documents/version/00.pdf", cancellation.Token));
