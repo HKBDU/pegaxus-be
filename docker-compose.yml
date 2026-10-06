@@ -20,6 +20,20 @@ services:
     networks:
       - pegaxus-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: pegaxus_redis
+    restart: unless-stopped
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - pegaxus-network
+
   api:
     build:
       context: .
@@ -29,14 +43,22 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       ASPNETCORE_ENVIRONMENT: ${ASPNETCORE_ENVIRONMENT:-Development}
       ASPNETCORE_URLS: http://+:8080
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB:-pegaxus_db};Username=${POSTGRES_USER:-pegaxus_user};Password=${POSTGRES_PASSWORD:-pegaxus_secret_password}
-      JwtSettings__Secret: ${JWT_SECRET:-YourSuperSecretKeyWithAtLeast32CharactersLongForPegaxus2026!}
-      JwtSettings__Issuer: ${JWT_ISSUER:-Pegaxus.API}
-      JwtSettings__Audience: ${JWT_AUDIENCE:-Pegaxus.Client}
-      JwtSettings__ExpiryInMinutes: ${JWT_EXPIRY_MINUTES:-1440}
+      ConnectionStrings__Redis: redis:6379
+      JwtOptions__SecretKey: ${JWT_SECRET:-secretKeySieuCapVoDich123kkkNguVL@}
+      JwtOptions__Issuer: ${JWT_ISSUER:-pegaxusServer}
+      JwtOptions__Audience: ${JWT_AUDIENCE:-pegaxusClient}
+      JwtOptions__ExpirationMinutes: ${JWT_EXPIRY_MINUTES:-15}
+      MailOptions__Mail: ${MailOptions__Mail:-}
+      MailOptions__DisplayName: ${MailOptions__DisplayName:-Pegaxus}
+      MailOptions__Password: ${MailOptions__Password:-}
+      MailOptions__Host: ${MailOptions__Host:-smtp.gmail.com}
+      MailOptions__Port: ${MailOptions__Port:-587}
     ports:
       - "${API_PORT:-5000}:8080"
     networks:
