@@ -208,6 +208,11 @@ builder.Services.AddScoped<ComplianceRequirementService.IService, ComplianceRequ
 builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.ListRequest>, ComplianceRequirementService.Validator.ListRequestValidator>();
 builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.SaveRequest>, ComplianceRequirementService.Validator.SaveRequestValidator>();
 builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.StatusRequest>, ComplianceRequirementService.Validator.StatusRequestValidator>();
+builder.Services.AddScoped<Pegaxus.Service.TransportProviderService.IService, Pegaxus.Service.TransportProviderService.Service>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.ListRequest>, Pegaxus.Service.TransportProviderService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.CreateRequest>, Pegaxus.Service.TransportProviderService.Validator.CreateRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.UpdateRequest>, Pegaxus.Service.TransportProviderService.Validator.UpdateRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.StatusRequest>, Pegaxus.Service.TransportProviderService.Validator.StatusRequestValidator>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();

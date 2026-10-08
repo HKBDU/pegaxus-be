@@ -3531,6 +3531,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("tax_code");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -3545,7 +3546,12 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "IsDeleted" }, "TransportProvider_is_deleted_idx");
 
                     b.HasIndex(new[] { "ProviderCode" }, "TransportProvider_provider_code_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
+
+                    b.HasIndex(new[] { "TaxCode" }, "TransportProvider_tax_code_key")
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex(new[] { "ProviderName" }, "TransportProvider_provider_name_idx");
 
