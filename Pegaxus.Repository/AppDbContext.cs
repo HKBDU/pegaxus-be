@@ -179,7 +179,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("transport_plan_status", new[] { "DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED" })
             .HasPostgresEnum("transport_status", new[] { "CREATED", "PLANNING", "READY", "IN_TRANSIT", "COMPLETED", "CANCELLED" })
             .HasPostgresEnum("vehicle_incident_type", new[] { "BREAKDOWN", "ACCIDENT", "TIRE_DAMAGE", "ENGINE_FAILURE", "TEMPERATURE_CONTROL_FAILURE", "EQUIPMENT_FAILURE", "OTHER" })
-            .HasPostgresEnum("vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE" });
+            .HasPostgresEnum("vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE", "SUSPENDED", "OUT_OF_SERVICE" });
 
         modelBuilder.Entity<Account>(entity =>
         {
@@ -2652,9 +2652,9 @@ public partial class AppDbContext : DbContext
 
             entity.HasIndex(e => e.IsDeleted, "Vehicle_is_deleted_idx");
 
-            entity.HasIndex(e => e.LicensePlate, "Vehicle_license_plate_key").IsUnique();
+            entity.HasIndex(e => e.LicensePlate, "Vehicle_license_plate_key").IsUnique().HasFilter("is_deleted = false");
 
-            entity.HasIndex(e => e.VehicleCode, "Vehicle_vehicle_code_key").IsUnique();
+            entity.HasIndex(e => e.VehicleCode, "Vehicle_vehicle_code_key").IsUnique().HasFilter("is_deleted = false");
 
             entity.Property(e => e.VehicleId).HasColumnName("vehicle_id");
             entity.Property(e => e.CapacityHorses).HasColumnName("capacity_horses");
@@ -2687,6 +2687,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnName("registration_number");
             entity.Property(e => e.SpecialEquipment).HasColumnName("special_equipment");
             entity.Property(e => e.UpdatedAt)
+                .IsConcurrencyToken()
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
             entity.Property(e => e.VehicleCode)

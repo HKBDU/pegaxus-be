@@ -67,7 +67,7 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_plan_status", new[] { "DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_status", new[] { "CREATED", "PLANNING", "READY", "IN_TRANSIT", "COMPLETED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_incident_type", new[] { "BREAKDOWN", "ACCIDENT", "TIRE_DAMAGE", "ENGINE_FAILURE", "TEMPERATURE_CONTROL_FAILURE", "EQUIPMENT_FAILURE", "OTHER" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE", "SUSPENDED", "OUT_OF_SERVICE" });
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Account", b =>
@@ -3629,6 +3629,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("transport_mode");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -3662,10 +3663,12 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "IsDeleted" }, "Vehicle_is_deleted_idx");
 
                     b.HasIndex(new[] { "LicensePlate" }, "Vehicle_license_plate_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex(new[] { "VehicleCode" }, "Vehicle_vehicle_code_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.ToTable("Vehicle", null, t =>
                         {

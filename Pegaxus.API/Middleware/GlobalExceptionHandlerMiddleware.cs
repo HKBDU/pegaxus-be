@@ -30,7 +30,7 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
             context.Response.Clear();
             context.Response.StatusCode = statusCode;
             await context.Response.WriteAsJsonAsync(ResponseBuilder.ErrorResponse(
-                null,
+                (ex as FieldValidationException)?.Errors,
                 GetErrorMessage(ex, statusCode),
                 errorCode: GetErrorCode(ex, statusCode),
                 code: statusCode,
