@@ -2362,6 +2362,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnName("total_distance_km");
             entity.Property(e => e.TransportPlanId).HasColumnName("transport_plan_id");
             entity.Property(e => e.UpdatedAt)
+                .IsConcurrencyToken()
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
 
