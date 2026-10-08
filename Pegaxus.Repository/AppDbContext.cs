@@ -159,7 +159,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("horse_incident_type", new[] { "INJURY", "DEHYDRATION", "RESPIRATORY_ISSUE", "FEVER", "STRESS", "COLIC", "FATIGUE", "OTHER" })
             .HasPostgresEnum("horse_sex", new[] { "MALE", "FEMALE", "GELDING" })
             .HasPostgresEnum("hydration_status", new[] { "NORMAL", "MILD_DEHYDRATION", "MODERATE_DEHYDRATION", "SEVERE_DEHYDRATION" })
-            .HasPostgresEnum("incident_category", new[] { "VEHICLE", "HORSE_HEALTH", "BOTH" })
+            .HasPostgresEnum("incident_category", new[] { "VEHICLE", "HORSE_HEALTH", "BOTH", "ROUTE_CHANGE" })
             .HasPostgresEnum("incident_severity", new[] { "LOW", "MEDIUM", "HIGH", "CRITICAL" })
             .HasPostgresEnum("incident_status", new[] { "REPORTED", "PENDING", "RESOLVED", "CANCELLED" })
             .HasPostgresEnum("invoice_history_type", new[] { "CREATE", "ISSUE", "RECORD_PAYMENT", "MARK_OVERDUE", "CANCEL" })
@@ -2754,6 +2754,7 @@ public partial class AppDbContext : DbContext
         });
 
         OnModelCreatingPartial(modelBuilder);
+        ConfigureRouteChanges(modelBuilder);
     }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);

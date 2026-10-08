@@ -14,7 +14,7 @@ public sealed class TransactionalOutboxWorker(
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         do
         {
             try

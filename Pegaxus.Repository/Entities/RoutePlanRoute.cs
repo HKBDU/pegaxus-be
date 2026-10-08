@@ -36,6 +36,11 @@ public partial class RoutePlanRoute
 
     public string? Note { get; set; }
 
+    public string? ServiceType { get; set; }
+    public string? ProviderReference { get; set; }
+    public DateTime? SupersededAt { get; set; }
+    public Guid? SupersededByChangeRequestId { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }

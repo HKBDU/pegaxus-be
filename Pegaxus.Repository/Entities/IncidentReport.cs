@@ -12,6 +12,9 @@ public partial class IncidentReport
 {
     public Guid IncidentReportId { get; set; }
 
+    public Guid? TransportId { get; set; }
+    public bool EmergencySettlementRequired { get; set; }
+
     public string IncidentCode { get; set; } = null!;
 
     public Guid EmployeeId { get; set; }
