@@ -10,7 +10,6 @@ public sealed class TransactionalOutboxWorker(
     IServiceScopeFactory scopes,
     ILogger<TransactionalOutboxWorker> logger) : BackgroundService
 {
-    private const int BatchSize = 20;
     private const int MaxAttempts = 8;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -37,19 +36,17 @@ public sealed class TransactionalOutboxWorker(
     {
         await using var claimScope = scopes.CreateAsyncScope();
         var db = claimScope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var now = DateTime.UtcNow;
-        var staleLock = now.AddMinutes(-10);
-
+        var now = UtcNow();
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var messages = await db.OutboxMessages
-            .FromSqlInterpolated($"""
+            .FromSqlRaw("""
                 SELECT *
                 FROM "OutboxMessage"
-                WHERE (status = {"PENDING"} OR status = {"FAILED"}
-                    OR (status = {"PROCESSING"} AND locked_at < {staleLock}))
-                  AND available_at <= {now}
+                WHERE (status = 'PENDING' OR status = 'FAILED'
+                    OR (status = 'PROCESSING' AND locked_at < (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '10 minutes')))
+                  AND available_at <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
                 ORDER BY created_at
-                LIMIT {BatchSize}
+                LIMIT 20
                 FOR UPDATE SKIP LOCKED
                 """)
             .ToListAsync(cancellationToken);
@@ -104,7 +101,7 @@ public sealed class TransactionalOutboxWorker(
             }
 
             message.Status = "PROCESSED";
-            message.ProcessedAt = DateTime.UtcNow;
+            message.ProcessedAt = UtcNow();
             message.UpdatedAt = message.ProcessedAt.Value;
             message.LastError = null;
             await db.SaveChangesAsync(cancellationToken);
@@ -127,10 +124,13 @@ public sealed class TransactionalOutboxWorker(
 
         message.Attempts++;
         message.Status = message.Attempts >= MaxAttempts ? "DEAD" : "FAILED";
-        message.AvailableAt = DateTime.UtcNow.AddSeconds(Math.Min(300, Math.Pow(2, message.Attempts) * 5));
+        message.AvailableAt = UtcNow().AddSeconds(Math.Min(300, Math.Pow(2, message.Attempts) * 5));
         message.LastError = error.ToString()[..Math.Min(4000, error.ToString().Length)];
-        message.UpdatedAt = DateTime.UtcNow;
+        message.UpdatedAt = UtcNow();
         await db.SaveChangesAsync(cancellationToken);
         logger.LogError(error, "Outbox message {OutboxMessageId} failed on attempt {Attempt}.", messageId, message.Attempts);
     }
+
+    private static DateTime UtcNow() =>
+        DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 }
