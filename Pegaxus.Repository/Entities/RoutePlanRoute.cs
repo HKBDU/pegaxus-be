@@ -26,6 +26,14 @@ public partial class RoutePlanRoute
 
     public Guid? TransportProviderId { get; set; }
 
+    public string? ServiceType { get; set; }
+
+    public string? ProviderReference { get; set; }
+
+    public decimal? OutsourcingCostAmount { get; set; }
+
+    public string? OutsourcingCurrency { get; set; }
+
     public DateTime? PlannedDepartureAt { get; set; }
 
     public DateTime? PlannedArrivalAt { get; set; }

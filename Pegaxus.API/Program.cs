@@ -211,6 +211,8 @@ builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.Statu
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
+builder.Services.AddScoped<Pegaxus.Service.RouteOutsourcingService.IService, Pegaxus.Service.RouteOutsourcingService.Service>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteOutsourcingService.Request>, Pegaxus.Service.RouteOutsourcingService.Validator.RequestValidator>();
 
 var app = builder.Build();
 
