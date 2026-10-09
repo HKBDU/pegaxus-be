@@ -5,6 +5,8 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using BookingRequest = Pegaxus.Service.BookingService.Request;
 using BookingServiceImpl = Pegaxus.Service.BookingService.Service;
+using TransportPlanServiceImpl = Pegaxus.Service.TransportPlanService.Service;
+using TransportPlanRequest = Pegaxus.Service.TransportPlanService.Request;
 
 namespace Pegaxus.Service.Test;
 
@@ -358,6 +360,77 @@ public class BookingServiceTests
     }
 
     [Fact]
+    public async Task CreateTransportPlan_CreatesDraftAndMovesTransportToPlanning()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (_, customer) = await TestSupport.AddCustomerAsync(db);
+        var (managerAccount, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer, withHorse: true);
+        var service = CreateService(db);
+        await service.ApproveAsync(managerAccount.AccountId, booking.BookingId);
+        var transportPlanService = CreateTransportPlanService(db);
+
+        var start = DateTimeOffset.UtcNow.AddDays(1);
+        var result = await transportPlanService.CreateAsync(
+            managerAccount.AccountId,
+            booking.BookingId,
+            new TransportPlanRequest.CreateRequest
+            {
+                PlannedStartAt = start,
+                PlannedEndAt = start.AddDays(2),
+                EstimatedDistanceKm = 920.5m,
+                EstimatedDurationMinutes = 1260,
+                PlanningNote = "Temperature monitoring"
+            });
+
+        Assert.StartsWith("TP-", result.PlanCode);
+        Assert.Equal(TransportPlanStatus.DRAFT.ToString(), result.Status);
+        Assert.Equal(TransportStatus.PLANNING.ToString(), result.Transport.Status);
+        Assert.Empty(result.AssignedEmployees);
+        Assert.Single(await db.TransportPlans.ToListAsync());
+    }
+
+    [Fact]
+    public async Task CreateTransportPlan_RejectsDuplicateAndInvalidSchedule()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (_, customer) = await TestSupport.AddCustomerAsync(db);
+        var (managerAccount, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer, withHorse: true);
+        var service = CreateService(db);
+        await service.ApproveAsync(managerAccount.AccountId, booking.BookingId);
+        var transportPlanService = CreateTransportPlanService(db);
+
+        var start = DateTimeOffset.UtcNow.AddDays(1);
+        var request = new TransportPlanRequest.CreateRequest
+        {
+            PlannedStartAt = start,
+            PlannedEndAt = start.AddDays(1)
+        };
+        await transportPlanService.CreateAsync(managerAccount.AccountId, booking.BookingId, request);
+
+        var duplicate = await Assert.ThrowsAsync<ConflictException>(() =>
+            transportPlanService.CreateAsync(managerAccount.AccountId, booking.BookingId, request));
+        Assert.Equal("TRANSPORT_PLAN_EXISTS", duplicate.ErrorCode);
+
+        await using var secondDb = TestSupport.CreateDb();
+        var (_, secondCustomer) = await TestSupport.AddCustomerAsync(secondDb);
+        var (secondManager, _) = await TestSupport.AddLogisticsManagerAsync(secondDb);
+        var (secondBooking, _) = await TestSupport.AddPendingBookingAsync(secondDb, secondCustomer, withHorse: true);
+        await CreateService(secondDb).ApproveAsync(secondManager.AccountId, secondBooking.BookingId);
+        var invalid = await Assert.ThrowsAsync<BadRequestException>(() =>
+            CreateTransportPlanService(secondDb).CreateAsync(
+                secondManager.AccountId,
+                secondBooking.BookingId,
+                new TransportPlanRequest.CreateRequest
+                {
+                    PlannedStartAt = start,
+                    PlannedEndAt = start
+                }));
+        Assert.Equal("VALIDATION_ERROR", invalid.ErrorCode);
+    }
+
+    [Fact]
     public async Task Submit_RejectsBookingWithoutHorse()
     {
         await using var db = TestSupport.CreateDb();
@@ -394,6 +467,9 @@ public class BookingServiceTests
 
     private static BookingServiceImpl CreateService(AppDbContext db) =>
         new(db, TestSupport.CreateMailService());
+
+    private static TransportPlanServiceImpl CreateTransportPlanService(AppDbContext db) =>
+        new(db);
 
     private static BookingServiceImpl CreateService(AppDbContext db, out TestSupport.RecordingMailService mailService)
     {
