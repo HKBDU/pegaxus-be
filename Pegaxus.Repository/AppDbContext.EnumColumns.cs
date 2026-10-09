@@ -13,8 +13,6 @@ public partial class AppDbContext
         Configure<AuthoritySubmission>(modelBuilder, "status", "authority_submission_status", nameof(AuthoritySubmission.Status), "AuthoritySubmission_status_idx", "DRAFT");
         Configure<AuthoritySubmissionEvidenceFile>(modelBuilder, "evidence_type", "authority_evidence_type", nameof(AuthoritySubmissionEvidenceFile.EvidenceType), "AuthoritySubmissionEvidenceFile_evidence_type_idx");
         Configure<Booking>(modelBuilder, "status", "booking_status", nameof(Booking.Status), "Booking_status_idx", "PENDING");
-        Configure<BookingEmployeeAssignment>(modelBuilder, "assignment_role", "employee_role", nameof(BookingEmployeeAssignment.AssignmentRole));
-        Configure<BookingEmployeeAssignment>(modelBuilder, "status", "booking_assignment_status", nameof(BookingEmployeeAssignment.Status), "BookingEmployeeAssignment_status_idx", "ACTIVE");
         Configure<BookingStatusHistory>(modelBuilder, "type", "booking_history_type", nameof(BookingStatusHistory.Type), "BookingStatusHistory_type_idx");
         Configure<BookingStatusHistory>(modelBuilder, "previous_status", "booking_status", nameof(BookingStatusHistory.PreviousStatus));
         Configure<BookingStatusHistory>(modelBuilder, "new_status", "booking_status", nameof(BookingStatusHistory.NewStatus));

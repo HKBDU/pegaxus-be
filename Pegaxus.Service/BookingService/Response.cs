@@ -63,8 +63,40 @@ public class Response
     public class CustomerResponse
     {
         public Guid CustomerId { get; init; }
+        public string? CustomerCode { get; init; }
         public required string FullName { get; init; }
         public string? Phone { get; init; }
+    }
+
+    public sealed class ApprovedBookingDetailResponse
+    {
+        public Guid BookingId { get; init; }
+        public required string BookingCode { get; init; }
+        public required string Status { get; init; }
+        public required CustomerResponse Customer { get; init; }
+        public required string OriginAddress { get; init; }
+        public required string OriginCountry { get; init; }
+        public required string DestinationAddress { get; init; }
+        public required string DestinationCountry { get; init; }
+        public bool IsInternational { get; init; }
+        public DateOnly RequestedDepartureDate { get; init; }
+        public DateOnly? RequestedArrivalDate { get; init; }
+        public string? SpecialRequirements { get; init; }
+        public string? CustomerNote { get; init; }
+        public int TotalHorses { get; init; }
+        public required IReadOnlyList<BookingHorseResponse> Horses { get; init; }
+        public TransportDetailResponse? Transport { get; init; }
+        public TransportPlanSummary? TransportPlan { get; init; }
+        public ComplianceDossierSummary? ComplianceDossier { get; init; }
+        public required IReadOnlyList<ApprovedRoutePlanResponse> RoutePlans { get; init; }
+    }
+
+    public sealed class ApprovedRoutePlanResponse
+    {
+        public Guid RoutePlanId { get; init; }
+        public required string RoutePlanCode { get; init; }
+        public required string RouteType { get; init; }
+        public required string Status { get; init; }
     }
 
     public class BookingHorseResponse
@@ -130,15 +162,35 @@ public class Response
         public Guid BookingId { get; init; }
         public required string BookingCode { get; init; }
         public required string Status { get; init; }
-        public required string StatusName { get; init; }
         public required string CustomerName { get; init; }
+        public string? CustomerCode { get; init; }
+        public required string OriginAddress { get; init; }
         public required string OriginCountry { get; init; }
+        public required string DestinationAddress { get; init; }
         public required string DestinationCountry { get; init; }
+        public bool IsInternational { get; init; }
         public DateOnly RequestedDepartureDate { get; init; }
+        public DateOnly? RequestedArrivalDate { get; init; }
+        public string? SpecialRequirements { get; init; }
+        public DateTimeOffset? ApprovedAt { get; init; }
         public int TotalHorses { get; init; }
+        public Guid? TransportId { get; init; }
+        public TransportPlanSummary? TransportPlan { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public ComplianceDossierSummary? ComplianceDossier { get; init; }
         public RoutePlanSummary? RoutePlan { get; init; }
+    }
+
+    public class TransportPlanSummary
+    {
+        public Guid TransportPlanId { get; init; }
+        public required string PlanCode { get; init; }
+        public required string Status { get; init; }
+        public DateTimeOffset? PlannedStartAt { get; init; }
+        public DateTimeOffset? PlannedEndAt { get; init; }
+        public decimal? EstimatedDistanceKm { get; init; }
+        public int? EstimatedDurationMinutes { get; init; }
+        public string? PlanningNote { get; init; }
     }
 
     public class ComplianceDossierSummary
@@ -180,15 +232,14 @@ public class Response
 
     public sealed class BookingAssignmentResponse
     {
-        public Guid AssignmentId { get; init; }
         public Guid BookingId { get; init; }
+        public Guid TransportPlanId { get; init; }
         public Guid EmployeeId { get; init; }
         public required string EmployeeName { get; init; }
         public required string Role { get; init; }
-        public required string Status { get; init; }
-        public Guid AssignedByEmployeeId { get; init; }
         public DateTimeOffset AssignedAt { get; init; }
-        public DateTimeOffset? RevokedAt { get; init; }
+        public bool IsPrimary { get; init; }
+        public string? Responsibility { get; init; }
         public string? Note { get; init; }
     }
 

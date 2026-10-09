@@ -1,7 +1,7 @@
 # Racehorse Cross-Border Transport System
-## Data Dictionary V7 — Ý nghĩa từng bảng và từng field
+## Data Dictionary V8 — Ý nghĩa từng bảng và từng field
 
-> Tài liệu này được đối chiếu với `racehorse_transport_physical_erd_final_v7.dbml`.
+> Tài liệu này được đối chiếu với `racehorse_transport_physical_erd_final_v8.dbml`.
 > Mục tiêu: giải thích **từng field**, kiểu dữ liệu, PK/FK, bắt buộc/nullable và ý nghĩa nghiệp vụ.
 
 ### Quy ước
@@ -11,7 +11,7 @@
 - **Required = Yes**: field có `not null` trong DBML.
 - Field nullable không có nghĩa luôn được phép bỏ trống trong mọi trạng thái; một số business rule được backend kiểm tra.
 - Các field `created_at` / `updated_at` là metadata thời gian của bản ghi.
-- V7 dùng **soft delete** cho 11 bảng master/profile/config: `Account`, `Customer`, `Employee`, `Horse`, `Location`, `Route`, `Vehicle`, `TransportProvider`, `ComplianceRequirement`, `DossierTemplate`, `DossierRequirement` (chỉ áp dụng cho optional requirement).
+- V8 dùng **soft delete** cho 11 bảng master/profile/config: `Account`, `Customer`, `Employee`, `Horse`, `Location`, `Route`, `Vehicle`, `TransportProvider`, `ComplianceRequirement`, `DossierTemplate`, `DossierRequirement` (chỉ áp dụng cho optional requirement).
 - Với các bảng này: `is_deleted` cho biết đã xóa logic hay chưa; `deleted_at` là thời điểm xóa; `deleted_by_account_id` là Account thực hiện xóa.
 - `DossierRequirement.horse_id = NULL` nghĩa là requirement áp dụng cho toàn chuyến; có giá trị nghĩa là requirement áp dụng riêng cho Horse đó.
 - `ComplianceRequirement.validity_period_days` là số ngày hiệu lực mặc định của requirement. Khi áp dụng vào dossier, backend tính và lưu `DossierRequirement.valid_until`.
@@ -1188,25 +1188,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm tạo message trong transaction nghiệp vụ. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm cập nhật message gần nhất. |
 
-# 56. `BookingEmployeeAssignment`
-
-**Ý nghĩa bảng:** Lưu phân công của Logistics Manager cho nhân sự xử lý một Booking. Transport Specialist phụ trách hồ sơ pháp lý; Fleet Route Coordinator phụ trách kế hoạch vận chuyển và lộ trình.
-
-| Field | Type | Key | Required | Ý nghĩa |
-|---|---|---|---|---|
-| `booking_employee_assignment_id` | `uuid` | PK | No | Khóa chính của assignment. |
-| `booking_id` | `uuid` | FK | Yes | Booking được phân công. |
-| `employee_id` | `uuid` | FK | Yes | Nhân sự được phân công; phải là TS hoặc Fleet Route Coordinator đúng với `assignment_role`. |
-| `assignment_role` | `employee_role` |  | Yes | Vai trò xử lý: `TRANSPORT_SPECIALIST` hoặc `FLEET_ROUTE_COORDINATOR`. |
-| `assigned_by_employee_id` | `uuid` | FK | Yes | Logistics Manager thực hiện phân công. |
-| `status` | `booking_assignment_status` |  | Yes | Trạng thái: `ACTIVE` hoặc `REVOKED`. |
-| `assigned_at` | `timestamp` |  | Yes | Thời điểm phân công. |
-| `revoked_at` | `timestamp` |  | No | Thời điểm thu hồi assignment. |
-| `note` | `text` |  | No | Ghi chú phân công. |
-
-**Business rule:** Một Booking chỉ có tối đa một assignment `ACTIVE` cho mỗi role. Khi đổi người, assignment cũ chuyển `REVOKED` để giữ lịch sử.
-
-# Appendix A — Các business rule V7 cần backend kiểm tra
+# Appendix A — Các business rule V8 cần backend kiểm tra
 
 1. `Vehicle.transport_mode` phải phù hợp với `Route.transport_mode` của chặng được gán qua `RoutePlanRouteVehicle`.
 2. `RoutePlanRoute.driver_employee_id` nếu có phải trỏ tới Employee có `role = DRIVER`.

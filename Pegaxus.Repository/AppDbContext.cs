@@ -22,8 +22,6 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<AuthoritySubmissionEvidenceFile> AuthoritySubmissionEvidenceFiles { get; set; }
 
     public virtual DbSet<Booking> Bookings { get; set; }
-    public virtual DbSet<BookingEmployeeAssignment> BookingEmployeeAssignments { get; set; }
-
     public virtual DbSet<BookingHorse> BookingHorses { get; set; }
 
     public virtual DbSet<BookingStatusHistory> BookingStatusHistories { get; set; }
@@ -405,34 +403,6 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.CustomerId)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("Booking_customer_id_fkey");
-        });
-
-        modelBuilder.Entity<BookingEmployeeAssignment>(entity =>
-        {
-            entity.HasKey(e => e.BookingEmployeeAssignmentId).HasName("BookingEmployeeAssignment_pkey");
-            entity.ToTable("BookingEmployeeAssignment");
-            entity.HasIndex(e => new { e.BookingId, e.AssignmentRole }, "BookingEmployeeAssignment_active_role_idx")
-                .HasFilter("status = 'ACTIVE'").IsUnique();
-            entity.HasIndex(e => e.EmployeeId, "BookingEmployeeAssignment_employee_id_idx");
-            entity.HasIndex(e => e.AssignedByEmployeeId, "BookingEmployeeAssignment_assigned_by_employee_id_idx");
-            entity.Property(e => e.BookingEmployeeAssignmentId).HasColumnName("booking_employee_assignment_id");
-            entity.Property(e => e.BookingId).HasColumnName("booking_id");
-            entity.Property(e => e.EmployeeId).HasColumnName("employee_id");
-            entity.Property(e => e.AssignmentRole).HasColumnName("assignment_role");
-            entity.Property(e => e.AssignedByEmployeeId).HasColumnName("assigned_by_employee_id");
-            entity.Property(e => e.Status).HasColumnName("status");
-            entity.Property(e => e.AssignedAt).HasColumnType("timestamp without time zone").HasColumnName("assigned_at");
-            entity.Property(e => e.RevokedAt).HasColumnType("timestamp without time zone").HasColumnName("revoked_at");
-            entity.Property(e => e.Note).HasColumnName("note");
-            entity.HasOne(e => e.Booking).WithMany(e => e.EmployeeAssignments)
-                .HasForeignKey(e => e.BookingId).OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("BookingEmployeeAssignment_booking_id_fkey");
-            entity.HasOne(e => e.Employee).WithMany(e => e.BookingAssignments)
-                .HasForeignKey(e => e.EmployeeId).OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("BookingEmployeeAssignment_employee_id_fkey");
-            entity.HasOne(e => e.AssignedByEmployee).WithMany(e => e.CreatedBookingAssignments)
-                .HasForeignKey(e => e.AssignedByEmployeeId).OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("BookingEmployeeAssignment_assigned_by_employee_id_fkey");
         });
 
         modelBuilder.Entity<BookingHorse>(entity =>
