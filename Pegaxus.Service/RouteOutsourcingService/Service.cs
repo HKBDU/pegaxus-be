@@ -29,15 +29,16 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
             .Select(route => (Guid?)route.TransportPlanId).SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
         // Serialize provider-link changes across every route in the same transport plan.
-        var planQuery = db.Database.IsNpgsql()
-            ? db.TransportPlans.FromSqlInterpolated($"SELECT * FROM \"TransportPlan\" WHERE transport_plan_id = {planId} FOR UPDATE")
-            : db.TransportPlans.AsQueryable();
-        var plan = await planQuery.SingleAsync(plan => plan.TransportPlanId == planId, cancellationToken);
+        // Updating the key to itself holds a row lock until the transaction ends.
+        if (db.Database.IsNpgsql())
+            await db.TransportPlans.Where(plan => plan.TransportPlanId == planId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(plan => plan.TransportPlanId, plan => plan.TransportPlanId), cancellationToken);
+        var plan = await db.TransportPlans.SingleAsync(plan => plan.TransportPlanId == planId, cancellationToken);
         await db.Entry(plan).ReloadAsync(cancellationToken);
-        var routeQuery = db.Database.IsNpgsql()
-            ? db.RoutePlans.FromSqlInterpolated($"SELECT * FROM \"RoutePlan\" WHERE route_plan_id = {routePlanId} FOR UPDATE")
-            : db.RoutePlans.AsQueryable();
-        var route = await routeQuery.SingleOrDefaultAsync(route => route.RoutePlanId == routePlanId && route.TransportPlanId == planId, cancellationToken)
+        if (db.Database.IsNpgsql())
+            await db.RoutePlans.Where(route => route.RoutePlanId == routePlanId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(route => route.RoutePlanId, route => route.RoutePlanId), cancellationToken);
+        var route = await db.RoutePlans.SingleOrDefaultAsync(route => route.RoutePlanId == routePlanId && route.TransportPlanId == planId, cancellationToken)
             ?? throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
         await db.Entry(route).ReloadAsync(cancellationToken);
         if (route.Status is not (RoutePlanStatus.DRAFT or RoutePlanStatus.CONFIRMED or RoutePlanStatus.PENDING_LEGAL_REVIEW or
@@ -46,10 +47,10 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
         if (DateTime.SpecifyKind(route.UpdatedAt, DateTimeKind.Utc) != request.LastUpdatedAt.UtcDateTime)
             throw Modified();
 
-        var segmentQuery = db.Database.IsNpgsql()
-            ? db.RoutePlanRoutes.FromSqlInterpolated($"SELECT * FROM \"RoutePlanRoute\" WHERE route_plan_route_id = {segmentId} FOR UPDATE")
-            : db.RoutePlanRoutes.AsQueryable();
-        var segment = await segmentQuery.SingleOrDefaultAsync(segment => segment.RoutePlanRouteId == segmentId && segment.RoutePlanId == routePlanId, cancellationToken)
+        if (db.Database.IsNpgsql())
+            await db.RoutePlanRoutes.Where(segment => segment.RoutePlanRouteId == segmentId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(segment => segment.RoutePlanRouteId, segment => segment.RoutePlanRouteId), cancellationToken);
+        var segment = await db.RoutePlanRoutes.SingleOrDefaultAsync(segment => segment.RoutePlanRouteId == segmentId && segment.RoutePlanId == routePlanId, cancellationToken)
             ?? throw new NotFoundException("Segment not found", "SEGMENT_NOT_FOUND");
         await db.Entry(segment).ReloadAsync(cancellationToken);
         await db.Entry(segment).Reference(item => item.Route).LoadAsync(cancellationToken);
@@ -61,10 +62,10 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
         if (request.Outsourced == true)
         {
             // Coordinate with provider status changes and soft deletion (UC-41).
-            var providerQuery = db.Database.IsNpgsql()
-                ? db.TransportProviders.FromSqlInterpolated($"SELECT * FROM \"TransportProvider\" WHERE transport_provider_id = {request.TransportProviderId!.Value} FOR UPDATE")
-                : db.TransportProviders.AsQueryable();
-            provider = await providerQuery.SingleOrDefaultAsync(item => item.TransportProviderId == request.TransportProviderId, cancellationToken);
+            if (db.Database.IsNpgsql())
+                await db.TransportProviders.Where(item => item.TransportProviderId == request.TransportProviderId)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.TransportProviderId, item => item.TransportProviderId), cancellationToken);
+            provider = await db.TransportProviders.SingleOrDefaultAsync(item => item.TransportProviderId == request.TransportProviderId, cancellationToken);
             if (provider is not null) await db.Entry(provider).ReloadAsync(cancellationToken);
             if (provider is null || provider.IsDeleted)
                 throw new BadRequestException("Please select a valid Transport Provider for this outsourced segment.", "PROVIDER_REQUIRED");
