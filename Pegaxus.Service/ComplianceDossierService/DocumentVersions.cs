@@ -96,16 +96,20 @@ public sealed partial class Service
     private async Task<(ComplianceDocument Document, DocumentVersion Latest)> ExistingDocumentAsync(Guid requirementId, bool tracking,
         CancellationToken cancellationToken)
     {
-        var documents = tracking && _db.Database.IsRelational()
-            ? _db.ComplianceDocuments.FromSqlInterpolated($"SELECT * FROM \"ComplianceDocument\" WHERE dossier_requirement_id = {requirementId} FOR UPDATE")
-            : _db.ComplianceDocuments.AsQueryable();
+        // Updating the key to itself holds a row lock until the transaction ends.
+        if (tracking && _db.Database.IsRelational())
+            await _db.ComplianceDocuments.Where(item => item.DossierRequirementId == requirementId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDocumentId, item => item.ComplianceDocumentId), cancellationToken);
+        var documents = _db.ComplianceDocuments.AsQueryable();
         var document = await (tracking ? documents.AsTracking() : documents.AsNoTracking())
             .SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId, cancellationToken)
             ?? throw new NotFoundException("ComplianceDocument not found.", "DOCUMENT_NOT_FOUND");
         if (tracking) await _db.Entry(document).ReloadAsync(cancellationToken);
-        var versions = tracking && _db.Database.IsRelational()
-            ? _db.DocumentVersions.FromSqlInterpolated($"SELECT * FROM \"DocumentVersion\" WHERE compliance_document_id = {document.ComplianceDocumentId} ORDER BY version_no DESC LIMIT 1 FOR UPDATE")
-            : _db.DocumentVersions.AsQueryable();
+        if (tracking && _db.Database.IsRelational())
+            await _db.DocumentVersions.Where(item => item.ComplianceDocumentId == document.ComplianceDocumentId)
+                .OrderByDescending(item => item.VersionNo).Take(1)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DocumentVersionId, item => item.DocumentVersionId), cancellationToken);
+        var versions = _db.DocumentVersions.AsQueryable();
         var latest = await (tracking ? versions.AsTracking() : versions.AsNoTracking())
             .Include(item => item.DocumentAttachments).Include(item => item.DocumentReviews)
             .Where(item => item.ComplianceDocumentId == document.ComplianceDocumentId).OrderByDescending(item => item.VersionNo)

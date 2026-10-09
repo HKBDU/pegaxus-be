@@ -114,9 +114,11 @@ public sealed partial class Service
 
     private async Task<ComplianceDossier> ReviewDossierAsync(Guid dossierId, CancellationToken cancellationToken)
     {
-        var dossiers = _db.Database.IsRelational()
-            ? _db.ComplianceDossiers.FromSqlInterpolated($"SELECT * FROM \"ComplianceDossier\" WHERE compliance_dossier_id = {dossierId} FOR UPDATE")
-            : _db.ComplianceDossiers.AsQueryable();
+        // Updating the key to itself holds a row lock until the transaction ends.
+        if (_db.Database.IsRelational())
+            await _db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDossierId, item => item.ComplianceDossierId), cancellationToken);
+        var dossiers = _db.ComplianceDossiers.AsQueryable();
         var dossier = await dossiers.AsTracking().Include(item => item.Transport).ThenInclude(item => item.Booking)
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)
             ?? throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
@@ -132,24 +134,27 @@ public sealed partial class Service
     private async Task<(DossierRequirement Requirement, ComplianceDocument Document, DocumentVersion Version)> ReviewContextAsync(
         Guid dossierId, Guid requirementId, Guid versionId, CancellationToken cancellationToken)
     {
-        var requirements = _db.Database.IsRelational()
-            ? _db.DossierRequirements.FromSqlInterpolated($"SELECT * FROM \"DossierRequirement\" WHERE dossier_requirement_id = {requirementId} FOR UPDATE")
-            : _db.DossierRequirements.AsQueryable();
+        if (_db.Database.IsRelational())
+            await _db.DossierRequirements.Where(item => item.DossierRequirementId == requirementId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DossierRequirementId, item => item.DossierRequirementId), cancellationToken);
+        var requirements = _db.DossierRequirements.AsQueryable();
         var requirement = await requirements.AsTracking().SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId &&
             item.ComplianceDossierId == dossierId && !item.IsDeleted, cancellationToken)
             ?? throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
         await _db.Entry(requirement).ReloadAsync(cancellationToken);
         if (requirement.IsDeleted || _db.Entry(requirement).State == EntityState.Detached)
             throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
-        var documents = _db.Database.IsRelational()
-            ? _db.ComplianceDocuments.FromSqlInterpolated($"SELECT * FROM \"ComplianceDocument\" WHERE dossier_requirement_id = {requirementId} FOR UPDATE")
-            : _db.ComplianceDocuments.AsQueryable();
+        if (_db.Database.IsRelational())
+            await _db.ComplianceDocuments.Where(item => item.DossierRequirementId == requirementId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDocumentId, item => item.ComplianceDocumentId), cancellationToken);
+        var documents = _db.ComplianceDocuments.AsQueryable();
         var document = await documents.AsTracking().SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId, cancellationToken)
             ?? throw new NotFoundException("ComplianceDocument not found.", "DOCUMENT_NOT_FOUND");
         await _db.Entry(document).ReloadAsync(cancellationToken);
-        var versions = _db.Database.IsRelational()
-            ? _db.DocumentVersions.FromSqlInterpolated($"SELECT * FROM \"DocumentVersion\" WHERE document_version_id = {versionId} FOR UPDATE")
-            : _db.DocumentVersions.AsQueryable();
+        if (_db.Database.IsRelational())
+            await _db.DocumentVersions.Where(item => item.DocumentVersionId == versionId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DocumentVersionId, item => item.DocumentVersionId), cancellationToken);
+        var versions = _db.DocumentVersions.AsQueryable();
         var version = await versions.AsTracking().SingleOrDefaultAsync(item => item.DocumentVersionId == versionId &&
             item.ComplianceDocumentId == document.ComplianceDocumentId, cancellationToken)
             ?? throw new NotFoundException("DocumentVersion not found.", "DOCUMENT_VERSION_NOT_FOUND");

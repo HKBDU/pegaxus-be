@@ -557,8 +557,9 @@ public sealed partial class Service : IService
 
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         if (_db.Database.IsRelational())
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT 1 FROM \"ComplianceDossier\" WHERE compliance_dossier_id = {dossierId} FOR UPDATE", cancellationToken);
+            // Updating the key to itself holds a row lock until the transaction ends.
+            await _db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDossierId, item => item.ComplianceDossierId), cancellationToken);
 
         var dossier = await _db.ComplianceDossiers
             .Include(item => item.Transport)

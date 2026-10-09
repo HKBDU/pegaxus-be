@@ -64,12 +64,16 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         if (db.Database.IsNpgsql())
         {
             var transportId = await db.TransportPlans.AsNoTracking().Where(x => x.TransportPlanId == planId).Select(x => x.TransportId).SingleAsync(cancellationToken);
-            await db.Transports.FromSqlInterpolated($"SELECT * FROM \"Transport\" WHERE transport_id = {transportId} FOR UPDATE").AsNoTracking().LoadAsync(cancellationToken);
-            await db.TransportPlans.FromSqlInterpolated($"SELECT * FROM \"TransportPlan\" WHERE transport_plan_id = {planId} FOR UPDATE").LoadAsync(cancellationToken);
+            // Updating the key to itself holds a row lock until the transaction ends.
+            await db.Transports.Where(x => x.TransportId == transportId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportId, x => x.TransportId), cancellationToken);
+            await db.TransportPlans.Where(x => x.TransportPlanId == planId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportPlanId, x => x.TransportPlanId), cancellationToken);
         }
-        var route = db.Database.IsNpgsql()
-            ? await db.RoutePlans.FromSqlInterpolated($"SELECT * FROM \"RoutePlan\" WHERE route_plan_id = {routePlanId} FOR UPDATE").SingleAsync(cancellationToken)
-            : await db.RoutePlans.SingleAsync(x => x.RoutePlanId == routePlanId, cancellationToken);
+        if (db.Database.IsNpgsql())
+            await db.RoutePlans.Where(x => x.RoutePlanId == routePlanId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanId, x => x.RoutePlanId), cancellationToken);
+        var route = await db.RoutePlans.SingleAsync(x => x.RoutePlanId == routePlanId, cancellationToken);
         if (db.Database.IsRelational()) await db.Entry(route).ReloadAsync(cancellationToken);
         if (route.UpdatedAt.Ticks != version.UtcDateTime.Ticks)
             throw new ConflictException("The route plan changed. Reload it and try again.", "ROUTE_PLAN_MODIFIED");
@@ -116,9 +120,10 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         // Employee row locks serialize schedule checks even when two different plans select the same person.
         foreach (var id in employeeIds)
         {
-            var employee = db.Database.IsNpgsql()
-                ? await db.Employees.FromSqlInterpolated($"SELECT * FROM \"Employee\" WHERE employee_id = {id} FOR UPDATE").SingleOrDefaultAsync(cancellationToken)
-                : await db.Employees.SingleOrDefaultAsync(x => x.EmployeeId == id, cancellationToken);
+            if (db.Database.IsNpgsql())
+                await db.Employees.Where(x => x.EmployeeId == id)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.EmployeeId, x => x.EmployeeId), cancellationToken);
+            var employee = await db.Employees.SingleOrDefaultAsync(x => x.EmployeeId == id, cancellationToken);
             if (employee is null) throw new NotFoundException("Employee not found", "EMPLOYEE_NOT_FOUND");
             if (db.Database.IsRelational()) await db.Entry(employee).ReloadAsync(cancellationToken);
             var account = await db.Accounts.AsNoTracking().SingleAsync(x => x.AccountId == employee.AccountId, cancellationToken);
@@ -230,7 +235,14 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     private async Task<List<RoutePlanRoute>> LoadSegmentsAsync(Guid id, bool tracked, CancellationToken cancellationToken)
     {
         if (tracked && db.Database.IsNpgsql())
-            await db.RoutePlanRoutes.FromSqlInterpolated($"SELECT * FROM \"RoutePlanRoute\" WHERE route_plan_id = {id} ORDER BY route_plan_route_id FOR UPDATE").LoadAsync(cancellationToken);
+        {
+            // Acquire each segment lock in a stable order to avoid deadlocks.
+            var segmentIds = await db.RoutePlanRoutes.Where(x => x.RoutePlanId == id)
+                .OrderBy(x => x.RoutePlanRouteId).Select(x => x.RoutePlanRouteId).ToArrayAsync(cancellationToken);
+            foreach (var segmentId in segmentIds)
+                await db.RoutePlanRoutes.Where(x => x.RoutePlanRouteId == segmentId)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanRouteId, x => x.RoutePlanRouteId), cancellationToken);
+        }
         var query = db.RoutePlanRoutes.Include(x => x.DriverEmployee).Include(x => x.EscortEmployee).Include(x => x.TransportProvider).Include(x => x.Route)
             .Where(x => x.RoutePlanId == id).OrderBy(x => x.SequenceNo);
         if (!tracked) return await query.AsNoTracking().ToListAsync(cancellationToken);
