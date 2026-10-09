@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -46,11 +47,14 @@ public sealed partial class Service
         Guid accountId, Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken = default)
     {
         await RequireSpecialistAsync(accountId, cancellationToken);
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = _db.Database.IsRelational()
+            ? await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : await _db.Database.BeginTransactionAsync(cancellationToken);
         // The negotiated status change takes the same lock before changing the booking or its dossier.
         if (_db.Database.IsRelational())
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT 1 FROM \"Booking\" WHERE booking_id = {bookingId} FOR UPDATE", cancellationToken);
+            // Updating the key to itself holds a row lock until the transaction ends.
+            await _db.Bookings.Where(item => item.BookingId == bookingId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.BookingId, item => item.BookingId), cancellationToken);
 
         var (booking, requirements) = await PrepareInitializationAsync(bookingId, request, cancellationToken);
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
