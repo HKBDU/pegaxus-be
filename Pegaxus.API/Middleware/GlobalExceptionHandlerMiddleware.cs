@@ -1,6 +1,7 @@
 using Pegaxus.Service.Models;
 using Pegaxus.Service.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace Pegaxus.API.Middleware;
 
@@ -44,6 +45,8 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
         {
             Exceptions appEx => appEx.StatusCode,
             DbUpdateConcurrencyException => StatusCodes.Status409Conflict,
+            PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } => StatusCodes.Status409Conflict,
+            DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } } => StatusCodes.Status409Conflict,
             ArgumentException => StatusCodes.Status400BadRequest,
             UnauthorizedAccessException => StatusCodes.Status401Unauthorized,
             KeyNotFoundException => StatusCodes.Status404NotFound,
@@ -53,7 +56,7 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
 
     private static string GetErrorMessage(Exception ex, int statusCode)
     {
-        if (ex is DbUpdateConcurrencyException)
+        if (statusCode == StatusCodes.Status409Conflict && ex is not Exceptions)
             return "The record changed. Reload it and try again.";
         return statusCode >= StatusCodes.Status500InternalServerError
             ? "A system error occurred. Please try again later"

@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Data;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -150,7 +151,10 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     {
         await AuthorizeAsync(accountId, cancellationToken);
         Validate(request, statusValidator);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // shortcut: future assignment writers must validate the vehicle within a Serializable transaction.
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : await db.Database.BeginTransactionAsync(cancellationToken);
         var vehicle = await LockAsync(vehicleId, cancellationToken);
         CheckVersion(vehicle, request.LastUpdatedAt);
         if (vehicle.Status is VehicleStatus.ASSIGNED or VehicleStatus.IN_USE ||
@@ -179,9 +183,14 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
 
     private async Task<Vehicle> LockAsync(Guid id, CancellationToken cancellationToken)
     {
-        var query = db.Database.IsNpgsql()
-            ? db.Vehicles.FromSqlInterpolated($"SELECT * FROM \"Vehicle\" WHERE vehicle_id = {id} FOR UPDATE")
-            : db.Vehicles.Where(x => x.VehicleId == id);
+        var query = db.Vehicles.Where(x => x.VehicleId == id);
+        // Updating the key to itself holds a row lock until the transaction ends.
+        if (db.Database.IsNpgsql())
+        {
+            try { await query.ExecuteUpdateAsync(setters => setters.SetProperty(x => x.VehicleId, x => x.VehicleId), cancellationToken); }
+            catch (PostgresException error) when (error.SqlState is PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected)
+            { throw Modified(); }
+        }
         var vehicle = await query.SingleOrDefaultAsync(cancellationToken) ?? throw NotFound();
         // A reused context may already track the vehicle before acquiring its row lock.
         if (db.Database.IsRelational()) await db.Entry(vehicle).ReloadAsync(cancellationToken);
@@ -218,6 +227,8 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 ReferenceType = nameof(Vehicle), ReferenceId = vehicle.VehicleId, CreatedAt = vehicle.UpdatedAt });
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw Modified(); }
+        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected })
+        { throw Modified(); }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "Vehicle_vehicle_code_key" })
         { throw DuplicateCode(); }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "Vehicle_license_plate_key" })

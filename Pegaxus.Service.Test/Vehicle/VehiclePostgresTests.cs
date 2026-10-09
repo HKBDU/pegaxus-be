@@ -1,3 +1,7 @@
+using Pegaxus.API.Middleware;
+using Pegaxus.API.Services;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -151,10 +155,151 @@ public class VehiclePostgresTests
                 Assert.Equal(notificationCount, await verify.Notifications.LongCountAsync());
                 Assert.Equal(outboxCount, await verify.OutboxMessages.LongCountAsync());
             }
+            await Execute(admin, "DROP TRIGGER reject_vehicle_audit ON \"CatalogAuditLog\"; DROP FUNCTION reject_vehicle_audit()");
+            await using var queryDb = new AppDbContext(options);
+            Assert.Equal(0, await queryDb.DocumentVersions.Where(item => item.ComplianceDocumentId == Guid.Empty)
+                .OrderByDescending(item => item.VersionNo).Take(1)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DocumentVersionId, item => item.DocumentVersionId)));
+            await CheckOutboxClaimsAsync(options);
+            await CheckRequirementReferenceRaceAsync(options, actor);
+            await CheckVehicleAssignmentRaceAsync(options, actor);
         }
         finally
         {
             await Execute(admin, $"SET search_path TO public; DROP SCHEMA {schema} CASCADE;");
+        }
+    }
+
+    private static async Task CheckVehicleAssignmentRaceAsync(DbContextOptions<AppDbContext> options, Guid actor)
+    {
+        await using var seed = new AppDbContext(options);
+        var vehicle = await VehicleServiceTests.CreateService(seed).CreateAsync(VehicleServiceTests.ValidRequest("ASSIGN-RACE", "ASSIGN-RACE"), actor);
+        var segment = await VehicleServiceTests.AddAssignmentAsync(seed, await seed.Vehicles.SingleAsync(item => item.VehicleId == vehicle.VehicleId));
+        seed.RoutePlanRouteVehicles.Remove(await seed.RoutePlanRouteVehicles.SingleAsync(item => item.VehicleId == vehicle.VehicleId));
+        await seed.SaveChangesAsync();
+        await using var writer = new AppDbContext(options);
+        await using var writeTransaction = await writer.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+        Assert.True(await writer.Vehicles.AnyAsync(item => item.VehicleId == vehicle.VehicleId && !item.IsDeleted && item.Status == VehicleStatus.AVAILABLE));
+        writer.RoutePlanRouteVehicles.Add(new RoutePlanRouteVehicle
+        {
+            VehicleId = vehicle.VehicleId, RoutePlanRouteId = segment.RoutePlanRouteId,
+            AssignedAt = DateTime.SpecifyKind(VehicleServiceTests.TestClock.GetUtcNow().UtcDateTime, DateTimeKind.Unspecified)
+        });
+        await writer.SaveChangesAsync();
+        await using var changer = new AppDbContext(options);
+        var changeError = await Attempt(() => VehicleServiceTests.CreateService(changer).ChangeStatusAsync(vehicle.VehicleId,
+            VehicleServiceTests.StatusRequest(vehicle.UpdatedAt, "SUSPENDED"), actor));
+        var writeError = await Attempt(() => writeTransaction.CommitAsync());
+        Assert.True(changeError is not null || writeError is not null, "Status change and assignment insertion must not both commit.");
+        var conflict = changeError ?? writeError;
+        if (conflict is ConflictException applicationConflict)
+            Assert.Equal("VEHICLE_MODIFIED", applicationConflict.ErrorCode);
+        else
+            Assert.Equal(PostgresErrorCodes.SerializationFailure,
+                Assert.IsType<PostgresException>(conflict is DbUpdateException update ? update.InnerException : conflict).SqlState);
+        await using var check = new AppDbContext(options);
+        Assert.False(await check.RoutePlanRouteVehicles.AnyAsync(item => item.VehicleId == vehicle.VehicleId && item.Vehicle.Status == VehicleStatus.SUSPENDED));
+    }
+
+    private static async Task CheckOutboxClaimsAsync(DbContextOptions<AppDbContext> options)
+    {
+        await using var db = new AppDbContext(options);
+        await db.OutboxMessages.ExecuteDeleteAsync();
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        for (var index = 0; index < 26; index++)
+        {
+            Pegaxus.Service.OutboxService.OutboxQueue.AddEmail(db,
+                new() { To = "outbox@example.com", Subject = index.ToString(), Body = "Test" }, now);
+            var message = db.ChangeTracker.Entries<OutboxMessage>().Last().Entity;
+            message.Status = index switch { 20 or 23 => "PROCESSING", 21 => "FAILED", 24 => "DEAD", 25 => "PROCESSED", _ => "PENDING" };
+            if (index is 20 or 23) message.LockedAt = index == 20 ? now.AddMinutes(-11) : now;
+            if (index == 22) message.AvailableAt = now.AddHours(1);
+        }
+        await db.SaveChangesAsync();
+        var mail = new ConcurrentMail();
+        await using var services = new ServiceCollection().AddScoped(_ => new AppDbContext(options))
+            .AddSingleton<Pegaxus.Service.MailService.IService>(mail).BuildServiceProvider();
+        var batch = typeof(TransactionalOutboxWorker).GetMethod("ProcessBatchAsync",
+            System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
+        async Task RunBatchAsync()
+        {
+            using var worker = new TransactionalOutboxWorker(services.GetRequiredService<IServiceScopeFactory>(),
+                NullLogger<TransactionalOutboxWorker>.Instance);
+            await (Task)batch.Invoke(worker, [CancellationToken.None])!;
+        }
+        await RunBatchAsync();
+        Assert.Equal(20, mail.Subjects.Count);
+        await Task.WhenAll(RunBatchAsync(), RunBatchAsync());
+        Assert.Equal(22, mail.Subjects.Count);
+        Assert.Equal(22, mail.Subjects.Distinct().Count());
+        Assert.DoesNotContain("22", mail.Subjects);
+        Assert.DoesNotContain("23", mail.Subjects);
+        Assert.DoesNotContain("24", mail.Subjects);
+        Assert.DoesNotContain("25", mail.Subjects);
+        Assert.Equal(23, await db.OutboxMessages.CountAsync(message => message.Status == "PROCESSED"));
+    }
+
+    private static async Task CheckRequirementReferenceRaceAsync(DbContextOptions<AppDbContext> options, Guid actorId)
+    {
+        await using var seed = new AppDbContext(options);
+        var requirement = new ComplianceRequirement
+        {
+            ComplianceRequirementId = Guid.NewGuid(), RequirementCode = "RACE", RequirementName = "Race check",
+            Status = ComplianceRequirementStatus.ACTIVE, Category = ComplianceRequirementCategory.Other
+        };
+        var template = new DossierTemplate { DossierTemplateId = Guid.NewGuid(), TemplateCode = "RACE", TemplateName = "Race check" };
+        seed.AddRange(requirement, template);
+        await seed.SaveChangesAsync();
+        await using var writer = new AppDbContext(options);
+        await using var writeTransaction = await writer.Database.BeginTransactionAsync(System.Data.IsolationLevel.Serializable);
+        Assert.True(await writer.ComplianceRequirements.AnyAsync(item => item.ComplianceRequirementId == requirement.ComplianceRequirementId && !item.IsDeleted));
+        writer.DossierTemplateItems.Add(new DossierTemplateItem
+        {
+            DossierTemplateItemId = Guid.NewGuid(), DossierTemplateId = template.DossierTemplateId,
+            ComplianceRequirementId = requirement.ComplianceRequirementId, SequenceNo = 1
+        });
+        await writer.SaveChangesAsync();
+        await using var deleter = new AppDbContext(options);
+        var deleteError = await Record.ExceptionAsync(() =>
+            new Pegaxus.Service.ComplianceRequirementService.Service(deleter, null!, null!, null!)
+                .DeleteAsync(requirement.ComplianceRequirementId, actorId));
+        var writeError = await Record.ExceptionAsync(() => writeTransaction.CommitAsync());
+        Assert.True(deleteError is not null || writeError is not null, "Deletion and reference insertion must not both commit.");
+        var conflict = deleteError ?? writeError;
+        Assert.Equal(PostgresErrorCodes.SerializationFailure,
+            Assert.IsType<PostgresException>(conflict is DbUpdateException update ? update.InnerException : conflict).SqlState);
+        await using var check = new AppDbContext(options);
+        Assert.False(await check.DossierTemplateItems.AnyAsync(item =>
+            item.ComplianceRequirementId == requirement.ComplianceRequirementId && item.ComplianceRequirement.IsDeleted));
+    }
+
+    [Theory]
+    [InlineData(PostgresErrorCodes.SerializationFailure, false)]
+    [InlineData(PostgresErrorCodes.SerializationFailure, true)]
+    [InlineData(PostgresErrorCodes.DeadlockDetected, false)]
+    [InlineData(PostgresErrorCodes.DeadlockDetected, true)]
+    public async Task PostgreSqlWriteConflicts_Return409WithoutDatabaseDetails(string sqlState, bool wrapped)
+    {
+        var context = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        var postgres = new PostgresException("Database internals", "ERROR", "ERROR", sqlState);
+        Exception error = wrapped ? new DbUpdateException("Database internals", postgres) : postgres;
+        await new GlobalExceptionHandlerMiddleware(NullLogger<GlobalExceptionHandlerMiddleware>.Instance)
+            .InvokeAsync(context, _ => Task.FromException(error));
+        Assert.Equal(409, context.Response.StatusCode);
+        context.Response.Body.Position = 0;
+        var response = await new StreamReader(context.Response.Body).ReadToEndAsync();
+        Assert.Contains("CONCURRENT_UPDATE", response);
+        Assert.DoesNotContain("Database internals", response);
+    }
+
+    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IService
+    {
+        public System.Collections.Concurrent.ConcurrentBag<string> Subjects { get; } = [];
+        public Task SendMail(Pegaxus.Service.MailService.MailContent mailContent, CancellationToken cancellationToken = default)
+        {
+            Subjects.Add(mailContent.Subject);
+            return Task.CompletedTask;
         }
     }
 

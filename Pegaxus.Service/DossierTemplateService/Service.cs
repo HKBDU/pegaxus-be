@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Data;
 using Npgsql;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
@@ -58,6 +59,9 @@ public sealed class Service(AppDbContext db) : IService
         var status = ParseStatus(request.Status);
         if (status == DossierTemplateStatus.INACTIVE)
             throw new BadRequestException("Initial status must be DRAFT or ACTIVE.");
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : await db.Database.BeginTransactionAsync(cancellationToken);
         await ValidateSaveAsync(request, status, null, cancellationToken);
         var now = UtcNow();
         var template = new DossierTemplate
@@ -67,17 +71,20 @@ public sealed class Service(AppDbContext db) : IService
         Apply(template, request, status);
         db.DossierTemplates.Add(template);
         await SaveAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return await GetAsync(template.DossierTemplateId, cancellationToken);
     }
 
     public async Task<Response.TemplateResponse> UpdateAsync(Guid templateId, Request.SaveRequest request, CancellationToken cancellationToken = default)
     {
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : await db.Database.BeginTransactionAsync(cancellationToken);
         var template = await FindAsync(templateId, cancellationToken);
         var status = ParseStatus(request.Status);
         ValidateTransition(template.Status, status);
         await ValidateSaveAsync(request, status, templateId, cancellationToken);
 
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         template.VersionNo++;
         template.UpdatedAt = UtcNow();
         // Delete before inserting so swapping sequence numbers cannot violate the unique indexes.
