@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Data;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -132,7 +133,10 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
     public async Task DeleteAsync(Guid accountId, Guid id, CancellationToken cancellationToken = default)
     {
         await RequireEmployeeAsync(accountId, true, cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // shortcut: future route writers must validate the provider within a Serializable transaction.
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : await db.Database.BeginTransactionAsync(cancellationToken);
         var item = await GetForUpdateAsync(id, cancellationToken);
         if (await db.RoutePlanRoutes.AnyAsync(route => route.TransportProviderId == id &&
             route.RoutePlan.Status != RoutePlanStatus.COMPLETED && route.RoutePlan.Status != RoutePlanStatus.CANCELLED, cancellationToken))
@@ -158,10 +162,11 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
 
     private async Task<TransportProvider> GetForUpdateAsync(Guid id, CancellationToken cancellationToken)
     {
-        // Lock the provider before checking references; concurrent foreign-key inserts must finish first.
-        var query = db.Database.IsNpgsql()
-            ? db.TransportProviders.FromSqlInterpolated($"SELECT * FROM \"TransportProvider\" WHERE transport_provider_id = {id} FOR UPDATE")
-            : db.TransportProviders.AsQueryable();
+        // Updating the key to itself serializes catalog mutations until the transaction ends.
+        if (db.Database.IsNpgsql())
+            await db.TransportProviders.Where(item => item.TransportProviderId == id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.TransportProviderId, item => item.TransportProviderId), cancellationToken);
+        var query = db.TransportProviders.AsQueryable();
         var item = await query.SingleOrDefaultAsync(item => item.TransportProviderId == id && !item.IsDeleted, cancellationToken) ?? throw NotFound();
         await db.Entry(item).ReloadAsync(cancellationToken);
         if (item.IsDeleted) throw NotFound();
