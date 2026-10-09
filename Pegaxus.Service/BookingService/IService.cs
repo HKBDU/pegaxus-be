@@ -8,6 +8,10 @@ public interface IService
         Guid accountId,
         Guid bookingId,
         CancellationToken cancellationToken = default);
+    Task<Response.ApprovedBookingDetailResponse> GetApprovedAsync(
+        Guid accountId,
+        Guid bookingId,
+        CancellationToken cancellationToken = default);
     Task<IReadOnlyList<Response.BookingHistoryResponse>> GetHistoriesAsync(
         Guid accountId,
         Guid bookingId,
@@ -18,7 +22,7 @@ public interface IService
         CancellationToken cancellationToken = default);
     Task<Response.ApprovedBookingListResponse> GetApprovedListAsync(
         Guid accountId,
-        Request.BookingListRequest request,
+        Request.ApprovedBookingListRequest request,
         CancellationToken cancellationToken = default);
     Task AddHorseIntoBookingAsync(
         Guid accountId,

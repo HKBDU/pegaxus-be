@@ -35,6 +35,23 @@ public class Request
         public List<string>? SortBy { get; set; }
     }
 
+    public sealed class ApprovedBookingListRequest
+    {
+        public int PageIndex { get; set; } = 1;
+        public int PageSize { get; set; } = 20;
+        public string? Search { get; set; }
+        public bool? IsInternational { get; set; }
+        public string? TransportPlanStatus { get; set; }
+        public string? RoutePlanStatus { get; set; }
+        public bool? HasRoutePlan { get; set; }
+        public bool? HasTransportPlan { get; set; }
+        public bool? HasComplianceDossier { get; set; }
+        public string? ComplianceDossierStatus { get; set; }
+        public DateOnly? DepartureFrom { get; set; }
+        public DateOnly? DepartureTo { get; set; }
+        public string? SortBy { get; set; }
+    }
+
     public class CreateBookingRequest
     {
         public string OriginAddress { get; set; } = string.Empty;
