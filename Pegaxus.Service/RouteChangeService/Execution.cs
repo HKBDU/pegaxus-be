@@ -15,14 +15,19 @@ public sealed partial class Service
         var providerIds = proposed.Where(x => x.Outsourcing is not null).Select(x => x.Outsourcing!.Provider.TransportProviderId).Distinct().Order().ToArray();
         if (db.Database.IsRelational())
         {
+            // Updating each key to itself holds row locks in a stable order until the transaction ends.
             foreach (var id in proposed.Select(x => x.Route.RouteId).Distinct().Order())
-                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Route\" WHERE route_id = {id} FOR UPDATE", token);
+                await db.Routes.Where(x => x.RouteId == id)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RouteId, x => x.RouteId), token);
             foreach (var id in providerIds)
-                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"TransportProvider\" WHERE transport_provider_id = {id} FOR UPDATE", token);
+                await db.TransportProviders.Where(x => x.TransportProviderId == id)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportProviderId, x => x.TransportProviderId), token);
             foreach (var id in vehicleIds)
-                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Vehicle\" WHERE vehicle_id = {id} FOR UPDATE", token);
+                await db.Vehicles.Where(x => x.VehicleId == id)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.VehicleId, x => x.VehicleId), token);
             foreach (var id in employeeIds)
-                await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Employee\" WHERE employee_id = {id} FOR UPDATE", token);
+                await db.Employees.Where(x => x.EmployeeId == id)
+                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.EmployeeId, x => x.EmployeeId), token);
         }
         var vehicles = await db.Vehicles.AsNoTracking().Where(x => vehicleIds.Contains(x.VehicleId)).ToDictionaryAsync(x => x.VehicleId, token);
         var employees = await db.Employees.AsNoTracking().Include(x => x.Account).Where(x => employeeIds.Contains(x.EmployeeId)).ToDictionaryAsync(x => x.EmployeeId, token);

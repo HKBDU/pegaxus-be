@@ -37,32 +37,27 @@ public sealed class TransactionalOutboxWorker(
         await using var claimScope = scopes.CreateAsyncScope();
         var db = claimScope.ServiceProvider.GetRequiredService<AppDbContext>();
         var now = UtcNow();
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var messages = await db.OutboxMessages
-            .FromSqlRaw("""
-                SELECT *
-                FROM "OutboxMessage"
-                WHERE (status = 'PENDING' OR status = 'FAILED'
-                    OR (status = 'PROCESSING' AND locked_at < (CURRENT_TIMESTAMP AT TIME ZONE 'UTC' - INTERVAL '10 minutes')))
-                  AND available_at <= (CURRENT_TIMESTAMP AT TIME ZONE 'UTC')
-                ORDER BY created_at
-                LIMIT 20
-                FOR UPDATE SKIP LOCKED
-                """)
+        var staleBefore = now.AddMinutes(-10);
+        var eligible = db.OutboxMessages.Where(message =>
+            (message.Status == "PENDING" || message.Status == "FAILED" ||
+                (message.Status == "PROCESSING" && message.LockedAt < staleBefore)) &&
+            message.AvailableAt <= now);
+        var candidates = await eligible.OrderBy(message => message.CreatedAt).ThenBy(message => message.OutboxMessageId)
+            .Select(message => message.OutboxMessageId).Take(20)
             .ToListAsync(cancellationToken);
-
-        foreach (var message in messages)
+        var claimed = new List<Guid>();
+        foreach (var messageId in candidates)
         {
-            message.Status = "PROCESSING";
-            message.LockedAt = now;
-            message.UpdatedAt = now;
+            // Recheck eligibility atomically so competing workers cannot claim the same message.
+            if (await eligible.Where(message => message.OutboxMessageId == messageId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(message => message.Status, "PROCESSING")
+                    .SetProperty(message => message.LockedAt, now)
+                    .SetProperty(message => message.UpdatedAt, now), cancellationToken) == 1)
+                claimed.Add(messageId);
         }
-
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        foreach (var message in messages)
-            await ProcessMessageAsync(message.OutboxMessageId, cancellationToken);
+        foreach (var messageId in claimed)
+            await ProcessMessageAsync(messageId, cancellationToken);
     }
 
     private async Task ProcessMessageAsync(Guid messageId, CancellationToken cancellationToken)

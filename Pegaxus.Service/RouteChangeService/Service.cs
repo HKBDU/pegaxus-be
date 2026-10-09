@@ -127,7 +127,8 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var plan = await LockPlanAsync(header.RoutePlanId, cancellationToken);
         if (db.Database.IsRelational())
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"RouteChangeRequest\" WHERE route_change_request_id = {changeRequestId} FOR UPDATE", cancellationToken);
+            await db.RouteChangeRequests.Where(x => x.RouteChangeRequestId == changeRequestId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RouteChangeRequestId, x => x.RouteChangeRequestId), cancellationToken);
         var change = await db.RouteChangeRequests.SingleAsync(x => x.RouteChangeRequestId == changeRequestId, cancellationToken);
         await db.Entry(change).ReloadAsync(cancellationToken);
         var decisionRequest = Json(new { actor.EmployeeId, request.LastUpdatedAt, request.Decision, Note = request.Note?.Trim(), request.ReturnSegments });
@@ -215,10 +216,14 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
             ?? throw new NotFoundException("Route plan not found.", "ROUTE_PLAN_NOT_FOUND");
         if (db.Database.IsRelational())
         {
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"Transport\" WHERE transport_id = {header.TransportId} FOR UPDATE", token);
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"TransportPlan\" WHERE transport_plan_id = {header.TransportPlanId} FOR UPDATE", token);
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"RoutePlan\" WHERE route_plan_id = {routePlanId} FOR UPDATE", token);
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"RoutePlanRoute\" WHERE route_plan_id = {routePlanId} ORDER BY route_plan_route_id FOR UPDATE", token);
+            // Updating the key to itself holds a row lock until the transaction ends.
+            await db.Transports.Where(x => x.TransportId == header.TransportId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportId, x => x.TransportId), token);
+            await db.TransportPlans.Where(x => x.TransportPlanId == header.TransportPlanId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportPlanId, x => x.TransportPlanId), token);
+            await db.RoutePlans.Where(x => x.RoutePlanId == routePlanId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanId, x => x.RoutePlanId), token);
+            await LockSegmentsAsync(routePlanId, token);
         }
         var plan = await db.RoutePlans.Include(x => x.TransportPlan).ThenInclude(x => x.Transport).ThenInclude(x => x.Booking).ThenInclude(x => x.Customer).ThenInclude(x => x.Account)
             .SingleAsync(x => x.RoutePlanId == routePlanId, token);
@@ -226,6 +231,16 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         await db.Entry(plan.TransportPlan).ReloadAsync(token);
         await db.Entry(plan.TransportPlan.Transport).ReloadAsync(token);
         return plan;
+    }
+
+    private async Task LockSegmentsAsync(Guid routePlanId, CancellationToken token)
+    {
+        // Acquire segment locks in the same order for primary and backup routes to avoid deadlocks.
+        var ids = await db.RoutePlanRoutes.Where(x => x.RoutePlanId == routePlanId)
+            .OrderBy(x => x.RoutePlanRouteId).Select(x => x.RoutePlanRouteId).ToArrayAsync(token);
+        foreach (var id in ids)
+            await db.RoutePlanRoutes.Where(x => x.RoutePlanRouteId == id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanRouteId, x => x.RoutePlanRouteId), token);
     }
 
     private static void EnsureInTransit(RoutePlan plan)
@@ -279,8 +294,9 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
     {
         if (db.Database.IsRelational())
         {
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"RoutePlan\" WHERE route_plan_id = {backupId} FOR UPDATE", token);
-            await db.Database.ExecuteSqlInterpolatedAsync($"SELECT 1 FROM \"RoutePlanRoute\" WHERE route_plan_id = {backupId} ORDER BY route_plan_route_id FOR UPDATE", token);
+            await db.RoutePlans.Where(x => x.RoutePlanId == backupId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanId, x => x.RoutePlanId), token);
+            await LockSegmentsAsync(backupId, token);
         }
         var backup = await db.RoutePlans.AsNoTracking().SingleOrDefaultAsync(x => x.RoutePlanId == backupId, token);
         if (backup is null || backup.Status != RoutePlanStatus.CONFIRMED || backup.PrimaryRoutePlanId != plan.RoutePlanId || backup.TransportPlanId != plan.TransportPlanId)
