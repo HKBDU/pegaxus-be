@@ -176,9 +176,11 @@ public sealed partial class Service
     {
         var mail = _mailService ?? throw new InvalidOperationException("MailService must be configured for missing-document reminders.");
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-        var reminders = _db.Database.IsRelational()
-            ? _db.MissingDocumentReminders.FromSqlInterpolated($"SELECT * FROM \"MissingDocumentReminder\" WHERE missing_document_reminder_id = {reminderId} FOR UPDATE")
-            : _db.MissingDocumentReminders.AsQueryable();
+        // Updating the key to itself holds a row lock until the transaction ends.
+        if (_db.Database.IsRelational())
+            await _db.MissingDocumentReminders.Where(item => item.MissingDocumentReminderId == reminderId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.MissingDocumentReminderId, item => item.MissingDocumentReminderId), cancellationToken);
+        var reminders = _db.MissingDocumentReminders.AsQueryable();
         var reminder = await reminders.AsTracking().SingleAsync(item => item.MissingDocumentReminderId == reminderId, cancellationToken);
         await _db.Entry(reminder).ReloadAsync(cancellationToken);
         var now = ReminderNow();
@@ -243,9 +245,10 @@ public sealed partial class Service
 
     private async Task<ComplianceDossier> MissingReminderDossierAsync(Guid dossierId, bool forUpdate, CancellationToken cancellationToken)
     {
-        var query = forUpdate && _db.Database.IsRelational()
-            ? _db.ComplianceDossiers.FromSqlInterpolated($"SELECT * FROM \"ComplianceDossier\" WHERE compliance_dossier_id = {dossierId} FOR UPDATE")
-            : _db.ComplianceDossiers.AsQueryable();
+        if (forUpdate && _db.Database.IsRelational())
+            await _db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDossierId, item => item.ComplianceDossierId), cancellationToken);
+        var query = _db.ComplianceDossiers.AsQueryable();
         query = forUpdate ? query.AsTracking() : query.AsNoTracking();
         var dossier = await query.Include(item => item.Transport).ThenInclude(item => item.Booking).ThenInclude(item => item.Customer)
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)

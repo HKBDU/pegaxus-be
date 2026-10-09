@@ -1,4 +1,5 @@
 using FluentValidation;
+using System.Data;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -110,7 +111,10 @@ public sealed class Service(AppDbContext db,
 
     public async Task DeleteAsync(Guid id, Guid actorAccountId, CancellationToken cancellationToken = default)
     {
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        // Serializable reference writers prevent deletion racing with a newly linked requirement.
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : await db.Database.BeginTransactionAsync(cancellationToken);
         var entity = await GetForUpdateAsync(id, cancellationToken);
         // Include historical references, even requirements belonging to deleted dossiers.
         if (await db.DossierTemplateItems.IgnoreQueryFilters().AnyAsync(item => item.ComplianceRequirementId == id, cancellationToken) ||
@@ -126,10 +130,11 @@ public sealed class Service(AppDbContext db,
 
     private async Task<ComplianceRequirement> GetForUpdateAsync(Guid id, CancellationToken cancellationToken)
     {
-        // Serialize mutations and wait for in-flight foreign-key inserts before checking references.
-        var query = db.Database.IsNpgsql()
-            ? db.ComplianceRequirements.FromSqlInterpolated($"SELECT * FROM \"ComplianceRequirement\" WHERE compliance_requirement_id = {id} FOR UPDATE")
-            : db.ComplianceRequirements.AsQueryable();
+        // Updating the key to itself serializes catalog mutations until the transaction ends.
+        if (db.Database.IsNpgsql())
+            await db.ComplianceRequirements.Where(item => item.ComplianceRequirementId == id)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceRequirementId, item => item.ComplianceRequirementId), cancellationToken);
+        var query = db.ComplianceRequirements.AsQueryable();
         return await query.SingleOrDefaultAsync(item => item.ComplianceRequirementId == id && !item.IsDeleted, cancellationToken)
             ?? throw NotFound();
     }

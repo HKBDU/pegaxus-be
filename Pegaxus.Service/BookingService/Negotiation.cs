@@ -16,8 +16,9 @@ public partial class Service
 
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         if (_db.Database.IsRelational())
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT 1 FROM \"Booking\" WHERE booking_id = {bookingId} FOR UPDATE", cancellationToken);
+            // Updating the key to itself holds a row lock until the transaction ends.
+            await _db.Bookings.Where(item => item.BookingId == bookingId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.BookingId, item => item.BookingId), cancellationToken);
         var booking = await _db.Bookings.Include(value => value.Customer)
             .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossier).ThenInclude(value => value!.DossierRequirements)
             .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
