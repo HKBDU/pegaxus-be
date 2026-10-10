@@ -132,7 +132,7 @@ public static class AppDbContextSeedData
                     Sex = seed.Sex,
                     Breed = seed.Breed,
                     MicrochipNumber = seed.MicrochipNumber,
-                    PassportNumber = $"PEGAXUS-{seed.MicrochipNumber[^6..]}",
+                    PassportNumber = $"PEGAXUS-{seed.Code}",
                     DateOfBirth = new DateOnly(2021, 1, 1).AddDays(seed.Id.GetHashCode() & 120),
                     Color = seed.Sex == HorseSex.MALE ? "Bay" : "Chestnut",
                     CountryOfOrigin = "FR",
