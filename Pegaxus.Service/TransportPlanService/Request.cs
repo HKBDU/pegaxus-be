@@ -31,4 +31,18 @@ public static class Request
         public int? EstimatedDurationMinutes { get; set; }
         public string? PlanningNote { get; set; }
     }
+
+    public sealed class Phase1AssignmentRequest
+    {
+        public Guid TransportSpecialistId { get; set; }
+        public Guid RouteCoordinatorId { get; set; }
+    }
+
+    public sealed class UpdatePhase1AssignmentRequest
+    {
+        public DateTimeOffset LastUpdatedAt { get; set; }
+        public Guid? TransportSpecialistId { get; set; }
+        public Guid? RouteCoordinatorId { get; set; }
+        public required string Reason { get; set; }
+    }
 }

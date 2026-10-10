@@ -765,12 +765,17 @@ public partial class AppDbContext : DbContext
 
             entity.HasIndex(e => e.AccountId, "Customer_account_id_key").IsUnique();
 
+            entity.HasIndex(e => e.CustomerCode, "Customer_customer_code_key").IsUnique();
+
             entity.HasIndex(e => e.IsDeleted, "Customer_is_deleted_idx");
 
             entity.HasIndex(e => e.Phone, "Customer_phone_idx");
 
             entity.Property(e => e.CustomerId).HasColumnName("customer_id");
             entity.Property(e => e.AccountId).HasColumnName("account_id");
+            entity.Property(e => e.CustomerCode)
+                .HasMaxLength(20)
+                .HasColumnName("customer_code");
             entity.Property(e => e.Address)
                 .HasMaxLength(500)
                 .HasColumnName("address");
@@ -2408,7 +2413,6 @@ public partial class AppDbContext : DbContext
                 .HasForeignKey(d => d.TransportProviderId)
                 .HasConstraintName("RoutePlanRoute_transport_provider_id_fkey");
         });
-
         modelBuilder.Entity<RoutePlanRouteVehicle>(entity =>
         {
             entity.HasKey(e => new { e.RoutePlanRouteId, e.VehicleId }).HasName("RoutePlanRouteVehicle_pkey");

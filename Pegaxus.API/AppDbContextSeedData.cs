@@ -634,10 +634,23 @@ public static class AppDbContextSeedData
         {
             CustomerId = Guid.NewGuid(),
             AccountId = account.AccountId,
+            CustomerCode = await GenerateCustomerCodeAsync(db, cancellationToken),
             FullName = seed.FullName,
             CreatedAt = now,
             UpdatedAt = now
         });
+    }
+
+    private static async Task<string> GenerateCustomerCodeAsync(AppDbContext db, CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var code = $"CUS-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(0, 10_000):D4}";
+            if (!await db.Customers.AnyAsync(item => item.CustomerCode == code, cancellationToken))
+                return code;
+        }
+
+        throw new InvalidOperationException("Could not generate a unique customer code.");
     }
 
     private static async Task SeedComplianceRequirementsAsync(

@@ -29,6 +29,5 @@ public partial class RoutePlan
     public DateTime UpdatedAt { get; set; }
 
     public virtual ICollection<RoutePlanRoute> RoutePlanRoutes { get; set; } = new List<RoutePlanRoute>();
-
     public virtual TransportPlan TransportPlan { get; set; } = null!;
 }
