@@ -9,6 +9,7 @@ COPY ["Pegaxus.sln", "./"]
 COPY ["Pegaxus.API/Pegaxus.API.csproj", "Pegaxus.API/"]
 COPY ["Pegaxus.Service/Pegaxus.Service.csproj", "Pegaxus.Service/"]
 COPY ["Pegaxus.Repository/Pegaxus.Repository.csproj", "Pegaxus.Repository/"]
+COPY ["Pegaxus.Service.Test/Pegaxus.Service.Test.csproj", "Pegaxus.Service.Test/"]
 
 # Restore dependencies
 RUN dotnet restore "Pegaxus.sln"

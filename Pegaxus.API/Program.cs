@@ -94,8 +94,11 @@ builder.Services.AddHttpClient(CloudinaryService.Service.PreviewHttpClient)
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IUserIdProvider, AccountUserIdProvider>();
 
-var dataSourceBuilder = new NpgsqlDataSourceBuilder(
-    builder.Configuration.GetConnectionString("DefaultConnection"));
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+    ?? Environment.GetEnvironmentVariable("ConnectionStrings__DefaultConnection")
+    ?? "Host=localhost;Port=5432;Database=pegaxus_db;Username=postgres;Password=MyStrongPassword123@";
+
+var dataSourceBuilder = new NpgsqlDataSourceBuilder(connectionString);
 var enumNameTranslator = new PostgresEnumNameTranslator();
 foreach (var enumType in typeof(AccountStatus).Assembly.GetTypes()
              .Where(type => type.IsEnum && type.Namespace == typeof(AccountStatus).Namespace))
