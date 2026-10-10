@@ -38,6 +38,7 @@ public static class Response
         public int? EstimatedDurationMinutes { get; init; }
         public required IReadOnlyList<global::Pegaxus.Service.BookingService.Response.BookingAssignmentResponse> AssignedEmployees { get; init; }
         public ApprovedByResponse? ApprovedBy { get; init; }
+        public DateTimeOffset? ApprovedAt { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }
@@ -70,5 +71,74 @@ public static class Response
     {
         public Guid EmployeeId { get; init; }
         public required string FullName { get; init; }
+    }
+
+    public sealed class Phase1AssignmentResponse
+    {
+        public Guid TransportPlanId { get; init; }
+        public required IReadOnlyList<Phase1AssignedEmployeeResponse> AssignedEmployees { get; init; }
+        public DateTimeOffset UpdatedAt { get; init; }
+    }
+
+    public sealed class Phase1AssignedEmployeeResponse
+    {
+        public Guid EmployeeId { get; init; }
+        public required string EmployeeCode { get; init; }
+        public required string FullName { get; init; }
+        public required string Role { get; init; }
+        public required string Responsibility { get; init; }
+        public bool IsPrimary { get; init; }
+        public DateTimeOffset AssignedAt { get; init; }
+    }
+
+    public sealed class AssignmentsResponse
+    {
+        public Guid TransportPlanId { get; init; }
+        public required Phase1AssignmentsResponse Phase1 { get; init; }
+        public required Phase2AssignmentsResponse Phase2 { get; init; }
+    }
+
+    public sealed class Phase1AssignmentsResponse
+    {
+        public bool IsAssigned { get; init; }
+        public bool IsLocked { get; init; }
+        public AssignmentEmployeeResponse? TransportSpecialist { get; init; }
+        public AssignmentEmployeeResponse? RouteCoordinator { get; init; }
+    }
+
+    public sealed class Phase2AssignmentsResponse
+    {
+        public bool Enabled { get; init; }
+        public Guid? RoutePlanId { get; init; }
+        public bool IsPersonnelComplete { get; init; }
+        public required IReadOnlyList<AssignmentSegmentResponse> Segments { get; init; }
+    }
+
+    public sealed class AssignmentSegmentResponse
+    {
+        public Guid RoutePlanRouteId { get; init; }
+        public int SequenceNo { get; init; }
+        public bool IsOutsourced { get; init; }
+        public DateTimeOffset? PlannedDepartureAt { get; init; }
+        public DateTimeOffset? PlannedArrivalAt { get; init; }
+        public AssignmentEmployeeResponse? Driver { get; init; }
+        public AssignmentEmployeeResponse? Escort { get; init; }
+        public AssignmentProviderResponse? Provider { get; init; }
+        public bool IsComplete { get; init; }
+    }
+
+    public sealed class AssignmentEmployeeResponse
+    {
+        public Guid EmployeeId { get; init; }
+        public required string EmployeeCode { get; init; }
+        public required string FullName { get; init; }
+        public required string Role { get; init; }
+    }
+
+    public sealed class AssignmentProviderResponse
+    {
+        public Guid TransportProviderId { get; init; }
+        public required string ProviderCode { get; init; }
+        public required string ProviderName { get; init; }
     }
 }

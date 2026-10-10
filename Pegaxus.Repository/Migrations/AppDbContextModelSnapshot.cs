@@ -960,6 +960,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
+                    b.Property<string>("CustomerCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("customer_code");
+
                     b.Property<string>("Address")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -1018,6 +1024,9 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex("DeletedByAccountId");
 
                     b.HasIndex(new[] { "AccountId" }, "Customer_account_id_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "CustomerCode" }, "Customer_customer_code_key")
                         .IsUnique();
 
                     b.HasIndex(new[] { "IsDeleted" }, "Customer_is_deleted_idx");

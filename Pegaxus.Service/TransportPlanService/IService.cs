@@ -23,4 +23,21 @@ public interface IService
         Guid bookingId,
         Request.CreateRequest request,
         CancellationToken cancellationToken = default);
+
+    Task<Response.Phase1AssignmentResponse> AssignPhase1Async(
+        Guid accountId,
+        Guid transportPlanId,
+        Request.Phase1AssignmentRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<Response.Phase1AssignmentResponse> UpdatePhase1Async(
+        Guid accountId,
+        Guid transportPlanId,
+        Request.UpdatePhase1AssignmentRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<Response.AssignmentsResponse> GetAssignmentsAsync(
+        Guid accountId,
+        Guid transportPlanId,
+        CancellationToken cancellationToken = default);
 }

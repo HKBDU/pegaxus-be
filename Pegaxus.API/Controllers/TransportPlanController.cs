@@ -87,6 +87,64 @@ public sealed class TransportPlanController(TransportPlanService.IService servic
                 traceId: HttpContext.TraceIdentifier));
     }
 
+    /// <summary>Assign the first-phase Transport Specialist and Fleet Route Coordinator.</summary>
+    /// <param name="transportPlanId">The transport plan identifier.</param>
+    /// <param name="request">The phase 1 assignment.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>201 Created with the assignments.</returns>
+    [HttpPost("/api/v1/transport-plans/{transportPlanId:guid}/assignments/phase-1")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> AssignPhase1(
+        Guid transportPlanId,
+        [FromBody] TransportPlanService.Request.Phase1AssignmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await service.AssignPhase1Async(
+            GetAccountId(), transportPlanId, request, cancellationToken);
+        return Created(
+            $"/api/v1/transport-plans/{transportPlanId}",
+            ResponseBuilder.SuccessResponse(
+                response,
+                "Phase 1 personnel assigned successfully",
+                code: StatusCodes.Status201Created,
+                traceId: HttpContext.TraceIdentifier));
+    }
+
+    /// <summary>Replace one or both first-phase personnel assignments.</summary>
+    /// <param name="transportPlanId">The transport plan identifier.</param>
+    /// <param name="request">The replacement assignment.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the assignments.</returns>
+    [HttpPut("/api/v1/transport-plans/{transportPlanId:guid}/assignments/phase-1")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> UpdatePhase1(
+        Guid transportPlanId,
+        [FromBody] TransportPlanService.Request.UpdatePhase1AssignmentRequest request,
+        CancellationToken cancellationToken)
+    {
+        var response = await service.UpdatePhase1Async(
+            GetAccountId(), transportPlanId, request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Phase 1 personnel updated successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    /// <summary>Get phase 1 and phase 2 personnel assignments.</summary>
+    /// <param name="transportPlanId">The transport plan identifier.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the assignments.</returns>
+    [HttpGet("/api/v1/transport-plans/{transportPlanId:guid}/assignments")]
+    [Authorize(Policy = JwtExtensions.EmployeePolicy)]
+    public async Task<IActionResult> GetAssignments(Guid transportPlanId, CancellationToken cancellationToken)
+    {
+        var response = await service.GetAssignmentsAsync(GetAccountId(), transportPlanId, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Assignments retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
     private Guid GetAccountId()
     {
         var value = User.FindFirst("accountId")?.Value
