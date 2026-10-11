@@ -47,6 +47,7 @@ public class SwaggerDocumentationTests
 
     [Theory]
     [InlineData("/api/Health", OperationType.Get, "Check API health.")]
+    [InlineData("/api/v1/transport-plans/{transportPlanId}/assignments", OperationType.Get, "Get transport plan personnel assignments.")]
     [InlineData("/api/v1/quarantine-proofs/{proofId}/finalize", OperationType.Patch, "Finalize quarantine verification.")]
     [InlineData("/api/v1/customs-clearance-proofs/{proofId}/finalize", OperationType.Patch, "Finalize customs clearance.")]
     [InlineData("/api/v1/bookings/{bookingId}", OperationType.Patch, "Update a booking.")]

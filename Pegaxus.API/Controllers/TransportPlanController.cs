@@ -130,21 +130,6 @@ public sealed class TransportPlanController(TransportPlanService.IService servic
             traceId: HttpContext.TraceIdentifier));
     }
 
-    /// <summary>Get phase 1 and phase 2 personnel assignments.</summary>
-    /// <param name="transportPlanId">The transport plan identifier.</param>
-    /// <param name="cancellationToken">The request cancellation token.</param>
-    /// <returns>200 OK with the assignments.</returns>
-    [HttpGet("/api/v1/transport-plans/{transportPlanId:guid}/assignments")]
-    [Authorize(Policy = JwtExtensions.EmployeePolicy)]
-    public async Task<IActionResult> GetAssignments(Guid transportPlanId, CancellationToken cancellationToken)
-    {
-        var response = await service.GetAssignmentsAsync(GetAccountId(), transportPlanId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Assignments retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
-    }
-
     private Guid GetAccountId()
     {
         var value = User.FindFirst("accountId")?.Value
