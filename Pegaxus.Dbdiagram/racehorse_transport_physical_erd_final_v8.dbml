@@ -103,6 +103,10 @@ Enum route_plan_status {
   ACTIVE
   COMPLETED
   CANCELLED
+  PENDING_LEGAL_REVIEW
+  PENDING_MANAGER_APPROVAL
+  REJECTED_BY_MANAGER
+  APPROVED
 }
 
 Enum transport_mode {
@@ -133,6 +137,8 @@ Enum vehicle_status {
   IN_USE
   MAINTENANCE
   INACTIVE
+  SUSPENDED
+  OUT_OF_SERVICE
 }
 
 Enum provider_status {
@@ -200,6 +206,7 @@ Enum incident_category {
   VEHICLE
   HORSE_HEALTH
   BOTH
+  ROUTE_CHANGE
 }
 
 Enum incident_severity {
@@ -269,7 +276,6 @@ Enum approval_decision {
 Enum invoice_status {
   DRAFT
   ISSUED
-  PARTIALLY_PAID
   PAID
   OVERDUE
   CANCELLED
@@ -508,7 +514,7 @@ Enum recipient_status {
 //////////////////////////////////////////////////////////////
 
 Table Account {
-  account_id bigint [pk, increment]
+  account_id uuid [pk]
 
   email varchar(255) [not null, unique]
   password_hash varchar(255) [not null]
@@ -524,26 +530,23 @@ Table Account {
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
 
   indexes {
-    is_deleted
     status
-    account_type
   }
 }
-
 
 
 Table RefreshToken {
   Note: 'RefreshToken: Token dùng để cấp lại Access Token cho một Account. Một Account có thể có nhiều RefreshToken cho nhiều thiết bị/phiên đăng nhập. Database chỉ lưu token_hash, không lưu raw token.'
 
-  refresh_token_id bigint [pk, increment]
+  refresh_token_id uuid [pk]
 
-  account_id bigint [not null]
+  account_id uuid [not null]
 
   token_hash varchar(255) [not null, unique]
 
@@ -554,7 +557,7 @@ Table RefreshToken {
   revoked_at timestamp
 
   // Token mới thay thế token hiện tại khi sử dụng refresh-token rotation
-  replaced_by_token_id bigint
+  replaced_by_token_id uuid
 
   created_by_ip varchar(64)
   revoked_by_ip varchar(64)
@@ -570,9 +573,10 @@ Table RefreshToken {
 
 
 Table Customer {
-  customer_id bigint [pk, increment]
+  customer_id uuid [pk]
 
-  account_id bigint [not null, unique]
+  account_id uuid [not null, unique]
+  customer_code varchar(20) [not null, unique]
 
   full_name varchar(150) [not null]
   phone varchar(30)
@@ -586,7 +590,7 @@ Table Customer {
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -599,12 +603,15 @@ Table Customer {
 
 
 Table Employee {
-  employee_id bigint [pk, increment]
+  employee_id uuid [pk]
 
-  account_id bigint [not null, unique]
+  account_id uuid [not null, unique]
 
   employee_code varchar(50) [not null, unique]
   full_name varchar(150) [not null]
+  date_of_birth date
+  address varchar(500)
+  country varchar(100)
   phone varchar(30)
 
   role employee_role [not null]
@@ -614,7 +621,7 @@ Table Employee {
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -628,9 +635,9 @@ Table Employee {
 
 
 Table Horse {
-  horse_id bigint [pk, increment]
+  horse_id uuid [pk]
 
-  customer_id bigint [not null]
+  customer_id uuid [not null]
 
   horse_name varchar(150) [not null]
 
@@ -655,7 +662,7 @@ Table Horse {
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -669,13 +676,13 @@ Table Horse {
 
 
 Table Booking {
-  booking_id bigint [pk, increment]
+  booking_id uuid [pk]
 
   booking_code varchar(50) [not null, unique]
 
-  customer_id bigint [not null]
+  customer_id uuid [not null]
 
-  assigned_employee_id bigint
+  assigned_employee_id uuid
 
   status booking_status [not null, default: 'PENDING']
 
@@ -712,8 +719,8 @@ Table Booking {
 
 
 Table BookingHorse {
-  booking_id bigint [not null]
-  horse_id bigint [not null]
+  booking_id uuid [not null]
+  horse_id uuid [not null]
 
   special_handling_notes text
 
@@ -729,16 +736,16 @@ Table BookingHorse {
 Table BookingStatusHistory {
   Note: 'BookingStatusHistory: Lịch sử thay đổi trạng thái Booking. type cho biết hành động nghiệp vụ nào đã gây ra thay đổi status.'
 
-  booking_status_history_id bigint [pk, increment]
+  booking_status_history_id uuid [pk]
 
-  booking_id bigint [not null]
+  booking_id uuid [not null]
 
   type booking_history_type [not null]
 
   previous_status booking_status
   new_status booking_status [not null]
 
-  changed_by_account_id bigint [not null]
+  changed_by_account_id uuid [not null]
 
   reason text
 
@@ -754,11 +761,11 @@ Table BookingStatusHistory {
 
 
 Table Transport {
-  transport_id bigint [pk, increment]
+  transport_id uuid [pk]
 
   transport_code varchar(50) [not null, unique]
 
-  booking_id bigint [not null, unique]
+  booking_id uuid [not null, unique]
 
   status transport_status [not null, default: 'CREATED']
 
@@ -784,9 +791,9 @@ Table Transport {
 //////////////////////////////////////////////////////////////
 
 Table TransportPlan {
-  transport_plan_id bigint [pk, increment]
+  transport_plan_id uuid [pk]
 
-  transport_id bigint [not null]
+  transport_id uuid [not null]
 
   plan_code varchar(50) [not null, unique]
 
@@ -800,7 +807,7 @@ Table TransportPlan {
   estimated_duration_minutes int
   estimated_distance_km decimal(10,2)
 
-  approved_by_employee_id bigint
+  approved_by_employee_id uuid
   approved_at timestamp
 
   created_at timestamp [not null]
@@ -817,11 +824,12 @@ Table TransportPlan {
 Table RoutePlan {
   Note: 'RoutePlan: Kế hoạch tuyến đường của một TransportPlan. Đây là tập hợp các Route được sắp xếp nối tiếp từ điểm đầu đến điểm cuối.'
 
-  route_plan_id bigint [pk, increment]
+  route_plan_id uuid [pk]
 
   // Một TransportPlan có thể có nhiều RoutePlan (PRIMARY/BACKUP/RETURN).
   // Không đặt UNIQUE trên transport_plan_id; ràng buộc loại route và số lượng route active do business rule kiểm soát.
-  transport_plan_id bigint [not null]
+  transport_plan_id uuid [not null]
+  primary_route_plan_id uuid
 
   route_plan_code varchar(50) [not null, unique]
 
@@ -844,7 +852,7 @@ Table RoutePlan {
 Table Location {
   Note: 'Location: Địa điểm master trên bản đồ. Một địa điểm chỉ tạo một lần và có thể được nhiều Route tái sử dụng, ví dụ Thành phố Hồ Chí Minh.'
 
-  location_id bigint [pk, increment]
+  location_id uuid [pk]
 
   location_name varchar(200) [not null]
 
@@ -864,7 +872,7 @@ Table Location {
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -881,12 +889,12 @@ Table Location {
 Table Route {
   Note: 'Route: Một tuyến đường có hướng nối từ một Location bắt đầu đến một Location kết thúc. Route có thể được tái sử dụng trong nhiều RoutePlan.'
 
-  route_id bigint [pk, increment]
+  route_id uuid [pk]
 
   route_code varchar(50) [not null, unique]
 
-  from_location_id bigint [not null]
-  to_location_id bigint [not null]
+  from_location_id uuid [not null]
+  to_location_id uuid [not null]
 
   route_name varchar(200)
 
@@ -900,7 +908,7 @@ Table Route {
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -917,10 +925,10 @@ Table Route {
 Table RoutePlanRoute {
   Note: 'RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver/Escort phụ trách, provider thuê ngoài và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.'
 
-  route_plan_route_id bigint [pk, increment]
+  route_plan_route_id uuid [pk]
 
-  route_plan_id bigint [not null]
-  route_id bigint [not null]
+  route_plan_id uuid [not null]
+  route_id uuid [not null]
 
   sequence_no int [not null]
 
@@ -928,15 +936,20 @@ Table RoutePlanRoute {
 
   // Nullable khi plan còn DRAFT; phải có trước khi RoutePlan CONFIRMED/ACTIVE.
   // Business rule: Employee được gán phải có role = DRIVER.
-  driver_employee_id bigint
+  driver_employee_id uuid
 
   // Nullable; bắt buộc với chặng nội bộ khi RoutePlan được phân công đầy đủ.
   // Business rule: Employee được gán phải có role = ESCORT.
-  escort_employee_id bigint
+  escort_employee_id uuid
 
   // Nullable; có giá trị khi chặng được thuê ngoài.
   // Khi có provider thì chặng không được gán vehicle/driver/escort nội bộ.
-  transport_provider_id bigint
+  transport_provider_id uuid
+
+  service_type varchar(100)
+  provider_reference varchar(150)
+  outsourcing_cost_amount decimal(18,2)
+  outsourcing_currency varchar(3)
 
   planned_departure_at timestamp
   planned_arrival_at timestamp
@@ -945,6 +958,9 @@ Table RoutePlanRoute {
   actual_arrival_at timestamp
 
   note text
+
+  superseded_at timestamp
+  superseded_by_change_request_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -965,7 +981,7 @@ Table RoutePlanRoute {
 Table Vehicle {
   Note: 'Vehicle: Phương tiện vận chuyển master dùng chung cho ROAD, AIR hoặc SEA, ví dụ xe tải chở ngựa, máy bay hoặc tàu. Vehicle không thuộc cố định một TransportPlan; phương tiện được gán vào từng chặng RoutePlanRoute.'
 
-  vehicle_id bigint [pk, increment]
+  vehicle_id uuid [pk]
 
   vehicle_code varchar(50) [not null, unique]
 
@@ -996,7 +1012,7 @@ Table Vehicle {
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -1012,8 +1028,8 @@ Table Vehicle {
 Table RoutePlanRouteVehicle {
   Note: 'RoutePlanRouteVehicle: Bảng trung gian N-N gán Vehicle vào một chặng RoutePlanRoute cụ thể. Nhờ vậy một Transport có thể đi xe -> máy bay -> xe, và cùng một Vehicle có thể được tái sử dụng ở nhiều chuyến/chặng khác nhau.'
 
-  route_plan_route_id bigint [not null]
-  vehicle_id bigint [not null]
+  route_plan_route_id uuid [not null]
+  vehicle_id uuid [not null]
 
   assigned_at timestamp [not null]
 
@@ -1027,7 +1043,7 @@ Table RoutePlanRouteVehicle {
 
 
 Table TransportProvider {
-  transport_provider_id bigint [pk, increment]
+  transport_provider_id uuid [pk]
 
   provider_code varchar(50) [not null, unique]
 
@@ -1051,7 +1067,7 @@ Table TransportProvider {
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -1065,8 +1081,8 @@ Table TransportProvider {
 
 
 Table TransportPlanProvider {
-  transport_plan_id bigint [not null]
-  transport_provider_id bigint [not null]
+  transport_plan_id uuid [not null]
+  transport_provider_id uuid [not null]
 
   service_type varchar(100)
 
@@ -1082,8 +1098,8 @@ Table TransportPlanProvider {
 
 
 Table EmployeeTransportPlan {
-  employee_id bigint [not null]
-  transport_plan_id bigint [not null]
+  employee_id uuid [not null]
+  transport_plan_id uuid [not null]
 
   responsibility varchar(150)
 
@@ -1107,9 +1123,9 @@ Table EmployeeTransportPlan {
 Table HandoverRecord {
   Note: 'HandoverRecord: Một lần bàn giao trong Transport. from_type/to_type xác định bên giao/nhận là CUSTOMER hay EMPLOYEE; from/to_route_plan_route_id xác định chặng vừa kết thúc và chặng tiếp theo.'
 
-  handover_record_id bigint [pk, increment]
+  handover_record_id uuid [pk]
 
-  transport_id bigint [not null]
+  transport_id uuid [not null]
 
   handover_code varchar(50) [not null, unique]
 
@@ -1125,19 +1141,19 @@ Table HandoverRecord {
   from_type handover_party_type [not null]
   to_type handover_party_type [not null]
 
-  from_customer_id bigint
-  from_employee_id bigint
+  from_customer_id uuid
+  from_employee_id uuid
 
-  to_customer_id bigint
-  to_employee_id bigint
+  to_customer_id uuid
+  to_employee_id uuid
 
   // RoutePlanRoute is used instead of Route because sequence_no belongs
   // to the concrete route usage within a RoutePlan.
   // Pickup: from_route_plan_route_id = null, to = first leg.
   // Internal handover: both present.
   // Delivery: from = final leg, to_route_plan_route_id = null.
-  from_route_plan_route_id bigint
-  to_route_plan_route_id bigint
+  from_route_plan_route_id uuid
+  to_route_plan_route_id uuid
 
   // Optional snapshot/contact text retained for operational evidence.
   from_party_name varchar(200)
@@ -1187,11 +1203,11 @@ Table HandoverRecord {
 
 
 Table HorseHealthLog {
-  horse_health_log_id bigint [pk, increment]
+  horse_health_log_id uuid [pk]
 
-  transport_id bigint [not null]
-  horse_id bigint [not null]
-  employee_id bigint [not null]
+  transport_id uuid [not null]
+  horse_id uuid [not null]
+  employee_id uuid [not null]
 
   log_type horse_health_log_type [not null]
 
@@ -1242,15 +1258,60 @@ Table HorseHealthLog {
 // FLOW 4 - INCIDENT / EMERGENCY
 //////////////////////////////////////////////////////////////
 
+Table RouteChangeRequest {
+  route_change_request_id uuid [pk]
+
+  route_plan_id uuid [not null]
+  backup_route_plan_id uuid
+  status varchar(30) [not null]
+  reason text [not null]
+  client_request_id uuid
+
+  submitted_request jsonb [not null]
+  note text
+  new_estimated_arrival_at timestamp [not null]
+  estimated_extra_cost decimal(18,2)
+  currency varchar(3)
+  current_segments jsonb [not null]
+  proposed_segments jsonb [not null]
+  comparison jsonb [not null]
+  approval_reasons text[] [not null]
+
+  requested_by_employee_id uuid [not null]
+  decided_by_employee_id uuid
+  decision_note text
+  decided_at timestamp
+  decision_request jsonb
+  decision_response jsonb
+  incident_report_id uuid
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    route_plan_id
+    backup_route_plan_id
+    requested_by_employee_id
+    decided_by_employee_id
+    incident_report_id
+    created_at
+    (route_plan_id, client_request_id) [unique]
+  }
+}
+
+
 Table IncidentReport {
   Note: 'IncidentReport: Báo cáo sự cố phát sinh trong quá trình vận chuyển. category gồm VEHICLE, HORSE_HEALTH hoặc BOTH.'
 
-  incident_report_id bigint [pk, increment]
+  incident_report_id uuid [pk]
 
   incident_code varchar(50) [not null, unique]
 
-  employee_id bigint [not null]
-  location_id bigint [not null]
+  transport_id uuid
+  employee_id uuid [not null]
+  location_id uuid [not null]
+
+  emergency_settlement_required boolean [not null, default: false]
 
   category incident_category [not null]
   severity incident_severity [not null]
@@ -1288,11 +1349,11 @@ Table IncidentReport {
 
 
 Table VehicleIncidentDetail {
-  vehicle_incident_detail_id bigint [pk, increment]
+  vehicle_incident_detail_id uuid [pk]
 
-  incident_report_id bigint [not null, unique]
+  incident_report_id uuid [not null, unique]
 
-  vehicle_id bigint [not null]
+  vehicle_id uuid [not null]
 
   incident_type vehicle_incident_type [not null]
 
@@ -1321,11 +1382,11 @@ Table VehicleIncidentDetail {
 
 
 Table HorseHealthIncidentDetail {
-  horse_health_incident_detail_id bigint [pk, increment]
+  horse_health_incident_detail_id uuid [pk]
 
-  incident_report_id bigint [not null]
+  incident_report_id uuid [not null]
 
-  horse_id bigint [not null]
+  horse_id uuid [not null]
 
   incident_type horse_incident_type [not null]
 
@@ -1366,9 +1427,9 @@ Table HorseHealthIncidentDetail {
 
 
 Table EmergencyCostRequest {
-  emergency_cost_request_id bigint [pk, increment]
+  emergency_cost_request_id uuid [pk]
 
-  incident_report_id bigint [not null]
+  incident_report_id uuid [not null]
 
   request_code varchar(50) [not null, unique]
 
@@ -1403,11 +1464,11 @@ Table EmergencyCostRequest {
 
 
 Table CostApprovalDecision {
-  cost_approval_decision_id bigint [pk, increment]
+  cost_approval_decision_id uuid [pk]
 
-  emergency_cost_request_id bigint [not null, unique]
+  emergency_cost_request_id uuid [not null, unique]
 
-  employee_id bigint [not null]
+  employee_id uuid [not null]
 
   decision approval_decision [not null]
 
@@ -1432,12 +1493,12 @@ Table CostApprovalDecision {
 //////////////////////////////////////////////////////////////
 
 Table Invoice {
-  invoice_id bigint [pk, increment]
+  invoice_id uuid [pk]
 
   invoice_code varchar(50) [not null, unique]
 
-  booking_id bigint [not null]
-  employee_id bigint [not null]
+  booking_id uuid [not null]
+  employee_id uuid [not null]
 
   type invoice_type [not null, default: 'QUOTATION']
   status invoice_status [not null, default: 'DRAFT']
@@ -1472,13 +1533,13 @@ Table Invoice {
 
 
 Table InvoiceItem {
-  invoice_item_id bigint [pk, increment]
+  invoice_item_id uuid [pk]
 
-  invoice_id bigint [not null]
+  invoice_id uuid [not null]
 
-  horse_id bigint
+  horse_id uuid
 
-  emergency_cost_request_id bigint [unique]
+  emergency_cost_request_id uuid [unique]
 
   item_type invoice_item_type [not null]
 
@@ -1504,11 +1565,11 @@ Table InvoiceItem {
 
 
 Table Receipt {
-  receipt_id bigint [pk, increment]
+  receipt_id uuid [pk]
 
   receipt_code varchar(50) [not null, unique]
 
-  invoice_id bigint [not null]
+  invoice_id uuid [not null]
 
   amount decimal(18,2) [not null]
 
@@ -1540,16 +1601,16 @@ Table Receipt {
 Table InvoiceStatusHistory {
   Note: 'InvoiceStatusHistory: Lịch sử thay đổi trạng thái Invoice. type cho biết hành động nghiệp vụ gây ra thay đổi; changed_by_account_id có thể null nếu hệ thống tự động thực hiện, ví dụ MARK_OVERDUE.'
 
-  invoice_status_history_id bigint [pk, increment]
+  invoice_status_history_id uuid [pk]
 
-  invoice_id bigint [not null]
+  invoice_id uuid [not null]
 
   type invoice_history_type [not null]
 
   previous_status invoice_status
   new_status invoice_status [not null]
 
-  changed_by_account_id bigint
+  changed_by_account_id uuid
 
   reason text
 
@@ -1570,11 +1631,12 @@ Table InvoiceStatusHistory {
 Table FinancialReport {
   Note: 'FinancialReport: Báo cáo tài chính tổng hợp theo một Transport, được hệ thống sinh từ dữ liệu Invoice, InvoiceItem, Receipt và chi phí liên quan; không có trạng thái lưu nháp.'
 
-  financial_report_id bigint [pk, increment]
+  financial_report_id uuid [pk]
 
   report_code varchar(50) [not null, unique]
 
-  transport_id bigint [not null, unique]
+  transport_id uuid [not null]
+  dossier_template_id uuid
 
   currency varchar(3) [not null]
 
@@ -1599,13 +1661,13 @@ Table FinancialReport {
 Table Claim {
   Note: 'Claim: Khiếu nại do Customer gửi liên quan đến một lần bàn giao. Hệ thống chỉ lưu khiếu nại và kết quả; việc trao đổi/thương lượng giữa Customer và Manager diễn ra ngoài hệ thống.'
 
-  claim_id bigint [pk, increment]
+  claim_id uuid [pk]
 
   claim_code varchar(50) [not null, unique]
 
-  customer_id bigint [not null]
+  customer_id uuid [not null]
 
-  handover_record_id bigint [not null]
+  handover_record_id uuid [not null]
 
   claim_type claim_type [not null]
 
@@ -1646,9 +1708,9 @@ Table Claim {
 Table ClaimResolution {
   Note: 'ClaimResolution: Kết quả xử lý/thỏa thuận cuối cùng của một Claim, ví dụ mức bồi thường thực tế sau khi hai bên trao đổi trực tiếp.'
 
-  claim_resolution_id bigint [pk, increment]
+  claim_resolution_id uuid [pk]
 
-  claim_id bigint [not null, unique]
+  claim_id uuid [not null, unique]
 
   resolution_type claim_resolution_type [not null]
 
@@ -1698,7 +1760,7 @@ Table ClaimResolution {
 Table ComplianceRequirement {
   Note: 'ComplianceRequirement: Danh mục master các loại yêu cầu pháp lý hoặc loại giấy tờ mà hệ thống biết có thể cần trong hồ sơ.'
 
-  compliance_requirement_id bigint [pk, increment]
+  compliance_requirement_id uuid [pk]
 
   requirement_code varchar(50) [not null, unique]
 
@@ -1723,7 +1785,7 @@ Table ComplianceRequirement {
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -1741,7 +1803,7 @@ Table ComplianceRequirement {
 Table DossierTemplate {
   Note: 'DossierTemplate: Bộ hồ sơ pháp lý mẫu cho một kịch bản vận chuyển. Template xác định thông thường cần những loại yêu cầu nào.'
 
-  dossier_template_id bigint [pk, increment]
+  dossier_template_id uuid [pk]
 
   template_code varchar(50) [not null, unique]
 
@@ -1759,7 +1821,7 @@ Table DossierTemplate {
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -1775,11 +1837,11 @@ Table DossierTemplate {
 Table DossierTemplateItem {
   Note: 'DossierTemplateItem: Một dòng yêu cầu nằm trong DossierTemplate, dùng để liên kết Template với ComplianceRequirement và đánh dấu yêu cầu bắt buộc hay không.'
 
-  dossier_template_item_id bigint [pk, increment]
+  dossier_template_item_id uuid [pk]
 
-  dossier_template_id bigint [not null]
+  dossier_template_id uuid [not null]
 
-  compliance_requirement_id bigint [not null]
+  compliance_requirement_id uuid [not null]
 
   sequence_no int [not null]
 
@@ -1804,11 +1866,13 @@ Table DossierTemplateItem {
 Table ComplianceDossier {
   Note: 'ComplianceDossier: Bộ hồ sơ do Transport Specialist lập và chịu trách nhiệm hoàn thiện trước khi chuyến đi xuất phát. Kết quả kiểm dịch hoặc hải quan phát sinh tại cửa khẩu không ghi vào status của bảng này mà lưu riêng trong QuarantineProof và CustomsClearanceProof.'
 
-  compliance_dossier_id bigint [pk, increment]
+  compliance_dossier_id uuid [pk]
 
   dossier_code varchar(50) [not null, unique]
 
-  transport_id bigint [not null, unique]
+  transport_id uuid [not null, unique]
+
+  dossier_template_id uuid
 
   status compliance_dossier_status [not null, default: 'DRAFT']
 
@@ -1828,6 +1892,7 @@ Table ComplianceDossier {
 
   indexes {
     status
+    dossier_template_id
   }
 }
 
@@ -1835,14 +1900,14 @@ Table ComplianceDossier {
 Table DossierRequirement {
   Note: 'DossierRequirement: Một yêu cầu pháp lý thực tế đã được sinh ra trong ComplianceDossier của chuyến đi cụ thể, dựa trên loại ComplianceRequirement.'
 
-  dossier_requirement_id bigint [pk, increment]
+  dossier_requirement_id uuid [pk]
 
-  compliance_dossier_id bigint [not null]
+  compliance_dossier_id uuid [not null]
 
-  compliance_requirement_id bigint [not null]
+  compliance_requirement_id uuid [not null]
 
   // NULL = yêu cầu chung cho toàn chuyến; NOT NULL = yêu cầu riêng cho một Horse.
-  horse_id bigint
+  horse_id uuid
 
   status dossier_requirement_status [not null, default: 'PENDING']
 
@@ -1851,7 +1916,7 @@ Table DossierRequirement {
   // Soft delete is allowed only for optional requirements.
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
-  deleted_by_account_id bigint
+  deleted_by_account_id uuid
 
   due_date date
 
@@ -1883,9 +1948,9 @@ Table DossierRequirement {
 Table ComplianceDocument {
   Note: 'ComplianceDocument: Giấy tờ thực tế được cung cấp để đáp ứng một DossierRequirement. Đây là document logic, không phải từng file upload.'
 
-  compliance_document_id bigint [pk, increment]
+  compliance_document_id uuid [pk]
 
-  dossier_requirement_id bigint [not null, unique]
+  dossier_requirement_id uuid [not null, unique]
 
   document_code varchar(50) [not null, unique]
 
@@ -1902,8 +1967,8 @@ Table ComplianceDocument {
 
   note text
 
-  created_by_account_id bigint [not null]
-  updated_by_account_id bigint [not null]
+  created_by_account_id uuid [not null]
+  updated_by_account_id uuid [not null]
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -1919,9 +1984,9 @@ Table ComplianceDocument {
 Table DocumentVersion {
   Note: 'DocumentVersion: Một phiên bản file cụ thể của ComplianceDocument. Khi giấy tờ bị sửa hoặc upload lại thì tạo version mới, không tạo ComplianceDocument mới.'
 
-  document_version_id bigint [pk, increment]
+  document_version_id uuid [pk]
 
-  compliance_document_id bigint [not null]
+  compliance_document_id uuid [not null]
 
   version_no int [not null]
 
@@ -1931,11 +1996,11 @@ Table DocumentVersion {
 
   mime_type varchar(100)
 
-  file_size_bytes bigint
+  file_size_bytes uuid
 
   upload_note text
 
-  uploaded_by_account_id bigint [not null]
+  uploaded_by_account_id uuid [not null]
 
   uploaded_at timestamp [not null]
 
@@ -1953,13 +2018,13 @@ Table DocumentAttachment {
 
   document_attachment_id uuid [pk]
 
-  // DocumentVersion hiện tại dùng bigint, nên FK này dùng bigint để cùng kiểu dữ liệu.
-  document_version_id bigint [not null]
+  // DocumentVersion hiện tại dùng uuid, nên FK này dùng uuid để cùng kiểu dữ liệu.
+  document_version_id uuid [not null]
 
   file_name varchar(255) [not null]
   file_url varchar(1000) [not null]
   mime_type varchar(100)
-  file_size_bytes bigint
+  file_size_bytes uuid
 
   // Thứ tự hiển thị/xử lý file trong cùng một DocumentVersion.
   sort_order int [not null]
@@ -1977,15 +2042,15 @@ Table DocumentAttachment {
 Table DocumentReview {
   Note: 'DocumentReview: Kết quả kiểm tra của một DocumentVersion cụ thể, ví dụ APPROVED, REJECTED hoặc REVISION_REQUIRED.'
 
-  document_review_id bigint [pk, increment]
+  document_review_id uuid [pk]
 
-  document_version_id bigint [not null]
+  document_version_id uuid [not null]
 
   result document_review_result [not null]
 
   review_comment text
 
-  reviewed_by_account_id bigint [not null]
+  reviewed_by_account_id uuid [not null]
 
   reviewed_at timestamp [not null]
 
@@ -2096,9 +2161,9 @@ Table MissingDocumentReminder {
 Table AuthoritySubmission {
   Note: 'AuthoritySubmission: Một lần thực tế gửi ComplianceDossier tới cơ quan có thẩm quyền. Một dossier có thể được gửi nhiều lần nếu bị trả về hoặc từ chối.'
 
-  authority_submission_id bigint [pk, increment]
+  authority_submission_id uuid [pk]
 
-  compliance_dossier_id bigint [not null]
+  compliance_dossier_id uuid [not null]
 
   submission_no int [not null]
 
@@ -2110,7 +2175,7 @@ Table AuthoritySubmission {
 
   submission_method varchar(100)
 
-  submitted_by_account_id bigint [not null]
+  submitted_by_account_id uuid [not null]
   is_required boolean [not null, default: true]
 
   permit_number varchar(150)
@@ -2144,16 +2209,16 @@ Table AuthoritySubmissionEvidenceFile {
 
   authority_submission_evidence_file_id uuid [pk]
 
-  authority_submission_id bigint [not null]
+  authority_submission_id uuid [not null]
 
   evidence_type authority_evidence_type [not null]
 
-  uploaded_by_employee_id bigint [not null]
+  uploaded_by_employee_id uuid [not null]
 
   file_name varchar(255) [not null]
   file_url varchar(1000) [not null]
   mime_type varchar(100)
-  file_size_bytes bigint
+  file_size_bytes uuid
 
   note text
 
@@ -2174,15 +2239,15 @@ Table AuthoritySubmissionEvidenceFile {
 Table QuarantineProof {
   Note: 'QuarantineProof: Bằng chứng và kết quả kiểm dịch tại trạm BCP do Driver hoặc Escort nộp và Transport Specialist xác minh. Cả kết quả đạt, có điều kiện, tạm giữ, thất bại hoặc bị từ chối đều lưu tại đây và không thay đổi ComplianceDossier.status. File vật lý được lưu tại ProofAttachment.'
 
-  quarantine_proof_id bigint [pk, increment]
+  quarantine_proof_id uuid [pk]
 
-  compliance_dossier_id bigint [not null]
+  compliance_dossier_id uuid [not null]
 
   status quarantine_proof_status [not null, default: 'PENDING_VERIFICATION']
 
-  submitted_by_employee_id bigint [not null]
-  verified_by_employee_id bigint
-  location_id bigint
+  submitted_by_employee_id uuid [not null]
+  verified_by_employee_id uuid
+  location_id uuid
 
   bcp_name varchar(200) [not null]
   official_veterinarian_name varchar(200)
@@ -2222,16 +2287,16 @@ Table QuarantineProof {
 Table CustomsClearanceProof {
   Note: 'CustomsClearanceProof: Bằng chứng và kết quả thông quan hải quan do Driver nộp và Transport Specialist xác minh. Cả kết quả thông quan, tạm giữ hoặc bị từ chối đều lưu tại đây và không thay đổi ComplianceDossier.status. File vật lý được lưu tại ProofAttachment.'
 
-  customs_clearance_proof_id bigint [pk, increment]
+  customs_clearance_proof_id uuid [pk]
 
-  compliance_dossier_id bigint [not null]
+  compliance_dossier_id uuid [not null]
 
   status customs_clearance_proof_status [not null, default: 'PENDING_VERIFICATION']
   customs_lane customs_lane
 
-  submitted_by_employee_id bigint [not null]
-  verified_by_employee_id bigint
-  location_id bigint
+  submitted_by_employee_id uuid [not null]
+  verified_by_employee_id uuid
+  location_id uuid
 
   customs_port_name varchar(200) [not null]
   mrn_number varchar(150)
@@ -2270,13 +2335,13 @@ Table ProofAttachment {
 
   proof_attachment_id uuid [pk]
 
-  quarantine_proof_id bigint
-  customs_clearance_proof_id bigint
+  quarantine_proof_id uuid
+  customs_clearance_proof_id uuid
 
   file_name varchar(255) [not null]
   file_url varchar(1000) [not null]
   mime_type varchar(100)
-  file_size_bytes bigint
+  file_size_bytes uuid
   sort_order int [not null]
   created_at timestamp [not null]
 
@@ -2292,15 +2357,15 @@ Table ProofAttachment {
 Table AuditDossier {
   Note: 'AuditDossier: Nhật ký append-only của ComplianceDossier. Bản ghi chỉ được thêm mới, không được sửa hoặc xóa qua API.'
 
-  audit_dossier_id bigint [pk, increment]
+  audit_dossier_id uuid [pk]
 
-  compliance_dossier_id bigint [not null]
+  compliance_dossier_id uuid [not null]
 
   action_type varchar(100) [not null]
   target_entity varchar(100) [not null]
-  target_id bigint
+  target_id uuid
 
-  actor_account_id bigint [not null]
+  actor_account_id uuid [not null]
 
   summary varchar(500)
   details jsonb
@@ -2328,13 +2393,13 @@ Table AuditDossier {
 Table CatalogAuditLog {
   Note: 'CatalogAuditLog: Append-only audit cho thay đổi các bảng catalog như ComplianceRequirement. Không thay thế AuditDossier của một ComplianceDossier cụ thể.'
 
-  catalog_audit_log_id bigint [pk, increment]
+  catalog_audit_log_id uuid [pk]
 
   entity_type varchar(100) [not null]
-  entity_id bigint [not null]
+  entity_id uuid [not null]
   action_type varchar(100) [not null]
 
-  actor_account_id bigint [not null]
+  actor_account_id uuid [not null]
 
   summary varchar(500)
   before_data jsonb [not null]
@@ -2356,9 +2421,9 @@ Table CatalogAuditLog {
 //////////////////////////////////////////////////////////////
 
 Table Notification {
-  notification_id bigint [pk, increment]
+  notification_id uuid [pk]
 
-  transport_id bigint [not null]
+  transport_id uuid [not null]
 
   notification_type notification_type [not null]
 
@@ -2369,7 +2434,7 @@ Table Notification {
   message text [not null]
 
   reference_type varchar(100)
-  reference_id bigint
+  reference_id uuid
 
   action_url varchar(1000)
 
@@ -2389,9 +2454,9 @@ Table Notification {
 
 
 Table AccountNotification {
-  account_id bigint [not null]
+  account_id uuid [not null]
 
-  notification_id bigint [not null]
+  notification_id uuid [not null]
 
   status recipient_status [not null, default: 'PENDING']
 
@@ -2488,6 +2553,7 @@ Ref: TransportPlan.transport_id > Transport.transport_id
 Ref: TransportPlan.approved_by_employee_id > Employee.employee_id
 
 Ref: RoutePlan.transport_plan_id > TransportPlan.transport_plan_id
+Ref: RoutePlan.primary_route_plan_id > RoutePlan.route_plan_id
 
 Ref: Route.from_location_id > Location.location_id
 Ref: Route.to_location_id > Location.location_id
@@ -2497,6 +2563,13 @@ Ref: RoutePlanRoute.route_id > Route.route_id
 Ref: RoutePlanRoute.driver_employee_id > Employee.employee_id
 Ref: RoutePlanRoute.escort_employee_id > Employee.employee_id
 Ref: RoutePlanRoute.transport_provider_id > TransportProvider.transport_provider_id
+Ref: RoutePlanRoute.superseded_by_change_request_id > RouteChangeRequest.route_change_request_id
+
+Ref: RouteChangeRequest.route_plan_id > RoutePlan.route_plan_id
+Ref: RouteChangeRequest.backup_route_plan_id > RoutePlan.route_plan_id
+Ref: RouteChangeRequest.requested_by_employee_id > Employee.employee_id
+Ref: RouteChangeRequest.decided_by_employee_id > Employee.employee_id
+Ref: RouteChangeRequest.incident_report_id > IncidentReport.incident_report_id
 
 // RoutePlanRoute N - N Vehicle
 Ref: RoutePlanRouteVehicle.route_plan_route_id > RoutePlanRoute.route_plan_route_id
@@ -2534,6 +2607,7 @@ Ref: HorseHealthLog.employee_id > Employee.employee_id
 
 Ref: IncidentReport.employee_id > Employee.employee_id
 Ref: IncidentReport.location_id > Location.location_id
+Ref: IncidentReport.transport_id > Transport.transport_id
 
 Ref: VehicleIncidentDetail.incident_report_id - IncidentReport.incident_report_id
 Ref: VehicleIncidentDetail.vehicle_id > Vehicle.vehicle_id
@@ -2588,6 +2662,7 @@ Ref: DossierTemplateItem.compliance_requirement_id > ComplianceRequirement.compl
 Ref: DossierTemplateItem.dossier_template_id > DossierTemplate.dossier_template_id
 
 Ref: ComplianceDossier.transport_id - Transport.transport_id
+Ref: ComplianceDossier.dossier_template_id > DossierTemplate.dossier_template_id
 
 Ref: DossierRequirement.compliance_dossier_id > ComplianceDossier.compliance_dossier_id
 Ref: DossierRequirement.compliance_requirement_id > ComplianceRequirement.compliance_requirement_id
@@ -2764,3 +2839,4 @@ Ref: AccountNotification.notification_id > Notification.notification_id
 // 19) PostgreSQL note: if unique values should be reusable after soft deletion,
 //     implement partial unique indexes with WHERE is_deleted = false where needed.
 //////////////////////////////////////////////////////////////
+

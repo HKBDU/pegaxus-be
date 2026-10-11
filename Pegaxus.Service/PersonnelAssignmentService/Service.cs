@@ -285,8 +285,8 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         }
         if (scheduled)
         {
-            var from = request.AvailableFrom!.Value.UtcDateTime;
-            var to = request.AvailableTo!.Value.UtcDateTime;
+            var from = DateTime.SpecifyKind(request.AvailableFrom!.Value.UtcDateTime, DateTimeKind.Unspecified);
+            var to = DateTime.SpecifyKind(request.AvailableTo!.Value.UtcDateTime, DateTimeKind.Unspecified);
             var now = Now();
             query = query.Where(employee => !db.RoutePlanRoutes.Any(segment =>
                 (segment.DriverEmployeeId == employee.EmployeeId || segment.EscortEmployeeId == employee.EmployeeId) &&

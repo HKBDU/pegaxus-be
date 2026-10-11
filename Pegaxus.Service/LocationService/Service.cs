@@ -143,7 +143,10 @@ public sealed class Service(AppDbContext db) : IService
         if (pageIndex < 1 || pageSize is < 1 or > 100) throw new BadRequestException("Invalid pagination", "VALIDATION_ERROR");
     }
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    private static DateTime UtcNow() => DateTime.UtcNow;
+    // The database stores timestamps as `timestamp without time zone`.
+    // Keep the UTC instant while writing an unspecified DateTime so Npgsql
+    // does not reject the value because of its Kind metadata.
+    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
     private static DateTimeOffset AsUtc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
     private static void EnsureConcurrency(DateTime actual, DateTimeOffset expected)
     {
