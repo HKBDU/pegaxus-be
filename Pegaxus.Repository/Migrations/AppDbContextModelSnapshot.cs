@@ -3166,6 +3166,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("transport_plan_id");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 

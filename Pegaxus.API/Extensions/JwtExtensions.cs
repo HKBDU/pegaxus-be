@@ -25,6 +25,7 @@ public static class JwtExtensions
     public const string TransportSpecialistOrFleetRouteCoordinatorPolicy = "TransportSpecialistOrFleetRouteCoordinatorPolicy";
     public const string LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy = "LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy";
     public const string TransportSpecialistOrLogisticsManagerPolicy = "TransportSpecialistOrLogisticsManagerPolicy";
+    public const string PersonnelAssignmentViewerPolicy = nameof(PersonnelAssignmentViewerPolicy);
     public const string BookingAssignmentViewerPolicy = "BookingAssignmentViewerPolicy";
     public const string DriverOrEscortPolicy = "DriverOrEscortPolicy";
     public const string ComplianceDossierViewerPolicy = "ComplianceDossierViewerPolicy";
@@ -187,6 +188,11 @@ public static class JwtExtensions
                 policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER),
                     JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST),
                     JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR)));
+            options.AddPolicy(PersonnelAssignmentViewerPolicy, policy =>
+                policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER),
+                    JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST),
+                    JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                    JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
             options.AddPolicy(BookingAssignmentViewerPolicy, policy =>
                 policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER),
                     JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST),
