@@ -56,8 +56,6 @@ public partial class Booking
 
     public virtual ICollection<BookingHorse> BookingHorses { get; set; } = new List<BookingHorse>();
 
-    public virtual ICollection<BookingEmployeeAssignment> EmployeeAssignments { get; set; } = new List<BookingEmployeeAssignment>();
-
     public virtual ICollection<BookingStatusHistory> BookingStatusHistories { get; set; } = new List<BookingStatusHistory>();
 
     public virtual Customer Customer { get; set; } = null!;
