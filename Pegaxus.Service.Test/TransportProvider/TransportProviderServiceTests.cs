@@ -54,7 +54,7 @@ public class TransportProviderServiceTests
         var updated = await service.UpdateAsync(actor.AccountId, created.TransportProviderId, update);
         Assert.Equal("Lufthansa Cargo AG", (await service.GetAsync(actor.AccountId, created.TransportProviderId)).ProviderName);
         var inactive = await service.UpdateStatusAsync(actor.AccountId, created.TransportProviderId,
-            new() { Status = "INACTIVE", Reason = "Contract ended", LastUpdatedAt = updated.UpdatedAt });
+            new() { Status = "INACTIVE", Reason = "Contract ended" });
         var active = await service.UpdateStatusAsync(actor.AccountId, created.TransportProviderId,
             new() { Status = "ACTIVE", LastUpdatedAt = inactive.UpdatedAt });
         Assert.Equal("ACTIVE", active.Status);

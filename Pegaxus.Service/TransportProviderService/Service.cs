@@ -105,7 +105,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         Validate(request, statusValidator);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var item = await GetForUpdateAsync(id, cancellationToken);
-        CheckVersion(item, request.LastUpdatedAt);
+        if (request.LastUpdatedAt.HasValue) CheckVersion(item, request.LastUpdatedAt.Value);
         var before = Snapshot(item);
         var status = Enum.Parse<ProviderStatus>(request.Status.Trim(), true);
         if (item.Status != status)

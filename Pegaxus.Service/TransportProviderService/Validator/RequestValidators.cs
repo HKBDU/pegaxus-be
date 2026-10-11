@@ -62,7 +62,7 @@ public sealed class StatusRequestValidator : AbstractValidator<Request.StatusReq
     public StatusRequestValidator()
     {
         RuleFor(request => request.Status).Must(IsStatus).WithMessage("Status must be ACTIVE, INACTIVE or SUSPENDED.");
-        RuleFor(request => request.LastUpdatedAt).NotEmpty();
+        RuleFor(request => request.LastUpdatedAt).NotEqual(default(DateTimeOffset)).When(request => request.LastUpdatedAt.HasValue);
         RuleFor(request => request.Reason).MaximumLength(2000);
         RuleFor(request => request.Reason).Must(value => !string.IsNullOrWhiteSpace(value))
             .When(request => request.Status?.Trim().ToUpperInvariant() is "INACTIVE" or "SUSPENDED")

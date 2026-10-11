@@ -72,7 +72,7 @@ public sealed class TransportProvidersController(Providers.IService service) : C
     /// <summary>
     /// Change a transport provider status.
     /// </summary>
-    /// <remarks>Only Logistics Managers may change status. INACTIVE and SUSPENDED require a reason. Supply lastUpdatedAt to prevent stale changes. Historical assignments remain intact.</remarks>
+    /// <remarks>Only Logistics Managers may change status. INACTIVE and SUSPENDED require a reason. Optional lastUpdatedAt rejects stale changes. Historical assignments remain intact.</remarks>
     /// <param name="providerId">The transport provider identifier (UUID).</param>
     /// <param name="request">The target status, reason and latest lastUpdatedAt.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
