@@ -3,7 +3,8 @@ namespace Pegaxus.Repository.Enum;
 public enum IncidentCategory {
     VEHICLE = 1,
     HORSE_HEALTH,
-    BOTH
+    BOTH,
+    ROUTE_CHANGE
 }
 public enum IncidentSeverity {
     LOW = 1,
