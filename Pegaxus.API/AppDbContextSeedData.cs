@@ -1,5 +1,8 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -44,7 +47,56 @@ public static class AppDbContextSeedData
 
         await db.SaveChangesAsync(cancellationToken);
         await SeedDemoOperationsAsync(db, now, cancellationToken);
+        await SeedLocationsAsync(db, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    public static async Task<int> SeedLocationsAsync(AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        using var stream = typeof(AppDbContextSeedData).Assembly
+            .GetManifestResourceStream("Pegaxus.API.Data.locations-camelcase.json")
+            ?? throw new InvalidDataException("Location seed resource is missing.");
+        var records = JsonNode.Parse(stream)?.AsArray()
+            ?? throw new InvalidDataException("Location seed must be an array.");
+        var options = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+        options.Converters.Add(new JsonStringEnumConverter(allowIntegerValues: false));
+        var sourceIds = new HashSet<int>();
+        var names = new HashSet<(string, string)>();
+        var locations = new List<Location>();
+        foreach (var record in records)
+        {
+            if (record is not JsonObject row || row["locationId"]?.GetValue<int>() is not int id ||
+                id <= 0 || !sourceIds.Add(id))
+                throw new InvalidDataException("Location seed IDs must be positive and unique.");
+            row["locationId"] = JsonValue.Create(StableGuid($"LOC-CATALOG:{id}"));
+            var location = row.Deserialize<Location>(options)
+                ?? throw new InvalidDataException($"Invalid location seed: {id}.");
+            if (string.IsNullOrWhiteSpace(location.LocationName) || location.LocationName.Length > 200 ||
+                string.IsNullOrWhiteSpace(location.Country) || location.Country.Length > 100 ||
+                location.Address?.Length > 500 || location.City?.Length > 100 || location.StateProvince?.Length > 100 ||
+                location.LocationType is null || location.Latitude is < -90 or > 90 || location.Longitude is < -180 or > 180 ||
+                location.CreatedAt == default || location.UpdatedAt < location.CreatedAt ||
+                !names.Add((location.LocationName.Trim().ToUpperInvariant(), location.Country.Trim().ToUpperInvariant())))
+                throw new InvalidDataException($"Invalid or duplicate location seed: {id}.");
+            location.CreatedAt = DateTime.SpecifyKind(location.CreatedAt.ToUniversalTime(), DateTimeKind.Unspecified);
+            location.UpdatedAt = DateTime.SpecifyKind(location.UpdatedAt.ToUniversalTime(), DateTimeKind.Unspecified);
+            if (location.DeletedAt is { } deletedAt)
+                location.DeletedAt = DateTime.SpecifyKind(deletedAt.ToUniversalTime(), DateTimeKind.Unspecified);
+            locations.Add(location);
+        }
+
+        var existing = await db.Locations.IgnoreQueryFilters()
+            .Select(item => new { item.LocationId, item.LocationName, item.Country })
+            .ToArrayAsync(cancellationToken);
+        var existingIds = existing.Select(item => item.LocationId).ToHashSet();
+        var existingNames = existing.Select(item =>
+            (item.LocationName.Trim().ToUpperInvariant(), item.Country.Trim().ToUpperInvariant())).ToHashSet();
+        var additions = locations.Where(item => !existingIds.Contains(item.LocationId) &&
+            !existingNames.Contains((item.LocationName.Trim().ToUpperInvariant(), item.Country.Trim().ToUpperInvariant())))
+            .ToArray();
+        db.Locations.AddRange(additions);
+        await db.SaveChangesAsync(cancellationToken);
+        return additions.Length;
     }
 
     private static async Task SeedDemoOperationsAsync(
@@ -316,16 +368,26 @@ public static class AppDbContextSeedData
         var plan = plans["REQ-20261010-DEMO-0005"];
         var assignments = new[]
         {
-            (Email: "huyvog6226@gmail.com", Responsibility: "Compliance dossier", IsPrimary: true),
-            (Email: "hoanguyen91011@gmail.com", Responsibility: "Route planning", IsPrimary: true)
+            (Email: "huyvog6226@gmail.com", Responsibility: EmployeeRole.TRANSPORT_SPECIALIST.ToString(), IsPrimary: true),
+            (Email: "hoanguyen91011@gmail.com", Responsibility: EmployeeRole.FLEET_ROUTE_COORDINATOR.ToString(), IsPrimary: true)
         };
         foreach (var assignment in assignments)
         {
-            if (await db.EmployeeTransportPlans.AnyAsync(item => item.EmployeeId == employees[assignment.Email].EmployeeId && item.TransportPlanId == plan.TransportPlanId, cancellationToken))
+            var employeeId = employees[assignment.Email].EmployeeId;
+            var existing = await db.EmployeeTransportPlans.SingleOrDefaultAsync(item =>
+                item.EmployeeId == employeeId && item.TransportPlanId == plan.TransportPlanId, cancellationToken);
+            if (existing is not null)
+            {
+                if (existing.Responsibility is "Compliance dossier" or "Route planning")
+                    existing.Responsibility = assignment.Responsibility;
+                continue;
+            }
+            if (await db.EmployeeTransportPlans.AnyAsync(item => item.TransportPlanId == plan.TransportPlanId &&
+                item.IsPrimary && item.Responsibility == assignment.Responsibility, cancellationToken))
                 continue;
             db.EmployeeTransportPlans.Add(new EmployeeTransportPlan
             {
-                EmployeeId = employees[assignment.Email].EmployeeId,
+                EmployeeId = employeeId,
                 TransportPlanId = plan.TransportPlanId,
                 Responsibility = assignment.Responsibility,
                 AssignedAt = now.AddDays(-1),
