@@ -42,10 +42,9 @@ public sealed class Service : IService
         await using var transaction = db.Database.IsRelational()
             ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
             : null;
-        if (db.Database.IsRelational())
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT 1 FROM \"TransportPlan\" WHERE transport_plan_id = {transportPlanId} FOR UPDATE",
-                cancellationToken);
+        if (db.Database.IsNpgsql())
+            await db.TransportPlans.Where(x => x.TransportPlanId == transportPlanId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportPlanId, x => x.TransportPlanId), cancellationToken);
 
         var plan = await db.TransportPlans
             .Include(item => item.Transport)
@@ -229,10 +228,9 @@ public sealed class Service : IService
         await using var transaction = db.Database.IsRelational()
             ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
             : null;
-        if (db.Database.IsRelational())
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT 1 FROM \"TransportPlan\" WHERE transport_plan_id = {transportPlanId} FOR UPDATE",
-                cancellationToken);
+        if (db.Database.IsNpgsql())
+            await db.TransportPlans.Where(x => x.TransportPlanId == transportPlanId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportPlanId, x => x.TransportPlanId), cancellationToken);
 
         var plan = await db.TransportPlans
             .Include(item => item.Transport)
@@ -241,6 +239,9 @@ public sealed class Service : IService
             .SingleOrDefaultAsync(item => item.TransportPlanId == transportPlanId, cancellationToken);
         if (plan is null)
             throw new NotFoundException("Transport plan not found", "TRANSPORT_PLAN_NOT_FOUND");
+        if (plan.Status is TransportPlanStatus.IN_PROGRESS or TransportPlanStatus.COMPLETED or TransportPlanStatus.CANCELLED ||
+            plan.Transport.Status is TransportStatus.IN_TRANSIT or TransportStatus.COMPLETED or TransportStatus.CANCELLED)
+            throw new ConflictException("Cannot change assignments once transport is in progress, completed or cancelled.", "PLAN_LOCKED");
         if (plan.Status != TransportPlanStatus.APPROVED)
             throw new UnprocessableEntityException(
                 "Only an approved TransportPlan can receive phase 1 personnel assignments",
@@ -259,11 +260,16 @@ public sealed class Service : IService
         var specialist = employees.SingleOrDefault(item => item.EmployeeId == request.TransportSpecialistId);
         var coordinator = employees.SingleOrDefault(item => item.EmployeeId == request.RouteCoordinatorId);
         if (specialist is null || coordinator is null)
-            throw new NotFoundException("One or more employees were not found or are inactive", "EMPLOYEE_NOT_FOUND");
+            {
+            var missing = !await db.Employees.AnyAsync(x => x.EmployeeId == request.TransportSpecialistId, cancellationToken) ||
+                !await db.Employees.AnyAsync(x => x.EmployeeId == request.RouteCoordinatorId, cancellationToken);
+            if (missing) throw new NotFoundException("Employee not found", "EMPLOYEE_NOT_FOUND");
+            throw new UnprocessableEntityException("Selected employee is inactive.", "INVALID_ROLE_ASSIGNMENT");
+        }
         if (specialist.Role != EmployeeRole.TRANSPORT_SPECIALIST)
-            throw new BadRequestException("transportSpecialistId must reference an active TRANSPORT_SPECIALIST", "ASSIGNMENT_ROLE_MISMATCH");
+            throw new UnprocessableEntityException("transportSpecialistId must reference an active TRANSPORT_SPECIALIST", "INVALID_ROLE_ASSIGNMENT");
         if (coordinator.Role != EmployeeRole.FLEET_ROUTE_COORDINATOR)
-            throw new BadRequestException("routeCoordinatorId must reference an active FLEET_ROUTE_COORDINATOR", "ASSIGNMENT_ROLE_MISMATCH");
+            throw new UnprocessableEntityException("routeCoordinatorId must reference an active FLEET_ROUTE_COORDINATOR", "INVALID_ROLE_ASSIGNMENT");
 
         var now = UtcNow();
         var assignments = new[]
@@ -294,12 +300,12 @@ public sealed class Service : IService
                 AccountId = employee.AccountId,
                 TransportId = plan.TransportId,
                 Type = NotificationType.TRANSPORT,
-                Priority = NotificationPriority.NORMAL,
+                Priority = NotificationPriority.HIGH,
                 Title = "You have been assigned to a Transport Plan",
                 Message = $"You have been assigned to Transport Plan {plan.PlanCode} as {employee.Role}.",
                 ReferenceType = "TransportPlan",
                 ReferenceId = plan.TransportPlanId,
-                ActionUrl = $"/transport-plans/{plan.TransportPlanId}",
+                ActionUrl = $"/admin/transport-plans/{plan.TransportPlanId}",
                 CreatedAt = now
             });
 
@@ -348,10 +354,9 @@ public sealed class Service : IService
         await using var transaction = db.Database.IsRelational()
             ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
             : null;
-        if (db.Database.IsRelational())
-            await db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT 1 FROM \"TransportPlan\" WHERE transport_plan_id = {transportPlanId} FOR UPDATE",
-                cancellationToken);
+        if (db.Database.IsNpgsql())
+            await db.TransportPlans.Where(x => x.TransportPlanId == transportPlanId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportPlanId, x => x.TransportPlanId), cancellationToken);
 
         var plan = await db.TransportPlans
             .Include(item => item.Transport)
@@ -362,6 +367,10 @@ public sealed class Service : IService
             .SingleOrDefaultAsync(item => item.TransportPlanId == transportPlanId, cancellationToken);
         if (plan is null)
             throw new NotFoundException("Transport plan not found", "TRANSPORT_PLAN_NOT_FOUND");
+
+        if (plan.Status is TransportPlanStatus.IN_PROGRESS or TransportPlanStatus.COMPLETED or TransportPlanStatus.CANCELLED ||
+            plan.Transport.Status is TransportStatus.IN_TRANSIT or TransportStatus.COMPLETED or TransportStatus.CANCELLED)
+            throw new ConflictException("Cannot change assignments once transport is in progress, completed or cancelled.", "PLAN_LOCKED");
 
         var currentSpecialist = plan.EmployeeTransportPlans.SingleOrDefault(item =>
             item.IsPrimary && item.Responsibility == EmployeeRole.TRANSPORT_SPECIALIST.ToString());
@@ -400,17 +409,25 @@ public sealed class Service : IService
         {
             replacementSpecialist = employees.SingleOrDefault(item => item.EmployeeId == request.TransportSpecialistId.Value);
             if (replacementSpecialist is null)
-                throw new NotFoundException("Transport Specialist was not found or is inactive", "EMPLOYEE_NOT_FOUND");
+            {
+                if (!await db.Employees.AnyAsync(x => x.EmployeeId == request.TransportSpecialistId.Value, cancellationToken))
+                    throw new NotFoundException("Employee not found", "EMPLOYEE_NOT_FOUND");
+                throw new UnprocessableEntityException("Selected employee is inactive.", "INVALID_ROLE_ASSIGNMENT");
+            }
             if (replacementSpecialist.Role != EmployeeRole.TRANSPORT_SPECIALIST)
-                throw new BadRequestException("transportSpecialistId must reference an active TRANSPORT_SPECIALIST", "ASSIGNMENT_ROLE_MISMATCH");
+                throw new UnprocessableEntityException("transportSpecialistId must reference an active TRANSPORT_SPECIALIST", "INVALID_ROLE_ASSIGNMENT");
         }
         if (request.RouteCoordinatorId.HasValue)
         {
             replacementCoordinator = employees.SingleOrDefault(item => item.EmployeeId == request.RouteCoordinatorId.Value);
             if (replacementCoordinator is null)
-                throw new NotFoundException("Fleet Route Coordinator was not found or is inactive", "EMPLOYEE_NOT_FOUND");
+            {
+                if (!await db.Employees.AnyAsync(x => x.EmployeeId == request.RouteCoordinatorId.Value, cancellationToken))
+                    throw new NotFoundException("Employee not found", "EMPLOYEE_NOT_FOUND");
+                throw new UnprocessableEntityException("Selected employee is inactive.", "INVALID_ROLE_ASSIGNMENT");
+            }
             if (replacementCoordinator.Role != EmployeeRole.FLEET_ROUTE_COORDINATOR)
-                throw new BadRequestException("routeCoordinatorId must reference an active FLEET_ROUTE_COORDINATOR", "ASSIGNMENT_ROLE_MISMATCH");
+                throw new UnprocessableEntityException("routeCoordinatorId must reference an active FLEET_ROUTE_COORDINATOR", "INVALID_ROLE_ASSIGNMENT");
         }
 
         var replacedAssignments = new List<(Employee OldEmployee, Employee NewEmployee, string Responsibility)>();
@@ -432,12 +449,12 @@ public sealed class Service : IService
                     AccountId = recipientId,
                     TransportId = plan.TransportId,
                     Type = NotificationType.TRANSPORT,
-                    Priority = NotificationPriority.NORMAL,
+                    Priority = recipientId == change.NewEmployee.AccountId ? NotificationPriority.HIGH : NotificationPriority.NORMAL,
                     Title = "Transport Plan personnel assignment updated",
                     Message = $"The {change.Responsibility} assignment for Transport Plan {plan.PlanCode} was changed. Reason: {request.Reason.Trim()}",
                     ReferenceType = "TransportPlan",
                     ReferenceId = plan.TransportPlanId,
-                    ActionUrl = $"/transport-plans/{plan.TransportPlanId}",
+                    ActionUrl = $"/admin/transport-plans/{plan.TransportPlanId}",
                     CreatedAt = now
                 });
         }

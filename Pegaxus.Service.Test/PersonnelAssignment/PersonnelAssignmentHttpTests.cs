@@ -37,36 +37,39 @@ public class PersonnelAssignmentHttpTests
         var (route, segment) = await PersonnelAssignmentTests.RouteAsync(db, RoutePlanStatus.DRAFT);
         await using var host = await Start(db);
         using var client = Client(host, manager.AccountId, EmployeeRole.LOGISTICS_MANAGER);
+        var employees = await client.GetFromJsonAsync<JsonElement>("/api/v1/employees/assignable?role=TRANSPORT_SPECIALIST");
+        Assert.Equal(200, employees.GetProperty("code").GetInt32());
+        await Error(await client.GetAsync("/api/v1/employees/assignable?role=DRIVER"), HttpStatusCode.BadRequest, "INVALID_DATE_RANGE");
         var view = await client.GetFromJsonAsync<JsonElement>($"/api/v1/transport-plans/{route.TransportPlanId}/assignments");
         Assert.False(view.GetProperty("value").GetProperty("phase2").GetProperty("enabled").GetBoolean());
         var request = PersonnelAssignmentTests.Assign(route, segment, driver, escort);
-        await Error(await client.PutAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", request), HttpStatusCode.UnprocessableEntity, "ROUTE_NOT_APPROVED");
+        await Error(await client.PostAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", request), HttpStatusCode.UnprocessableEntity, "ROUTE_NOT_CONFIRMED");
         route.Status = RoutePlanStatus.CONFIRMED; await db.SaveChangesAsync();
-        var assigned = await client.PutAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", request);
-        Assert.Equal(HttpStatusCode.OK, assigned.StatusCode);
+        var assigned = await client.PostAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", request);
+        Assert.Equal(HttpStatusCode.Created, assigned.StatusCode);
         var value = (await assigned.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
-        Assert.Equal("FULLY_ASSIGNED", value.GetProperty("personnelStatus").GetString());
+        Assert.True(value.GetProperty("isPersonnelComplete").GetBoolean());
         Assert.Equal(driver.EmployeeId, value.GetProperty("segments")[0].GetProperty("driver").GetProperty("employeeId").GetGuid());
         var version = value.GetProperty("updatedAt").GetDateTimeOffset();
-        await Error(await client.PutAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", new { lastUpdatedAt = version }), HttpStatusCode.BadRequest, "VALIDATION_ERROR");
-        await Error(await client.PutAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", request), HttpStatusCode.Conflict, "ROUTE_PLAN_MODIFIED");
+        await Error(await client.PostAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", new { lastUpdatedAt = version }), HttpStatusCode.BadRequest, "VALIDATION_ERROR");
+        await Error(await client.PostAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", request), HttpStatusCode.Conflict, "ROUTE_PLAN_MODIFIED");
         var patchUrl = $"/api/v1/route-plans/{route.RoutePlanId}/segments/{segment.RoutePlanRouteId}/personnel";
-        var changed = await client.PatchAsJsonAsync(patchUrl, new Request.ReplaceRequest { LastUpdatedAt = version, DriverEmployeeId = replacement.EmployeeId, Reason = "Sick" });
+        var changed = await client.PutAsJsonAsync(patchUrl, new Request.ReplaceRequest { LastUpdatedAt = version, DriverEmployeeId = replacement.EmployeeId, Reason = "Sick" });
         Assert.Equal(HttpStatusCode.OK, changed.StatusCode);
         var changedValue = (await changed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
         Assert.Equal(replacement.EmployeeId, changedValue.GetProperty("segment").GetProperty("driver").GetProperty("employeeId").GetGuid());
         Assert.Equal(escort.EmployeeId, changedValue.GetProperty("segment").GetProperty("escort").GetProperty("employeeId").GetGuid());
-        await Error(await client.PatchAsJsonAsync(patchUrl, new { driverEmployeeId = driver.EmployeeId, reason = "Sick" }), HttpStatusCode.BadRequest, "VALIDATION_ERROR");
-        await Error(await client.PatchAsJsonAsync(patchUrl, new Request.ReplaceRequest { LastUpdatedAt = changedValue.GetProperty("updatedAt").GetDateTimeOffset(), DriverEmployeeId = driver.EmployeeId }), HttpStatusCode.BadRequest, "VALIDATION_ERROR");
+        await Error(await client.PutAsJsonAsync(patchUrl, new { driverEmployeeId = driver.EmployeeId, reason = "Sick" }), HttpStatusCode.BadRequest, "VALIDATION_ERROR");
+        await Error(await client.PutAsJsonAsync(patchUrl, new Request.ReplaceRequest { LastUpdatedAt = changedValue.GetProperty("updatedAt").GetDateTimeOffset(), DriverEmployeeId = driver.EmployeeId }), HttpStatusCode.BadRequest, "VALIDATION_ERROR");
         await Error(await client.GetAsync($"/api/v1/transport-plans/{Guid.NewGuid()}/assignments"), HttpStatusCode.NotFound, "TRANSPORT_PLAN_NOT_FOUND");
-        await Error(await client.PutAsJsonAsync($"/api/v1/route-plans/{Guid.NewGuid()}/personnel", request), HttpStatusCode.NotFound, "ROUTE_PLAN_NOT_FOUND");
-        await Error(await client.PatchAsJsonAsync(patchUrl, new { lastUpdatedAt = version, driverEmployeeId = driver.EmployeeId, reason = "Sick", transportProviderId = Guid.NewGuid() }), HttpStatusCode.BadRequest, "VALIDATION_ERROR");
+        await Error(await client.PostAsJsonAsync($"/api/v1/route-plans/{Guid.NewGuid()}/personnel", request), HttpStatusCode.NotFound, "ROUTE_PLAN_NOT_FOUND");
+        await Error(await client.PutAsJsonAsync(patchUrl, new { lastUpdatedAt = version, driverEmployeeId = driver.EmployeeId, reason = "Sick", transportProviderId = Guid.NewGuid() }), HttpStatusCode.BadRequest, "VALIDATION_ERROR");
     }
 
     [Theory]
-    [InlineData(EmployeeRole.LOGISTICS_MANAGER, 200, 200)]
-    [InlineData(EmployeeRole.TRANSPORT_SPECIALIST, 200, 403)]
-    [InlineData(EmployeeRole.FLEET_ROUTE_COORDINATOR, 200, 403)]
+    [InlineData(EmployeeRole.LOGISTICS_MANAGER, 200, 201)]
+    [InlineData(EmployeeRole.TRANSPORT_SPECIALIST, 403, 403)]
+    [InlineData(EmployeeRole.FLEET_ROUTE_COORDINATOR, 403, 403)]
     [InlineData(EmployeeRole.DRIVER, 403, 403)]
     [InlineData(EmployeeRole.ESCORT, 403, 403)]
     public async Task JwtPolicies_AndDatabaseRolesProtectReadAndWrite(EmployeeRole role, int readStatus, int writeStatus)
@@ -78,14 +81,14 @@ public class PersonnelAssignmentHttpTests
         await using var host = await Start(db);
         using var client = Client(host, actor.AccountId, role);
         Assert.Equal(readStatus, (int)(await client.GetAsync($"/api/v1/transport-plans/{route.TransportPlanId}/assignments")).StatusCode);
-        Assert.Equal(writeStatus, (int)(await client.PutAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", PersonnelAssignmentTests.Assign(route, segment, driver, escort))).StatusCode);
-        Assert.Equal(writeStatus, (int)(await client.PatchAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/segments/{segment.RoutePlanRouteId}/personnel", new Request.ReplaceRequest {
+        Assert.Equal(writeStatus, (int)(await client.PostAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", PersonnelAssignmentTests.Assign(route, segment, driver, escort))).StatusCode);
+        Assert.Equal(writeStatus == 201 ? 200 : writeStatus, (int)(await client.PutAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/segments/{segment.RoutePlanRouteId}/personnel", new Request.ReplaceRequest {
             LastUpdatedAt = PersonnelAssignmentTests.Version(route), DriverEmployeeId = driver.EmployeeId, EscortEmployeeId = escort.EmployeeId, Reason = "Confirm" })).StatusCode);
         client.DefaultRequestHeaders.Authorization = null;
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync($"/api/v1/transport-plans/{route.TransportPlanId}/assignments")).StatusCode);
         using var forged = Client(host, actor.AccountId, EmployeeRole.LOGISTICS_MANAGER);
         if (role != EmployeeRole.LOGISTICS_MANAGER)
-            Assert.Equal(HttpStatusCode.Forbidden, (await forged.PutAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", PersonnelAssignmentTests.Assign(route, segment, driver, escort))).StatusCode);
+            Assert.Equal(HttpStatusCode.Forbidden, (await forged.PostAsJsonAsync($"/api/v1/route-plans/{route.RoutePlanId}/personnel", PersonnelAssignmentTests.Assign(route, segment, driver, escort))).StatusCode);
         actor.IsActive = false; await db.SaveChangesAsync();
         Assert.Equal(HttpStatusCode.Unauthorized, (await forged.GetAsync($"/api/v1/transport-plans/{route.TransportPlanId}/assignments")).StatusCode);
     }

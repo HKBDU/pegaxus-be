@@ -62,7 +62,7 @@ public class PersonnelAssignmentTests
         var coordinator = await EmployeeAsync(db, EmployeeRole.FLEET_ROUTE_COORDINATOR);
         var (route, segment) = await RouteAsync(db, RoutePlanStatus.DRAFT);
         db.EmployeeTransportPlans.AddRange(new EmployeeTransportPlan { EmployeeId = specialist.EmployeeId, TransportPlanId = route.TransportPlanId, Responsibility = "TRANSPORT_SPECIALIST", IsPrimary = true },
-            new EmployeeTransportPlan { EmployeeId = coordinator.EmployeeId, TransportPlanId = route.TransportPlanId, Responsibility = "ROUTE_COORDINATOR", IsPrimary = true });
+            new EmployeeTransportPlan { EmployeeId = coordinator.EmployeeId, TransportPlanId = route.TransportPlanId, Responsibility = "FLEET_ROUTE_COORDINATOR", IsPrimary = true });
         await db.SaveChangesAsync();
         var service = CreateService(db);
         foreach (var actor in new[] { manager, specialist, coordinator })
@@ -73,12 +73,12 @@ public class PersonnelAssignmentTests
             Assert.Equal(coordinator.EmployeeId, view.Phase1.RouteCoordinator!.EmployeeId);
         }
         var driver = await EmployeeAsync(db, EmployeeRole.DRIVER); var escort = await EmployeeAsync(db, EmployeeRole.ESCORT);
-        Assert.Equal("ROUTE_NOT_APPROVED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId))).ErrorCode);
+        Assert.Equal("ROUTE_NOT_CONFIRMED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId))).ErrorCode);
         route.Status = RoutePlanStatus.CONFIRMED; await db.SaveChangesAsync();
         Assert.True((await service.GetAsync(route.TransportPlanId, manager.AccountId)).Phase2.Enabled);
         segment.RouteType = RouteType.BACKUP; await db.SaveChangesAsync();
         Assert.False((await service.GetAsync(route.TransportPlanId, manager.AccountId)).Phase2.Enabled);
-        Assert.Equal("ROUTE_NOT_APPROVED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId))).ErrorCode);
+        Assert.Equal("ROUTE_NOT_CONFIRMED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId))).ErrorCode);
     }
 
     [Fact]
@@ -92,7 +92,7 @@ public class PersonnelAssignmentTests
         db.Add(outsource); await db.SaveChangesAsync();
         var service = CreateService(db);
         var result = await service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId);
-        Assert.Equal("FULLY_ASSIGNED", result.PersonnelStatus);
+        Assert.True(result.IsPersonnelComplete);
         Assert.Equal(driver.EmployeeId, result.Segments[0].Driver!.EmployeeId);
         Assert.Equal(escort.EmployeeId, result.Segments[0].Escort!.EmployeeId);
         Assert.Null(result.Segments[1].Driver); Assert.Null(result.Segments[1].Escort);
@@ -104,14 +104,13 @@ public class PersonnelAssignmentTests
         Assert.Equal(manager.AccountId, audit.ActorAccountId); Assert.Equal("PERSONNEL_ASSIGNED", audit.ActionType);
         Assert.Equal(2, await db.Notifications.CountAsync());
         Assert.All(await db.Notifications.ToArrayAsync(), x => { Assert.Equal(route.TransportPlan.TransportId, x.TransportId); Assert.Contains("Segment 1", x.Message); });
-        Assert.Equal(3, await db.OutboxMessages.CountAsync()); // InMemory queues emails; relational additionally queues SignalR.
-        var providerMail = await db.OutboxMessages.SingleAsync(x => x.Payload.Contains("provider@example.com"));
-        Assert.DoesNotContain(driver.EmployeeCode, providerMail.Payload);
-        Assert.DoesNotContain("Segment 1", providerMail.Payload);
-        Assert.Equal(TransportStatus.CREATED, route.TransportPlan.Transport.Status);
+        Assert.Equal(2, await db.OutboxMessages.CountAsync()); // Only assigned employees receive emails.
+        Assert.DoesNotContain(await db.OutboxMessages.ToListAsync(), x => x.Payload.Contains("provider@example.com"));
+        Assert.Equal(TransportStatus.READY, route.TransportPlan.Transport.Status);
         Assert.True(result.UpdatedAt > TestClock.GetUtcNow());
-        await service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId);
-        Assert.Single(db.CatalogAuditLogs); Assert.Equal(3, await db.OutboxMessages.CountAsync());
+        Assert.Equal("SEGMENT_ALREADY_ASSIGNED", (await Assert.ThrowsAsync<ConflictException>(() =>
+            service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId))).ErrorCode);
+        Assert.Single(db.CatalogAuditLogs); Assert.Equal(2, await db.OutboxMessages.CountAsync());
     }
 
     [Fact]
@@ -123,15 +122,18 @@ public class PersonnelAssignmentTests
         var escort = await EmployeeAsync(db, EmployeeRole.ESCORT);
         var (route, first) = await RouteAsync(db); var second = Segment(route, 2); db.Add(second); await db.SaveChangesAsync();
         var service = CreateService(db);
-        var partial = await service.AssignAsync(route.RoutePlanId, Assign(route, first, driver, escort), manager.AccountId);
-        Assert.Equal("PARTIALLY_ASSIGNED", partial.PersonnelStatus); Assert.Null(partial.Segments[1].Driver);
-        await service.AssignAsync(route.RoutePlanId, Assign(route, second, driver, escort), manager.AccountId);
-        var oldVersion = partial.UpdatedAt;
+        await Assert.ThrowsAsync<BadRequestException>(() => service.AssignAsync(route.RoutePlanId, Assign(route, first, driver, escort), manager.AccountId));
+        Assert.Null(first.DriverEmployeeId);
+        var request = Assign(route, first, driver, escort);
+        request.Segments.Add(new() { RoutePlanRouteId = second.RoutePlanRouteId, DriverEmployeeId = driver.EmployeeId, EscortEmployeeId = escort.EmployeeId });
+        var oldVersion = Version(route);
+        var assigned = await service.AssignAsync(route.RoutePlanId, request, manager.AccountId);
+        Assert.True(assigned.IsPersonnelComplete);
         Assert.Equal("ROUTE_PLAN_MODIFIED", (await Assert.ThrowsAsync<ConflictException>(() => service.ReplaceAsync(route.RoutePlanId, first.RoutePlanRouteId,
             new() { LastUpdatedAt = oldVersion, DriverEmployeeId = replacement.EmployeeId, Reason = "Sick" }, manager.AccountId))).ErrorCode);
         var replaced = await service.ReplaceAsync(route.RoutePlanId, first.RoutePlanRouteId, new() { LastUpdatedAt = Version(route), DriverEmployeeId = replacement.EmployeeId, Reason = "<b>Sick</b>" }, manager.AccountId);
         Assert.Equal(replacement.EmployeeId, replaced.Segment.Driver!.EmployeeId); Assert.Equal(escort.EmployeeId, replaced.Segment.Escort!.EmployeeId);
-        Assert.Equal("FULLY_ASSIGNED", replaced.PersonnelStatus);
+        Assert.True(replaced.IsPersonnelComplete);
         Assert.Equal(3, await db.EmployeeTransportPlans.CountAsync()); // Old driver still serves the second segment.
         await service.ReplaceAsync(route.RoutePlanId, second.RoutePlanRouteId, new() { LastUpdatedAt = Version(route), DriverEmployeeId = replacement.EmployeeId, Reason = "Sick" }, manager.AccountId);
         Assert.False(await db.EmployeeTransportPlans.AnyAsync(x => x.EmployeeId == driver.EmployeeId));
@@ -179,7 +181,7 @@ public class PersonnelAssignmentTests
         second.PlannedDepartureAt = null; await db.SaveChangesAsync();
         Assert.Equal("INVALID_SEGMENT_SCHEDULE", (await Assert.ThrowsAsync<BadRequestException>(() => service.AssignAsync(route.RoutePlanId, request, manager.AccountId))).ErrorCode);
         second.PlannedDepartureAt = first.PlannedArrivalAt!.Value.AddMinutes(1); await db.SaveChangesAsync();
-        Assert.Equal("FULLY_ASSIGNED", (await service.AssignAsync(route.RoutePlanId, request, manager.AccountId)).PersonnelStatus);
+        Assert.True((await service.AssignAsync(route.RoutePlanId, request, manager.AccountId)).IsPersonnelComplete);
     }
 
     [Theory]
@@ -197,7 +199,7 @@ public class PersonnelAssignmentTests
             case "account": driver.Account.Status = AccountStatus.INACTIVE; break; case "role": driver.Role = EmployeeRole.ESCORT; break; case "missing": request.Segments[0].DriverEmployeeId = Guid.NewGuid(); break; }
         await db.SaveChangesAsync();
         var error = await Record.ExceptionAsync(() => CreateService(db).AssignAsync(route.RoutePlanId, request, manager.AccountId));
-        Assert.Equal(invalid == "role" ? "INVALID_ROLE_ASSIGNMENT" : "EMPLOYEE_NOT_FOUND", Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(error).ErrorCode);
+        Assert.Equal(invalid == "missing" ? "EMPLOYEE_NOT_FOUND" : "INVALID_ROLE_ASSIGNMENT", Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(error).ErrorCode);
         Assert.Null(segment.DriverEmployeeId); Assert.Empty(db.CatalogAuditLogs); Assert.Empty(db.Notifications);
     }
 
@@ -231,8 +233,8 @@ public class PersonnelAssignmentTests
         var manager = await EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER); var (route, segment) = await RouteAsync(db);
         segment.TransportProvider = Provider(); db.Add(segment.TransportProvider); segment.Route.TransportMode = TransportMode.AIR; await db.SaveChangesAsync();
         var result = await CreateService(db).AssignAsync(route.RoutePlanId, new() { LastUpdatedAt = Version(route) }, manager.AccountId);
-        Assert.Equal("FULLY_ASSIGNED", result.PersonnelStatus); Assert.Empty(db.EmployeeTransportPlans);
-        Assert.Single(db.OutboxMessages); Assert.Single(db.CatalogAuditLogs);
+        Assert.True(result.IsPersonnelComplete); Assert.Empty(db.EmployeeTransportPlans);
+        Assert.Empty(db.OutboxMessages); Assert.Single(db.CatalogAuditLogs);
     }
 
     [Theory]
@@ -272,6 +274,7 @@ public class PersonnelAssignmentTests
     }
 
     [Theory]
+    [InlineData("plan-started")]
     [InlineData("plan-completed")]
     [InlineData("plan-cancelled")]
     [InlineData("transport-completed")]
@@ -284,6 +287,7 @@ public class PersonnelAssignmentTests
         var (route, segment) = await RouteAsync(db);
         switch (terminal)
         {
+            case "plan-started": route.TransportPlan.Status = TransportPlanStatus.IN_PROGRESS; break;
             case "plan-completed": route.TransportPlan.Status = TransportPlanStatus.COMPLETED; break;
             case "plan-cancelled": route.TransportPlan.Status = TransportPlanStatus.CANCELLED; break;
             case "transport-completed": route.TransportPlan.Transport.Status = TransportStatus.COMPLETED; break;
@@ -291,9 +295,107 @@ public class PersonnelAssignmentTests
             case "transport-started": route.TransportPlan.Transport.Status = TransportStatus.IN_TRANSIT; break;
         }
         await db.SaveChangesAsync(); var service = CreateService(db);
-        Assert.False((await service.GetAsync(route.TransportPlanId, manager.AccountId)).Phase2.Enabled);
+        Assert.Equal(terminal is "transport-started" or "plan-started", (await service.GetAsync(route.TransportPlanId, manager.AccountId)).Phase2.Enabled);
         Assert.Equal("PLAN_LOCKED", (await Assert.ThrowsAsync<ConflictException>(() => service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId))).ErrorCode);
         Assert.Empty(db.CatalogAuditLogs);
+    }
+
+    [Fact]
+    public async Task Phase1_ValidatesRolesInactivityAndPlanLocks()
+    {
+        await using var db = TestSupport.CreateDb();
+        var manager = await EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER);
+        var specialist = await EmployeeAsync(db, EmployeeRole.TRANSPORT_SPECIALIST);
+        var coordinator = await EmployeeAsync(db, EmployeeRole.FLEET_ROUTE_COORDINATOR);
+        var (route, _) = await RouteAsync(db, RoutePlanStatus.DRAFT);
+        var service = new Pegaxus.Service.TransportPlanService.Service(db);
+        var request = new Pegaxus.Service.TransportPlanService.Request.Phase1AssignmentRequest {
+            TransportSpecialistId = specialist.EmployeeId, RouteCoordinatorId = coordinator.EmployeeId };
+        specialist.IsActive = false; await db.SaveChangesAsync();
+        Assert.Equal("INVALID_ROLE_ASSIGNMENT", (await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
+            service.AssignPhase1Async(manager.AccountId, route.TransportPlanId, request))).ErrorCode);
+        specialist.IsActive = true; specialist.Role = EmployeeRole.DRIVER; await db.SaveChangesAsync();
+        Assert.Equal("INVALID_ROLE_ASSIGNMENT", (await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
+            service.AssignPhase1Async(manager.AccountId, route.TransportPlanId, request))).ErrorCode);
+        specialist.Role = EmployeeRole.TRANSPORT_SPECIALIST;
+        route.TransportPlan.Status = TransportPlanStatus.IN_PROGRESS; await db.SaveChangesAsync();
+        Assert.Equal("PLAN_LOCKED", (await Assert.ThrowsAsync<ConflictException>(() =>
+            service.AssignPhase1Async(manager.AccountId, route.TransportPlanId, request))).ErrorCode);
+        route.TransportPlan.Status = TransportPlanStatus.APPROVED; await db.SaveChangesAsync();
+        var result = await service.AssignPhase1Async(manager.AccountId, route.TransportPlanId, request);
+        Assert.Equal(2, result.AssignedEmployees.Count);
+        var view = await CreateService(db).GetAsync(route.TransportPlanId, coordinator.AccountId);
+        Assert.True(view.Phase1.IsAssigned); Assert.False(view.Phase1.IsLocked);
+        Assert.Equal(coordinator.EmployeeId, view.Phase1.RouteCoordinator!.EmployeeId);
+        var replacement = await EmployeeAsync(db, EmployeeRole.FLEET_ROUTE_COORDINATOR);
+        await service.UpdatePhase1Async(manager.AccountId, route.TransportPlanId, new() {
+            LastUpdatedAt = result.UpdatedAt, RouteCoordinatorId = replacement.EmployeeId, Reason = "On leave" });
+        await Assert.ThrowsAsync<ForbiddenException>(() => CreateService(db).GetAsync(route.TransportPlanId, coordinator.AccountId));
+        Assert.True((await CreateService(db).GetAsync(route.TransportPlanId, replacement.AccountId)).Phase1.IsAssigned);
+    }
+
+    [Theory]
+    [InlineData(EmployeeRole.TRANSPORT_SPECIALIST)]
+    [InlineData(EmployeeRole.FLEET_ROUTE_COORDINATOR)]
+    [InlineData(EmployeeRole.DRIVER)]
+    [InlineData(EmployeeRole.ESCORT)]
+    public async Task Read_RequiresPlanAssignment_ActivePrimaryRemainsVisible(EmployeeRole role)
+    {
+        await using var db = TestSupport.CreateDb();
+        var actor = await EmployeeAsync(db, role);
+        var (route, segment) = await RouteAsync(db, RoutePlanStatus.ACTIVE);
+        var service = CreateService(db);
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.GetAsync(route.TransportPlanId, actor.AccountId));
+        db.EmployeeTransportPlans.Add(new() { EmployeeId = actor.EmployeeId, TransportPlanId = route.TransportPlanId,
+            Responsibility = role.ToString(), IsPrimary = true });
+        route.TransportPlan.Transport.Status = TransportStatus.IN_TRANSIT;
+        await db.SaveChangesAsync();
+        var result = await service.GetAsync(route.TransportPlanId, actor.AccountId);
+        Assert.True(result.Phase2.Enabled); Assert.True(result.Phase1.IsLocked);
+        Assert.False(result.Phase1.IsAssigned);
+        Assert.False(result.Phase2.Segments[0].IsOutsourced);
+        var (other, _) = await RouteAsync(db);
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.GetAsync(other.TransportPlanId, actor.AccountId));
+    }
+
+    [Fact]
+    public async Task Assignable_FiltersRoleActiveSearchPaginationAndSchedules()
+    {
+        await using var db = TestSupport.CreateDb();
+        var manager = await EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER);
+        var driver = await EmployeeAsync(db, EmployeeRole.DRIVER);
+        var free = await EmployeeAsync(db, EmployeeRole.DRIVER);
+        var inactive = await EmployeeAsync(db, EmployeeRole.DRIVER); inactive.IsActive = false;
+        var specialist = await EmployeeAsync(db, EmployeeRole.TRANSPORT_SPECIALIST);
+        var (route, segment) = await RouteAsync(db);
+        segment.DriverEmployeeId = driver.EmployeeId; await db.SaveChangesAsync();
+        var service = CreateService(db);
+        var query = new Request.AssignableRequest { Role = "DRIVER",
+            AvailableFrom = new DateTimeOffset(DateTime.SpecifyKind(segment.PlannedDepartureAt!.Value, DateTimeKind.Utc)),
+            AvailableTo = new DateTimeOffset(DateTime.SpecifyKind(segment.PlannedArrivalAt!.Value, DateTimeKind.Utc)),
+            PageSize = 1 };
+        var result = await service.GetAssignableAsync(query, manager.AccountId);
+        Assert.Equal(free.EmployeeId, Assert.Single(result.Items).EmployeeId); Assert.Equal(1, result.TotalItems);
+        route.Status = RoutePlanStatus.DRAFT; await db.SaveChangesAsync();
+        Assert.Equal(2, (await service.GetAssignableAsync(query, manager.AccountId)).TotalItems);
+        query.Search = driver.EmployeeCode;
+        Assert.Equal(driver.EmployeeId, Assert.Single((await service.GetAssignableAsync(query, manager.AccountId)).Items).EmployeeId);
+        Assert.Equal(specialist.EmployeeId, Assert.Single((await service.GetAssignableAsync(new() { Role = "TRANSPORT_SPECIALIST" }, manager.AccountId)).Items).EmployeeId);
+        await Assert.ThrowsAsync<BadRequestException>(() => service.GetAssignableAsync(new() { Role = "DRIVER" }, manager.AccountId));
+        await Assert.ThrowsAsync<BadRequestException>(() => service.GetAssignableAsync(new() { Role = "LOGISTICS_MANAGER" }, manager.AccountId));
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.GetAssignableAsync(query, free.AccountId));
+    }
+
+    [Fact]
+    public async Task Replace_RequiresInitialAssignment()
+    {
+        await using var db = TestSupport.CreateDb();
+        var manager = await EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER);
+        var driver = await EmployeeAsync(db, EmployeeRole.DRIVER);
+        var (route, segment) = await RouteAsync(db);
+        var error = await Assert.ThrowsAsync<ConflictException>(() => CreateService(db).ReplaceAsync(route.RoutePlanId,
+            segment.RoutePlanRouteId, new() { LastUpdatedAt = Version(route), DriverEmployeeId = driver.EmployeeId, Reason = "Replacement" }, manager.AccountId));
+        Assert.Equal("SEGMENT_NOT_ASSIGNED", error.ErrorCode);
     }
 
     [Fact]

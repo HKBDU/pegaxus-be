@@ -81,7 +81,7 @@ public class PersonnelAssignmentPostgresTests
                 Assert.Single(await db.CatalogAuditLogs.ToListAsync());
                 Assert.Equal(4, await db.OutboxMessages.CountAsync()); // Two emails, two SignalR messages.
                 var view = await PersonnelAssignmentTests.CreateService(db).GetAsync(route.TransportPlanId, actor);
-                Assert.Equal("FULLY_ASSIGNED", view.Phase2.PersonnelStatus);
+                Assert.True(view.Phase2.IsPersonnelComplete);
                 var retry = await PersonnelAssignmentTests.CreateService(db).AssignAsync(winner, Assign(version, winningSegment, driver, winningEscort), actor);
                 Assert.Equal(version, retry.UpdatedAt); Assert.Equal(4, await db.OutboxMessages.CountAsync());
             }

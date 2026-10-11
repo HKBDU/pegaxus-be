@@ -4,6 +4,16 @@ namespace Pegaxus.Service.PersonnelAssignmentService;
 
 public static class Request
 {
+    public sealed class AssignableRequest
+    {
+        public string Role { get; set; } = "";
+        public DateTimeOffset? AvailableFrom { get; set; }
+        public DateTimeOffset? AvailableTo { get; set; }
+        public string? Search { get; set; }
+        public int PageIndex { get; set; } = 1;
+        public int PageSize { get; set; } = 20;
+    }
+
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class AssignRequest
     {
