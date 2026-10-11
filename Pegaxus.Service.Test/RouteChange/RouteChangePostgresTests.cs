@@ -19,37 +19,79 @@ namespace Pegaxus.Service.Test;
 public class RouteChangePostgresTests
 {
     [PostgresFact]
-    public async Task BackupLocks_MultipleSegments_KeepCompletedHistory()
+    public async Task BackupActivation_PreservesHistoryAndDurableNotifications()
     {
         await using var scope = await DatabaseScope.CreateAsync();
         await using var db = scope.Db();
-        var fixture = await RouteChangeTests.Fixture.CreateAsync(db);
-        var backup = new RoutePlan
+        var f = await RouteChangeTests.Fixture.CreateAsync(db);
+        var backup = await f.AlternateAsync();
+        await Service(db).CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal());
+        var result = await Service(db).DecideAsync(backup.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = RouteChangeTests.Fixture.Version(backup) });
+        Assert.Equal("ACTIVE", result.Status);
+        await using var check = scope.Db();
+        Assert.Equal(3, await check.RoutePlanRoutes.CountAsync());
+        Assert.Null((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Completed.RoutePlanRouteId)).SupersededAt);
+        Assert.NotNull((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Current.RoutePlanRouteId)).SupersededAt);
+        Assert.Equal(4, await check.Notifications.CountAsync());
+        Assert.Equal(4, await check.OutboxMessages.CountAsync());
+        Assert.Empty(await check.RouteChangeRequests.ToListAsync());
+        Assert.Empty(await check.IncidentReports.ToListAsync());
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scope.Source).Options;
+        await CheckOutboxClaimsAsync(options);
+        await CheckRequirementReferenceRaceAsync(options, f.Manager.AccountId);
+    }
+
+    [PostgresFact]
+    public async Task ConcurrentDecisions_OnlyOneRouteVersionSucceeds()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        Guid routeId, managerId; DateTimeOffset version;
+        await using (var setup = scope.Db())
         {
-            RoutePlanId = Guid.NewGuid(), TransportPlanId = fixture.Plan.TransportPlanId,
-            RoutePlanCode = "FULL_BACKUP", Status = RoutePlanStatus.CONFIRMED, PrimaryRoutePlanId = fixture.Plan.RoutePlanId
-        };
-        db.Add(backup);
-        db.AddRange(new RoutePlanRoute
+            var f = await RouteChangeTests.Fixture.CreateAsync(setup);
+            var backup = await f.AlternateAsync();
+            routeId = backup.RoutePlanId; managerId = f.Manager.AccountId; version = RouteChangeTests.Fixture.Version(backup);
+        }
+        async Task<string> Decide(string decision)
         {
-            RoutePlanRouteId = Guid.NewGuid(), RoutePlanId = backup.RoutePlanId, RouteId = fixture.Completed.RouteId,
-            SequenceNo = 1, RouteType = RouteType.BACKUP, PlannedDepartureAt = fixture.Completed.PlannedDepartureAt, PlannedArrivalAt = fixture.Completed.PlannedArrivalAt
-        }, new RoutePlanRoute
+            await using var db = scope.Db();
+            try { return (await Service(db).DecideAsync(routeId, managerId,
+                new() { Decision = decision, LastUpdatedAt = version, Note = "Manager reviewed the emergency" })).Status; }
+            catch (ConflictException error) { return error.ErrorCode; }
+            catch (PostgresException error) when (error.SqlState == PostgresErrorCodes.SerializationFailure) { return "ROUTE_PLAN_MODIFIED"; }
+            catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure }) { return "ROUTE_PLAN_MODIFIED"; }
+        }
+        var results = await Task.WhenAll(Decide("APPROVE"), Decide("REJECT"));
+        Assert.Single(results, x => x == "ROUTE_PLAN_MODIFIED");
+        Assert.Single(results, x => x is "ACTIVE" or "CONFIRMED");
+        await using var check = scope.Db();
+        Assert.Single(await check.CatalogAuditLogs.ToListAsync());
+    }
+
+    [PostgresFact]
+    public async Task FailedAudit_RollsBackActivationAndNotifications()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        Guid routeId, managerId, segmentId; DateTimeOffset version;
+        await using (var setup = scope.Db())
         {
-            RoutePlanRouteId = Guid.NewGuid(), RoutePlanId = backup.RoutePlanId, RouteId = fixture.Alternative.RouteId,
-            SequenceNo = 2, RouteType = RouteType.BACKUP, PlannedDepartureAt = fixture.Current.PlannedDepartureAt, PlannedArrivalAt = fixture.Current.PlannedArrivalAt
-        });
-        await db.SaveChangesAsync();
-        var request = fixture.Proposal();
-        request.ReplacementSegments = null;
-        request.BackupRoutePlanId = backup.RoutePlanId;
-        var created = await Service(db).CreateAsync(fixture.Plan.RoutePlanId, fixture.Coordinator.AccountId, request);
-        var result = await Service(db).DecideAsync(created.ChangeRequestId, fixture.Manager.AccountId,
-            new() { Decision = "APPROVE", LastUpdatedAt = created.CreatedAt });
-        var replacementId = Assert.Single(result.NewSegmentIds);
-        Assert.Equal(fixture.Driver.EmployeeId, (await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == replacementId)).DriverEmployeeId);
-        Assert.Null((await db.RoutePlanRoutes.AsNoTracking().SingleAsync(x => x.RoutePlanRouteId == fixture.Completed.RoutePlanRouteId)).SupersededAt);
-        Assert.Equal(2, await db.RoutePlanRoutes.CountAsync(x => x.RoutePlanId == backup.RoutePlanId));
+            var f = await RouteChangeTests.Fixture.CreateAsync(setup);
+            var backup = await f.AlternateAsync();
+            routeId = backup.RoutePlanId; managerId = f.Manager.AccountId;
+            segmentId = f.Current.RoutePlanRouteId; version = RouteChangeTests.Fixture.Version(backup);
+            await setup.Database.ExecuteSqlRawAsync("""
+                CREATE FUNCTION reject_uc48_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit unavailable'; END $$;
+                CREATE TRIGGER reject_uc48_audit BEFORE INSERT ON "CatalogAuditLog" FOR EACH ROW EXECUTE FUNCTION reject_uc48_audit();
+                """);
+        }
+        await using (var failing = scope.Db())
+            await Assert.ThrowsAsync<DbUpdateException>(() => Service(failing).DecideAsync(routeId, managerId,
+                new() { Decision = "APPROVE", LastUpdatedAt = version }));
+        await using var check = scope.Db();
+        Assert.Equal(RoutePlanStatus.CONFIRMED, (await check.RoutePlans.SingleAsync(x => x.RoutePlanId == routeId)).Status);
+        Assert.Null((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == segmentId)).SupersededAt);
+        Assert.Empty(await check.Notifications.ToListAsync()); Assert.Empty(await check.OutboxMessages.ToListAsync());
     }
 
     [PostgresFact]
@@ -60,97 +102,8 @@ public class RouteChangePostgresTests
         Assert.False(db.Database.HasPendingModelChanges());
         var migrator = db.GetInfrastructure().GetRequiredService<IMigrator>();
         await migrator.MigrateAsync("20261006100000_AlignRoutePlanningWithDbV7");
-        await using (var connection = await scope.Source.OpenConnectionAsync())
-        await using (var command = new NpgsqlCommand("SELECT to_regclass('\"RouteChangeRequest\"') IS NULL", connection))
-            Assert.True((bool)(await command.ExecuteScalarAsync())!);
         await migrator.MigrateAsync();
-        await using var connection2 = await scope.Source.OpenConnectionAsync();
-        await using var command2 = new NpgsqlCommand("SELECT EXISTS (SELECT 1 FROM pg_enum WHERE enumlabel = 'ROUTE_CHANGE' AND enumtypid = 'incident_category'::regtype)", connection2);
-        Assert.True((bool)(await command2.ExecuteScalarAsync())!);
-    }
-
-    [PostgresFact]
-    public async Task ConcurrentCreateAndApproval_ReplayOnce_PersistOutboxAndIncident()
-    {
-        await using var scope = await DatabaseScope.CreateAsync();
-        Guid planId, coordinatorId, managerId;
-        RouteChange.Request.CreateRequest proposal;
-        await using (var setup = scope.Db())
-        {
-            var f = await RouteChangeTests.Fixture.CreateAsync(setup);
-            planId = f.Plan.RoutePlanId;
-            coordinatorId = f.Coordinator.AccountId;
-            managerId = f.Manager.AccountId;
-            proposal = f.Proposal();
-            proposal.ClientRequestId = Guid.NewGuid();
-        }
-        async Task<RouteChange.Response.Created> Create()
-        {
-            await using var db = scope.Db();
-            return await Service(db).CreateAsync(planId, coordinatorId, proposal);
-        }
-        var created = await Task.WhenAll(Create(), Create());
-        Assert.Equal(created[0].ChangeRequestId, created[1].ChangeRequestId);
-        var decision = new RouteChange.Request.DecisionRequest { Decision = "APPROVE", LastUpdatedAt = created[0].CreatedAt };
-        async Task<RouteChange.Response.DecisionResult> Decide()
-        {
-            await using var db = scope.Db();
-            return await Service(db).DecideAsync(created[0].ChangeRequestId, managerId, decision);
-        }
-        var results = await Task.WhenAll(Decide(), Decide());
-        Assert.Equal(results[0].NewSegmentIds, results[1].NewSegmentIds);
-        await using var check = scope.Db();
-        Assert.Equal(1, await check.RouteChangeRequests.CountAsync());
-        Assert.Equal(3, await check.RoutePlanRoutes.CountAsync());
-        Assert.Equal(1, await check.RoutePlanRoutes.CountAsync(x => x.SupersededAt != null));
-        Assert.Equal(1, await check.IncidentReports.CountAsync());
-        Assert.Equal(1, await check.EmergencyCostRequests.CountAsync());
-        Assert.Equal(4, await check.Notifications.CountAsync());
-        Assert.Equal(8, await check.OutboxMessages.CountAsync());
-        Assert.Equal(2, await check.CatalogAuditLogs.CountAsync());
-        proposal.Note = "Changed after retry";
-        Assert.Equal("IDEMPOTENCY_KEY_REUSED", (await Assert.ThrowsAsync<ConflictException>(() =>
-            Service(check).CreateAsync(planId, coordinatorId, proposal))).ErrorCode);
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scope.Source).Options;
-        Assert.Equal(0, await check.DocumentVersions.Where(item => item.ComplianceDocumentId == Guid.Empty)
-            .OrderByDescending(item => item.VersionNo).Take(1)
-            .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DocumentVersionId, item => item.DocumentVersionId)));
-        await CheckOutboxClaimsAsync(options);
-        await CheckRequirementReferenceRaceAsync(options, managerId);
-    }
-
-    [PostgresFact]
-    public async Task FailedAudit_RollsBackRouteEtaCostsNotificationsAndDecision()
-    {
-        await using var scope = await DatabaseScope.CreateAsync();
-        Guid requestId, managerId, oldSegmentId, planId;
-        DateTimeOffset updatedAt;
-        await using (var setup = scope.Db())
-        {
-            var f = await RouteChangeTests.Fixture.CreateAsync(setup);
-            var created = await Service(setup).CreateAsync(f.Plan.RoutePlanId, f.Coordinator.AccountId, f.Proposal());
-            requestId = created.ChangeRequestId;
-            updatedAt = created.CreatedAt;
-            managerId = f.Manager.AccountId;
-            oldSegmentId = f.Current.RoutePlanRouteId;
-            planId = f.Plan.TransportPlanId;
-            await setup.Database.ExecuteSqlRawAsync("""
-                CREATE FUNCTION reject_uc48_audit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'audit unavailable'; END $$;
-                CREATE TRIGGER reject_uc48_audit BEFORE INSERT ON "CatalogAuditLog" FOR EACH ROW EXECUTE FUNCTION reject_uc48_audit();
-                """);
-        }
-        await using (var failing = scope.Db())
-            await Assert.ThrowsAsync<DbUpdateException>(() => Service(failing).DecideAsync(requestId, managerId,
-                new() { Decision = "APPROVE", LastUpdatedAt = updatedAt }));
-        await using var check = scope.Db();
-        Assert.Equal("PENDING", (await check.RouteChangeRequests.SingleAsync()).Status);
-        Assert.Null((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == oldSegmentId)).SupersededAt);
-        Assert.Equal(2, await check.RoutePlanRoutes.CountAsync());
-        Assert.Empty(await check.IncidentReports.ToListAsync());
-        Assert.Empty(await check.EmergencyCostRequests.ToListAsync());
-        Assert.Equal(1, await check.Notifications.CountAsync());
-        Assert.Equal(2, await check.OutboxMessages.CountAsync());
-        Assert.Equal(RouteChangeTests.Fixture.StartAt.AddHours(2).UtcDateTime, (await check.TransportPlans.SingleAsync(x => x.TransportPlanId == planId)).PlannedEndAt);
+        Assert.False(db.Database.HasPendingModelChanges());
     }
 
     private static async Task CheckOutboxClaimsAsync(DbContextOptions<AppDbContext> options)
@@ -257,36 +210,6 @@ public class RouteChangePostgresTests
 
     private static RouteChange.Service Service(AppDbContext db) => new(db,
         new Pegaxus.Service.NotificationService.Service(db, new NoopNotificationRealtimeService()), new RouteChangeTests.Fixture.FixedClock());
-
-    [PostgresFact]
-    public async Task CompetingDecisions_OnlyOneWins_OtherReturnsConflict()
-    {
-        await using var scope = await DatabaseScope.CreateAsync();
-        Guid managerId;
-        RouteChange.Response.Created created;
-        await using (var setup = scope.Db())
-        {
-            var f = await RouteChangeTests.Fixture.CreateAsync(setup);
-            managerId = f.Manager.AccountId;
-            created = await Service(setup).CreateAsync(f.Plan.RoutePlanId, f.Coordinator.AccountId, f.Proposal());
-        }
-        async Task<string> Decide(string decision)
-        {
-            await using var db = scope.Db();
-            try
-            {
-                return (await Service(db).DecideAsync(created.ChangeRequestId, managerId,
-                    new() { Decision = decision, LastUpdatedAt = created.CreatedAt, Note = "Manager reviewed the emergency" })).Status;
-            }
-            catch (ConflictException error) { return error.ErrorCode; }
-        }
-        var results = await Task.WhenAll(Decide("APPROVE"), Decide("REJECT"));
-        Assert.Single(results, x => x == "CHANGE_REQUEST_ALREADY_DECIDED");
-        Assert.Single(results, x => x is "APPROVED" or "REJECTED");
-        await using var check = scope.Db();
-        Assert.Equal(2, await check.CatalogAuditLogs.CountAsync());
-        Assert.Equal(results.Contains("APPROVED") ? 1 : 0, await check.IncidentReports.CountAsync());
-    }
 
     internal sealed class PostgresFactAttribute : FactAttribute
     {

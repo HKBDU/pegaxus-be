@@ -1,4 +1,4 @@
-using System.Net;
+using System.Data;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -7,20 +7,16 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
-using Pegaxus.Service.OutboxService;
 using Pegaxus.Service.RouteChangeService.Validator;
 
 namespace Pegaxus.Service.RouteChangeService;
 
 public sealed partial class Service(AppDbContext db, NotificationService.IService notifications, TimeProvider clock) : IService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
     private DateTime Now => new(clock.GetUtcNow().Ticks / 10 * 10, DateTimeKind.Unspecified);
     private static DateTime DbTime(DateTimeOffset value) => new(value.UtcTicks / 10 * 10, DateTimeKind.Unspecified);
     private static DateTimeOffset Utc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
     private static DateTimeOffset? Utc(DateTime? value) => value.HasValue ? Utc(value.Value) : null;
-    private static string Json<T>(T value) => JsonSerializer.Serialize(value, JsonOptions);
-    private static T Read<T>(string value) => JsonSerializer.Deserialize<T>(value, JsonOptions)!;
     private static void Validate<T>(T request, IValidator<T> validator)
     {
         var result = validator.Validate(request);
@@ -31,174 +27,321 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
     {
         Validate(request, new CreateRequestValidator());
         var actor = await ActorAsync(accountId, [EmployeeRole.FLEET_ROUTE_COORDINATOR], cancellationToken);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await BeginAsync(cancellationToken);
         var plan = await LockPlanAsync(routePlanId, cancellationToken);
-        if (request.ClientRequestId is { } clientId)
-        {
-            var existing = await db.RouteChangeRequests.AsNoTracking().SingleOrDefaultAsync(x =>
-                x.RoutePlanId == routePlanId && x.ClientRequestId == clientId, cancellationToken);
-            if (existing is not null)
-            {
-                if (existing.RequestedByEmployeeId != actor.EmployeeId || !JsonEquivalent(existing.SubmittedRequest, Json(request)))
-                    throw new ConflictException("clientRequestId was already used with a different request.", "IDEMPOTENCY_KEY_REUSED");
-                return new(existing.RouteChangeRequestId, routePlanId, "PENDING", true, existing.ApprovalReasons, Utc(existing.CreatedAt));
-            }
-        }
         EnsureInTransit(plan);
-        if (await db.RouteChangeRequests.AnyAsync(x => x.RoutePlanId == routePlanId && x.Status == "PENDING", cancellationToken))
-            throw new ConflictException("There is already a pending change request for this route plan.", "CHANGE_REQUEST_PENDING_EXISTS");
-
-        var active = await SegmentsAsync(routePlanId, cancellationToken);
-        var remaining = Remaining(active);
-        var proposed = request.BackupRoutePlanId is { } backupId
-            ? BackupRemainder(await BackupAsync(backupId, plan, cancellationToken), remaining, Utc(DbTime(request.NewEstimatedArrivalAt)))
-            : await ResolveAsync(request.ReplacementSegments!, remaining, cancellationToken);
-        var eta = Utc(DbTime(request.NewEstimatedArrivalAt));
-        CheckContinuity(active, proposed, eta, false);
-        if (proposed[0].PlannedDepartureAt < Utc(Now))
-            throw new BadRequestException("Proposed departure must not be in the past.");
-        await ValidateResourcesAsync(proposed, plan, remaining, false, cancellationToken);
-        var comparison = Compare(active, remaining, proposed, eta);
-        var reasons = ApprovalReasons(comparison);
-        if (reasons.Length == 0)
-            throw new UnprocessableEntityException("The change is below the BR-036 thresholds and does not require approval.", "APPROVAL_NOT_REQUIRED");
-
+        await EnsureCoordinatorAsync(plan, actor, cancellationToken);
+        var backup = await SegmentsAsync(routePlanId, cancellationToken);
+        EnsureTypeStatus(plan, backup, "BACKUP", RoutePlanStatus.CONFIRMED);
+        var primary = await PrimaryAsync(plan, cancellationToken);
+        var active = await SegmentsAsync(primary.RoutePlanId, cancellationToken);
+        var range = ReplacementRange(active, backup);
+        if (range.Concat(backup).Any(x => !x.Route.DistanceKm.HasValue || x.Route.DistanceKm < 0))
+            throw new ConflictException("Measured route distances are required for BR-036.", "ROUTE_DATA_INCOMPLETE");
+        var comparison = Compare(active, range, backup, request.NewEstimatedArrivalAt) with {
+            DelayMinutes = (decimal)(request.NewEstimatedArrivalAt - active[^1].PlannedArrivalAt).TotalMinutes };
+        if (ApprovalReasons(comparison).Length == 0)
+            throw new UnprocessableEntityException("The change is below the approval threshold (BR-036)", "APPROVAL_NOT_REQUIRED");
+        var managers = await db.Employees.AsNoTracking().Where(x => x.Role == EmployeeRole.LOGISTICS_MANAGER &&
+            x.IsActive && !x.IsDeleted && x.Account.Status == AccountStatus.ACTIVE && !x.Account.IsDeleted)
+            .Select(x => x.AccountId).ToArrayAsync(cancellationToken);
+        if (managers.Length == 0) throw new ConflictException("No active Logistics Manager can review this request.", "REVIEWER_UNAVAILABLE");
         var now = Now;
-        var change = new RouteChangeRequest
-        {
-            RouteChangeRequestId = Guid.NewGuid(), RoutePlanId = routePlanId, BackupRoutePlanId = request.BackupRoutePlanId,
-            ClientRequestId = request.ClientRequestId, SubmittedRequest = Json(request),
-            Reason = request.Reason.Trim(), Note = request.Note?.Trim(), NewEstimatedArrivalAt = DbTime(request.NewEstimatedArrivalAt),
-            EstimatedExtraCost = request.EstimatedExtraCost, Currency = request.Currency, CurrentSegments = Json(remaining),
-            ProposedSegments = Json(proposed), Comparison = Json(comparison), ApprovalReasons = reasons,
-            RequestedByEmployeeId = actor.EmployeeId, CreatedAt = now, UpdatedAt = now
-        };
-        db.RouteChangeRequests.Add(change);
-        var managers = await db.Employees.AsNoTracking().Include(x => x.Account)
-            .Where(x => x.Role == EmployeeRole.LOGISTICS_MANAGER && x.IsActive && !x.IsDeleted &&
-                x.Account.Status == AccountStatus.ACTIVE && !x.Account.IsDeleted).ToListAsync(cancellationToken);
-        if (managers.Count == 0) throw new ConflictException("No active Logistics Manager can review this request.", "REVIEWER_UNAVAILABLE");
+        var message = $"{request.Reason.Trim()}\nETA: {request.NewEstimatedArrivalAt:O}\nEstimated extra cost: {request.EstimatedExtraCost} {request.Currency}\n{request.Note}";
         foreach (var manager in managers)
-            Notify(manager.Account, plan.TransportPlan.TransportId, change, "Emergency route change requested", change.Reason, now);
-        Audit(change, accountId, "IN_TRANSIT_ROUTE_CHANGE_REQUESTED", new { }, new { change.ApprovalReasons, comparison, proposed }, now);
+            Notify(manager, plan, "Emergency backup activation requested", message, NotificationPriority.URGENT, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
-        return new(change.RouteChangeRequestId, routePlanId, change.Status, true, reasons, Utc(now));
+        return new(routePlanId, "BACKUP", plan.Status.ToString(), Utc(now));
     }
 
-    public async Task<Response.ListResponse> ListAsync(Guid accountId, Request.ListRequest request, CancellationToken cancellationToken = default)
-    {
-        Validate(request, new ListRequestValidator());
-        await ActorAsync(accountId, [EmployeeRole.LOGISTICS_MANAGER, EmployeeRole.FLEET_ROUTE_COORDINATOR], cancellationToken);
-        var query = db.RouteChangeRequests.AsNoTracking();
-        if (request.Status is not null) query = query.Where(x => x.Status == request.Status);
-        if (request.TransportPlanId is { } planId) query = query.Where(x => x.RoutePlan.TransportPlanId == planId);
-        var count = await query.CountAsync(cancellationToken);
-        var sorted = request.SortBy == "createdAt:asc" ? query.OrderBy(x => x.CreatedAt) : query.OrderByDescending(x => x.CreatedAt);
-        var items = await sorted.ThenBy(x => x.RouteChangeRequestId).Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize)
-            .Include(x => x.RoutePlan).ThenInclude(x => x.TransportPlan).ThenInclude(x => x.Transport).ThenInclude(x => x.Booking)
-            .ToListAsync(cancellationToken);
-        return new(items.Select(x => new Response.ListItem(x.RouteChangeRequestId, x.RoutePlanId, x.RoutePlan.TransportPlanId,
-            x.RoutePlan.TransportPlan.PlanCode, x.RoutePlan.TransportPlan.Transport.Booking.BookingCode, x.Status, x.Reason,
-            x.ApprovalReasons, Utc(x.NewEstimatedArrivalAt), Utc(x.CreatedAt))).ToList(),
-            request.PageIndex, request.PageSize, count, (int)Math.Ceiling(count / (double)request.PageSize));
-    }
-
-    public async Task<Response.Detail> GetAsync(Guid changeRequestId, Guid accountId, CancellationToken cancellationToken = default)
-    {
-        await ActorAsync(accountId, [EmployeeRole.LOGISTICS_MANAGER, EmployeeRole.FLEET_ROUTE_COORDINATOR], cancellationToken);
-        var change = await db.RouteChangeRequests.AsNoTracking().Include(x => x.RequestedByEmployee).Include(x => x.RoutePlan)
-            .SingleOrDefaultAsync(x => x.RouteChangeRequestId == changeRequestId, cancellationToken)
-            ?? throw new NotFoundException("Route change request not found.", "CHANGE_REQUEST_NOT_FOUND");
-        return new(changeRequestId, change.RoutePlanId, change.RoutePlan.TransportPlanId, change.Status, change.Reason,
-            Employee(change.RequestedByEmployee)!, Read<List<Response.Segment>>(change.CurrentSegments), Read<List<Response.Segment>>(change.ProposedSegments),
-            change.BackupRoutePlanId, Read<Response.Comparison>(change.Comparison), change.ApprovalReasons, change.EstimatedExtraCost,
-            change.Currency, change.Note, change.DecidedAt is { } decidedAt ? new(change.Status, change.DecidedByEmployeeId!.Value, change.DecisionNote, Utc(decidedAt)) : null,
-            Utc(change.CreatedAt), Utc(change.UpdatedAt));
-    }
-
-    public async Task<Response.DecisionResult> DecideAsync(Guid changeRequestId, Guid accountId, Request.DecisionRequest request, CancellationToken cancellationToken = default)
+    public async Task<Response.DecisionResult> DecideAsync(Guid routePlanId, Guid accountId, Request.DecisionRequest request, CancellationToken cancellationToken = default)
     {
         Validate(request, new DecisionRequestValidator());
-        var actor = await ActorAsync(accountId, [EmployeeRole.LOGISTICS_MANAGER], cancellationToken);
-        var header = await db.RouteChangeRequests.AsNoTracking().SingleOrDefaultAsync(x => x.RouteChangeRequestId == changeRequestId, cancellationToken)
-            ?? throw new NotFoundException("Route change request not found.", "CHANGE_REQUEST_NOT_FOUND");
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var plan = await LockPlanAsync(header.RoutePlanId, cancellationToken);
-        if (db.Database.IsRelational())
-            await db.RouteChangeRequests.Where(x => x.RouteChangeRequestId == changeRequestId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RouteChangeRequestId, x => x.RouteChangeRequestId), cancellationToken);
-        var change = await db.RouteChangeRequests.SingleAsync(x => x.RouteChangeRequestId == changeRequestId, cancellationToken);
-        await db.Entry(change).ReloadAsync(cancellationToken);
-        var decisionRequest = Json(new { actor.EmployeeId, request.LastUpdatedAt, request.Decision, Note = request.Note?.Trim(), request.ReturnSegments });
-        if (change.Status != "PENDING")
-        {
-            // PostgreSQL jsonb changes key order; compare deserialized values rather than serialized text.
-            if (change.DecisionRequest is not null && JsonEquivalent(change.DecisionRequest, decisionRequest))
-                return Read<Response.DecisionResult>(change.DecisionResponse!);
-            throw new ConflictException("This change request has already been decided.", "CHANGE_REQUEST_ALREADY_DECIDED");
-        }
-        if (DbTime(request.LastUpdatedAt) != change.UpdatedAt)
-            throw new ConflictException("The change request was just modified. Please reload the page.", "CHANGE_REQUEST_MODIFIED");
+        await ActorAsync(accountId, [EmployeeRole.LOGISTICS_MANAGER], cancellationToken);
+        await using var transaction = await BeginAsync(cancellationToken);
+        var plan = await LockPlanAsync(routePlanId, cancellationToken);
         EnsureInTransit(plan);
-        var now = new DateTime(Math.Max(Now.Ticks, change.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
-        List<Response.Segment> proposed = [];
-        List<Response.Segment> remaining = [];
-        Guid[] newIds = [];
-        string[] notified;
-        var isReturn = request.Decision == "EMERGENCY_RETURN";
-        if (request.Decision != "REJECT")
+        CheckVersion(plan, request.LastUpdatedAt);
+        var segments = await SegmentsAsync(routePlanId, cancellationToken);
+        var type = segments.Count > 0 ? segments[0].RouteType : "";
+        EnsureTypeStatus(plan, segments, type, type == "BACKUP" ? RoutePlanStatus.CONFIRMED : RoutePlanStatus.DRAFT);
+        if (type is not ("BACKUP" or "RETURN")) throw InvalidStatus(plan);
+        var dossier = plan.TransportPlan.Transport.ComplianceDossier;
+        if (type == "RETURN" && dossier?.Status != ComplianceDossierStatus.APPROVED)
+            throw new ConflictException("The compliance dossier must be approved to approve a return route plan", "DOSSIER_NOT_APPROVED");
+        var now = NextVersion(plan);
+        if (request.Decision == "APPROVE")
         {
-            var active = await SegmentsAsync(plan.RoutePlanId, cancellationToken);
-            remaining = Remaining(active);
-            if (!JsonEquivalent(Json(remaining), change.CurrentSegments))
-                throw new ConflictException("The current route or its progress changed. Submit a fresh proposal.", "ROUTE_PROGRESS_CHANGED");
-            proposed = isReturn ? await ReturnAsync(request, active, remaining, plan, cancellationToken)
-                : Read<List<Response.Segment>>(change.ProposedSegments);
-            if (!isReturn && change.BackupRoutePlanId is { } backupId)
+            if (type == "RETURN")
             {
-                var backup = BackupRemainder(await BackupAsync(backupId, plan, cancellationToken), remaining, Utc(change.NewEstimatedArrivalAt));
-                if (!JsonEquivalent(Json(backup), change.ProposedSegments))
-                    throw new ConflictException("The backup changed since submission.", "BACKUP_MODIFIED");
+                dossier!.Status = ComplianceDossierStatus.DRAFT;
+                dossier.ApprovedAt = null;
+                dossier.UpdatedAt = now;
+                db.AuditDossiers.Add(new() { AuditDossierId = Guid.NewGuid(), ComplianceDossierId = dossier.ComplianceDossierId,
+                    ActorAccountId = accountId, ActionType = "RETURN_DOSSIER_REOPENED", TargetEntity = "RoutePlan", TargetId = routePlanId,
+                    Summary = request.Note ?? "Return route approved; dossier reopened for the assigned Transport Specialist.",
+                    Details = JsonSerializer.SerializeToDocument(new { before = "APPROVED", after = "DRAFT" }),
+                    Visibility = AuditVisibility.Internal, CreatedAt = now });
+                await NotifyAssignedAsync(plan, EmployeeRole.TRANSPORT_SPECIALIST, "Return dossier reopened", request.Note, NotificationPriority.HIGH, now, cancellationToken);
             }
-            var eta = isReturn ? proposed[^1].PlannedArrivalAt : Utc(change.NewEstimatedArrivalAt);
-            CheckContinuity(active, proposed, eta, isReturn);
-            if (proposed[0].PlannedDepartureAt < Utc(Now))
-                throw new ConflictException("The proposed departure is in the past. Submit an updated schedule.", "PROPOSAL_EXPIRED");
-            await ValidateResourcesAsync(proposed, plan, remaining, true, cancellationToken);
-            newIds = await ApplyAsync(plan, change, remaining, proposed, isReturn, now, cancellationToken);
-            plan.TransportPlan.PlannedEndAt = DbTime(eta);
-            plan.TransportPlan.UpdatedAt = now;
-            plan.UpdatedAt = now;
-            RecordIncident(plan, change, actor, remaining[0].FromLocation.LocationId, isReturn, request.Note, now);
-            notified = await NotifyDecisionAsync(plan, change, proposed, remaining, isReturn, now, cancellationToken);
+            else
+            {
+                var primary = await PrimaryAsync(plan, cancellationToken);
+                var active = await SegmentsAsync(primary.RoutePlanId, cancellationToken);
+                var range = ReplacementRange(active, segments);
+                EnsureUntravelled(range);
+                var effective = active.TakeWhile(x => x.RoutePlanRouteId != range[0].RoutePlanRouteId).Concat(segments)
+                    .Concat(active.SkipWhile(x => x.RoutePlanRouteId != range[^1].RoutePlanRouteId).Skip(1)).ToList();
+                CheckConnections(effective);
+                segments = InheritPersonnel(segments, range);
+                await ValidateResourcesAsync(segments, plan, range, true, cancellationToken);
+                foreach (var segment in segments)
+                {
+                    var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == segment.RoutePlanRouteId, cancellationToken);
+                    row.DriverEmployeeId = segment.Driver?.EmployeeId;
+                    row.EscortEmployeeId = segment.Escort?.EmployeeId;
+                    row.UpdatedAt = now;
+                }
+                await SupersedeAsync(range, now, cancellationToken);
+                plan.Status = RoutePlanStatus.ACTIVE;
+                Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Backup route activated", request.Note, NotificationPriority.URGENT, now);
+                await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Backup route activated", request.Note, now, cancellationToken);
+            }
         }
-        else
+        else if (type == "RETURN")
         {
-            var requester = await db.Employees.AsNoTracking().Include(x => x.Account)
-                .SingleAsync(x => x.EmployeeId == change.RequestedByEmployeeId, cancellationToken);
-            Notify(requester.Account, plan.TransportPlan.TransportId, change, "Route change rejected", request.Note!.Trim(), now);
-            notified = ["ROUTE_COORDINATOR"];
+            plan.Status = RoutePlanStatus.CANCELLED;
+            plan.RouteNote = request.Note!.Trim();
         }
-        change.Status = request.Decision == "APPROVE" ? "APPROVED" : request.Decision == "REJECT" ? "REJECTED" : "EMERGENCY_RETURN";
-        change.DecidedByEmployeeId = actor.EmployeeId;
-        change.DecisionNote = request.Note?.Trim();
-        change.DecidedAt = now;
-        change.UpdatedAt = now;
-        change.DecisionRequest = decisionRequest;
-        var result = new Response.DecisionResult(changeRequestId, change.Status, plan.RoutePlanId,
-            isReturn ? proposed[^1].PlannedArrivalAt : Utc(change.NewEstimatedArrivalAt),
-            isReturn ? [] : remaining.Select(x => x.RoutePlanRouteId).ToArray(), isReturn ? [] : newIds,
-            isReturn ? newIds : [], isReturn ? remaining.Select(x => x.RoutePlanRouteId).ToArray() : [], notified,
-            change.IncidentReportId.HasValue && change.EstimatedExtraCost.HasValue, isReturn, Utc(now));
-        change.DecisionResponse = Json(result);
-        Audit(change, accountId, "ROUTE_CHANGE_" + change.Status, new { status = "PENDING", segments = Read<List<Response.Segment>>(change.CurrentSegments) }, result, now);
+        plan.UpdatedAt = now;
+        await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR,
+            request.Decision == "APPROVE" ? "Route change approved" : "Route change rejected", request.Note, NotificationPriority.HIGH, now, cancellationToken);
+        Audit(plan, accountId, "ROUTE_CHANGE_" + request.Decision, request.Note, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
-        return result;
+        return new(routePlanId, type, request.Decision, plan.Status.ToString(),
+            type == "RETURN" ? new(dossier!.ComplianceDossierId, dossier.Status.ToString()) : null, Utc(now));
     }
+
+    public async Task<Response.ActivationResult> ActivateReturnAsync(Guid routePlanId, Guid accountId, Request.ActivationRequest request, CancellationToken cancellationToken = default)
+    {
+        Validate(request, new ActivationRequestValidator());
+        await ActorAsync(accountId, [EmployeeRole.LOGISTICS_MANAGER], cancellationToken);
+        await using var transaction = await BeginAsync(cancellationToken);
+        var plan = await LockPlanAsync(routePlanId, cancellationToken);
+        EnsureInTransit(plan);
+        CheckVersion(plan, request.LastUpdatedAt);
+        var segments = await SegmentsAsync(routePlanId, cancellationToken);
+        EnsureTypeStatus(plan, segments, "RETURN", RoutePlanStatus.CONFIRMED);
+        if (plan.TransportPlan.Transport.ComplianceDossier?.Status != ComplianceDossierStatus.APPROVED)
+            throw new ConflictException("The reviewed compliance dossier must be approved.", "DOSSIER_NOT_APPROVED");
+        var primary = await PrimaryAsync(plan, cancellationToken);
+        var active = await SegmentsAsync(primary.RoutePlanId, cancellationToken);
+        var alternateIds = await db.RoutePlans.AsNoTracking().Where(x => x.TransportPlanId == plan.TransportPlanId &&
+            x.Status == RoutePlanStatus.ACTIVE && x.RoutePlanId != primary.RoutePlanId)
+            .Select(x => x.RoutePlanId).ToArrayAsync(cancellationToken);
+        foreach (var alternateId in alternateIds) active.AddRange(await SegmentsAsync(alternateId, cancellationToken));
+        active = active.OrderBy(x => x.PlannedDepartureAt).ThenBy(x => x.SequenceNo).ToList();
+        var remaining = active.Where(x => !x.ActualArrivalAt.HasValue).ToList();
+        EnsureUntravelled(remaining);
+        if (segments[0].FromLocation.LocationId != remaining[0].FromLocation.LocationId ||
+            segments[^1].ToLocation.LocationId != active[0].FromLocation.LocationId)
+            throw new UnprocessableEntityException("Return route must connect the current stop to the origin.", "RETURN_NOT_ANCHORED");
+        CheckConnections(segments);
+        var proposed = segments.ToList();
+        foreach (var change in request.Segments ?? [])
+        {
+            var index = proposed.FindIndex(x => x.RoutePlanRouteId == change.RoutePlanRouteId);
+            if (index < 0) throw new NotFoundException("Segment not found", "SEGMENT_NOT_FOUND");
+            var segment = proposed[index];
+            if ((change.Outsourcing is not null || segment.Outsourcing is not null) && change.VehicleIds is { Count: > 0 })
+                throw new UnprocessableEntityException("An outsourced segment cannot have internal vehicles.", "OUTSOURCED_SEGMENT");
+            if (change.Outsourcing is not null)
+            {
+                var provider = await db.TransportProviders.AsNoTracking().SingleOrDefaultAsync(x =>
+                    x.TransportProviderId == change.Outsourcing.TransportProviderId, cancellationToken)
+                    ?? throw new NotFoundException("Transport Provider not found", "TRANSPORT_PROVIDER_NOT_FOUND");
+                segment = segment with { Outsourcing = new(new(provider.TransportProviderId, provider.ProviderCode,
+                    provider.ProviderName, provider.Status.ToString(), Modes(provider.SupportedModes)), null, null),
+                    ExecutionType = "OUTSOURCED", Vehicles = [], Driver = null, Escort = null, Note = change.Outsourcing.Note };
+            }
+            else if (change.VehicleIds is { } ids)
+            {
+                var vehicles = await db.Vehicles.AsNoTracking().Where(x => ids.Contains(x.VehicleId)).OrderBy(x => x.VehicleId).ToListAsync(cancellationToken);
+                if (vehicles.Count != ids.Count) throw new NotFoundException("Vehicle not found", "VEHICLE_NOT_FOUND");
+                segment = segment with { Vehicles = vehicles.Select(Vehicle).ToList() };
+            }
+            proposed[index] = segment;
+        }
+        proposed = InheritPersonnel(proposed, active);
+        await ValidateResourcesAsync(proposed, plan, remaining, true, cancellationToken);
+        var now = NextVersion(plan);
+        foreach (var segment in proposed)
+        {
+            var row = await db.RoutePlanRoutes.Include(x => x.RoutePlanRouteVehicles).SingleAsync(x => x.RoutePlanRouteId == segment.RoutePlanRouteId, cancellationToken);
+            row.TransportProviderId = segment.Outsourcing?.Provider.TransportProviderId;
+            row.DriverEmployeeId = segment.Driver?.EmployeeId; row.EscortEmployeeId = segment.Escort?.EmployeeId;
+            row.Note = segment.Note; row.UpdatedAt = now;
+            var desired = segment.Vehicles.Select(x => x.VehicleId).ToArray();
+            db.RoutePlanRouteVehicles.RemoveRange(row.RoutePlanRouteVehicles.Where(x => !desired.Contains(x.VehicleId)));
+            foreach (var id in desired.Where(id => !row.RoutePlanRouteVehicles.Any(x => x.VehicleId == id)))
+                db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = row.RoutePlanRouteId, VehicleId = id, AssignedAt = now });
+            if (row.TransportProviderId is Guid providerId && !await db.TransportPlanProviders.AnyAsync(x =>
+                    x.TransportPlanId == plan.TransportPlanId && x.TransportProviderId == providerId, cancellationToken) &&
+                !db.TransportPlanProviders.Local.Any(x => x.TransportPlanId == plan.TransportPlanId && x.TransportProviderId == providerId))
+                db.TransportPlanProviders.Add(new() { TransportPlanId = plan.TransportPlanId, TransportProviderId = providerId });
+        }
+        foreach (var id in proposed.SelectMany(x => x.Vehicles).Select(x => x.VehicleId).Distinct())
+        {
+            var vehicle = await db.Vehicles.SingleAsync(x => x.VehicleId == id, cancellationToken);
+            if (db.Database.IsRelational()) await db.Entry(vehicle).ReloadAsync(cancellationToken);
+            if (vehicle.Status == VehicleStatus.AVAILABLE) { vehicle.Status = VehicleStatus.ASSIGNED; vehicle.UpdatedAt = now; }
+        }
+        await SupersedeAsync(remaining, now, cancellationToken);
+        plan.Status = RoutePlanStatus.ACTIVE; plan.UpdatedAt = now;
+        Audit(plan, accountId, "RETURN_ROUTE_ACTIVATED", request.Note, now);
+        Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Return route activated", request.Note, NotificationPriority.URGENT, now);
+        await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR, "Return route activated", request.Note, NotificationPriority.HIGH, now, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        var detail = await new RoutePlanService.Service(db).GetByIdAsync(accountId, routePlanId, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        await notifications.FlushAsync(cancellationToken);
+        return new(routePlanId, "RETURN", "ACTIVE", detail.Segments, Utc(now));
+    }
+
+    public async Task<Response.DriverNoticeResult> NotifyDriversAsync(Guid routePlanId, Guid accountId, Request.DriverNoticeRequest request, CancellationToken cancellationToken = default)
+    {
+        if (request.Message?.Length > 4000) throw new BadRequestException("Message must not exceed 4000 characters.");
+        var actor = await ActorAsync(accountId, [EmployeeRole.FLEET_ROUTE_COORDINATOR], cancellationToken);
+        await using var transaction = await BeginAsync(cancellationToken);
+        var plan = await LockPlanAsync(routePlanId, cancellationToken);
+        await EnsureCoordinatorAsync(plan, actor, cancellationToken);
+        var segments = await SegmentsAsync(routePlanId, cancellationToken);
+        if (plan.Status is not (RoutePlanStatus.CONFIRMED or RoutePlanStatus.ACTIVE)) throw InvalidStatus(plan);
+        EnsureTypeStatus(plan, segments, "RETURN", plan.Status);
+        var primary = await PrimaryAsync(plan, cancellationToken);
+        var now = Now;
+        var drivers = await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Begin return journey", request.Message, now, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        await notifications.FlushAsync(cancellationToken);
+        return new(routePlanId, drivers.Select(x => Employee(x)!).ToArray(), Utc(now));
+    }
+
+    private Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginAsync(CancellationToken token) =>
+        db.Database.IsRelational() ? db.Database.BeginTransactionAsync(IsolationLevel.Serializable, token) : db.Database.BeginTransactionAsync(token);
+
+    private async Task EnsureCoordinatorAsync(RoutePlan plan, Employee actor, CancellationToken token)
+    {
+        if (!await db.EmployeeTransportPlans.AnyAsync(x => x.TransportPlanId == plan.TransportPlanId &&
+            x.EmployeeId == actor.EmployeeId && x.Responsibility == "FLEET_ROUTE_COORDINATOR", token))
+            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan can perform this action.");
+    }
+
+    private async Task<RoutePlan> PrimaryAsync(RoutePlan plan, CancellationToken token)
+    {
+        var primaryIds = await db.RoutePlans.AsNoTracking().Where(x => x.TransportPlanId == plan.TransportPlanId &&
+            x.Status == RoutePlanStatus.ACTIVE && x.RoutePlanRoutes.Any() &&
+            x.RoutePlanRoutes.All(s => s.RouteType == RouteType.PRIMARY)).Select(x => x.RoutePlanId).ToArrayAsync(token);
+        if (primaryIds.Length != 1) throw new ConflictException("One active PRIMARY route is required.", "PRIMARY_ROUTE_PLAN_REQUIRED");
+        return await LockPlanAsync(primaryIds[0], token);
+    }
+
+    private static List<Response.Segment> ReplacementRange(List<Response.Segment> primary, List<Response.Segment> backup)
+    {
+        if (backup.Count == 0) throw new BadRequestException("Backup itinerary is empty.");
+        var start = primary.FindIndex(x => x.FromLocation.LocationId == backup[0].FromLocation.LocationId);
+        var end = primary.FindLastIndex(x => x.ToLocation.LocationId == backup[^1].ToLocation.LocationId);
+        if (start < 0 || end < start) throw new ConflictException("Backup overlaps an active replacement or is not anchored to PRIMARY.", "BACKUP_RANGE_CONFLICT");
+        var range = primary.GetRange(start, end - start + 1);
+        if (range.Zip(range.Skip(1), (a, b) => a.ToLocation.LocationId == b.FromLocation.LocationId).Any(x => !x))
+            throw new ConflictException("Backup overlaps an active replacement.", "BACKUP_RANGE_CONFLICT");
+        return range;
+    }
+
+    private static void EnsureUntravelled(List<Response.Segment> segments)
+    {
+        if (segments.Count == 0 || segments.Any(x => x.ActualDepartureAt.HasValue || x.ActualArrivalAt.HasValue))
+            throw new ConflictException("Only untravelled segments can be replaced.", "SEGMENT_LOCKED");
+    }
+
+    private static List<Response.Segment> InheritPersonnel(List<Response.Segment> segments, List<Response.Segment> primary) =>
+        segments.Select((x, i) =>
+        {
+            var crew = primary[Math.Min(i, primary.Count - 1)];
+            if (crew.Driver is null || crew.Escort is null)
+                crew = primary.LastOrDefault(p => p.Driver is not null && p.Escort is not null) ?? crew;
+            return x.ExecutionType == "INTERNAL" ? x with { Driver = crew.Driver, Escort = crew.Escort }
+                : x with { Driver = null, Escort = null };
+        }).ToList();
+
+    private static void CheckConnections(List<Response.Segment> segments)
+    {
+        if (segments.Any(x => x.PlannedArrivalAt <= x.PlannedDepartureAt))
+            throw new UnprocessableEntityException("Invalid segment schedule.", "INVALID_SEGMENT_SCHEDULE");
+        for (var i = 1; i < segments.Count; i++)
+            if (segments[i - 1].ToLocation.LocationId != segments[i].FromLocation.LocationId ||
+                segments[i].PlannedDepartureAt < (segments[i - 1].ActualArrivalAt ?? segments[i - 1].PlannedArrivalAt))
+                throw new UnprocessableEntityException("Segments must connect without overlapping schedules.", "SEGMENT_NOT_CONTINUOUS");
+    }
+
+    private async Task SupersedeAsync(List<Response.Segment> segments, DateTime now, CancellationToken token)
+    {
+        var ids = segments.Select(x => x.RoutePlanRouteId).ToArray();
+        var rows = await db.RoutePlanRoutes.Where(x => ids.Contains(x.RoutePlanRouteId)).ToListAsync(token);
+        foreach (var row in rows) { row.SupersededAt = now; row.UpdatedAt = now; }
+    }
+
+    private async Task NotifyAssignedAsync(RoutePlan plan, EmployeeRole role, string title, string? message,
+        NotificationPriority priority, DateTime now, CancellationToken token)
+    {
+        var recipients = await db.EmployeeTransportPlans.AsNoTracking().Where(x => x.TransportPlanId == plan.TransportPlanId &&
+            x.Employee.Role == role && x.Employee.IsActive && !x.Employee.IsDeleted &&
+            !x.Employee.Account.IsDeleted && x.Employee.Account.Status == AccountStatus.ACTIVE)
+            .Select(x => x.Employee.AccountId).Distinct().ToArrayAsync(token);
+        foreach (var recipient in recipients) Notify(recipient, plan, title, message, priority, now);
+    }
+
+    private async Task<List<Employee>> NotifyPrimaryDriversAsync(RoutePlan plan, Guid primaryId, string title, string? message, DateTime now, CancellationToken token)
+    {
+        var driverIds = db.RoutePlanRoutes.Where(x => x.RoutePlanId == primaryId && x.DriverEmployeeId.HasValue).Select(x => x.DriverEmployeeId!.Value);
+        var drivers = await db.Employees.AsNoTracking().Where(x => driverIds.Contains(x.EmployeeId) && x.IsActive && !x.IsDeleted &&
+            x.Role == EmployeeRole.DRIVER && !x.Account.IsDeleted && x.Account.Status == AccountStatus.ACTIVE).OrderBy(x => x.EmployeeCode).ToListAsync(token);
+        foreach (var driver in drivers) Notify(driver.AccountId, plan, title, message, NotificationPriority.URGENT, now);
+        return drivers;
+    }
+
+    private void Notify(Guid accountId, RoutePlan plan, string title, string? message, NotificationPriority priority, DateTime now) =>
+        notifications.Queue(new() { AccountId = accountId, TransportId = plan.TransportPlan.TransportId, Type = NotificationType.ROUTE,
+            Priority = priority, Title = title, Message = $"{plan.RoutePlanCode}: {message}", ReferenceType = "RoutePlan",
+            ReferenceId = plan.RoutePlanId, ActionUrl = $"/admin/route-plans/{plan.RoutePlanId}", CreatedAt = now });
+
+    private void Audit(RoutePlan plan, Guid accountId, string action, string? note, DateTime now) =>
+        db.CatalogAuditLogs.Add(new() { CatalogAuditLogId = Guid.NewGuid(), EntityType = "RoutePlan", EntityId = plan.RoutePlanId,
+            ActorAccountId = accountId, ActionType = action, Summary = note, BeforeData = JsonDocument.Parse("{}"),
+            AfterData = JsonSerializer.SerializeToDocument(new { status = plan.Status.ToString() }), CreatedAt = now });
+
+    private static void EnsureInTransit(RoutePlan plan)
+    {
+        if (plan.TransportPlan.Transport.Status != TransportStatus.IN_TRANSIT)
+            throw new ConflictException("The transport is not in transit", "TRANSPORT_NOT_IN_TRANSIT");
+    }
+
+    private static void EnsureTypeStatus(RoutePlan plan, List<Response.Segment> segments, string type, RoutePlanStatus status)
+    {
+        if (plan.Status != status || segments.Count == 0 || segments.Any(x => x.RouteType != type)) throw InvalidStatus(plan);
+    }
+
+    private static ConflictException InvalidStatus(RoutePlan plan) =>
+        new($"This action cannot be performed while the route plan is in {plan.Status} status", "INVALID_ROUTE_PLAN_STATUS");
+    private static void CheckVersion(RoutePlan plan, DateTimeOffset version)
+    {
+        if (plan.UpdatedAt != DbTime(version)) throw new ConflictException("The route plan was just modified. Please reload the page", "ROUTE_PLAN_MODIFIED");
+    }
+    private DateTime NextVersion(RoutePlan plan) => new(Math.Max(Now.Ticks, plan.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
 
     private async Task<Employee> ActorAsync(Guid accountId, EmployeeRole[] roles, CancellationToken token)
     {
@@ -226,10 +369,18 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
             await LockSegmentsAsync(routePlanId, token);
         }
         var plan = await db.RoutePlans.Include(x => x.TransportPlan).ThenInclude(x => x.Transport).ThenInclude(x => x.Booking).ThenInclude(x => x.Customer).ThenInclude(x => x.Account)
+            .Include(x => x.TransportPlan).ThenInclude(x => x.Transport).ThenInclude(x => x.ComplianceDossier)
             .SingleAsync(x => x.RoutePlanId == routePlanId, token);
         await db.Entry(plan).ReloadAsync(token);
         await db.Entry(plan.TransportPlan).ReloadAsync(token);
         await db.Entry(plan.TransportPlan.Transport).ReloadAsync(token);
+        var dossier = plan.TransportPlan.Transport.ComplianceDossier;
+        if (dossier is not null && db.Database.IsRelational())
+        {
+            await db.ComplianceDossiers.Where(x => x.ComplianceDossierId == dossier.ComplianceDossierId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.ComplianceDossierId, x => x.ComplianceDossierId), token);
+            await db.Entry(dossier).ReloadAsync(token);
+        }
         return plan;
     }
 
@@ -241,14 +392,6 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         foreach (var id in ids)
             await db.RoutePlanRoutes.Where(x => x.RoutePlanRouteId == id)
                 .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanRouteId, x => x.RoutePlanRouteId), token);
-    }
-
-    private static void EnsureInTransit(RoutePlan plan)
-    {
-        if (plan.TransportPlan.Transport.Status != TransportStatus.IN_TRANSIT)
-            throw new ConflictException("Emergency route change is only available while the transport is IN_TRANSIT.", "TRANSPORT_NOT_IN_TRANSIT");
-        if (plan.Status != RoutePlanStatus.ACTIVE || plan.PrimaryRoutePlanId.HasValue)
-            throw new ConflictException("Emergency route changes require an ACTIVE primary route plan.", "ROUTE_PLAN_NOT_ACTIVE");
     }
 
     private IQueryable<RoutePlanRoute> SegmentQuery() => db.RoutePlanRoutes.AsNoTracking()
@@ -268,8 +411,8 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
     private static string[] Modes(string? modes) => (modes ?? "").Split([',', ';', '|', ' ', '[', ']', '"'], StringSplitOptions.RemoveEmptyEntries).Distinct().Order().ToArray();
     private static Response.Segment Segment(RoutePlanRoute x, DateTime? nextDeparture)
     {
-        if (x.PlannedArrivalAt is null || x.PlannedDepartureAt is null || x.Route.DistanceKm is null or < 0)
-            throw new ConflictException("Route distance and segment schedule are required for BR-036.", "ROUTE_DATA_INCOMPLETE");
+        if (x.PlannedArrivalAt is null || x.PlannedDepartureAt is null || x.Route.DistanceKm < 0)
+            throw new ConflictException("A valid segment schedule and nonnegative route distance are required.", "ROUTE_DATA_INCOMPLETE");
         return new(x.RoutePlanRouteId, x.SequenceNo, x.RouteType.ToString(),
             new(x.RouteId, x.Route.RouteCode, x.Route.RouteName, x.Route.TransportMode.ToString(), x.Route.DistanceKm, x.Route.EstimatedDurationMinutes),
             Location(x.Route.FromLocation), Location(x.Route.ToLocation), Utc(x.PlannedDepartureAt.Value), Utc(x.PlannedArrivalAt.Value),
@@ -278,103 +421,6 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
             x.TransportProviderId.HasValue ? "OUTSOURCED" : "INTERNAL", x.RoutePlanRouteVehicles.OrderBy(v => v.VehicleId).Select(v => Vehicle(v.Vehicle)).ToList(),
             x.TransportProvider is { } p ? new(new(p.TransportProviderId, p.ProviderCode, p.ProviderName, p.Status.ToString(), Modes(p.SupportedModes)), x.ServiceType, x.ProviderReference) : null,
             Employee(x.DriverEmployee), Employee(x.EscortEmployee), x.Note);
-    }
-
-    private static List<Response.Segment> Remaining(List<Response.Segment> active)
-    {
-        if (active.Count == 0 || active.Any(x => x.ActualDepartureAt.HasValue && !x.ActualArrivalAt.HasValue))
-            throw new ConflictException("Stop at a completed segment before replacing the untravelled itinerary.", "ROUTE_PROGRESS_CHANGED");
-        var remaining = active.SkipWhile(x => x.ActualArrivalAt.HasValue).ToList();
-        if (remaining.Count == 0 || remaining.Any(x => x.ActualArrivalAt.HasValue))
-            throw new ConflictException("No continuous untravelled route remains.", "ROUTE_PROGRESS_CHANGED");
-        return remaining;
-    }
-
-    private async Task<List<Response.Segment>> BackupAsync(Guid backupId, RoutePlan plan, CancellationToken token)
-    {
-        if (db.Database.IsRelational())
-        {
-            await db.RoutePlans.Where(x => x.RoutePlanId == backupId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanId, x => x.RoutePlanId), token);
-            await LockSegmentsAsync(backupId, token);
-        }
-        var backup = await db.RoutePlans.AsNoTracking().SingleOrDefaultAsync(x => x.RoutePlanId == backupId, token);
-        if (backup is null || backup.Status != RoutePlanStatus.CONFIRMED || backup.PrimaryRoutePlanId != plan.RoutePlanId || backup.TransportPlanId != plan.TransportPlanId)
-            throw new ConflictException("Backup must be CONFIRMED and linked to this primary route plan.", "BACKUP_NOT_APPROVED");
-        return await SegmentsAsync(backupId, token);
-    }
-
-    private static List<Response.Segment> BackupRemainder(List<Response.Segment> backup, List<Response.Segment> remaining, DateTimeOffset eta)
-    {
-        var start = backup.FindIndex(x => x.FromLocation.LocationId == remaining[0].FromLocation.LocationId);
-        if (start < 0) throw new BadRequestException("Backup must pass through the current safe stop.");
-        var result = backup.Skip(start).ToList();
-        var offset = eta - result[^1].PlannedArrivalAt;
-        return result.Select((x, i) =>
-        {
-            var old = remaining.ElementAtOrDefault(i) ?? remaining[^1];
-            var internalRoad = x.ExecutionType == "INTERNAL" && x.Route.TransportMode == "ROAD";
-            return x with { SequenceNo = i + 1, PlannedDepartureAt = x.PlannedDepartureAt + offset,
-                PlannedArrivalAt = x.PlannedArrivalAt + offset, Driver = internalRoad ? x.Driver ?? old.Driver : x.Driver,
-                Escort = internalRoad ? x.Escort ?? old.Escort : x.Escort,
-                Vehicles = internalRoad && x.Vehicles.Count == 0 ? old.Vehicles : x.Vehicles };
-        }).ToList();
-    }
-
-    private async Task<List<Response.Segment>> ResolveAsync(List<Request.SegmentRequest> input, List<Response.Segment> remaining, CancellationToken token)
-    {
-        var result = new List<Response.Segment>();
-        var ordered = input.OrderBy(x => x.SequenceNo).ToList();
-        foreach (var (item, index) in ordered.Select((x, i) => (x, i)))
-        {
-            if (item.SequenceNo != index + 1) throw new BadRequestException("sequenceNo must be contiguous from 1.");
-            var mode = item.TransportMode is null ? default : Enum.Parse<TransportMode>(item.TransportMode);
-            // ponytail: resolve measured masters only; add route creation when a map service supplies road distance and duration.
-            var route = await db.Routes.AsNoTracking().Include(x => x.FromLocation).Include(x => x.ToLocation)
-                .Where(x => !x.IsDeleted && !x.FromLocation.IsDeleted && !x.ToLocation.IsDeleted)
-                .OrderBy(x => x.RouteId).FirstOrDefaultAsync(x => item.RouteId.HasValue ? x.RouteId == item.RouteId :
-                    x.FromLocationId == item.FromLocationId && x.ToLocationId == item.ToLocationId && x.TransportMode == mode, token)
-                ?? throw new BadRequestException("A measured route master is required; no map service is configured.", "ROUTE_MASTER_REQUIRED");
-            if (route.DistanceKm is null or < 0) throw new ConflictException("Route distance is missing.", "ROUTE_DATA_INCOMPLETE");
-            var old = remaining.ElementAtOrDefault(index) ?? remaining.Last();
-            var internalRoad = item.Outsourcing is null && route.TransportMode == TransportMode.ROAD;
-            var vehicles = new List<Response.VehicleBrief>();
-            if (item.VehicleIds is { } ids)
-            {
-                var rows = await db.Vehicles.AsNoTracking().Where(x => ids.Contains(x.VehicleId)).OrderBy(x => x.VehicleId).ToListAsync(token);
-                if (rows.Count != ids.Count) throw new BadRequestException("A selected vehicle does not exist.");
-                vehicles = rows.Select(Vehicle).ToList();
-            }
-            else if (internalRoad && old.ExecutionType == "INTERNAL") vehicles = old.Vehicles;
-            TransportProvider? provider = null;
-            if (item.Outsourcing is { } outsourcing)
-                provider = await db.TransportProviders.AsNoTracking().SingleOrDefaultAsync(x => x.TransportProviderId == outsourcing.TransportProviderId, token)
-                    ?? throw new BadRequestException("Provider does not exist.", "PROVIDER_NOT_FOUND");
-            result.Add(new(Guid.Empty, item.SequenceNo, "PRIMARY", new(route.RouteId, route.RouteCode, route.RouteName, route.TransportMode.ToString(), route.DistanceKm, route.EstimatedDurationMinutes),
-                Location(route.FromLocation), Location(route.ToLocation), Utc(DbTime(item.PlannedDepartureAt)), Utc(DbTime(item.PlannedArrivalAt)), null, null, "PLANNED",
-                index + 1 < ordered.Count ? (decimal)(DbTime(ordered[index + 1].PlannedDepartureAt) - DbTime(item.PlannedArrivalAt)).TotalMinutes : null,
-                provider is null ? "INTERNAL" : "OUTSOURCED", vehicles,
-                provider is null ? null : new(new(provider.TransportProviderId, provider.ProviderCode, provider.ProviderName, provider.Status.ToString(), Modes(provider.SupportedModes)), item.Outsourcing!.ServiceType, item.Outsourcing.ProviderReference),
-                internalRoad ? old.Driver : null, internalRoad ? old.Escort : null, item.Note ?? item.Outsourcing?.Note));
-        }
-        return result;
-    }
-
-    private static void CheckContinuity(List<Response.Segment> active, List<Response.Segment> proposed, DateTimeOffset eta, bool isReturn)
-    {
-        var remaining = Remaining(active);
-        var lastCompleted = active.LastOrDefault(x => x.ActualArrivalAt.HasValue);
-        if (proposed.Count == 0 || proposed[0].FromLocation.LocationId != remaining[0].FromLocation.LocationId ||
-            proposed[^1].ToLocation.LocationId != (isReturn ? active[0].FromLocation.LocationId : active[^1].ToLocation.LocationId) ||
-            proposed[^1].PlannedArrivalAt != eta || proposed.Any(x => x.ActualDepartureAt.HasValue || x.ActualArrivalAt.HasValue || x.PlannedArrivalAt <= x.PlannedDepartureAt) ||
-            lastCompleted?.ActualArrivalAt > proposed[0].PlannedDepartureAt)
-            throw new BadRequestException("The proposed itinerary must connect the current position to the destination and match the new ETA.");
-        if (proposed.Sum(x => x.Route.DistanceKm ?? 0) + active.Where(x => x.ActualArrivalAt.HasValue).Sum(x => x.Route.DistanceKm ?? 0) > 99999999.99m ||
-            (eta - active[0].PlannedDepartureAt).TotalMinutes > int.MaxValue)
-            throw new BadRequestException("The proposed distance or duration exceeds the plan storage limit.");
-        for (var i = 1; i < proposed.Count; i++)
-            if (proposed[i - 1].ToLocation.LocationId != proposed[i].FromLocation.LocationId || proposed[i].PlannedDepartureAt < proposed[i - 1].PlannedArrivalAt)
-                throw new BadRequestException("Segments must connect without overlapping schedules.");
     }
 
     private static Response.Comparison Compare(List<Response.Segment> active, List<Response.Segment> current, List<Response.Segment> proposed, DateTimeOffset eta)
@@ -410,58 +456,4 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         return reasons.ToArray();
     }
 
-    private async Task<List<Response.Segment>> ReturnAsync(Request.DecisionRequest request, List<Response.Segment> active,
-        List<Response.Segment> remaining, RoutePlan plan, CancellationToken token)
-    {
-        if (request.ReturnSegments is not null) return await ResolveAsync(request.ReturnSegments, remaining, token);
-        var backupIds = await db.RoutePlans.AsNoTracking().Where(x => x.PrimaryRoutePlanId == plan.RoutePlanId &&
-            x.TransportPlanId == plan.TransportPlanId && x.Status == RoutePlanStatus.CONFIRMED).OrderBy(x => x.RoutePlanId).Select(x => x.RoutePlanId).ToListAsync(token);
-        foreach (var id in backupIds)
-        {
-            var segments = await BackupAsync(id, plan, token);
-            if (segments.Count > 0 && segments.All(x => x.RouteType == "RETURN") &&
-                segments[0].FromLocation.LocationId == remaining[0].FromLocation.LocationId && segments[^1].ToLocation.LocationId == active[0].FromLocation.LocationId)
-            {
-                var shift = Utc(Now) - segments[0].PlannedDepartureAt;
-                return BackupRemainder(segments, remaining, segments[^1].PlannedArrivalAt + shift);
-            }
-        }
-        throw new ConflictException("No confirmed return route exists. Provide manager-approved returnSegments.", "SAFE_RETURN_ROUTE_REQUIRED");
-    }
-
-    private static bool JsonEquivalent(string left, string right)
-    {
-        using var a = JsonDocument.Parse(left);
-        using var b = JsonDocument.Parse(right);
-        static bool Equal(JsonElement x, JsonElement y) => x.ValueKind == y.ValueKind && (x.ValueKind switch
-        {
-            JsonValueKind.Object => x.EnumerateObject().Count() == y.EnumerateObject().Count() &&
-                x.EnumerateObject().All(p => y.TryGetProperty(p.Name, out var value) && Equal(p.Value, value)),
-            JsonValueKind.Array => x.GetArrayLength() == y.GetArrayLength() && x.EnumerateArray().Zip(y.EnumerateArray()).All(p => Equal(p.First, p.Second)),
-            JsonValueKind.Number => x.GetDecimal() == y.GetDecimal(),
-            _ => x.ToString() == y.ToString()
-        });
-        return Equal(a.RootElement, b.RootElement);
-    }
-
-    private void Audit(RouteChangeRequest change, Guid accountId, string action, object before, object after, DateTime now) =>
-        db.CatalogAuditLogs.Add(new CatalogAuditLog
-        {
-            CatalogAuditLogId = Guid.NewGuid(), EntityType = "RouteChangeRequest", EntityId = change.RouteChangeRequestId,
-            ActionType = action, ActorAccountId = accountId, Summary = change.DecisionNote ?? change.Reason,
-            BeforeData = JsonDocument.Parse(Json(before)), AfterData = JsonDocument.Parse(Json(after)), CreatedAt = now
-        });
-
-    private void Notify(Account account, Guid transportId, RouteChangeRequest change, string title, string message, DateTime now)
-    {
-        if (account.IsDeleted || account.Status != AccountStatus.ACTIVE)
-            throw new ConflictException("A notification recipient is unavailable.", "RECIPIENT_UNAVAILABLE");
-        notifications.Queue(new NotificationCreateRequest
-        {
-            AccountId = account.AccountId, TransportId = transportId, Type = NotificationType.ROUTE, Priority = NotificationPriority.URGENT,
-            Title = title, Message = message, ReferenceType = "RouteChangeRequest", ReferenceId = change.RouteChangeRequestId,
-            ActionUrl = $"/route-change-requests/{change.RouteChangeRequestId}", CreatedAt = now
-        });
-        OutboxQueue.AddEmail(db, new MailService.MailContent { To = account.Email, Subject = title, Body = WebUtility.HtmlEncode(message) }, now);
-    }
 }

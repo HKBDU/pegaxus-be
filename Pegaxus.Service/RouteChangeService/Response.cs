@@ -2,15 +2,13 @@ namespace Pegaxus.Service.RouteChangeService;
 
 public static class Response
 {
-    public sealed record Created(Guid ChangeRequestId, Guid RoutePlanId, string Status, bool RequiresApproval,
-        string[] ApprovalReasons, DateTimeOffset CreatedAt);
-    public sealed record ListResponse(List<ListItem> Items, int PageIndex, int PageSize, int TotalItems, int TotalPages);
-    public sealed record ListItem(Guid ChangeRequestId, Guid RoutePlanId, Guid TransportPlanId, string PlanCode,
-        string BookingCode, string Status, string Reason, string[] ApprovalReasons, DateTimeOffset NewEstimatedArrivalAt, DateTimeOffset CreatedAt);
-    public sealed record Detail(Guid ChangeRequestId, Guid RoutePlanId, Guid TransportPlanId, string Status,
-        string Reason, EmployeeBrief RequestedBy, List<Segment> CurrentSegments, List<Segment> ProposedSegments,
-        Guid? BackupRoutePlanId, Comparison Comparison, string[] ApprovalReasons, decimal? EstimatedExtraCost,
-        string? Currency, string? Note, DecisionInfo? Decision, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+    public sealed record Created(Guid RoutePlanId, string RouteType, string Status, DateTimeOffset RequestedAt);
+    public sealed record DossierBrief(Guid ComplianceDossierId, string Status);
+    public sealed record DecisionResult(Guid RoutePlanId, string RouteType, string Decision, string Status,
+        DossierBrief? ComplianceDossier, DateTimeOffset UpdatedAt);
+    public sealed record ActivationResult(Guid RoutePlanId, string RouteType, string Status,
+        IReadOnlyList<RoutePlanService.Response.SegmentResponse> Segments, DateTimeOffset UpdatedAt);
+    public sealed record DriverNoticeResult(Guid RoutePlanId, IReadOnlyList<EmployeeBrief> NotifiedDrivers, DateTimeOffset SentAt);
     public sealed record EmployeeBrief(Guid EmployeeId, string EmployeeCode, string FullName, string Role);
     public sealed record LocationBrief(Guid LocationId, string LocationName, string? LocationType, string? City, string Country,
         decimal? Latitude, decimal? Longitude);
@@ -27,8 +25,4 @@ public static class Response
         string ExecutionType, List<VehicleBrief> Vehicles, Outsourcing? Outsourcing, EmployeeBrief? Driver, EmployeeBrief? Escort, string? Note);
     public sealed record Comparison(decimal DistanceDeltaKm, decimal DelayMinutes, bool BcpChanged, bool Additional24hRest,
         LocationBrief? PreviousBcp, LocationBrief? NewBcp, DateTimeOffset PreviousEta, DateTimeOffset NewEta);
-    public sealed record DecisionInfo(string Decision, Guid EmployeeId, string? Note, DateTimeOffset DecidedAt);
-    public sealed record DecisionResult(Guid ChangeRequestId, string Status, Guid RoutePlanId, DateTimeOffset NewEstimatedArrivalAt,
-        Guid[] SupersededSegmentIds, Guid[] NewSegmentIds, Guid[] ReturnSegmentIds, Guid[] CancelledSegmentIds,
-        string[] Notified, bool ExtraCostRecordedForIncident, bool IncidentSettlementTriggered, DateTimeOffset UpdatedAt);
 }

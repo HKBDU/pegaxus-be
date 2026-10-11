@@ -201,7 +201,7 @@ builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<Pegaxus.Service.RouteChangeService.IService, Pegaxus.Service.RouteChangeService.Service>();
 builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.CreateRequest>, Pegaxus.Service.RouteChangeService.Validator.CreateRequestValidator>();
 builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.DecisionRequest>, Pegaxus.Service.RouteChangeService.Validator.DecisionRequestValidator>();
-builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.ListRequest>, Pegaxus.Service.RouteChangeService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.ActivationRequest>, Pegaxus.Service.RouteChangeService.Validator.ActivationRequestValidator>();
 builder.Services.AddHostedService<Pegaxus.API.Services.MissingDocumentReminderWorker>();
 builder.Services.AddHostedService<Pegaxus.API.Services.TransactionalOutboxWorker>();
 builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
