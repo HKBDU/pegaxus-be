@@ -35,7 +35,8 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
                 GetErrorMessage(ex, statusCode),
                 errorCode: GetErrorCode(ex, statusCode),
                 code: statusCode,
-                traceId: context.TraceIdentifier));
+                traceId: context.TraceIdentifier,
+                value: (ex as ConflictException)?.Value));
         }
     }
 

@@ -14,8 +14,6 @@ public sealed class EmergencyRouteChanges : Migration
             ALTER TABLE "RoutePlan" ADD COLUMN primary_route_plan_id uuid REFERENCES "RoutePlan"(route_plan_id) ON DELETE RESTRICT;
             CREATE INDEX "IX_RoutePlan_primary_route_plan_id" ON "RoutePlan"(primary_route_plan_id);
             ALTER TABLE "RoutePlanRoute"
-                ADD COLUMN service_type varchar(100),
-                ADD COLUMN provider_reference varchar(150),
                 ADD COLUMN superseded_at timestamp without time zone,
                 ADD COLUMN superseded_by_change_request_id uuid;
             ALTER TABLE "IncidentReport"
@@ -68,8 +66,7 @@ public sealed class EmergencyRouteChanges : Migration
             ALTER TABLE "RoutePlanRoute" DROP CONSTRAINT "FK_RoutePlanRoute_RouteChangeRequest_superseded_by_change_request~";
             DROP TABLE "RouteChangeRequest";
             ALTER TABLE "RoutePlan" DROP COLUMN primary_route_plan_id;
-            ALTER TABLE "RoutePlanRoute" DROP COLUMN service_type, DROP COLUMN provider_reference,
-                DROP COLUMN superseded_at, DROP COLUMN superseded_by_change_request_id;
+            ALTER TABLE "RoutePlanRoute" DROP COLUMN superseded_at, DROP COLUMN superseded_by_change_request_id;
             ALTER TABLE "IncidentReport" DROP COLUMN transport_id, DROP COLUMN emergency_settlement_required;
             """);
         // Preserve incident data: downgrade fails if ROUTE_CHANGE reports still exist.
