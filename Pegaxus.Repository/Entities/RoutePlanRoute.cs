@@ -45,7 +45,6 @@ public partial class RoutePlanRoute
     public string? Note { get; set; }
 
     public DateTime? SupersededAt { get; set; }
-    public Guid? SupersededByChangeRequestId { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

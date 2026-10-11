@@ -3917,144 +3917,6 @@ namespace Pegaxus.Repository.Migrations
                         });
                 });
 
-            modelBuilder.Entity("Pegaxus.Repository.Entities.RouteChangeRequest", b =>
-                {
-                    b.Property<Guid>("RouteChangeRequestId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("route_change_request_id");
-
-                    b.Property<string[]>("ApprovalReasons")
-                        .IsRequired()
-                        .HasColumnType("text[]")
-                        .HasColumnName("approval_reasons");
-
-                    b.Property<Guid?>("BackupRoutePlanId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("backup_route_plan_id");
-
-                    b.Property<Guid?>("ClientRequestId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("client_request_id");
-
-                    b.Property<string>("Comparison")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("comparison");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("Currency")
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)")
-                        .HasColumnName("currency");
-
-                    b.Property<string>("CurrentSegments")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("current_segments");
-
-                    b.Property<DateTime?>("DecidedAt")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("decided_at");
-
-                    b.Property<Guid?>("DecidedByEmployeeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("decided_by_employee_id");
-
-                    b.Property<string>("DecisionNote")
-                        .HasColumnType("text")
-                        .HasColumnName("decision_note");
-
-                    b.Property<string>("DecisionRequest")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("decision_request");
-
-                    b.Property<string>("DecisionResponse")
-                        .HasColumnType("jsonb")
-                        .HasColumnName("decision_response");
-
-                    b.Property<decimal?>("EstimatedExtraCost")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("estimated_extra_cost");
-
-                    b.Property<Guid?>("IncidentReportId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("incident_report_id");
-
-                    b.Property<DateTime>("NewEstimatedArrivalAt")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("new_estimated_arrival_at");
-
-                    b.Property<string>("Note")
-                        .HasColumnType("text")
-                        .HasColumnName("note");
-
-                    b.Property<string>("ProposedSegments")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("proposed_segments");
-
-                    b.Property<string>("Reason")
-                        .IsRequired()
-                        .HasColumnType("text")
-                        .HasColumnName("reason");
-
-                    b.Property<Guid>("RequestedByEmployeeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("requested_by_employee_id");
-
-                    b.Property<Guid>("RoutePlanId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("route_plan_id");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)")
-                        .HasColumnName("status");
-
-                    b.Property<string>("SubmittedRequest")
-                        .IsRequired()
-                        .HasColumnType("jsonb")
-                        .HasColumnName("submitted_request");
-
-                    b.Property<DateTime>("UpdatedAt")
-                        .IsConcurrencyToken()
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("updated_at");
-
-                    b.HasKey("RouteChangeRequestId");
-
-                    b.HasIndex("BackupRoutePlanId");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("DecidedByEmployeeId");
-
-                    b.HasIndex("IncidentReportId");
-
-                    b.HasIndex("RequestedByEmployeeId");
-
-                    b.HasIndex("RoutePlanId")
-                        .IsUnique()
-                        .HasDatabaseName("RouteChangeRequest_pending_route_key")
-                        .HasFilter("status = 'PENDING'");
-
-                    b.HasIndex("RoutePlanId", "ClientRequestId")
-                        .IsUnique()
-                        .HasDatabaseName("RouteChangeRequest_client_request_key")
-                        .HasFilter("client_request_id IS NOT NULL");
-
-                    b.ToTable("RouteChangeRequest", null, t =>
-                        {
-                            t.HasCheckConstraint("CK_RouteChangeRequest_Status", "status IN ('PENDING', 'APPROVED', 'REJECTED', 'EMERGENCY_RETURN')");
-                        });
-                });
-
             modelBuilder.Entity("Pegaxus.Repository.Entities.RoutePlan", b =>
                 {
                     b.Property<Guid>("RoutePlanId")
@@ -4204,10 +4066,6 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("superseded_at");
 
-                    b.Property<Guid?>("SupersededByChangeRequestId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("superseded_by_change_request_id");
-
                     b.Property<Guid?>("TransportProviderId")
                         .HasColumnType("uuid")
                         .HasColumnName("transport_provider_id");
@@ -4222,8 +4080,6 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex("RouteType")
                         .HasDatabaseName("RoutePlanRoute_route_type_idx");
-
-                    b.HasIndex("SupersededByChangeRequestId");
 
                     b.HasIndex(new[] { "DriverEmployeeId" }, "RoutePlanRoute_driver_employee_id_idx");
 
@@ -5661,40 +5517,6 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("ToLocation");
                 });
 
-            modelBuilder.Entity("Pegaxus.Repository.Entities.RouteChangeRequest", b =>
-                {
-                    b.HasOne("Pegaxus.Repository.Entities.RoutePlan", null)
-                        .WithMany()
-                        .HasForeignKey("BackupRoutePlanId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Pegaxus.Repository.Entities.Employee", null)
-                        .WithMany()
-                        .HasForeignKey("DecidedByEmployeeId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Pegaxus.Repository.Entities.IncidentReport", null)
-                        .WithMany()
-                        .HasForeignKey("IncidentReportId")
-                        .OnDelete(DeleteBehavior.Restrict);
-
-                    b.HasOne("Pegaxus.Repository.Entities.Employee", "RequestedByEmployee")
-                        .WithMany()
-                        .HasForeignKey("RequestedByEmployeeId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("Pegaxus.Repository.Entities.RoutePlan", "RoutePlan")
-                        .WithMany()
-                        .HasForeignKey("RoutePlanId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("RequestedByEmployee");
-
-                    b.Navigation("RoutePlan");
-                });
-
             modelBuilder.Entity("Pegaxus.Repository.Entities.RoutePlan", b =>
                 {
                     b.HasOne("Pegaxus.Repository.Entities.RoutePlan", null)
@@ -5734,11 +5556,6 @@ namespace Pegaxus.Repository.Migrations
                         .HasForeignKey("RoutePlanId")
                         .IsRequired()
                         .HasConstraintName("RoutePlanRoute_route_plan_id_fkey");
-
-                    b.HasOne("Pegaxus.Repository.Entities.RouteChangeRequest", null)
-                        .WithMany()
-                        .HasForeignKey("SupersededByChangeRequestId")
-                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.HasOne("Pegaxus.Repository.Entities.TransportProvider", "TransportProvider")
                         .WithMany("RoutePlanRoutes")

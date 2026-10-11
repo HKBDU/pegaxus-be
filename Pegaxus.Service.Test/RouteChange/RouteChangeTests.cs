@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -12,6 +14,27 @@ namespace Pegaxus.Service.Test;
 
 public class RouteChangeTests
 {
+    [Fact]
+    public void RouteChangeRequests_AreServiceDtos_NotDatabaseEntities()
+    {
+        using var db = TestSupport.CreateDb();
+        using var relationalDb = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
+            .UseNpgsql("Host=localhost;Database=unused;Username=unused").Options);
+        var snapshot = relationalDb.GetService<IMigrationsAssembly>().ModelSnapshot!.Model;
+        var requests = new[] { typeof(Request.CreateRequest), typeof(Request.DecisionRequest),
+            typeof(Request.ActivationRequest), typeof(Request.DriverNoticeRequest) };
+        foreach (var type in requests)
+        {
+            Assert.Equal(typeof(RouteChange.Service).Assembly, type.Assembly);
+            Assert.Null(db.Model.FindEntityType(type));
+        }
+        foreach (var model in new[] { db.Model, snapshot })
+        {
+            Assert.DoesNotContain(model.GetEntityTypes(), entity => entity.GetTableName() == "RouteChangeRequest");
+            Assert.Null(model.FindEntityType(typeof(RoutePlanRoute).FullName!)!.FindProperty("SupersededByChangeRequestId"));
+        }
+    }
+
     [Theory]
     [InlineData(15, 20, false)]
     [InlineData(49.99, 59, false)]
@@ -35,7 +58,7 @@ public class RouteChangeTests
         else
             Assert.Equal("APPROVAL_NOT_REQUIRED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
                 f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal(delay)))).ErrorCode);
-        Assert.Empty(db.RouteChangeRequests); Assert.Empty(db.EmergencyCostRequests);
+        Assert.Empty(db.EmergencyCostRequests);
     }
 
     [Theory]
@@ -140,7 +163,7 @@ public class RouteChangeTests
         Assert.Equal(f.Driver.EmployeeId, Assert.Single(notice.NotifiedDrivers).EmployeeId);
         var detail = await new Pegaxus.Service.RoutePlanService.Service(db).GetByIdAsync(f.Manager.AccountId, f.Plan.RoutePlanId);
         Assert.Equal(new[] { f.Completed.RouteId, row.RouteId }, detail.Segments.Select(x => x.Route.RouteId));
-        Assert.Empty(db.RouteChangeRequests); Assert.Empty(db.EmergencyCostRequests);
+        Assert.Empty(db.EmergencyCostRequests);
     }
 
     [Fact]

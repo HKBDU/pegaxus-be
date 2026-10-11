@@ -35,7 +35,6 @@ public class RouteChangePostgresTests
         Assert.NotNull((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Current.RoutePlanRouteId)).SupersededAt);
         Assert.Equal(4, await check.Notifications.CountAsync());
         Assert.Equal(4, await check.OutboxMessages.CountAsync());
-        Assert.Empty(await check.RouteChangeRequests.ToListAsync());
         Assert.Empty(await check.IncidentReports.ToListAsync());
         var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scope.Source).Options;
         await CheckOutboxClaimsAsync(options);
