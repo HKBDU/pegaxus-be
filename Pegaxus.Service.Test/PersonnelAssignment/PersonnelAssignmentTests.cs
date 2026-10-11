@@ -81,13 +81,17 @@ public class PersonnelAssignmentTests
         Assert.Equal("ROUTE_NOT_CONFIRMED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId))).ErrorCode);
     }
 
-    [Fact]
-    public async Task Assign_InternalAndOutsource_FullAtomicLinksAuditNotifications_RetryNoDuplicates()
+    [Theory]
+    [InlineData(TransportMode.ROAD)]
+    [InlineData(TransportMode.SEA)]
+    [InlineData(TransportMode.AIR)]
+    public async Task Assign_InternalAndOutsource_FullAtomicLinksAuditNotifications_RetryNoDuplicates(TransportMode mode)
     {
         await using var db = TestSupport.CreateDb();
         var manager = await EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER);
         var driver = await EmployeeAsync(db, EmployeeRole.DRIVER); var escort = await EmployeeAsync(db, EmployeeRole.ESCORT);
         var (route, segment) = await RouteAsync(db);
+        segment.Route.TransportMode = mode;
         var outsource = Segment(route, 2); outsource.TransportProvider = Provider(); outsource.Route.TransportMode = TransportMode.AIR;
         db.Add(outsource); await db.SaveChangesAsync();
         var service = CreateService(db);

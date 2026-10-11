@@ -119,8 +119,6 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 ?? throw new NotFoundException("Segment not found in this route plan", "SEGMENT_NOT_FOUND");
             if (segment.TransportProviderId.HasValue)
                 throw new UnprocessableEntityException("An outsourced segment cannot have a driver or escort", "OUTSOURCED_SEGMENT");
-            if (segment.Route.TransportMode != TransportMode.ROAD)
-                throw new UnprocessableEntityException("AIR/SEA segments require an outsourcing provider.", "OUTSOURCING_REQUIRED");
             if (segment.ActualDepartureAt.HasValue || segment.ActualArrivalAt.HasValue)
                 throw new ConflictException("Cannot change personnel on a started or completed segment", "SEGMENT_LOCKED");
             if (reason is not null && (!segment.DriverEmployeeId.HasValue || !segment.EscortEmployeeId.HasValue))
