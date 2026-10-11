@@ -13,6 +13,8 @@ public partial class Customer
 
     public Guid AccountId { get; set; }
 
+    public string CustomerCode { get; set; } = null!;
+
     public string FullName { get; set; } = null!;
 
     public string? Phone { get; set; }

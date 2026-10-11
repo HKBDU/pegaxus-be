@@ -129,6 +129,7 @@ public class Service : IService
             {
                 CustomerId = Guid.NewGuid(),
                 AccountId = account.AccountId,
+                CustomerCode = await GenerateCustomerCodeAsync(cancellationToken),
                 FullName = string.IsNullOrWhiteSpace(request.FullName) ? email : request.FullName.Trim(),
                 CreatedAt = now,
                 UpdatedAt = now
@@ -287,6 +288,7 @@ public class Service : IService
         {
             CustomerId = Guid.NewGuid(),
             AccountId = account.AccountId,
+            CustomerCode = await GenerateCustomerCodeAsync(cancellationToken),
             FullName = request.FullName.Trim(),
             CreatedAt = now,
             UpdatedAt = now
@@ -657,6 +659,18 @@ public class Service : IService
     private static AppException InvalidRefreshToken() =>
         new("Session has expired. Please sign in again", 401, "REFRESH_TOKEN_INVALID");
     private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+    private async Task<string> GenerateCustomerCodeAsync(CancellationToken cancellationToken)
+    {
+        for (var attempt = 0; attempt < 10; attempt++)
+        {
+            var code = $"CUS-{DateTime.UtcNow:yyyyMMdd}-{RandomNumberGenerator.GetInt32(0, 10_000):D4}";
+            if (!await _db.Customers.AnyAsync(item => item.CustomerCode == code, cancellationToken))
+                return code;
+        }
+
+        throw new AppException("Could not generate a unique customer code", 409, "CUSTOMER_CODE_GENERATION_FAILED");
+    }
 
     private sealed record OtpCacheEntry(string CodeHash, int Attempts, DateTimeOffset ExpiresAt);
     private sealed record LoginFailureEntry(int Count, DateTimeOffset WindowStartedAt);

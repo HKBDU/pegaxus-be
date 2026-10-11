@@ -101,6 +101,10 @@ pegaxus-be/
    cp .env.example .env
    ```
 
+   For local `dotnet` / `dotnet ef`, set `ConnectionStrings__DefaultConnection` in `.env`
+   to your PostgreSQL connection string (host, port, database, username, password).
+   `POSTGRES_*` variables configure Docker Compose; they do not configure EF CLI directly.
+
 3. **Start PostgreSQL Database**:
    ```bash
    docker compose up postgres -d
