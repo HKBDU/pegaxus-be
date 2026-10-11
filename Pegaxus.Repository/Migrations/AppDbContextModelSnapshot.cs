@@ -3254,8 +3254,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("is_deleted");
 
                     b.Property<decimal?>("Latitude")
-                        .HasPrecision(10, 7)
-                        .HasColumnType("numeric(10,7)")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
                         .HasColumnName("latitude");
 
                     b.Property<string>("LocationName")
@@ -3273,8 +3273,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("location_type");
 
                     b.Property<decimal?>("Longitude")
-                        .HasPrecision(10, 7)
-                        .HasColumnType("numeric(10,7)")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
                         .HasColumnName("longitude");
 
                     b.Property<string>("StateProvince")

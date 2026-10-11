@@ -2085,14 +2085,14 @@ public partial class AppDbContext : DbContext
                 .HasDefaultValue(false)
                 .HasColumnName("is_deleted");
             entity.Property(e => e.Latitude)
-                .HasPrecision(10, 7)
+                .HasPrecision(10, 4)
                 .HasColumnName("latitude");
             entity.Property(e => e.LocationName)
                 .HasMaxLength(200)
                 .HasColumnName("location_name");
             entity.Property(e => e.LocationNote).HasColumnName("location_note");
             entity.Property(e => e.Longitude)
-                .HasPrecision(10, 7)
+                .HasPrecision(10, 4)
                 .HasColumnName("longitude");
             entity.Property(e => e.StateProvince)
                 .HasMaxLength(100)
