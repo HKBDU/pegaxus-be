@@ -101,6 +101,18 @@ public class PersonnelAssignmentPostgresTests
                 Assert.True(view.Phase2.IsPersonnelComplete);
                 Assert.Equal(employee.Account.Email, view.Phase2.Segments[0].Driver!.Email);
                 Assert.Equal(employee.Account.AvatarUrl, view.Phase2.Segments[0].Driver!.AvatarUrl);
+                var from = new DateTimeOffset(DateTime.SpecifyKind(assigned.PlannedDepartureAt!.Value, DateTimeKind.Utc));
+                var to = new DateTimeOffset(DateTime.SpecifyKind(assigned.PlannedArrivalAt!.Value, DateTimeKind.Utc));
+                foreach (var offset in new[] { TimeSpan.Zero, TimeSpan.FromHours(7) })
+                {
+                    var drivers = await PersonnelAssignmentTests.CreateService(db).GetAssignableAsync(new() {
+                        Role = "DRIVER", AvailableFrom = from.ToOffset(offset), AvailableTo = to.ToOffset(offset) }, actor);
+                    Assert.Equal(2, drivers.TotalItems);
+                    Assert.Equal(new[] { replacement1, replacement2 }.OrderBy(x => x), drivers.Items.Select(x => x.EmployeeId).OrderBy(x => x));
+                    var escorts = await PersonnelAssignmentTests.CreateService(db).GetAssignableAsync(new() {
+                        Role = "ESCORT", AvailableFrom = from.ToOffset(offset), AvailableTo = to.ToOffset(offset) }, actor);
+                    Assert.Equal(winningEscort == escort1 ? escort2 : escort1, Assert.Single(escorts.Items).EmployeeId);
+                }
                 var retry = await Assert.ThrowsAsync<ConflictException>(() => PersonnelAssignmentTests.CreateService(db)
                     .AssignAsync(winner, Assign(version, winningSegment, driver, winningEscort), actor));
                 Assert.Equal("SEGMENT_ALREADY_ASSIGNED", retry.ErrorCode);

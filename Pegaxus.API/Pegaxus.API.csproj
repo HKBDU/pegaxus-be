@@ -29,4 +29,9 @@
     <ProjectReference Include="..\Pegaxus.Repository\Pegaxus.Repository.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Content Remove="Data\locations-camelcase.json" />
+    <EmbeddedResource Include="Data\locations-camelcase.json" />
+  </ItemGroup>
+
 </Project>
