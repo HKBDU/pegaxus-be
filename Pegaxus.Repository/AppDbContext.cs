@@ -172,7 +172,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("quarantine_proof_status", new[] { "PendingVerification", "Passed", "PassedWithConditions", "Holdback", "Failed", "Rejected" })
             .HasPostgresEnum("receipt_status", new[] { "PENDING", "CONFIRMED", "FAILED", "REFUNDED" })
             .HasPostgresEnum("recipient_status", new[] { "PENDING", "DELIVERED", "READ", "FAILED" })
-            .HasPostgresEnum("route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED" })
+            .HasPostgresEnum("route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED", "PENDING_LEGAL_REVIEW", "PENDING_MANAGER_APPROVAL", "REJECTED_BY_MANAGER", "APPROVED" })
             .HasPostgresEnum("route_type", new[] { "PRIMARY", "BACKUP", "RETURN" })
             .HasPostgresEnum("transport_mode", new[] { "ROAD", "SEA", "AIR" })
             .HasPostgresEnum("transport_plan_status", new[] { "DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED" })
@@ -2341,6 +2341,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnName("total_distance_km");
             entity.Property(e => e.TransportPlanId).HasColumnName("transport_plan_id");
             entity.Property(e => e.UpdatedAt)
+                .IsConcurrencyToken()
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
 
@@ -2390,8 +2391,13 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.RouteId).HasColumnName("route_id");
             entity.Property(e => e.RoutePlanId).HasColumnName("route_plan_id");
             entity.Property(e => e.TransportProviderId).HasColumnName("transport_provider_id");
+            entity.Property(e => e.ServiceType).HasMaxLength(100).HasColumnName("service_type");
+            entity.Property(e => e.ProviderReference).HasMaxLength(255).HasColumnName("provider_reference");
+            entity.Property(e => e.OutsourcingCostAmount).HasPrecision(18, 2).HasColumnName("outsourcing_cost_amount");
+            entity.Property(e => e.OutsourcingCurrency).HasMaxLength(3).HasColumnName("outsourcing_currency");
             entity.Property(e => e.SequenceNo).HasColumnName("sequence_no");
             entity.Property(e => e.UpdatedAt)
+                .IsConcurrencyToken()
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
 
