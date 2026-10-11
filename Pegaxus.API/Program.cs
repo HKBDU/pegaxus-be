@@ -20,6 +20,8 @@ using AuthService = Pegaxus.Service.Auth;
 using BookingService = Pegaxus.Service.BookingService;
 using TransportPlanService = Pegaxus.Service.TransportPlanService;
 using RoutePlanService = Pegaxus.Service.RoutePlanService;
+using LocationService = Pegaxus.Service.LocationService;
+using RouteService = Pegaxus.Service.RouteService;
 using JwtService = Pegaxus.Service.JwtService;
 using MediaService = Pegaxus.Service.MediaService;
 using CloudinaryService = Pegaxus.Service.CloudinaryService;
@@ -188,6 +190,8 @@ builder.Services.AddScoped<IValidator<AuthService.Request.ResetPasswordRequest>,
 builder.Services.AddScoped<BookingService.IService, BookingService.Service>();
 builder.Services.AddScoped<TransportPlanService.IService, TransportPlanService.Service>();
 builder.Services.AddScoped<RoutePlanService.IService, RoutePlanService.Service>();
+builder.Services.AddScoped<LocationService.IService, LocationService.Service>();
+builder.Services.AddScoped<RouteService.IService, RouteService.Service>();
 builder.Services.AddScoped<IValidator<BookingService.Request.CreateBookingRequest>, BookingService.Validations.CreateBookingRequestValidator>();
 builder.Services.AddScoped<IValidator<BookingService.Request.UpdateBookingRequest>, BookingService.Validations.UpdateBookingRequestValidator>();
 builder.Services.AddScoped<IValidator<BookingService.Request.CancelBookingRequest>, BookingService.Validations.CancelBookingRequestValidator>();
