@@ -35,6 +35,30 @@ namespace Pegaxus.Service.Test;
 public class RouteOutsourcingTests
 {
     [Fact]
+    public async Task Notifications_OnlyReachActiveCoordinatorsAssignedToTheTransportPlan()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (actor, segment, provider) = await SeedAsync(db);
+        var coordinator = (await db.EmployeeTransportPlans.Include(item => item.Employee).SingleAsync()).Employee;
+        var (_, unassigned) = await TestSupport.AddLogisticsManagerAsync(db);
+        unassigned.Role = EmployeeRole.FLEET_ROUTE_COORDINATOR;
+        var (_, inactive) = await TestSupport.AddLogisticsManagerAsync(db);
+        inactive.Role = EmployeeRole.FLEET_ROUTE_COORDINATOR;
+        inactive.IsActive = false;
+        var (_, driver) = await TestSupport.AddLogisticsManagerAsync(db);
+        driver.Role = EmployeeRole.DRIVER;
+        db.EmployeeTransportPlans.AddRange(
+            new() { TransportPlanId = segment.RoutePlan.TransportPlanId, Employee = inactive },
+            new() { TransportPlanId = segment.RoutePlan.TransportPlanId, Employee = driver });
+        await db.SaveChangesAsync();
+
+        await Service(db).SetAsync(actor, segment.RoutePlanId, segment.RoutePlanRouteId, Assign(segment, provider));
+
+        Assert.Single(await db.Notifications.ToListAsync());
+        Assert.Equal(coordinator.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
+    }
+
+    [Fact]
     public async Task AssignSwitchAndRemove_PersistSegmentMetadataClearResourcesAndMaintainPlanLinks()
     {
         await using var db = TestSupport.CreateDb();

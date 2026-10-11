@@ -138,12 +138,9 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
             ActionType = provider is null ? "OUTSOURCING_REMOVED" : "OUTSOURCING_ASSIGNED", ActorAccountId = accountId,
             BeforeData = before, AfterData = Snapshot(route, segment, vehicles), CreatedAt = now
         });
-        var bookingId = await db.Transports.Where(item => item.TransportId == plan.TransportId).Select(item => item.BookingId).SingleAsync(cancellationToken);
         var recipients = await db.Employees.Where(employee => employee.IsActive && !employee.IsDeleted &&
             employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && employee.Account.Status == AccountStatus.ACTIVE && !employee.Account.IsDeleted &&
-            (db.EmployeeTransportPlans.Any(assignment => assignment.TransportPlanId == planId && assignment.EmployeeId == employee.EmployeeId) ||
-             db.BookingEmployeeAssignments.Any(assignment => assignment.BookingId == bookingId && assignment.EmployeeId == employee.EmployeeId &&
-                 assignment.AssignmentRole == EmployeeRole.FLEET_ROUTE_COORDINATOR && assignment.Status == BookingAssignmentStatus.ACTIVE)))
+            db.EmployeeTransportPlans.Any(assignment => assignment.TransportPlanId == planId && assignment.EmployeeId == employee.EmployeeId))
             .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
         foreach (var recipient in recipients)
             notifications.Queue(new NotificationCreateRequest
