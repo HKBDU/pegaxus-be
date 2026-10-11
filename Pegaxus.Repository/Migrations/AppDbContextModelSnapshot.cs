@@ -69,13 +69,13 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "quarantine_proof_status", new[] { "PendingVerification", "Passed", "PassedWithConditions", "Holdback", "Failed", "Rejected" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "receipt_status", new[] { "PENDING", "CONFIRMED", "FAILED", "REFUNDED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "recipient_status", new[] { "PENDING", "DELIVERED", "READ", "FAILED" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED", "PENDING_LEGAL_REVIEW", "PENDING_MANAGER_APPROVAL", "REJECTED_BY_MANAGER", "APPROVED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_type", new[] { "PRIMARY", "BACKUP", "RETURN" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_mode", new[] { "ROAD", "SEA", "AIR" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_plan_status", new[] { "DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_status", new[] { "CREATED", "PLANNING", "READY", "IN_TRANSIT", "COMPLETED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_incident_type", new[] { "BREAKDOWN", "ACCIDENT", "TIRE_DAMAGE", "ENGINE_FAILURE", "TEMPERATURE_CONTROL_FAILURE", "EQUIPMENT_FAILURE", "OTHER" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE", "SUSPENDED", "OUT_OF_SERVICE" });
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Account", b =>
@@ -4100,6 +4100,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("transport_plan_id");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -4148,6 +4149,16 @@ namespace Pegaxus.Repository.Migrations
                     b.Property<Guid?>("EscortEmployeeId")
                         .HasColumnType("uuid")
                         .HasColumnName("escort_employee_id");
+
+                    b.Property<decimal?>("OutsourcingCostAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("outsourcing_cost_amount");
+
+                    b.Property<string>("OutsourcingCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("outsourcing_currency");
 
                     b.Property<string>("Note")
                         .HasColumnType("text")
@@ -4202,6 +4213,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("transport_provider_id");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -4517,6 +4529,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("tax_code");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -4531,7 +4544,12 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "IsDeleted" }, "TransportProvider_is_deleted_idx");
 
                     b.HasIndex(new[] { "ProviderCode" }, "TransportProvider_provider_code_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
+
+                    b.HasIndex(new[] { "TaxCode" }, "TransportProvider_tax_code_key")
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex(new[] { "ProviderName" }, "TransportProvider_provider_name_idx");
 
@@ -4615,6 +4633,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("transport_mode");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -4648,10 +4667,12 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "IsDeleted" }, "Vehicle_is_deleted_idx");
 
                     b.HasIndex(new[] { "LicensePlate" }, "Vehicle_license_plate_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex(new[] { "VehicleCode" }, "Vehicle_vehicle_code_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.ToTable("Vehicle", null, t =>
                         {

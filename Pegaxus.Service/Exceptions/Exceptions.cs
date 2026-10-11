@@ -17,6 +17,14 @@ public class BadRequestException : Exceptions
     public BadRequestException(string message, string errorCode = "VALIDATION_ERROR") : base(message, 400, errorCode) { }
 }
 
+public sealed record FieldError(string Field, string Message);
+
+public sealed class FieldValidationException(IReadOnlyList<FieldError> errors, string errorCode = "VALIDATION_ERROR",
+    string message = "The input data is invalid") : BadRequestException(message, errorCode)
+{
+    public IReadOnlyList<FieldError> Errors { get; } = errors;
+}
+
 public class UnauthorizedException : Exceptions
 {
     public UnauthorizedException(string message, string errorCode = "UNAUTHORIZED") : base(message, 401, errorCode) { }
