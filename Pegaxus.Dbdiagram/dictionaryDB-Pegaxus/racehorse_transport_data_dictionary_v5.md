@@ -614,6 +614,7 @@
 | `invoice_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `Invoice`. |
 | `booking_id` | `bigint` | FK | Yes | Booking mà hóa đơn này được lập cho. |
 | `employee_id` | `bigint` | FK | Yes | Employee phụ trách/lập hóa đơn. |
+| `type` | `invoice_type` |  | Yes | Loại chứng từ tài chính: QUOTATION (báo giá), DEPOSIT (đặt cọc), FINAL (quyết toán cuối), SUPPLEMENTARY (phát sinh thêm) hoặc CREDIT_NOTE (điều chỉnh giảm/hoàn tiền). Mặc định là QUOTATION. Các loại hóa đơn của cùng một Booking được truy xuất qua `booking_id`. |
 | `status` | `invoice_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `invoice_status`: DRAFT, ISSUED, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED. |
 | `currency` | `varchar(3)` |  | Yes | Mã tiền tệ, thường theo chuẩn 3 ký tự như USD/VND. |
 | `subtotal` | `decimal(18,2)` |  | Yes | Tổng tiền trước giảm giá và thuế. |
@@ -1231,5 +1232,5 @@
 | `AuditDossier` | Nhật ký audit append-only cho các thay đổi trong compliance dossier. |
 
 **Tổng số bảng:** 56
-**Tổng số enum:** 55
+**Tổng số enum:** 56
 **Tổng số field được mô tả:** 702

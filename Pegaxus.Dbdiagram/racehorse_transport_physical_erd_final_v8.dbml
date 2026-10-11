@@ -275,6 +275,14 @@ Enum invoice_status {
   CANCELLED
 }
 
+Enum invoice_type {
+  QUOTATION
+  DEPOSIT
+  FINAL
+  SUPPLEMENTARY
+  CREDIT_NOTE
+}
+
 Enum invoice_history_type {
   CREATE
   ISSUE
@@ -1431,6 +1439,7 @@ Table Invoice {
   booking_id bigint [not null]
   employee_id bigint [not null]
 
+  type invoice_type [not null, default: 'QUOTATION']
   status invoice_status [not null, default: 'DRAFT']
 
   currency varchar(3) [not null]
@@ -1455,6 +1464,7 @@ Table Invoice {
   indexes {
     booking_id
     employee_id
+    type
     status
     due_date
   }
