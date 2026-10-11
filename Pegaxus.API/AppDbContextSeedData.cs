@@ -134,12 +134,6 @@ public static class AppDbContextSeedData
         await db.SaveChangesAsync(cancellationToken);
         await SeedDemoAssignmentsAsync(db, plans, employees, now, cancellationToken);
 
-        var locations = await SeedDemoLocationsAsync(db, now, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        var routes = await SeedDemoRoutesAsync(db, locations, now, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        await SeedDemoRoutePlansAsync(db, plans, routes, employees, now, cancellationToken);
-
         var templates = await SeedDemoTemplatesAsync(db, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await SeedDemoDossiersAsync(db, transports, templates, horses, now, cancellationToken);
@@ -393,108 +387,6 @@ public static class AppDbContextSeedData
                 AssignedAt = now.AddDays(-1),
                 IsPrimary = assignment.IsPrimary,
                 Note = "Seeded demo assignment."
-            });
-        }
-    }
-
-    private static async Task<Dictionary<string, Location>> SeedDemoLocationsAsync(AppDbContext db, DateTime now, CancellationToken cancellationToken)
-    {
-        var seeds = new[]
-        {
-            new LocationSeed("LOC-DEMO-PARIS", "Paris Stable", "FR", "Paris"),
-            new LocationSeed("LOC-DEMO-LONDON", "London Stable", "GB", "London"),
-            new LocationSeed("LOC-DEMO-BERLIN", "Berlin Stable", "DE", "Berlin")
-        };
-        var result = new Dictionary<string, Location>(StringComparer.OrdinalIgnoreCase);
-        foreach (var seed in seeds)
-        {
-            var location = await db.Locations.SingleOrDefaultAsync(item => item.LocationName == seed.Name, cancellationToken);
-            if (location is null)
-            {
-                location = new Location
-                {
-                    LocationId = seed.Id,
-                    LocationName = seed.Name,
-                    LocationType = LocationType.STABLE,
-                    Address = seed.Name,
-                    City = seed.City,
-                    Country = seed.Country,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                };
-                db.Locations.Add(location);
-            }
-            result[seed.Code] = location;
-        }
-        return result;
-    }
-
-    private static async Task<Dictionary<string, RouteEntity>> SeedDemoRoutesAsync(AppDbContext db, IReadOnlyDictionary<string, Location> locations, DateTime now, CancellationToken cancellationToken)
-    {
-        var seeds = new[]
-        {
-            new RouteSeed("ROUTE-DEMO-FR-GB", "LOC-DEMO-PARIS", "LOC-DEMO-LONDON", "Paris - London horse transport", 920.5m, 1260),
-            new RouteSeed("ROUTE-DEMO-DE-FR", "LOC-DEMO-BERLIN", "LOC-DEMO-PARIS", "Berlin - Paris horse transport", 1050m, 1440)
-        };
-        var result = new Dictionary<string, RouteEntity>(StringComparer.OrdinalIgnoreCase);
-        foreach (var seed in seeds)
-        {
-            var route = await db.Routes.SingleOrDefaultAsync(item => item.RouteCode == seed.Code, cancellationToken);
-            if (route is null)
-            {
-                route = new RouteEntity
-                {
-                    RouteId = seed.Id,
-                    RouteCode = seed.Code,
-                    FromLocationId = locations[seed.From].LocationId,
-                    ToLocationId = locations[seed.To].LocationId,
-                    TransportMode = TransportMode.ROAD,
-                    RouteName = seed.Name,
-                    DistanceKm = seed.DistanceKm,
-                    EstimatedDurationMinutes = seed.DurationMinutes,
-                    RouteNote = "Seeded demo route.",
-                    CreatedAt = now,
-                    UpdatedAt = now
-                };
-                db.Routes.Add(route);
-            }
-            result[seed.Code] = route;
-        }
-        return result;
-    }
-
-    private static async Task SeedDemoRoutePlansAsync(AppDbContext db, IReadOnlyDictionary<string, TransportPlan> plans, IReadOnlyDictionary<string, RouteEntity> routes, IReadOnlyDictionary<string, Employee> employees, DateTime now, CancellationToken cancellationToken)
-    {
-        var plan = plans["REQ-20261010-DEMO-0005"];
-        if (!await db.RoutePlans.AnyAsync(item => item.RoutePlanCode == "RP-20261010-DEMO-0001", cancellationToken))
-        {
-            var routePlan = new RoutePlan
-            {
-                RoutePlanId = Guid.Parse("71000000-0000-0000-0000-000000000001"),
-                TransportPlanId = plan.TransportPlanId,
-                RoutePlanCode = "RP-20261010-DEMO-0001",
-                Status = RoutePlanStatus.DRAFT,
-                TotalDistanceKm = 920.5m,
-                EstimatedDurationMinutes = 1260,
-                RouteNote = "Primary route for Swagger testing.",
-                CreatedAt = now,
-                UpdatedAt = now
-            };
-            db.RoutePlans.Add(routePlan);
-            db.RoutePlanRoutes.Add(new RoutePlanRoute
-            {
-                RoutePlanRouteId = Guid.Parse("72000000-0000-0000-0000-000000000001"),
-                RoutePlanId = routePlan.RoutePlanId,
-                RouteId = routes["ROUTE-DEMO-FR-GB"].RouteId,
-                SequenceNo = 1,
-                RouteType = RouteType.PRIMARY,
-                DriverEmployeeId = employees["duongngo2209@gmail.com"].EmployeeId,
-                EscortEmployeeId = employees["quocbao.nguyen16102006@gmail.com"].EmployeeId,
-                PlannedDepartureAt = now.AddDays(20),
-                PlannedArrivalAt = now.AddDays(25),
-                Note = "Seeded primary route.",
-                CreatedAt = now,
-                UpdatedAt = now
             });
         }
     }
@@ -816,22 +708,6 @@ public static class AppDbContextSeedData
         TransportPlanStatus Status)
     {
         public Guid Id => StableGuid(PlanCode);
-    }
-
-    private sealed record LocationSeed(string Code, string Name, string Country, string City)
-    {
-        public Guid Id => StableGuid(Code);
-    }
-
-    private sealed record RouteSeed(
-        string Code,
-        string From,
-        string To,
-        string Name,
-        decimal DistanceKm,
-        int DurationMinutes)
-    {
-        public Guid Id => StableGuid(Code);
     }
 
     private sealed record TemplateSeed(
