@@ -94,15 +94,32 @@ public class BookingController : ControllerBase
     /// <exception cref="ForbiddenException">The caller is not a Transport Specialist or Fleet Route Coordinator.</exception>
     /// <exception cref="BadRequestException">The query fields or status filter are invalid.</exception>
     [HttpGet("approved")]
-    [Authorize(Policy = JwtExtensions.TransportSpecialistOrFleetRouteCoordinatorPolicy)]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> GetApprovedList(
-        [FromQuery] BookingService.Request.BookingListRequest request,
+        [FromQuery] BookingService.Request.ApprovedBookingListRequest request,
         CancellationToken cancellationToken)
     {
         var response = await _service.GetApprovedListAsync(GetAccountId(), request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(
             response,
-            "Bookings retrieved successfully",
+            "Approved bookings retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
+    }
+
+    /// <summary>
+    /// Get an approved booking detail for transport planning work.
+    /// </summary>
+    /// <param name="bookingId">The approved booking identifier (UUID).</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with booking, transport plan, compliance dossier, and route plans.</returns>
+    [HttpGet("approved/{bookingId:guid}")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy)]
+    public async Task<IActionResult> GetApproved(Guid bookingId, CancellationToken cancellationToken)
+    {
+        var response = await _service.GetApprovedAsync(GetAccountId(), bookingId, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(
+            response,
+            "Approved booking retrieved successfully",
             traceId: HttpContext.TraceIdentifier));
     }
 
@@ -140,14 +157,14 @@ public class BookingController : ControllerBase
     /// Revoke a booking employee assignment.
     /// </summary>
     /// <param name="bookingId">The booking identifier (UUID).</param>
-    /// <param name="assignmentId">The assignment identifier (UUID).</param>
+    /// <param name="employeeId">The assigned employee identifier (UUID).</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the revoked assignment.</returns>
-    [HttpDelete("{bookingId:guid}/assignments/{assignmentId:guid}")]
+    [HttpDelete("{bookingId:guid}/assignments/{employeeId:guid}")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
-    public async Task<IActionResult> RevokeAssignment(Guid bookingId, Guid assignmentId, CancellationToken cancellationToken)
+    public async Task<IActionResult> RevokeAssignment(Guid bookingId, Guid employeeId, CancellationToken cancellationToken)
     {
-        var response = await _service.RevokeAssignmentAsync(GetAccountId(), bookingId, assignmentId, cancellationToken);
+        var response = await _service.RevokeAssignmentAsync(GetAccountId(), bookingId, employeeId, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(response, "Booking employee assignment revoked successfully", traceId: HttpContext.TraceIdentifier));
     }
 

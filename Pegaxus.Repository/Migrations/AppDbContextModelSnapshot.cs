@@ -53,6 +53,7 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "incident_status", new[] { "REPORTED", "PENDING", "RESOLVED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_history_type", new[] { "CREATE", "ISSUE", "RECORD_PAYMENT", "MARK_OVERDUE", "CANCEL" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_item_type", new[] { "TRANSPORT_FEE", "HORSE_SERVICE_FEE", "HANDLING_FEE", "COMPLIANCE_FEE", "EMERGENCY_COST", "OTHER" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_type", new[] { "QUOTATION", "DEPOSIT", "FINAL", "SUPPLEMENTARY", "CREDIT_NOTE" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_status", new[] { "DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "location_type", new[] { "CITY", "BORDER_GATE", "AIRPORT", "SEAPORT", "STABLE", "REST_STOP", "OTHER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "notification_priority", new[] { "LOW", "NORMAL", "HIGH", "URGENT" });
@@ -960,6 +961,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
+                    b.Property<string>("CustomerCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("customer_code");
+
                     b.Property<string>("Address")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -1018,6 +1025,9 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex("DeletedByAccountId");
 
                     b.HasIndex(new[] { "AccountId" }, "Customer_account_id_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "CustomerCode" }, "Customer_customer_code_key")
                         .IsUnique();
 
                     b.HasIndex(new[] { "IsDeleted" }, "Customer_is_deleted_idx");
@@ -2518,6 +2528,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("invoice_code");
 
+                    b.Property<int>("Type")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("invoice_type")
+                        .HasColumnName("type")
+                        .HasDefaultValueSql("'QUOTATION'::invoice_type");
+
                     b.Property<DateTime?>("IssuedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("issued_at");
@@ -2556,6 +2572,9 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex("Status")
                         .HasDatabaseName("Invoice_status_idx");
+
+                    b.HasIndex("Type")
+                        .HasDatabaseName("Invoice_type_idx");
 
                     b.HasIndex(new[] { "BookingId" }, "Invoice_booking_id_idx");
 
