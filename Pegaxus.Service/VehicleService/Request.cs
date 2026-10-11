@@ -22,7 +22,7 @@ public static class Request
     {
         public string? VehicleName { get; set; }
         public string TransportMode { get; set; } = "ROAD";
-        public string LicensePlate { get; set; } = "";
+        public string? LicensePlate { get; set; }
         public string? VehicleType { get; set; }
         public string? Manufacturer { get; set; }
         public string? Model { get; set; }

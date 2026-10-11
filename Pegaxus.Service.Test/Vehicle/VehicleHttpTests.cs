@@ -51,11 +51,11 @@ public class VehicleHttpTests
         var updated = await client.PutAsJsonAsync($"/api/v1/vehicles/{id}", update);
         Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
         version = (await updated.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value").GetProperty("updatedAt").GetDateTimeOffset();
-        var status = await client.PatchAsJsonAsync($"/api/v1/vehicles/{id}/status", VehicleServiceTests.StatusRequest(version, "SUSPENDED"));
+        var status = await client.PatchAsJsonAsync($"/api/v1/vehicles/{id}/status", VehicleServiceTests.StatusRequest(version, "INACTIVE"));
         Assert.Equal(HttpStatusCode.OK, status.StatusCode);
         var changed = (await status.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
         Assert.Equal("AVAILABLE", changed.GetProperty("previousStatus").GetString());
-        Assert.Equal("SUSPENDED", changed.GetProperty("status").GetString());
+        Assert.Equal("INACTIVE", changed.GetProperty("status").GetString());
         await Error(await client.PutAsJsonAsync($"/api/v1/vehicles/{id}", update), HttpStatusCode.Conflict, "VEHICLE_MODIFIED");
         await Error(await client.GetAsync($"/api/v1/vehicles/{Guid.NewGuid()}"), HttpStatusCode.NotFound, "VEHICLE_NOT_FOUND");
         await Error(await client.GetAsync("/api/v1/vehicles?availableFrom=2026-10-10"), HttpStatusCode.BadRequest, "INVALID_DATE_RANGE");

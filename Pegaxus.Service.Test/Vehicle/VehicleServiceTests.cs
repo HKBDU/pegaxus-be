@@ -122,7 +122,8 @@ public class VehicleServiceTests
     [InlineData(-1, "EXPIRED")]
     [InlineData(0, "EXPIRED")]
     [InlineData(1, "EXPIRING_SOON")]
-    [InlineData(7, "EXPIRING_SOON")]
+    [InlineData(6, "EXPIRING_SOON")]
+    [InlineData(7, "VALID")]
     [InlineData(8, "VALID")]
     public async Task ExpiryWarnings_UseDateBoundaries_AndRenewalClearsWarnings(int days, string status)
     {
@@ -173,7 +174,6 @@ public class VehicleServiceTests
     [InlineData("vehicleId")]
     [InlineData("vehicleCode")]
     [InlineData("status")]
-    [InlineData("transportMode")]
     public async Task Update_RejectsChangedImmutableFields(string field)
     {
         await using var db = TestSupport.CreateDb();
@@ -194,11 +194,9 @@ public class VehicleServiceTests
     }
 
     [Theory]
-    [InlineData("AIR")]
-    [InlineData("SEA")]
     [InlineData("RAIL")]
     [InlineData("1")]
-    public async Task Create_RejectsNonRoad(string mode)
+    public async Task Create_RejectsInvalidMode(string mode)
     {
         await using var db = TestSupport.CreateDb();
         var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
@@ -208,10 +206,37 @@ public class VehicleServiceTests
     }
 
     [Theory]
+    [InlineData("SEA")]
+    [InlineData("AIR")]
+    public async Task Mode_CreateListUpdate_AllowOptionalPlate_AndBlockAssignedChanges(string mode)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var service = CreateService(db);
+        var request = ValidRequest(); request.TransportMode = mode; request.LicensePlate = null;
+        request.RegistrationExpiryDate = request.InsuranceExpiryDate = null;
+        var vehicle = await service.CreateAsync(request, account.AccountId);
+        Assert.Equal(mode, vehicle.TransportMode);
+        Assert.Null(vehicle.LicensePlate);
+        Assert.Equal("VALID", vehicle.RegistrationStatus);
+        Assert.Equal("VALID", vehicle.InsuranceStatus);
+        Assert.Single((await service.GetListAsync(new() { TransportMode = mode }, account.AccountId)).Items);
+        Assert.Empty((await service.GetListAsync(new() { TransportMode = "ROAD" }, account.AccountId)).Items);
+        var update = UpdateRequest(vehicle); update.LicensePlate = "NEW-ROAD";
+        var changed = await service.UpdateAsync(vehicle.VehicleId, update, account.AccountId);
+        Assert.Equal("ROAD", (await service.GetAsync(vehicle.VehicleId, account.AccountId)).TransportMode);
+        var entity = await db.Vehicles.SingleAsync();
+        await AddAssignmentAsync(db, entity);
+        update.LastUpdatedAt = changed.UpdatedAt; update.TransportMode = mode;
+        var error = await Assert.ThrowsAsync<ConflictException>(() => service.UpdateAsync(vehicle.VehicleId, update, account.AccountId));
+        Assert.Equal("VEHICLE_IN_USE", error.ErrorCode);
+        Assert.Equal(TransportMode.ROAD, entity.TransportMode);
+    }
+
+    [Theory]
     [InlineData("AVAILABLE")]
     [InlineData("MAINTENANCE")]
-    [InlineData("SUSPENDED")]
-    [InlineData("OUT_OF_SERVICE")]
+    [InlineData("INACTIVE")]
     public async Task ManualStatus_AuditsReasonAndExcludesUnavailableVehicles(string status)
     {
         await using var db = TestSupport.CreateDb();
@@ -238,7 +263,8 @@ public class VehicleServiceTests
     [InlineData("ASSIGNED")]
     [InlineData("IN_USE")]
     [InlineData("IN_TRANSIT")]
-    [InlineData("INACTIVE")]
+    [InlineData("SUSPENDED")]
+    [InlineData("OUT_OF_SERVICE")]
     [InlineData("1")]
     [InlineData("")]
     public async Task Status_RejectsAutomaticOrUnknownInputs(string status)
@@ -322,7 +348,7 @@ public class VehicleServiceTests
     }
 
     [Fact]
-    public async Task List_FiltersSortsPaginates_AndHidesDeletedAndNonRoad()
+    public async Task List_FiltersSortsPaginates_AndHidesDeleted()
     {
         await using var db = TestSupport.CreateDb();
         var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
@@ -335,14 +361,14 @@ public class VehicleServiceTests
         var d = await service.CreateAsync(ValidRequest("D", "PLATE-D"), account.AccountId);
         (await db.Vehicles.SingleAsync(x => x.VehicleId == d.VehicleId)).IsDeleted = true;
         await db.SaveChangesAsync();
-        var list = await service.GetListAsync(new() { PageSize = 1, PageIndex = 2 }, account.AccountId);
+        var list = await service.GetListAsync(new() { PageSize = 1, PageIndex = 2, TransportMode = "ROAD" }, account.AccountId);
         Assert.Equal("B", Assert.Single(list.Items).VehicleCode); Assert.Equal(2, list.TotalItems); Assert.Equal(2, list.TotalPages);
         Assert.Null(list.Items[0].IsAvailable);
         Assert.Equal("B", Assert.Single((await service.GetListAsync(new() { MinCapacity = 4, VehicleType = "horse_truck", Search = "plate-b", Status = "available" }, account.AccountId)).Items).VehicleCode);
-        Assert.Equal("B", (await service.GetListAsync(new() { SortBy = "capacityHorses:desc" }, account.AccountId)).Items[0].VehicleCode);
+        Assert.Equal(6, (await service.GetListAsync(new() { SortBy = "capacityHorses:desc" }, account.AccountId)).Items[0].CapacityHorses);
         Assert.Empty((await service.GetListAsync(new() { Search = "missing" }, account.AccountId)).Items);
-        await Assert.ThrowsAsync<NotFoundException>(() => service.GetAsync(c.VehicleId, account.AccountId));
-        await Assert.ThrowsAsync<NotFoundException>(() => service.UpdateAsync(c.VehicleId, UpdateRequest(c), account.AccountId));
+        Assert.Equal("AIR", (await service.GetAsync(c.VehicleId, account.AccountId)).TransportMode);
+        await service.UpdateAsync(c.VehicleId, UpdateRequest(c), account.AccountId);
         await Assert.ThrowsAsync<NotFoundException>(() => service.ChangeStatusAsync(d.VehicleId, StatusRequest(d.UpdatedAt), account.AccountId));
     }
 
@@ -351,7 +377,7 @@ public class VehicleServiceTests
     {
         var list = new ListRequestValidator();
         Assert.False(list.Validate(new Request.ListRequest { Status = "1" }).IsValid);
-        Assert.False(list.Validate(new Request.ListRequest { TransportMode = "AIR" }).IsValid);
+        Assert.False(list.Validate(new Request.ListRequest { TransportMode = "RAIL" }).IsValid);
         Assert.Equal("INVALID_SORT_PARAMETER", Assert.Single(list.Validate(new Request.ListRequest { SortBy = "name:asc" }).Errors).ErrorCode);
         Assert.Equal("INVALID_DATE_RANGE", Assert.Single(list.Validate(new Request.ListRequest { AvailableFrom = Today }).Errors).ErrorCode);
         Assert.False(list.Validate(new Request.ListRequest { AvailableFrom = Today, AvailableTo = Today.AddDays(-1) }).IsValid);

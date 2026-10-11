@@ -11,8 +11,8 @@ public sealed class ListRequestValidator : AbstractValidator<Request.ListRequest
         RuleFor(x => x.PageSize).InclusiveBetween(1, 100);
         RuleFor(x => x).Must(x => ((long)x.PageIndex - 1) * x.PageSize <= int.MaxValue)
             .WithMessage("The requested page is too large.").OverridePropertyName("pageIndex");
-        RuleFor(x => x.TransportMode).Must(x => x is null || string.Equals(x.Trim(), "ROAD", StringComparison.OrdinalIgnoreCase))
-            .WithMessage("Only ROAD vehicles are managed internally.");
+        RuleFor(x => x.TransportMode).Must(x => x is null || Enum.GetNames<TransportMode>().Contains(x.Trim(), StringComparer.OrdinalIgnoreCase))
+            .WithMessage("Transport mode must be ROAD, SEA or AIR.");
         RuleFor(x => x.Status).Must(x => x is null || Enum.GetNames<VehicleStatus>().Contains(x.Trim(), StringComparer.OrdinalIgnoreCase))
             .WithMessage("Invalid vehicle status.");
         RuleFor(x => x.MinCapacity).InclusiveBetween(2, 9).When(x => x.MinCapacity.HasValue);
@@ -32,10 +32,13 @@ public sealed class VehicleFieldsValidator : AbstractValidator<Request.VehicleFi
 {
     public VehicleFieldsValidator(TimeProvider clock)
     {
-        RuleFor(x => x.TransportMode).Must(x => string.Equals(x?.Trim(), "ROAD", StringComparison.OrdinalIgnoreCase))
-            .WithMessage("Transport mode is read-only and must be ROAD.");
-        RuleFor(x => x.LicensePlate).NotEmpty().MaximumLength(50)
-            .Matches(@"^[\p{L}\p{N}][\p{L}\p{N} .-]*$").WithMessage("Invalid license plate format.");
+        RuleFor(x => x.TransportMode).Must(x => Enum.GetNames<TransportMode>().Contains(x?.Trim(), StringComparer.OrdinalIgnoreCase))
+            .WithMessage("Transport mode must be ROAD, SEA or AIR.");
+        RuleFor(x => x.LicensePlate).NotEmpty()
+            .When(x => string.Equals(x.TransportMode?.Trim(), "ROAD", StringComparison.OrdinalIgnoreCase));
+        RuleFor(x => x.LicensePlate).MaximumLength(50)
+            .Matches(@"^[\p{L}\p{N}][\p{L}\p{N} .-]*$").WithMessage("Invalid license plate format.")
+            .When(x => !string.IsNullOrWhiteSpace(x.LicensePlate));
         RuleFor(x => x.VehicleName).MaximumLength(200);
         RuleFor(x => x.VehicleType).MaximumLength(100);
         RuleFor(x => x.Manufacturer).MaximumLength(100);
@@ -77,7 +80,7 @@ public sealed class StatusRequestValidator : AbstractValidator<Request.StatusReq
     public StatusRequestValidator()
     {
         RuleFor(x => x.LastUpdatedAt).NotEmpty();
-        RuleFor(x => x.Status).Must(x => new[] { "AVAILABLE", "MAINTENANCE", "SUSPENDED", "OUT_OF_SERVICE" }
+        RuleFor(x => x.Status).Must(x => new[] { "AVAILABLE", "MAINTENANCE", "INACTIVE" }
             .Contains(x?.Trim(), StringComparer.OrdinalIgnoreCase)).WithMessage("Only manual vehicle statuses are allowed.");
         RuleFor(x => x.Reason).NotEmpty().MaximumLength(2000);
     }

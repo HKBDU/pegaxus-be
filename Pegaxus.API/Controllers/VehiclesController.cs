@@ -14,7 +14,7 @@ namespace Pegaxus.API.Controllers;
 public sealed class VehiclesController(Vehicles.IService service) : ControllerBase
 {
     /// <summary>List specialized vehicles.</summary>
-    /// <remarks>Lists undeleted ROAD vehicles. Optional date filters return vehicles without unfinished schedule conflicts.</remarks>
+    /// <remarks>Lists undeleted ROAD, SEA and AIR vehicles. Optional date filters return vehicles without unfinished schedule conflicts.</remarks>
     /// <param name="request">Pagination, search, status, capacity, dates, and sorting.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with a paginated vehicle catalog and expiry warnings.</returns>
@@ -34,7 +34,7 @@ public sealed class VehiclesController(Vehicles.IService service) : ControllerBa
             "Vehicle retrieved successfully", traceId: HttpContext.TraceIdentifier));
 
     /// <summary>Create a specialized vehicle.</summary>
-    /// <remarks>Creates an AVAILABLE ROAD vehicle with unique code and license plate and capacity between 2 and 9.</remarks>
+    /// <remarks>Creates an AVAILABLE vehicle with unique code and license plate and capacity between 2 and 9.</remarks>
     /// <param name="request">The vehicle code and editable technical and document fields.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>201 Created with vehicle details, or field errors and duplicate conflicts.</returns>
@@ -47,7 +47,7 @@ public sealed class VehiclesController(Vehicles.IService service) : ControllerBa
     }
 
     /// <summary>Update specialized vehicle information.</summary>
-    /// <remarks>Replaces editable fields. Vehicle identifier, code, ROAD mode, and status are read-only. Stale versions return 409 VEHICLE_MODIFIED.</remarks>
+    /// <remarks>Replaces editable fields. Vehicle identifier, code and status are read-only. Mode changes require no unfinished assignments. Stale versions return 409 VEHICLE_MODIFIED.</remarks>
     /// <param name="vehicleId">The vehicle identifier (UUID).</param>
     /// <param name="request">Replacement vehicle fields and the last observed updatedAt.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
@@ -58,7 +58,7 @@ public sealed class VehiclesController(Vehicles.IService service) : ControllerBa
             "Vehicle updated successfully", traceId: HttpContext.TraceIdentifier));
 
     /// <summary>Update a specialized vehicle status.</summary>
-    /// <remarks>Allows AVAILABLE, MAINTENANCE, SUSPENDED, or OUT_OF_SERVICE with a reason. Assigned vehicles are locked. The change, audit, and notifications commit together.</remarks>
+    /// <remarks>Allows AVAILABLE, MAINTENANCE or INACTIVE with a reason. Assigned vehicles are locked. The change, audit, and notifications commit together.</remarks>
     /// <param name="vehicleId">The vehicle identifier (UUID).</param>
     /// <param name="request">The manual status, reason, and last observed updatedAt.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>

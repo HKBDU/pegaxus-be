@@ -92,8 +92,8 @@ public class VehiclePostgresTests
                 await first.Vehicles.SingleAsync(x => x.VehicleId == vehicle.VehicleId);
                 await second.Vehicles.SingleAsync(x => x.VehicleId == vehicle.VehicleId);
                 var outcomes = await Task.WhenAll(
-                    Attempt(() => VehicleServiceTests.CreateService(first).ChangeStatusAsync(vehicle.VehicleId, VehicleServiceTests.StatusRequest(vehicle.UpdatedAt, "SUSPENDED"), actor)),
-                    Attempt(() => VehicleServiceTests.CreateService(second).ChangeStatusAsync(vehicle.VehicleId, VehicleServiceTests.StatusRequest(vehicle.UpdatedAt, "OUT_OF_SERVICE"), actor)));
+                    Attempt(() => VehicleServiceTests.CreateService(first).ChangeStatusAsync(vehicle.VehicleId, VehicleServiceTests.StatusRequest(vehicle.UpdatedAt, "INACTIVE"), actor)),
+                    Attempt(() => VehicleServiceTests.CreateService(second).ChangeStatusAsync(vehicle.VehicleId, VehicleServiceTests.StatusRequest(vehicle.UpdatedAt, "INACTIVE"), actor)));
                 Assert.Single(outcomes, x => x is null);
                 Assert.Equal("VEHICLE_MODIFIED", Assert.IsType<ConflictException>(Assert.Single(outcomes, x => x is not null)).ErrorCode);
             }
@@ -188,7 +188,7 @@ public class VehiclePostgresTests
         await writer.SaveChangesAsync();
         await using var changer = new AppDbContext(options);
         var changeError = await Attempt(() => VehicleServiceTests.CreateService(changer).ChangeStatusAsync(vehicle.VehicleId,
-            VehicleServiceTests.StatusRequest(vehicle.UpdatedAt, "SUSPENDED"), actor));
+            VehicleServiceTests.StatusRequest(vehicle.UpdatedAt, "INACTIVE"), actor));
         var writeError = await Attempt(() => writeTransaction.CommitAsync());
         Assert.True(changeError is not null || writeError is not null, "Status change and assignment insertion must not both commit.");
         var conflict = changeError ?? writeError;
@@ -198,7 +198,7 @@ public class VehiclePostgresTests
             Assert.Equal(PostgresErrorCodes.SerializationFailure,
                 Assert.IsType<PostgresException>(conflict is DbUpdateException update ? update.InnerException : conflict).SqlState);
         await using var check = new AppDbContext(options);
-        Assert.False(await check.RoutePlanRouteVehicles.AnyAsync(item => item.VehicleId == vehicle.VehicleId && item.Vehicle.Status == VehicleStatus.SUSPENDED));
+        Assert.False(await check.RoutePlanRouteVehicles.AnyAsync(item => item.VehicleId == vehicle.VehicleId && item.Vehicle.Status == VehicleStatus.INACTIVE));
     }
 
     private static async Task CheckOutboxClaimsAsync(DbContextOptions<AppDbContext> options)

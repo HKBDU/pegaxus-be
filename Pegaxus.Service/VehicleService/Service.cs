@@ -22,6 +22,11 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         await AuthorizeAsync(accountId, cancellationToken);
         Validate(request, listValidator);
         var query = Vehicles();
+        if (request.TransportMode is not null)
+        {
+            var mode = Enum.Parse<TransportMode>(request.TransportMode.Trim(), true);
+            query = query.Where(x => x.TransportMode == mode);
+        }
         if (request.Status is not null)
         {
             var status = Enum.Parse<VehicleStatus>(request.Status.Trim(), true);
@@ -111,7 +116,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         await CheckPlateAsync(request.LicensePlate, null, cancellationToken);
         var now = Now();
         var vehicle = new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = request.VehicleCode,
-            TransportMode = TransportMode.ROAD, Status = VehicleStatus.AVAILABLE, CreatedAt = now, UpdatedAt = now };
+            Status = VehicleStatus.AVAILABLE, CreatedAt = now, UpdatedAt = now };
         Apply(vehicle, request);
         db.Vehicles.Add(vehicle);
         await SaveAsync(vehicle, accountId, "CREATE", JsonSerializer.SerializeToDocument(new { }), null, cancellationToken);
@@ -126,7 +131,9 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         await AuthorizeAsync(accountId, cancellationToken);
         Normalize(request);
         Validate(request, updateValidator);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = db.Database.IsRelational()
+            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+            : await db.Database.BeginTransactionAsync(cancellationToken);
         var vehicle = await LockAsync(vehicleId, cancellationToken);
         CheckVersion(vehicle, request.LastUpdatedAt);
         if (request.VehicleId.HasValue && request.VehicleId != vehicleId)
@@ -135,6 +142,9 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             throw Immutable("vehicleCode");
         if (request.Status is not null && !string.Equals(request.Status, vehicle.Status.ToString(), StringComparison.OrdinalIgnoreCase))
             throw Immutable("status");
+        if (vehicle.TransportMode != Enum.Parse<TransportMode>(request.TransportMode.Trim(), true) &&
+            await UnfinishedAssignments().AnyAsync(x => x.VehicleId == vehicleId, cancellationToken))
+            throw new ConflictException("Cannot change transport mode while the vehicle has unfinished assignments.", "VEHICLE_IN_USE");
         await CheckPlateAsync(request.LicensePlate, vehicleId, cancellationToken);
         var before = Snapshot(vehicle);
         Apply(vehicle, request);
@@ -171,7 +181,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         return new(vehicleId, previous, vehicle.Status.ToString(), Offset(vehicle.UpdatedAt));
     }
 
-    private IQueryable<Vehicle> Vehicles() => db.Vehicles.AsNoTracking().Where(x => !x.IsDeleted && x.TransportMode == TransportMode.ROAD);
+    private IQueryable<Vehicle> Vehicles() => db.Vehicles.AsNoTracking().Where(x => !x.IsDeleted);
 
     private IQueryable<RoutePlanRouteVehicle> UnfinishedAssignments() => db.RoutePlanRouteVehicles.AsNoTracking().Where(x =>
         x.RoutePlanRoute.ActualArrivalAt == null &&
@@ -194,7 +204,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var vehicle = await query.SingleOrDefaultAsync(cancellationToken) ?? throw NotFound();
         // A reused context may already track the vehicle before acquiring its row lock.
         if (db.Database.IsRelational()) await db.Entry(vehicle).ReloadAsync(cancellationToken);
-        if (vehicle.IsDeleted || vehicle.TransportMode != TransportMode.ROAD) throw NotFound();
+        if (vehicle.IsDeleted) throw NotFound();
         return vehicle;
     }
 
@@ -206,9 +216,9 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         if (!allowed) throw new ForbiddenException("Only active Fleet Route Coordinators and Logistics Managers can manage vehicles.");
     }
 
-    private async Task CheckPlateAsync(string plate, Guid? id, CancellationToken cancellationToken)
+    private async Task CheckPlateAsync(string? plate, Guid? id, CancellationToken cancellationToken)
     {
-        if (await db.Vehicles.AnyAsync(x => !x.IsDeleted && x.VehicleId != id && x.LicensePlate != null &&
+        if (plate is not null && await db.Vehicles.AnyAsync(x => !x.IsDeleted && x.VehicleId != id && x.LicensePlate != null &&
             x.LicensePlate.ToUpper() == plate, cancellationToken)) throw DuplicatePlate();
     }
 
@@ -251,17 +261,18 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             IsAvailable = available, CreatedAt = Offset(x.CreatedAt), UpdatedAt = Offset(x.UpdatedAt) };
     }
 
-    private string? ExpiryStatus(DateOnly? date)
+    private string ExpiryStatus(DateOnly? date)
     {
-        if (!date.HasValue) return null;
+        if (!date.HasValue) return "VALID";
         var remaining = date.Value.DayNumber - DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime).DayNumber;
-        return remaining <= 0 ? "EXPIRED" : remaining <= 7 ? "EXPIRING_SOON" : "VALID";
+        return remaining <= 0 ? "EXPIRED" : remaining < 7 ? "EXPIRING_SOON" : "VALID";
     }
 
     private JsonDocument Snapshot(Vehicle vehicle) => JsonSerializer.SerializeToDocument(Map(vehicle), new JsonSerializerOptions(JsonSerializerDefaults.Web));
-    private static void Normalize(Request.VehicleFields request) => request.LicensePlate = request.LicensePlate?.Trim().ToUpperInvariant()!;
+    private static void Normalize(Request.VehicleFields request) => request.LicensePlate = Trim(request.LicensePlate)?.ToUpperInvariant();
     private static void Apply(Vehicle vehicle, Request.VehicleFields request)
     {
+        vehicle.TransportMode = Enum.Parse<TransportMode>(request.TransportMode.Trim(), true);
         vehicle.VehicleName = Trim(request.VehicleName); vehicle.LicensePlate = request.LicensePlate;
         vehicle.VehicleType = Trim(request.VehicleType); vehicle.Manufacturer = Trim(request.Manufacturer);
         vehicle.Model = Trim(request.Model); vehicle.CapacityHorses = request.CapacityHorses;
