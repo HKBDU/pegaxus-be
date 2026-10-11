@@ -21,7 +21,7 @@ public class RouteChangeTests
         using var relationalDb = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
             .UseNpgsql("Host=localhost;Database=unused;Username=unused").Options);
         var snapshot = relationalDb.GetService<IMigrationsAssembly>().ModelSnapshot!.Model;
-        var requests = new[] { typeof(RouteChange.RouteChangeRequest), typeof(Request.CreateRequest), typeof(Request.DecisionRequest),
+        var requests = new[] { typeof(Request.RouteChangeRequest), typeof(Request.CreateRequest), typeof(Request.DecisionRequest),
             typeof(Request.ActivationRequest), typeof(Request.DriverNoticeRequest) };
         foreach (var type in requests)
         {
