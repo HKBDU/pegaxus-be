@@ -35,7 +35,6 @@ public static class Request
         public Employee RequestedByEmployee { get; set; } = null!;
     }
 
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class CreateRequest
     {
         public string Reason { get; set; } = "";
@@ -45,7 +44,6 @@ public static class Request
         public string? Note { get; set; }
     }
 
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class DecisionRequest
     {
         public DateTimeOffset LastUpdatedAt { get; set; }
@@ -53,7 +51,6 @@ public static class Request
         public string? Note { get; set; }
     }
 
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class ActivationRequest
     {
         public DateTimeOffset LastUpdatedAt { get; set; }
@@ -61,7 +58,6 @@ public static class Request
         public string? Note { get; set; }
     }
 
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class SegmentRequest
     {
         public Guid RoutePlanRouteId { get; set; }
@@ -69,14 +65,12 @@ public static class Request
         public OutsourcingRequest? Outsourcing { get; set; }
     }
 
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class OutsourcingRequest
     {
         public Guid TransportProviderId { get; set; }
         public string? Note { get; set; }
     }
 
-    [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class DriverNoticeRequest
     {
         public string? Message { get; set; }
