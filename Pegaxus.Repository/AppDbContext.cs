@@ -2570,7 +2570,9 @@ public partial class AppDbContext : DbContext
 
             entity.HasIndex(e => e.IsDeleted, "TransportProvider_is_deleted_idx");
 
-            entity.HasIndex(e => e.ProviderCode, "TransportProvider_provider_code_key").IsUnique();
+            entity.HasIndex(e => e.ProviderCode, "TransportProvider_provider_code_key").HasFilter("is_deleted = false").IsUnique();
+
+            entity.HasIndex(e => e.TaxCode, "TransportProvider_tax_code_key").HasFilter("is_deleted = false").IsUnique();
 
             entity.HasIndex(e => e.ProviderName, "TransportProvider_provider_name_idx");
 
@@ -2614,6 +2616,7 @@ public partial class AppDbContext : DbContext
                 .HasMaxLength(100)
                 .HasColumnName("tax_code");
             entity.Property(e => e.UpdatedAt)
+                .IsConcurrencyToken()
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
 
