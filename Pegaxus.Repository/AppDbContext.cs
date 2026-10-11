@@ -162,6 +162,7 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("incident_status", new[] { "REPORTED", "PENDING", "RESOLVED", "CANCELLED" })
             .HasPostgresEnum("invoice_history_type", new[] { "CREATE", "ISSUE", "RECORD_PAYMENT", "MARK_OVERDUE", "CANCEL" })
             .HasPostgresEnum("invoice_item_type", new[] { "TRANSPORT_FEE", "HORSE_SERVICE_FEE", "HANDLING_FEE", "COMPLIANCE_FEE", "EMERGENCY_COST", "OTHER" })
+            .HasPostgresEnum("invoice_type", new[] { "QUOTATION", "DEPOSIT", "FINAL", "SUPPLEMENTARY", "CREDIT_NOTE" })
             .HasPostgresEnum("invoice_status", new[] { "DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED" })
             .HasPostgresEnum("location_type", new[] { "CITY", "BORDER_GATE", "AIRPORT", "SEAPORT", "STABLE", "REST_STOP", "OTHER" })
             .HasPostgresEnum("notification_priority", new[] { "LOW", "NORMAL", "HIGH", "URGENT" })
@@ -1934,6 +1935,9 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.InvoiceCode)
                 .HasMaxLength(50)
                 .HasColumnName("invoice_code");
+            entity.Property(e => e.Type)
+                .HasColumnName("type")
+                .HasColumnType("invoice_type");
             entity.Property(e => e.IssuedAt)
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("issued_at");

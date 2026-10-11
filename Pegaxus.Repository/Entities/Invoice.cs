@@ -19,6 +19,8 @@ public partial class Invoice
 
     public Guid EmployeeId { get; set; }
 
+    public InvoiceType Type { get; set; } = InvoiceType.QUOTATION;
+
     public InvoiceStatus Status { get; set; } = InvoiceStatus.DRAFT;
 
     public string Currency { get; set; } = null!;
