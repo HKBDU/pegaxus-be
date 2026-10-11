@@ -16,12 +16,12 @@ public sealed class RouteOutsourcingController(Outsourcing.IService service) : C
     /// <summary>
     /// Assign or remove outsourced transport for a segment.
     /// </summary>
-    /// <remarks>Logistics Managers only. Supply the route plan's latest lastUpdatedAt. Outsourcing clears internal personnel and vehicles, validates the ACTIVE provider's mode and maintains plan provider links atomically. Pending or approved routes require legal review again.</remarks>
+    /// <remarks>Logistics Managers only. Supply the route plan's latest lastUpdatedAt. Outsourcing clears internal personnel and vehicles, validates the ACTIVE provider's mode and maintains plan provider links atomically. Only DRAFT routes can change; route status remains DRAFT.</remarks>
     /// <param name="routePlanId">The route plan identifier (UUID).</param>
     /// <param name="routePlanRouteId">The segment identifier belonging to this route plan (UUID).</param>
-    /// <param name="request">The outsourcing selection, service, reference, note, estimated cost and currency, and latest route plan timestamp.</param>
+    /// <param name="request">The outsourcing selection, provider, note, and latest route plan timestamp.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
-    /// <returns>200 OK with the updated segment, personnel status, financial plan and cleared-resource flags; 409 for locked routes, inactive providers or stale changes; 422 for a provider mode mismatch.</returns>
+    /// <returns>200 OK with the updated segment and cleared-resource flags; 409 for locked routes, inactive providers or stale changes; 422 for a provider mode mismatch.</returns>
     [HttpPut]
     public async Task<IActionResult> Set(Guid routePlanId, Guid routePlanRouteId, [FromBody] Outsourcing.Request request, CancellationToken cancellationToken)
     {

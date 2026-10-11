@@ -4,9 +4,7 @@ public sealed class Response
 {
     public Guid RoutePlanId { get; init; }
     public required string RoutePlanStatus { get; init; }
-    public required string PersonnelStatus { get; init; }
     public required SegmentResponse Segment { get; init; }
-    public required FinancialPlanResponse FinancialPlan { get; init; }
     public bool ClearedPersonnel { get; init; }
     public bool ClearedVehicles { get; init; }
     public DateTimeOffset UpdatedAt { get; init; }
@@ -15,7 +13,7 @@ public sealed class Response
     {
         public Guid RoutePlanRouteId { get; init; }
         public int SequenceNo { get; init; }
-        public required string ExecutionType { get; init; }
+        public bool IsOutsourced { get; init; }
         public required IReadOnlyList<VehicleResponse> Vehicles { get; init; }
         public OutsourcingResponse? Outsourcing { get; init; }
         public EmployeeResponse? Driver { get; init; }
@@ -26,24 +24,6 @@ public sealed class Response
     public sealed class OutsourcingResponse
     {
         public required ProviderResponse Provider { get; init; }
-        public string? ServiceType { get; init; }
-        public string? ProviderReference { get; init; }
-        public decimal? CostAmount { get; init; }
-        public string? Currency { get; init; }
-    }
-
-    public sealed class FinancialPlanResponse
-    {
-        public Guid TransportPlanId { get; init; }
-        public required IReadOnlyList<RouteCostResponse> Routes { get; init; }
-    }
-
-    public sealed class RouteCostResponse
-    {
-        public Guid RoutePlanId { get; init; }
-        public string? Currency { get; init; }
-        public decimal? TotalOutsourcingCost { get; init; }
-        public int UnpricedSegments { get; init; }
     }
 
     public sealed class ProviderResponse

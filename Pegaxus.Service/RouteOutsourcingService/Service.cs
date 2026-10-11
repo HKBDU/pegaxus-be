@@ -41,8 +41,7 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
         var route = await db.RoutePlans.SingleOrDefaultAsync(route => route.RoutePlanId == routePlanId && route.TransportPlanId == planId, cancellationToken)
             ?? throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
         await db.Entry(route).ReloadAsync(cancellationToken);
-        if (route.Status is not (RoutePlanStatus.DRAFT or RoutePlanStatus.CONFIRMED or RoutePlanStatus.PENDING_LEGAL_REVIEW or
-            RoutePlanStatus.PENDING_MANAGER_APPROVAL or RoutePlanStatus.REJECTED_BY_MANAGER or RoutePlanStatus.APPROVED))
+        if (route.Status != RoutePlanStatus.DRAFT)
             throw new ConflictException("The route plan can no longer be modified (use emergency change)", "ROUTE_LOCKED");
         if (DateTime.SpecifyKind(route.UpdatedAt, DateTimeKind.Utc) != request.LastUpdatedAt.UtcDateTime)
             throw Modified();
@@ -76,21 +75,15 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
                 throw new UnprocessableEntityException("The provider does not support the transport mode of this segment", "PROVIDER_MODE_MISMATCH");
         }
 
-        var serviceType = provider is null ? null : Trim(request.ServiceType);
-        var reference = provider is null ? null : Trim(request.ProviderReference);
         var note = Trim(request.Note);
-        var cost = provider is null ? null : request.CostAmount;
-        var currency = provider is null ? null : request.Currency!.Trim().ToUpperInvariant();
         var clearedPersonnel = provider is not null && (segment.DriverEmployeeId.HasValue || segment.EscortEmployeeId.HasValue);
         var clearedVehicles = provider is not null && vehicles.Count > 0;
         var link = provider is null ? null : await db.TransportPlanProviders.SingleOrDefaultAsync(item =>
             item.TransportPlanId == planId && item.TransportProviderId == provider.TransportProviderId, cancellationToken);
-        if (segment.TransportProviderId == provider?.TransportProviderId && segment.ServiceType == serviceType &&
-            segment.ProviderReference == reference && segment.Note == note && !clearedPersonnel && !clearedVehicles &&
-            segment.OutsourcingCostAmount == cost && segment.OutsourcingCurrency == currency &&
-            (provider is null || (link is not null && link.ServiceType == serviceType && link.Note == note)))
+        if (segment.TransportProviderId == provider?.TransportProviderId && segment.Note == note && !clearedPersonnel && !clearedVehicles &&
+            (provider is null || (link is not null && link.Note == note)))
         {
-            var unchanged = await BuildResponseAsync(route, segment, provider, vehicles, false, false, cancellationToken);
+            var unchanged = Map(route, segment, provider, vehicles, false, false);
             await transaction.CommitAsync(cancellationToken);
             return unchanged;
         }
@@ -98,11 +91,7 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
         var before = Snapshot(route, segment, vehicles);
         var previousProviderId = segment.TransportProviderId;
         segment.TransportProviderId = provider?.TransportProviderId;
-        segment.ServiceType = serviceType;
-        segment.ProviderReference = reference;
         segment.Note = note;
-        segment.OutsourcingCostAmount = cost;
-        segment.OutsourcingCurrency = currency;
         var now = new DateTime(DateTime.UtcNow.Ticks / 10 * 10, DateTimeKind.Unspecified);
         now = now > route.UpdatedAt ? now : route.UpdatedAt.AddTicks(10);
         segment.UpdatedAt = route.UpdatedAt = now;
@@ -118,7 +107,6 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
                 link = new TransportPlanProvider { TransportPlanId = planId, TransportProviderId = provider.TransportProviderId };
                 db.TransportPlanProviders.Add(link);
             }
-            link.ServiceType = serviceType;
             link.AssignedAt = now;
             link.Note = note;
         }
@@ -130,8 +118,6 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
                 item.TransportProviderId == previousProviderId, cancellationToken);
             if (oldLink is not null) db.TransportPlanProviders.Remove(oldLink);
         }
-        if (route.Status is RoutePlanStatus.CONFIRMED or RoutePlanStatus.PENDING_LEGAL_REVIEW or RoutePlanStatus.PENDING_MANAGER_APPROVAL or RoutePlanStatus.APPROVED)
-            route.Status = RoutePlanStatus.PENDING_LEGAL_REVIEW;
         db.CatalogAuditLogs.Add(new CatalogAuditLog
         {
             CatalogAuditLogId = Guid.NewGuid(), EntityType = nameof(RoutePlanRoute), EntityId = segmentId,
@@ -146,12 +132,12 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
             notifications.Queue(new NotificationCreateRequest
             {
                 AccountId = recipient, TransportId = plan.TransportId, Type = NotificationType.ROUTE,
-                Title = "Route outsourcing updated", Message = $"{route.RoutePlanCode}, segment {segment.SequenceNo}: {(provider is null ? "INTERNAL" : provider.ProviderName)}",
+                Title = "Segment outsourced to a transport provider", Message = $"{route.RoutePlanCode}, segment {segment.SequenceNo}: {(provider is null ? "INTERNAL" : provider.ProviderName)}",
                 ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId, CreatedAt = now
             });
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw Modified(); }
-        var response = await BuildResponseAsync(route, segment, provider, vehicles, clearedPersonnel, clearedVehicles, cancellationToken);
+        var response = Map(route, segment, provider, vehicles, clearedPersonnel, clearedVehicles);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
         logger.LogInformation("Route {RoutePlanId} segment {SegmentId} outsourcing {Outsourced} provider {ProviderId} by {AccountId}",
@@ -159,39 +145,14 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
         return response;
     }
 
-    private async Task<Response> BuildResponseAsync(RoutePlan route, RoutePlanRoute segment, TransportProvider? provider,
-        IReadOnlyList<RoutePlanRouteVehicle> vehicles, bool clearedPersonnel, bool clearedVehicles, CancellationToken cancellationToken)
-    {
-        var segments = await db.RoutePlanRoutes.AsNoTracking().Where(item => item.RoutePlan.TransportPlanId == route.TransportPlanId &&
-            item.RoutePlan.Status != RoutePlanStatus.CANCELLED).ToArrayAsync(cancellationToken);
-        var financialPlan = new Response.FinancialPlanResponse
-        {
-            TransportPlanId = route.TransportPlanId,
-            Routes = segments.Where(item => item.TransportProviderId.HasValue)
-                .GroupBy(item => new { item.RoutePlanId, item.OutsourcingCurrency })
-                .OrderBy(group => group.Key.RoutePlanId).ThenBy(group => group.Key.OutsourcingCurrency)
-                .Select(group => new Response.RouteCostResponse
-                {
-                    RoutePlanId = group.Key.RoutePlanId, Currency = group.Key.OutsourcingCurrency,
-                    TotalOutsourcingCost = group.Any(item => !item.OutsourcingCostAmount.HasValue) ? null : group.Sum(item => item.OutsourcingCostAmount),
-                    UnpricedSegments = group.Count(item => !item.OutsourcingCostAmount.HasValue)
-                }).ToArray()
-        };
-        return Map(route, segment, provider, vehicles, clearedPersonnel, clearedVehicles,
-            RoutePersonnel.GetStatus(segments.Where(item => item.RoutePlanId == route.RoutePlanId).ToArray()), financialPlan);
-    }
-
     private static Response Map(RoutePlan route, RoutePlanRoute segment, TransportProvider? provider,
-        IReadOnlyList<RoutePlanRouteVehicle> vehicles, bool clearedPersonnel, bool clearedVehicles, string personnelStatus,
-        Response.FinancialPlanResponse financialPlan) => new()
+        IReadOnlyList<RoutePlanRouteVehicle> vehicles, bool clearedPersonnel, bool clearedVehicles) => new()
     {
         RoutePlanId = route.RoutePlanId, RoutePlanStatus = route.Status.ToString(), ClearedPersonnel = clearedPersonnel, ClearedVehicles = clearedVehicles,
-        PersonnelStatus = personnelStatus,
-        FinancialPlan = financialPlan,
         UpdatedAt = new DateTimeOffset(DateTime.SpecifyKind(route.UpdatedAt, DateTimeKind.Utc)),
         Segment = new Response.SegmentResponse
         {
-            RoutePlanRouteId = segment.RoutePlanRouteId, SequenceNo = segment.SequenceNo, ExecutionType = provider is null ? "INTERNAL" : "OUTSOURCED",
+            RoutePlanRouteId = segment.RoutePlanRouteId, SequenceNo = segment.SequenceNo, IsOutsourced = provider is not null,
             Vehicles = vehicles.Select(item => new Response.VehicleResponse
             {
                 VehicleId = item.VehicleId, VehicleCode = item.Vehicle.VehicleCode, VehicleName = item.Vehicle.VehicleName,
@@ -203,9 +164,7 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
                 {
                     TransportProviderId = provider.TransportProviderId, ProviderCode = provider.ProviderCode, ProviderName = provider.ProviderName,
                     Status = provider.Status.ToString(), SupportedModes = (provider.SupportedModes ?? "").ToUpperInvariant().Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
-                },
-                ServiceType = segment.ServiceType, ProviderReference = segment.ProviderReference,
-                CostAmount = segment.OutsourcingCostAmount, Currency = segment.OutsourcingCurrency
+                }
             },
             Driver = Employee(segment.DriverEmployee), Escort = Employee(segment.EscortEmployee), Note = segment.Note
         }

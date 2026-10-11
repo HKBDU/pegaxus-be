@@ -74,8 +74,7 @@ public class RouteOutsourcingTests
         await db.SaveChangesAsync();
         var service = Service(db);
         var result = await service.SetAsync(actor, segment.RoutePlanId, segment.RoutePlanRouteId, Assign(segment, provider));
-        Assert.Equal("OUTSOURCED", result.Segment.ExecutionType);
-        Assert.Equal("FULLY_ASSIGNED", result.PersonnelStatus);
+        Assert.True(result.Segment.IsOutsourced);
         Assert.True(result.ClearedPersonnel);
         Assert.True(result.ClearedVehicles);
         Assert.Empty(result.Segment.Vehicles);
@@ -84,11 +83,8 @@ public class RouteOutsourcingTests
         Assert.Empty(await db.RoutePlanRouteVehicles.ToListAsync());
         Assert.Null(segment.DriverEmployeeId);
         Assert.Null(segment.EscortEmployeeId);
-        Assert.Equal("AIR_CHARTER", segment.ServiceType);
-        Assert.Equal("AWB-123", segment.ProviderReference);
         var link = await db.TransportPlanProviders.SingleAsync();
         Assert.Equal(provider.TransportProviderId, link.TransportProviderId);
-        Assert.Equal("AIR_CHARTER", link.ServiceType);
         Assert.Equal("Flight note", link.Note);
         Assert.Equal(segment.UpdatedAt, link.AssignedAt);
         Assert.Equal(TimeSpan.Zero, result.UpdatedAt.Offset);
@@ -100,18 +96,15 @@ public class RouteOutsourcingTests
         var otherRoute = new RoutePlan { RoutePlanId = Guid.NewGuid(), RoutePlanCode = "BACKUP", TransportPlan = segment.RoutePlan.TransportPlan,
             CreatedAt = segment.CreatedAt, UpdatedAt = segment.UpdatedAt };
         var other = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = otherRoute, Route = segment.Route, SequenceNo = 1,
-            TransportProvider = provider, ServiceType = "AIR_FEEDER", CreatedAt = segment.CreatedAt, UpdatedAt = segment.UpdatedAt };
+            TransportProvider = provider, CreatedAt = segment.CreatedAt, UpdatedAt = segment.UpdatedAt };
         db.RoutePlanRoutes.Add(other);
         await db.SaveChangesAsync();
         await service.SetAsync(actor, segment.RoutePlanId, segment.RoutePlanRouteId, new() { Outsourced = false, LastUpdatedAt = Offset(segment.RoutePlan.UpdatedAt) });
         Assert.Single(await db.TransportPlanProviders.ToListAsync());
         Assert.Null(segment.TransportProviderId);
-        Assert.Null(segment.ServiceType);
-        Assert.Null(segment.ProviderReference);
         var internalResult = await service.SetAsync(actor, other.RoutePlanId, other.RoutePlanRouteId,
             new() { Outsourced = false, LastUpdatedAt = Offset(otherRoute.UpdatedAt) });
-        Assert.Equal("INTERNAL", internalResult.Segment.ExecutionType);
-        Assert.Equal("NOT_ASSIGNED", internalResult.PersonnelStatus);
+        Assert.False(internalResult.Segment.IsOutsourced);
         Assert.Null(internalResult.Segment.Outsourcing);
         Assert.Empty(await db.TransportPlanProviders.ToListAsync());
 
@@ -126,12 +119,7 @@ public class RouteOutsourcingTests
 
     [Theory]
     [InlineData(RoutePlanStatus.DRAFT, RoutePlanStatus.DRAFT)]
-    [InlineData(RoutePlanStatus.REJECTED_BY_MANAGER, RoutePlanStatus.REJECTED_BY_MANAGER)]
-    [InlineData(RoutePlanStatus.PENDING_LEGAL_REVIEW, RoutePlanStatus.PENDING_LEGAL_REVIEW)]
-    [InlineData(RoutePlanStatus.PENDING_MANAGER_APPROVAL, RoutePlanStatus.PENDING_LEGAL_REVIEW)]
-    [InlineData(RoutePlanStatus.APPROVED, RoutePlanStatus.PENDING_LEGAL_REVIEW)]
-    [InlineData(RoutePlanStatus.CONFIRMED, RoutePlanStatus.PENDING_LEGAL_REVIEW)]
-    public async Task AssignAndRemove_InvalidateReviewWhenRequired(RoutePlanStatus initial, RoutePlanStatus expected)
+    public async Task AssignAndRemove_KeepDraftStatus(RoutePlanStatus initial, RoutePlanStatus expected)
     {
         await using var db = TestSupport.CreateDb();
         var (actor, segment, provider) = await SeedAsync(db);
@@ -147,6 +135,11 @@ public class RouteOutsourcingTests
     }
 
     [Theory]
+    [InlineData(RoutePlanStatus.CONFIRMED)]
+    [InlineData(RoutePlanStatus.PENDING_LEGAL_REVIEW)]
+    [InlineData(RoutePlanStatus.PENDING_MANAGER_APPROVAL)]
+    [InlineData(RoutePlanStatus.REJECTED_BY_MANAGER)]
+    [InlineData(RoutePlanStatus.APPROVED)]
     [InlineData(RoutePlanStatus.ACTIVE)]
     [InlineData(RoutePlanStatus.COMPLETED)]
     [InlineData(RoutePlanStatus.CANCELLED)]
@@ -236,15 +229,15 @@ public class RouteOutsourcingTests
     }
 
     [Fact]
-    public void Validation_RequiresExplicitSelectionTimestampServiceAndBoundedFields()
+    public void Validation_RequiresExplicitSelectionTimestampAndBoundedNote()
     {
         var validator = new Outsourcing.Validator.RequestValidator();
         Assert.False(validator.Validate(new Outsourcing.Request()).IsValid);
         Assert.True(validator.Validate(new Outsourcing.Request { Outsourced = false, LastUpdatedAt = DateTimeOffset.UtcNow }).IsValid);
         Assert.False(validator.Validate(new Outsourcing.Request { Outsourced = false, TransportProviderId = Guid.NewGuid(), LastUpdatedAt = DateTimeOffset.UtcNow }).IsValid);
         Assert.False(validator.Validate(new Outsourcing.Request { Outsourced = true, TransportProviderId = Guid.Empty, LastUpdatedAt = DateTimeOffset.UtcNow }).IsValid);
-        Assert.False(validator.Validate(new Outsourcing.Request { Outsourced = true, TransportProviderId = Guid.NewGuid(), LastUpdatedAt = DateTimeOffset.UtcNow, ServiceType = " " }).IsValid);
-        Assert.False(validator.Validate(new Outsourcing.Request { Outsourced = true, TransportProviderId = Guid.NewGuid(), LastUpdatedAt = DateTimeOffset.UtcNow, ServiceType = new string('x', 101), ProviderReference = new string('x', 256) }).IsValid);
+        Assert.True(validator.Validate(new Outsourcing.Request { Outsourced = true, TransportProviderId = Guid.NewGuid(), LastUpdatedAt = DateTimeOffset.UtcNow }).IsValid);
+        Assert.False(validator.Validate(new Outsourcing.Request { Outsourced = true, TransportProviderId = Guid.NewGuid(), LastUpdatedAt = DateTimeOffset.UtcNow, Note = new string('x', 2001) }).IsValid);
     }
 
     [Fact]
@@ -284,7 +277,7 @@ public class RouteOutsourcingTests
             Assert.Equal(status, response.StatusCode);
             Assert.Equal(code, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
         }
-        await Error(new() { Outsourced = true, LastUpdatedAt = Offset(segment.RoutePlan.UpdatedAt), ServiceType = "AIR_CHARTER" }, HttpStatusCode.BadRequest, "PROVIDER_REQUIRED");
+        await Error(new() { Outsourced = true, LastUpdatedAt = Offset(segment.RoutePlan.UpdatedAt) }, HttpStatusCode.BadRequest, "PROVIDER_REQUIRED");
         provider.SupportedModes = "ROAD";
         await db.SaveChangesAsync();
         await Error(Assign(segment, provider), HttpStatusCode.UnprocessableEntity, "PROVIDER_MODE_MISMATCH");
@@ -300,10 +293,7 @@ public class RouteOutsourcingTests
         var body = await success.Content.ReadFromJsonAsync<JsonElement>();
         Assert.True(body.GetProperty("isSuccess").GetBoolean());
         var value = body.GetProperty("value");
-        Assert.Equal("OUTSOURCED", value.GetProperty("segment").GetProperty("executionType").GetString());
-        Assert.Equal("FULLY_ASSIGNED", value.GetProperty("personnelStatus").GetString());
-        Assert.Equal(1500.25m, value.GetProperty("financialPlan").GetProperty("routes")[0].GetProperty("totalOutsourcingCost").GetDecimal());
-        Assert.Equal("EUR", value.GetProperty("segment").GetProperty("outsourcing").GetProperty("currency").GetString());
+        Assert.True(value.GetProperty("segment").GetProperty("isOutsourced").GetBoolean());
         Assert.Equal(provider.TransportProviderId, value.GetProperty("segment").GetProperty("outsourcing").GetProperty("provider").GetProperty("transportProviderId").GetGuid());
         Assert.Equal(JsonValueKind.Null, value.GetProperty("segment").GetProperty("driver").ValueKind);
         Assert.Equal(0, value.GetProperty("segment").GetProperty("vehicles").GetArrayLength());
@@ -311,7 +301,7 @@ public class RouteOutsourcingTests
         var removed = await client.PutAsJsonAsync(path, new Outsourcing.Request { Outsourced = false, LastUpdatedAt = value.GetProperty("updatedAt").GetDateTimeOffset() });
         Assert.Equal(HttpStatusCode.OK, removed.StatusCode);
         var removedSegment = (await removed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value").GetProperty("segment");
-        Assert.Equal("INTERNAL", removedSegment.GetProperty("executionType").GetString());
+        Assert.False(removedSegment.GetProperty("isOutsourced").GetBoolean());
         Assert.Equal(JsonValueKind.Null, removedSegment.GetProperty("outsourcing").ValueKind);
         Assert.Equal(HttpStatusCode.NotFound, (await client.PutAsJsonAsync(path.Replace(segment.RoutePlanRouteId.ToString(), Guid.NewGuid().ToString()), Assign(segment, provider))).StatusCode);
         await app.StopAsync();
@@ -332,86 +322,6 @@ public class RouteOutsourcingTests
         Assert.Equal("FULLY_ASSIGNED", RoutePersonnel.GetStatus([outsourced, internalSegment]));
         outsourced.TransportProviderId = null;
         Assert.Equal("PARTIALLY_ASSIGNED", RoutePersonnel.GetStatus([outsourced, internalSegment]));
-    }
-
-    [Fact]
-    public async Task FinancialPlan_RecalculatesCostsSeparatelyPerRouteAndCurrencyOnEveryChange()
-    {
-        await using var db = TestSupport.CreateDb();
-        var (actor, first, provider) = await SeedAsync(db);
-        var second = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = first.RoutePlan, Route = first.Route, SequenceNo = 2,
-            CreatedAt = first.CreatedAt, UpdatedAt = first.UpdatedAt };
-        var backup = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), Route = first.Route, SequenceNo = 1,
-            RoutePlan = new RoutePlan { RoutePlanId = Guid.NewGuid(), RoutePlanCode = "BACKUP", TransportPlan = first.RoutePlan.TransportPlan,
-                CreatedAt = first.CreatedAt, UpdatedAt = first.UpdatedAt }, CreatedAt = first.CreatedAt, UpdatedAt = first.UpdatedAt };
-        var cancelled = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), Route = first.Route, SequenceNo = 1, TransportProvider = provider,
-            OutsourcingCostAmount = 999m, OutsourcingCurrency = "EUR",
-            RoutePlan = new RoutePlan { RoutePlanId = Guid.NewGuid(), RoutePlanCode = "CANCELLED", Status = RoutePlanStatus.CANCELLED,
-                TransportPlan = first.RoutePlan.TransportPlan, CreatedAt = first.CreatedAt, UpdatedAt = first.UpdatedAt }, CreatedAt = first.CreatedAt, UpdatedAt = first.UpdatedAt };
-        db.AddRange(second, backup, cancelled);
-        await db.SaveChangesAsync();
-        var service = Service(db);
-        var result = await service.SetAsync(actor, first.RoutePlanId, first.RoutePlanRouteId, Assign(first, provider));
-        Assert.Equal("PARTIALLY_ASSIGNED", result.PersonnelStatus);
-        Assert.Equal(1500.25m, Assert.Single(result.FinancialPlan.Routes).TotalOutsourcingCost);
-        Assert.Equal(first.RoutePlan.TransportPlanId, result.FinancialPlan.TransportPlanId);
-        var request = Assign(second, provider);
-        request.CostAmount = 100.50m;
-        result = await service.SetAsync(actor, second.RoutePlanId, second.RoutePlanRouteId, request);
-        Assert.Equal("FULLY_ASSIGNED", result.PersonnelStatus);
-        Assert.Equal(1600.75m, Assert.Single(result.FinancialPlan.Routes).TotalOutsourcingCost);
-        Assert.Equal("EUR", second.OutsourcingCurrency);
-        request = Assign(backup, provider);
-        request.Currency = "USD";
-        request.CostAmount = 75m;
-        result = await service.SetAsync(actor, backup.RoutePlanId, backup.RoutePlanRouteId, request);
-        Assert.Equal(2, result.FinancialPlan.Routes.Count);
-        Assert.Equal(75m, result.FinancialPlan.Routes.Single(item => item.RoutePlanId == backup.RoutePlanId).TotalOutsourcingCost);
-        Assert.DoesNotContain(result.FinancialPlan.Routes, item => item.RoutePlanId == cancelled.RoutePlanId);
-        request = Assign(second, provider);
-        request.Currency = "USD";
-        request.CostAmount = 40m;
-        result = await service.SetAsync(actor, second.RoutePlanId, second.RoutePlanRouteId, request);
-        Assert.Equal(3, result.FinancialPlan.Routes.Count);
-        Assert.Equal(1500.25m, result.FinancialPlan.Routes.Single(item => item.RoutePlanId == first.RoutePlanId && item.Currency == "EUR").TotalOutsourcingCost);
-        Assert.Equal(40m, result.FinancialPlan.Routes.Single(item => item.RoutePlanId == first.RoutePlanId && item.Currency == "USD").TotalOutsourcingCost);
-        result = await service.SetAsync(actor, second.RoutePlanId, second.RoutePlanRouteId,
-            new() { Outsourced = false, LastUpdatedAt = Offset(second.RoutePlan.UpdatedAt) });
-        Assert.Equal("PARTIALLY_ASSIGNED", result.PersonnelStatus);
-        Assert.Null(second.OutsourcingCostAmount);
-        Assert.Null(second.OutsourcingCurrency);
-        Assert.Null(result.Segment.Outsourcing);
-        Assert.Equal(2, result.FinancialPlan.Routes.Count);
-        result = await service.SetAsync(actor, first.RoutePlanId, first.RoutePlanRouteId,
-            new() { Outsourced = false, LastUpdatedAt = Offset(first.RoutePlan.UpdatedAt) });
-        Assert.Equal(backup.RoutePlanId, Assert.Single(result.FinancialPlan.Routes).RoutePlanId);
-        Assert.Equal("NOT_ASSIGNED", result.PersonnelStatus);
-        backup.OutsourcingCostAmount = null;
-        backup.OutsourcingCurrency = null;
-        await db.SaveChangesAsync();
-        result = await service.SetAsync(actor, first.RoutePlanId, first.RoutePlanRouteId,
-            new() { Outsourced = false, LastUpdatedAt = Offset(first.RoutePlan.UpdatedAt) });
-        Assert.Null(Assert.Single(result.FinancialPlan.Routes).TotalOutsourcingCost);
-        Assert.Equal(1, Assert.Single(result.FinancialPlan.Routes).UnpricedSegments);
-    }
-
-    [Theory]
-    [InlineData(null, "EUR")]
-    [InlineData("-1", "EUR")]
-    [InlineData("1.001", "EUR")]
-    [InlineData("10000000000000000", "EUR")]
-    [InlineData("1", null)]
-    [InlineData("1", "ZZZ")]
-    [InlineData("1", "EURO")]
-    public void CostValidation_RejectsMissingInvalidAndUnrepresentableMoney(string? amount, string? currency)
-    {
-        var request = new Outsourcing.Request { Outsourced = true, TransportProviderId = Guid.NewGuid(), ServiceType = "AIR_CHARTER",
-            CostAmount = amount is null ? null : decimal.Parse(amount, System.Globalization.CultureInfo.InvariantCulture), Currency = currency,
-            LastUpdatedAt = DateTimeOffset.UtcNow };
-        Assert.False(new Outsourcing.Validator.RequestValidator().Validate(request).IsValid);
-        request.CostAmount = 0m;
-        request.Currency = "EUR";
-        Assert.True(new Outsourcing.Validator.RequestValidator().Validate(request).IsValid);
     }
 
     private static Outsourcing.Service Service(AppDbContext db) => new(db, new Outsourcing.Validator.RequestValidator(),
@@ -450,7 +360,7 @@ public class RouteOutsourcingTests
             await Apply(new AddSegmentOutsourcing().UpOperations);
             var (actor, segment, provider) = await SeedAsync(db);
             var secondRoute = new RoutePlan { RoutePlanId = Guid.NewGuid(), RoutePlanCode = "RP-2", TransportPlan = segment.RoutePlan.TransportPlan,
-                UpdatedAt = segment.UpdatedAt, CreatedAt = segment.CreatedAt, Status = RoutePlanStatus.APPROVED };
+                UpdatedAt = segment.UpdatedAt, CreatedAt = segment.CreatedAt, Status = RoutePlanStatus.DRAFT };
             var other = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = secondRoute, Route = segment.Route,
                 SequenceNo = 1, UpdatedAt = segment.UpdatedAt, CreatedAt = segment.CreatedAt };
             db.RoutePlanRoutes.Add(other);
@@ -462,7 +372,7 @@ public class RouteOutsourcingTests
             Assert.Single(await db.TransportPlanProviders.ToListAsync());
             Assert.Equal(2, await db.OutboxMessages.CountAsync());
             Assert.Equal(2, await db.CatalogAuditLogs.CountAsync());
-            Assert.Equal(RoutePlanStatus.PENDING_LEGAL_REVIEW, (await db.RoutePlans.AsNoTracking().SingleAsync(item => item.RoutePlanId == secondRoute.RoutePlanId)).Status);
+            Assert.Equal(RoutePlanStatus.DRAFT, (await db.RoutePlans.AsNoTracking().SingleAsync(item => item.RoutePlanId == secondRoute.RoutePlanId)).Status);
 
             await db.Entry(segment.RoutePlan).ReloadAsync();
             var remove = new Outsourcing.Request { Outsourced = false, LastUpdatedAt = Offset(segment.RoutePlan.UpdatedAt) };
@@ -478,8 +388,6 @@ public class RouteOutsourcingTests
             Assert.Equal(3, await db.OutboxMessages.CountAsync());
             Assert.Equal(3, await db.CatalogAuditLogs.CountAsync());
             var retained = await db.RoutePlanRoutes.AsNoTracking().SingleAsync(item => item.RoutePlanRouteId == other.RoutePlanRouteId);
-            Assert.Equal(1500.25m, retained.OutsourcingCostAmount);
-            Assert.Equal("EUR", retained.OutsourcingCurrency);
 
             await db.Entry(secondRoute).ReloadAsync();
             await new NpgsqlCommand("""
@@ -492,7 +400,6 @@ public class RouteOutsourcingTests
                 await Assert.ThrowsAsync<DbUpdateException>(() => Service(failedDb).SetAsync(actor, other.RoutePlanId, other.RoutePlanRouteId,
                     new() { Outsourced = false, LastUpdatedAt = Offset(secondRoute.UpdatedAt) }));
             Assert.Equal(provider.TransportProviderId, (await db.RoutePlanRoutes.AsNoTracking().SingleAsync(item => item.RoutePlanRouteId == other.RoutePlanRouteId)).TransportProviderId);
-            Assert.Equal(1500.25m, (await db.RoutePlanRoutes.AsNoTracking().SingleAsync(item => item.RoutePlanRouteId == other.RoutePlanRouteId)).OutsourcingCostAmount);
             Assert.Single(await db.TransportPlanProviders.ToListAsync());
             Assert.Equal(3, await db.OutboxMessages.CountAsync());
             Assert.Equal(3, await db.Notifications.CountAsync());
@@ -623,9 +530,8 @@ public class RouteOutsourcingTests
 
     private static Outsourcing.Request Assign(RoutePlanRoute segment, TransportProvider provider) => new()
     {
-        Outsourced = true, TransportProviderId = provider.TransportProviderId, ServiceType = " AIR_CHARTER ",
-        ProviderReference = " AWB-123 ", Note = "Flight note", LastUpdatedAt = Offset(segment.RoutePlan.UpdatedAt),
-        CostAmount = 1500.25m, Currency = " eur "
+        Outsourced = true, TransportProviderId = provider.TransportProviderId,
+        Note = "Flight note", LastUpdatedAt = Offset(segment.RoutePlan.UpdatedAt)
     };
 
     private static async Task<(Guid Actor, RoutePlanRoute Segment, TransportProvider Provider)> SeedAsync(AppDbContext db)
