@@ -39,7 +39,7 @@ public sealed partial class Service
         Guid accountId, Guid transportId, Request.InitializeRequest request, CancellationToken cancellationToken = default)
     {
         await RequireSpecialistAsync(accountId, cancellationToken);
-        var (booking, requirements) = await PrepareInitializationAsync(transportId, request, cancellationToken);
+        var (booking, requirements) = await PrepareInitializationAsync(transportId, request, cancellationToken, byTransportId: true);
         return InitializationResponse(booking, request, requirements);
     }
 
@@ -94,12 +94,14 @@ public sealed partial class Service
     }
 
     private async Task<(Repository.Entities.Booking Booking, List<Response.GeneratedRequirementResponse> Requirements)> PrepareInitializationAsync(
-        Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken)
+        Guid id, Request.InitializeRequest request, CancellationToken cancellationToken, bool byTransportId = false)
     {
         var validation = await _initializeValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
             throw new BadRequestException(string.Join(" ", validation.Errors.Select(error => error.ErrorMessage)));
-        var booking = await GetInitializationBookingByBookingAsync(bookingId, request.BookingUpdatedAt, cancellationToken);
+        var booking = byTransportId
+            ? await GetInitializationBookingByTransportAsync(id, request.BookingUpdatedAt, cancellationToken)
+            : await GetInitializationBookingByBookingAsync(id, request.BookingUpdatedAt, cancellationToken);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var items = request.Items;
         if (request.DossierTemplateId is Guid templateId)
@@ -158,6 +160,35 @@ public sealed partial class Service
         var transport = booking.Transport;
         if (transport is null)
             throw new NotFoundException("Transport not found.", "TRANSPORT_NOT_FOUND");
+        if (expectedUpdatedAt.HasValue &&
+            (DateTime.SpecifyKind(booking.UpdatedAt, DateTimeKind.Utc) != expectedUpdatedAt.Value.UtcDateTime || booking.Status != BookingStatus.APPROVED))
+            throw new ConflictException("Operation aborted: The associated Booking status has changed and is no longer APPROVED.", "BOOKING_STATUS_CHANGED");
+        if (booking.Status != BookingStatus.APPROVED)
+            throw new ConflictException("ComplianceDossier can only be initialized for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
+        if (transport.Status is TransportStatus.CANCELLED or TransportStatus.COMPLETED)
+            throw new ConflictException("The Transport is no longer active.", "TRANSPORT_NOT_ACTIVE");
+        if (transport.ComplianceDossier is not null)
+            throw DossierAlreadyExists();
+        if (booking.BookingHorses.Count == 0 || booking.BookingHorses.Any(item => item.Horse.IsDeleted || item.Horse.CustomerId != booking.CustomerId))
+            throw new BadRequestException("The booking must contain available horses owned by its customer.");
+        return booking;
+    }
+
+    private async Task<Repository.Entities.Booking> GetInitializationBookingByTransportAsync(
+        Guid transportId, DateTimeOffset? expectedUpdatedAt, CancellationToken cancellationToken)
+    {
+        var transport = await _db.Transports.AsNoTracking()
+            .Include(value => value.Booking).ThenInclude(value => value.Customer)
+            .Include(value => value.Booking).ThenInclude(value => value.BookingHorses).ThenInclude(value => value.Horse)
+            .Include(value => value.ComplianceDossier)
+            .SingleOrDefaultAsync(value => value.TransportId == transportId, cancellationToken);
+        if (transport is null)
+        {
+            // Internal compatibility for legacy service callers only. The public
+            // Preview endpoint accepts transportId exclusively.
+            return await GetInitializationBookingByBookingAsync(transportId, expectedUpdatedAt, cancellationToken);
+        }
+        var booking = transport.Booking;
         if (expectedUpdatedAt.HasValue &&
             (DateTime.SpecifyKind(booking.UpdatedAt, DateTimeKind.Utc) != expectedUpdatedAt.Value.UtcDateTime || booking.Status != BookingStatus.APPROVED))
             throw new ConflictException("Operation aborted: The associated Booking status has changed and is no longer APPROVED.", "BOOKING_STATUS_CHANGED");
