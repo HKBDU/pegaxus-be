@@ -79,6 +79,7 @@ public partial class Service : IService
             Customer = new Response.CustomerResponse
             {
                 CustomerId = booking.Customer.CustomerId,
+                CustomerCode = booking.Customer.CustomerCode,
                 FullName = booking.Customer.FullName,
                 Phone = booking.Customer.Phone
             },
@@ -185,7 +186,7 @@ public partial class Service : IService
             Customer = new Response.CustomerResponse
             {
                 CustomerId = booking.Customer.CustomerId,
-                CustomerCode = null,
+                CustomerCode = booking.Customer.CustomerCode,
                 FullName = booking.Customer.FullName,
                 Phone = booking.Customer.Phone
             },
@@ -517,7 +518,7 @@ public partial class Service : IService
                 BookingCode = booking.BookingCode,
                 Status = booking.Status.ToString(),
                 CustomerName = booking.Customer.FullName,
-                CustomerCode = null,
+                CustomerCode = booking.Customer.CustomerCode,
                 OriginAddress = booking.OriginAddress,
                 OriginCountry = booking.OriginCountry,
                 DestinationAddress = booking.DestinationAddress,

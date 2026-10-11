@@ -19,6 +19,7 @@ using Pegaxus.Service.Models;
 using AuthService = Pegaxus.Service.Auth;
 using BookingService = Pegaxus.Service.BookingService;
 using TransportPlanService = Pegaxus.Service.TransportPlanService;
+using RoutePlanService = Pegaxus.Service.RoutePlanService;
 using JwtService = Pegaxus.Service.JwtService;
 using MediaService = Pegaxus.Service.MediaService;
 using CloudinaryService = Pegaxus.Service.CloudinaryService;
@@ -186,6 +187,7 @@ builder.Services.AddScoped<IValidator<AuthService.Request.LogoutRequest>, AuthSe
 builder.Services.AddScoped<IValidator<AuthService.Request.ResetPasswordRequest>, AuthService.Validations.ResetPasswordRequestValidator>();
 builder.Services.AddScoped<BookingService.IService, BookingService.Service>();
 builder.Services.AddScoped<TransportPlanService.IService, TransportPlanService.Service>();
+builder.Services.AddScoped<RoutePlanService.IService, RoutePlanService.Service>();
 builder.Services.AddScoped<IValidator<BookingService.Request.CreateBookingRequest>, BookingService.Validations.CreateBookingRequestValidator>();
 builder.Services.AddScoped<IValidator<BookingService.Request.UpdateBookingRequest>, BookingService.Validations.UpdateBookingRequestValidator>();
 builder.Services.AddScoped<IValidator<BookingService.Request.CancelBookingRequest>, BookingService.Validations.CancelBookingRequestValidator>();
@@ -199,6 +201,18 @@ builder.Services.AddScoped<HorseService.IService, HorseService.Service>();
 builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddScoped<Pegaxus.Service.RouteChangeService.IService, Pegaxus.Service.RouteChangeService.Service>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.CreateRequest>, Pegaxus.Service.RouteChangeService.Validator.CreateRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.DecisionRequest>, Pegaxus.Service.RouteChangeService.Validator.DecisionRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.ActivationRequest>, Pegaxus.Service.RouteChangeService.Validator.ActivationRequestValidator>();
+builder.Services.AddScoped<Pegaxus.Service.PersonnelAssignmentService.IService, Pegaxus.Service.PersonnelAssignmentService.Service>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.PersonnelAssignmentService.Request.AssignRequest>, Pegaxus.Service.PersonnelAssignmentService.Validator.AssignRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.PersonnelAssignmentService.Request.ReplaceRequest>, Pegaxus.Service.PersonnelAssignmentService.Validator.ReplaceRequestValidator>();
+builder.Services.AddScoped<Pegaxus.Service.VehicleService.IService, Pegaxus.Service.VehicleService.Service>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.VehicleService.Request.ListRequest>, Pegaxus.Service.VehicleService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.VehicleService.Request.CreateRequest>, Pegaxus.Service.VehicleService.Validator.CreateRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.VehicleService.Request.UpdateRequest>, Pegaxus.Service.VehicleService.Validator.UpdateRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.VehicleService.Request.StatusRequest>, Pegaxus.Service.VehicleService.Validator.StatusRequestValidator>();
 builder.Services.AddHostedService<Pegaxus.API.Services.MissingDocumentReminderWorker>();
 builder.Services.AddHostedService<Pegaxus.API.Services.TransactionalOutboxWorker>();
 builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
@@ -213,9 +227,16 @@ builder.Services.AddScoped<ComplianceRequirementService.IService, ComplianceRequ
 builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.ListRequest>, ComplianceRequirementService.Validator.ListRequestValidator>();
 builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.SaveRequest>, ComplianceRequirementService.Validator.SaveRequestValidator>();
 builder.Services.AddScoped<IValidator<ComplianceRequirementService.Request.StatusRequest>, ComplianceRequirementService.Validator.StatusRequestValidator>();
+builder.Services.AddScoped<Pegaxus.Service.TransportProviderService.IService, Pegaxus.Service.TransportProviderService.Service>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.ListRequest>, Pegaxus.Service.TransportProviderService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.CreateRequest>, Pegaxus.Service.TransportProviderService.Validator.CreateRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.UpdateRequest>, Pegaxus.Service.TransportProviderService.Validator.UpdateRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.StatusRequest>, Pegaxus.Service.TransportProviderService.Validator.StatusRequestValidator>();
 
 
 builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
+builder.Services.AddScoped<Pegaxus.Service.RouteOutsourcingService.IService, Pegaxus.Service.RouteOutsourcingService.Service>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteOutsourcingService.Request>, Pegaxus.Service.RouteOutsourcingService.Validator.RequestValidator>();
 
 var app = builder.Build();
 

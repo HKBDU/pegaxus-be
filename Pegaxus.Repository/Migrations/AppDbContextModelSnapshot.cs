@@ -23,7 +23,10 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "account_status", new[] { "ACTIVE", "INACTIVE", "SUSPENDED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "account_type", new[] { "CUSTOMER", "EMPLOYEE" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "approval_decision", new[] { "APPROVED", "REJECTED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "audit_visibility", new[] { "Public", "Internal" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "authority_evidence_type", new[] { "Acceptance", "Rejection", "AdditionalInformation", "Other" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "authority_submission_status", new[] { "DRAFT", "SUBMITTED", "PENDING", "APPROVED", "REJECTED", "RETURNED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "booking_assignment_status", new[] { "ACTIVE", "REVOKED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "booking_history_type", new[] { "SUBMIT", "APPROVE", "REJECT", "CANCEL" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "booking_status", new[] { "DRAFT", "PENDING", "APPROVED", "REJECTED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "claim_resolution_type", new[] { "COMPENSATION", "PARTIAL_COMPENSATION", "REFUND", "SERVICE_RECOVERY", "NO_COMPENSATION", "OTHER" });
@@ -31,7 +34,10 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "claim_type", new[] { "HORSE_INJURY", "HORSE_HEALTH", "LOSS", "DAMAGE", "DELAY", "DOCUMENT_ISSUE", "SERVICE_ISSUE", "OTHER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "compliance_document_status", new[] { "PROVIDED", "PENDING", "APPROVED", "REJECTED", "EXPIRED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "compliance_dossier_status", new[] { "DRAFT", "IN_PREPARATION", "READY_FOR_SUBMISSION", "SUBMITTED", "PENDING", "APPROVED", "REJECTED", "CLOSED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "compliance_requirement_category", new[] { "Quarantine", "Customs", "Transport", "HorseHealth", "HorseIdentity", "Other" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "compliance_requirement_status", new[] { "ACTIVE", "INACTIVE" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "customs_clearance_proof_status", new[] { "PendingVerification", "Cleared", "Held", "Rejected" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "customs_lane", new[] { "GreenLane", "OrangeLane", "RedLane" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "document_request_status", new[] { "OPEN", "FULFILLED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "document_request_type", new[] { "MISSING_DOCUMENT", "REVISION", "REUPLOAD", "ADDITIONAL_INFORMATION" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "document_review_result", new[] { "APPROVED", "REJECTED", "REVISION_REQUIRED", "REVOKED" });
@@ -48,26 +54,28 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "horse_incident_type", new[] { "INJURY", "DEHYDRATION", "RESPIRATORY_ISSUE", "FEVER", "STRESS", "COLIC", "FATIGUE", "OTHER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "horse_sex", new[] { "MALE", "FEMALE", "GELDING" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "hydration_status", new[] { "NORMAL", "MILD_DEHYDRATION", "MODERATE_DEHYDRATION", "SEVERE_DEHYDRATION" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "incident_category", new[] { "VEHICLE", "HORSE_HEALTH", "BOTH" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "incident_category", new[] { "VEHICLE", "HORSE_HEALTH", "BOTH", "ROUTE_CHANGE" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "incident_severity", new[] { "LOW", "MEDIUM", "HIGH", "CRITICAL" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "incident_status", new[] { "REPORTED", "PENDING", "RESOLVED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_history_type", new[] { "CREATE", "ISSUE", "RECORD_PAYMENT", "MARK_OVERDUE", "CANCEL" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_item_type", new[] { "TRANSPORT_FEE", "HORSE_SERVICE_FEE", "HANDLING_FEE", "COMPLIANCE_FEE", "EMERGENCY_COST", "OTHER" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_type", new[] { "QUOTATION", "DEPOSIT", "FINAL", "SUPPLEMENTARY", "CREDIT_NOTE" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_status", new[] { "DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "location_type", new[] { "CITY", "BORDER_GATE", "AIRPORT", "SEAPORT", "STABLE", "REST_STOP", "OTHER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "notification_priority", new[] { "LOW", "NORMAL", "HIGH", "URGENT" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "notification_type", new[] { "BOOKING", "TRANSPORT", "ROUTE", "HANDOVER", "HORSE_HEALTH", "INCIDENT", "EMERGENCY_COST", "PAYMENT", "CLAIM", "COMPLIANCE", "DOCUMENT", "SYSTEM" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "payment_method", new[] { "CASH", "BANK_TRANSFER", "OTHER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "provider_status", new[] { "ACTIVE", "INACTIVE", "SUSPENDED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "quarantine_proof_status", new[] { "PendingVerification", "Passed", "PassedWithConditions", "Holdback", "Failed", "Rejected" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "receipt_status", new[] { "PENDING", "CONFIRMED", "FAILED", "REFUNDED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "recipient_status", new[] { "PENDING", "DELIVERED", "READ", "FAILED" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_type", new[] { "PRIMARY", "BACKUP" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED", "PENDING_LEGAL_REVIEW", "PENDING_MANAGER_APPROVAL", "REJECTED_BY_MANAGER", "APPROVED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_type", new[] { "PRIMARY", "BACKUP", "RETURN" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_mode", new[] { "ROAD", "SEA", "AIR" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_plan_status", new[] { "DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_status", new[] { "CREATED", "PLANNING", "READY", "IN_TRANSIT", "COMPLETED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_incident_type", new[] { "BREAKDOWN", "ACCIDENT", "TIRE_DAMAGE", "ENGINE_FAILURE", "TEMPERATURE_CONTROL_FAILURE", "EQUIPMENT_FAILURE", "OTHER" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE", "SUSPENDED", "OUT_OF_SERVICE" });
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Account", b =>
@@ -194,6 +202,68 @@ namespace Pegaxus.Repository.Migrations
                     b.ToTable("AccountNotification", (string)null);
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.AuditDossier", b =>
+                {
+                    b.Property<Guid>("AuditDossierId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("audit_dossier_id");
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("action_type");
+
+                    b.Property<Guid>("ActorAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_account_id");
+
+                    b.Property<Guid>("ComplianceDossierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("compliance_dossier_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Details")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("details");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text")
+                        .HasColumnName("summary");
+
+                    b.Property<string>("TargetEntity")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("target_entity");
+
+                    b.Property<Guid?>("TargetId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("target_id");
+
+                    b.Property<int>("Visibility")
+                        .HasColumnType("audit_visibility")
+                        .HasColumnName("visibility");
+
+                    b.HasKey("AuditDossierId")
+                        .HasName("AuditDossier_pkey");
+
+                    b.HasIndex("Visibility")
+                        .HasDatabaseName("AuditDossier_visibility_idx");
+
+                    b.HasIndex(new[] { "ActorAccountId" }, "AuditDossier_actor_account_id_idx");
+
+                    b.HasIndex(new[] { "ComplianceDossierId" }, "AuditDossier_compliance_dossier_id_idx");
+
+                    b.HasIndex(new[] { "TargetEntity", "TargetId" }, "AuditDossier_target_entity_target_id_idx");
+
+                    b.ToTable("AuditDossier", (string)null);
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.AuthoritySubmission", b =>
                 {
                     b.Property<Guid>("AuthoritySubmissionId")
@@ -219,6 +289,25 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("decision_note");
 
+                    b.Property<bool>("IsRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true)
+                        .HasColumnName("is_required");
+
+                    b.Property<DateOnly?>("PermitExpiryDate")
+                        .HasColumnType("date")
+                        .HasColumnName("permit_expiry_date");
+
+                    b.Property<DateOnly?>("PermitIssuedDate")
+                        .HasColumnType("date")
+                        .HasColumnName("permit_issued_date");
+
+                    b.Property<string>("PermitNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("permit_number");
+
                     b.Property<string>("RejectionReason")
                         .HasColumnType("text")
                         .HasColumnName("rejection_reason");
@@ -226,6 +315,10 @@ namespace Pegaxus.Repository.Migrations
                     b.Property<DateTime?>("ResponseReceivedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("response_received_at");
+
+                    b.Property<DateOnly?>("RevisionDueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("revision_due_date");
 
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
@@ -251,6 +344,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("submitted_at");
 
+                    b.Property<Guid>("SubmittedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submitted_by_account_id");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
@@ -260,6 +357,8 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex("Status")
                         .HasDatabaseName("AuthoritySubmission_status_idx");
+
+                    b.HasIndex("SubmittedByAccountId");
 
                     b.HasIndex(new[] { "ComplianceDossierId" }, "AuthoritySubmission_compliance_dossier_id_idx");
 
@@ -272,6 +371,67 @@ namespace Pegaxus.Repository.Migrations
                         {
                             t.HasComment("AuthoritySubmission: Một lần thực tế gửi ComplianceDossier tới cơ quan có thẩm quyền. Một dossier có thể được gửi nhiều lần nếu bị trả về hoặc từ chối.");
                         });
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.AuthoritySubmissionEvidenceFile", b =>
+                {
+                    b.Property<Guid>("AuthoritySubmissionEvidenceFileId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("authority_submission_evidence_file_id");
+
+                    b.Property<Guid>("AuthoritySubmissionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("authority_submission_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<int>("EvidenceType")
+                        .HasColumnType("authority_evidence_type")
+                        .HasColumnName("evidence_type");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<long?>("FileSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("file_size_bytes");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("file_url");
+
+                    b.Property<string>("MimeType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("mime_type");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("UploadedByEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by_employee_id");
+
+                    b.HasKey("AuthoritySubmissionEvidenceFileId")
+                        .HasName("AuthoritySubmissionEvidenceFile_pkey");
+
+                    b.HasIndex("EvidenceType")
+                        .HasDatabaseName("AuthoritySubmissionEvidenceFile_evidence_type_idx");
+
+                    b.HasIndex(new[] { "AuthoritySubmissionId" }, "AuthoritySubmissionEvidenceFile_authority_submission_id_idx");
+
+                    b.HasIndex(new[] { "UploadedByEmployeeId" }, "AuthoritySubmissionEvidenceFile_uploaded_by_employee_id_idx");
+
+                    b.ToTable("AuthoritySubmissionEvidenceFile", (string)null);
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Booking", b =>
@@ -392,6 +552,64 @@ namespace Pegaxus.Repository.Migrations
                     b.ToTable("Booking", (string)null);
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.BookingEmployeeAssignment", b =>
+                {
+                    b.Property<Guid>("BookingEmployeeAssignmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("booking_employee_assignment_id");
+
+                    b.Property<DateTime>("AssignedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("assigned_at");
+
+                    b.Property<Guid>("AssignedByEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("assigned_by_employee_id");
+
+                    b.Property<int>("AssignmentRole")
+                        .HasColumnType("employee_role")
+                        .HasColumnName("assignment_role");
+
+                    b.Property<Guid>("BookingId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("booking_id");
+
+                    b.Property<Guid>("EmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("employee_id");
+
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
+                    b.Property<DateTime?>("RevokedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("revoked_at");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("booking_assignment_status")
+                        .HasColumnName("status")
+                        .HasDefaultValueSql("'ACTIVE'::booking_assignment_status");
+
+                    b.HasKey("BookingEmployeeAssignmentId")
+                        .HasName("BookingEmployeeAssignment_pkey");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("BookingEmployeeAssignment_status_idx");
+
+                    b.HasIndex(new[] { "BookingId", "AssignmentRole" }, "BookingEmployeeAssignment_active_role_idx")
+                        .IsUnique()
+                        .HasFilter("status = 'ACTIVE'");
+
+                    b.HasIndex(new[] { "AssignedByEmployeeId" }, "BookingEmployeeAssignment_assigned_by_employee_id_idx");
+
+                    b.HasIndex(new[] { "EmployeeId" }, "BookingEmployeeAssignment_employee_id_idx");
+
+                    b.ToTable("BookingEmployeeAssignment", (string)null);
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.BookingHorse", b =>
                 {
                     b.Property<Guid>("BookingId")
@@ -469,6 +687,67 @@ namespace Pegaxus.Repository.Migrations
                         {
                             t.HasComment("BookingStatusHistory: Lịch sử thay đổi trạng thái Booking. type cho biết hành động nghiệp vụ nào đã gây ra thay đổi status.");
                         });
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.CatalogAuditLog", b =>
+                {
+                    b.Property<Guid>("CatalogAuditLogId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("catalog_audit_log_id");
+
+                    b.Property<string>("ActionType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("action_type");
+
+                    b.Property<Guid>("ActorAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("actor_account_id");
+
+                    b.Property<string>("AfterData")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("after_data");
+
+                    b.Property<string>("BeforeData")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("before_data");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("EntityType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("entity_type");
+
+                    b.Property<string>("ReferenceCountSnapshot")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("reference_count_snapshot");
+
+                    b.Property<string>("Summary")
+                        .HasColumnType("text")
+                        .HasColumnName("summary");
+
+                    b.HasKey("CatalogAuditLogId")
+                        .HasName("CatalogAuditLog_pkey");
+
+                    b.HasIndex(new[] { "ActorAccountId" }, "CatalogAuditLog_actor_account_id_idx");
+
+                    b.HasIndex(new[] { "CreatedAt" }, "CatalogAuditLog_created_at_idx");
+
+                    b.HasIndex(new[] { "EntityType", "EntityId" }, "CatalogAuditLog_entity_type_entity_id_idx");
+
+                    b.ToTable("CatalogAuditLog", (string)null);
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Claim", b =>
@@ -661,6 +940,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid>("CreatedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_account_id");
+
                     b.Property<string>("DocumentCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -709,11 +992,19 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<Guid>("UpdatedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_account_id");
+
                     b.HasKey("ComplianceDocumentId")
                         .HasName("ComplianceDocument_pkey");
 
+                    b.HasIndex("CreatedByAccountId");
+
                     b.HasIndex("Status")
                         .HasDatabaseName("ComplianceDocument_status_idx");
+
+                    b.HasIndex("UpdatedByAccountId");
 
                     b.HasIndex(new[] { "DocumentCode" }, "ComplianceDocument_document_code_key")
                         .IsUnique();
@@ -786,7 +1077,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("status")
                         .HasDefaultValueSql("'DRAFT'::compliance_dossier_status");
 
-                    b.Property<Guid?>("TransportId")
+                    b.Property<Guid>("TransportId")
                         .HasColumnType("uuid")
                         .HasColumnName("transport_id");
 
@@ -797,13 +1088,13 @@ namespace Pegaxus.Repository.Migrations
                     b.HasKey("ComplianceDossierId")
                         .HasName("ComplianceDossier_pkey");
 
-                    b.HasIndex(new[] { "DossierTemplateId" }, "ComplianceDossier_dossier_template_id_idx");
-
                     b.HasIndex("Status")
                         .HasDatabaseName("ComplianceDossier_status_idx");
 
                     b.HasIndex(new[] { "DossierCode" }, "ComplianceDossier_dossier_code_key")
                         .IsUnique();
+
+                    b.HasIndex(new[] { "DossierTemplateId" }, "ComplianceDossier_dossier_template_id_idx");
 
                     b.HasIndex(new[] { "TransportId" }, "ComplianceDossier_transport_id_key")
                         .IsUnique();
@@ -820,6 +1111,20 @@ namespace Pegaxus.Repository.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("compliance_requirement_id");
+
+                    b.Property<string>("BcpCode")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("bcp_code");
+
+                    b.Property<int>("Category")
+                        .HasColumnType("compliance_requirement_category")
+                        .HasColumnName("category");
+
+                    b.Property<string>("Country")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("country");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
@@ -848,6 +1153,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("issuing_authority");
 
+                    b.Property<string>("LegalBasis")
+                        .HasColumnType("text")
+                        .HasColumnName("legal_basis");
+
                     b.Property<string>("RequirementCode")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -870,6 +1179,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<int?>("ValidityPeriodDays")
+                        .HasColumnType("integer")
+                        .HasColumnName("validity_period_days");
+
                     b.Property<bool>("ValidityRequired")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -878,6 +1191,9 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasKey("ComplianceRequirementId")
                         .HasName("ComplianceRequirement_pkey");
+
+                    b.HasIndex("Category")
+                        .HasDatabaseName("ComplianceRequirement_category_idx");
 
                     b.HasIndex("DeletedByAccountId");
 
@@ -960,6 +1276,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
+                    b.Property<string>("CustomerCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("customer_code");
+
                     b.Property<string>("Address")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -970,13 +1292,13 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("country");
 
-                    b.Property<DateOnly?>("DateOfBirth")
-                        .HasColumnType("date")
-                        .HasColumnName("date_of_birth");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date")
+                        .HasColumnName("date_of_birth");
 
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp without time zone")
@@ -1020,6 +1342,9 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "AccountId" }, "Customer_account_id_key")
                         .IsUnique();
 
+                    b.HasIndex(new[] { "CustomerCode" }, "Customer_customer_code_key")
+                        .IsUnique();
+
                     b.HasIndex(new[] { "IsDeleted" }, "Customer_is_deleted_idx");
 
                     b.HasIndex(new[] { "Phone" }, "Customer_phone_idx");
@@ -1027,175 +1352,114 @@ namespace Pegaxus.Repository.Migrations
                     b.ToTable("Customer", (string)null);
                 });
 
-            modelBuilder.Entity("Pegaxus.Repository.Entities.MissingDocumentReminder", b =>
+            modelBuilder.Entity("Pegaxus.Repository.Entities.CustomsClearanceProof", b =>
                 {
-                    b.Property<Guid>("MissingDocumentReminderId").ValueGeneratedOnAdd().HasColumnType("uuid").HasColumnName("missing_document_reminder_id");
-                    b.Property<Guid>("ComplianceDossierId").HasColumnType("uuid").HasColumnName("compliance_dossier_id");
-                    b.Property<Guid>("RecipientAccountId").HasColumnType("uuid").HasColumnName("recipient_account_id");
-                    b.Property<Guid[]>("RequirementIds").IsRequired().HasColumnType("uuid[]").HasColumnName("requirement_ids");
-                    b.Property<DateOnly>("DueDate").HasColumnType("date").HasColumnName("due_date");
-                    b.Property<string>("Note").HasMaxLength(2000).HasColumnType("character varying(2000)").HasColumnName("note");
-                    b.Property<DateOnly?>("AutomaticDate").HasColumnType("date").HasColumnName("automatic_date");
-                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp without time zone").HasColumnName("created_at");
-                    b.Property<DateTime?>("LastAttemptAt").HasColumnType("timestamp without time zone").HasColumnName("last_attempt_at");
-                    b.Property<DateTime?>("EmailSentAt").HasColumnType("timestamp without time zone").HasColumnName("email_sent_at");
-                    b.Property<DateTime?>("CancelledAt").HasColumnType("timestamp without time zone").HasColumnName("cancelled_at");
-                    b.Property<int>("EmailAttempts").HasColumnType("integer").HasColumnName("email_attempts");
-                    b.HasKey("MissingDocumentReminderId").HasName("MissingDocumentReminder_pkey");
-                    b.HasIndex(new[] { "ComplianceDossierId", "AutomaticDate" }, "MissingDocumentReminder_daily_key").IsUnique().HasFilter("automatic_date IS NOT NULL");
-                    b.HasIndex(new[] { "EmailSentAt", "CancelledAt", "LastAttemptAt" }, "MissingDocumentReminder_pending_idx");
-                    b.HasIndex(new[] { "RecipientAccountId" }, "MissingDocumentReminder_recipient_idx");
-                    b.ToTable("MissingDocumentReminder");
-                });
-
-            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequest", b =>
-                {
-                    b.Property<Guid>("DocumentRequestId")
+                    b.Property<Guid>("CustomsClearanceProofId")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
-                        .HasColumnName("document_request_id");
+                        .HasColumnName("customs_clearance_proof_id");
 
-                    b.Property<Guid?>("DocumentReviewId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("document_review_id");
+                    b.Property<DateOnly?>("AtaCarnetExpiryDate")
+                        .HasColumnType("date")
+                        .HasColumnName("ata_carnet_expiry_date");
 
-                    b.Property<string>("ErrorCategory")
-                        .HasMaxLength(40)
-                        .HasColumnType("character varying(40)")
-                        .HasColumnName("error_category");
-
-                    b.Property<string>("CancellationReason")
-                        .HasColumnType("text")
-                        .HasColumnName("cancellation_reason");
-
-                    b.Property<DateTime?>("CancelledAt")
+                    b.Property<DateTime?>("ClearanceAt")
                         .HasColumnType("timestamp without time zone")
-                        .HasColumnName("cancelled_at");
+                        .HasColumnName("clearance_at");
+
+                    b.Property<Guid>("ComplianceDossierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("compliance_dossier_id");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<Guid>("DossierRequirementId")
+                    b.Property<int?>("CustomsLane")
+                        .HasColumnType("customs_lane")
+                        .HasColumnName("customs_lane");
+
+                    b.Property<string>("CustomsPortName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("customs_port_name");
+
+                    b.Property<DateTime?>("FinalizedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("finalized_at");
+
+                    b.Property<bool>("IsFinalized")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_finalized");
+
+                    b.Property<Guid?>("LocationId")
                         .HasColumnType("uuid")
-                        .HasColumnName("dossier_requirement_id");
+                        .HasColumnName("location_id");
 
-                    b.Property<DateOnly?>("DueDate")
-                        .HasColumnType("date")
-                        .HasColumnName("due_date");
+                    b.Property<string>("MrnNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("mrn_number");
 
-                    b.Property<DateTime?>("FulfilledAt")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("fulfilled_at");
-
-                    b.Property<string>("Message")
-                        .IsRequired()
+                    b.Property<string>("RejectionReason")
                         .HasColumnType("text")
-                        .HasColumnName("message");
-
-                    b.Property<string>("RequestCode")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)")
-                        .HasColumnName("request_code");
-
-                    b.Property<int>("RequestType")
-                        .HasColumnType("document_request_type")
-                        .HasColumnName("request_type");
-
-                    b.Property<DateTime>("RequestedAt")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("requested_at");
+                        .HasColumnName("rejection_reason");
 
                     b.Property<int>("Status")
                         .ValueGeneratedOnAdd()
-                        .HasColumnType("document_request_status")
+                        .HasColumnType("customs_clearance_proof_status")
                         .HasColumnName("status")
-                        .HasDefaultValueSql("'OPEN'::document_request_status");
+                        .HasDefaultValueSql("'PendingVerification'::customs_clearance_proof_status");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<Guid>("SubmittedByEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submitted_by_employee_id");
+
+                    b.Property<string>("SubmittedNote")
+                        .HasColumnType("text")
+                        .HasColumnName("submitted_note");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
-                    b.HasKey("DocumentRequestId")
-                        .HasName("DocumentRequest_pkey");
+                    b.Property<string>("VerificationNote")
+                        .HasColumnType("text")
+                        .HasColumnName("verification_note");
 
-                    b.HasIndex(new[] { "DocumentReviewId" }, "DocumentRequest_document_review_id_key")
-                        .IsUnique();
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("verified_at");
 
-                    b.HasIndex("RequestType")
-                        .HasDatabaseName("DocumentRequest_request_type_idx");
+                    b.Property<Guid?>("VerifiedByEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("verified_by_employee_id");
+
+                    b.HasKey("CustomsClearanceProofId")
+                        .HasName("CustomsClearanceProof_pkey");
+
+                    b.HasIndex("CustomsLane")
+                        .HasDatabaseName("CustomsClearanceProof_customs_lane_idx");
 
                     b.HasIndex("Status")
-                        .HasDatabaseName("DocumentRequest_status_idx");
+                        .HasDatabaseName("CustomsClearanceProof_status_idx");
 
-                    b.HasIndex(new[] { "DossierRequirementId" }, "DocumentRequest_dossier_requirement_id_idx");
+                    b.HasIndex(new[] { "ComplianceDossierId" }, "CustomsClearanceProof_compliance_dossier_id_idx");
 
-                    b.HasIndex(new[] { "RequestCode" }, "DocumentRequest_request_code_key")
-                        .IsUnique();
+                    b.HasIndex(new[] { "LocationId" }, "CustomsClearanceProof_location_id_idx");
 
-                    b.HasIndex(new[] { "RequestedAt" }, "DocumentRequest_requested_at_idx");
+                    b.HasIndex(new[] { "SubmittedByEmployeeId" }, "CustomsClearanceProof_submitted_by_employee_id_idx");
 
-                    b.ToTable("DocumentRequest", null, t =>
-                        {
-                            t.HasComment("DocumentRequest: Yêu cầu gửi tới Customer để cung cấp, sửa, upload lại hoặc bổ sung thông tin cho một DossierRequirement.");
-                        });
-                });
+                    b.HasIndex(new[] { "VerifiedByEmployeeId" }, "CustomsClearanceProof_verified_by_employee_id_idx");
 
-            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequestComment", b =>
-                {
-                    b.Property<Guid>("DocumentRequestCommentId").ValueGeneratedOnAdd().HasColumnType("uuid").HasColumnName("document_request_comment_id");
-                    b.Property<Guid>("DocumentRequestId").HasColumnType("uuid").HasColumnName("document_request_id");
-                    b.Property<Guid>("AuthorAccountId").HasColumnType("uuid").HasColumnName("author_account_id");
-                    b.Property<string>("Message").IsRequired().HasMaxLength(2000).HasColumnType("character varying(2000)").HasColumnName("message");
-                    b.Property<DateTime>("CreatedAt").HasColumnType("timestamp without time zone").HasColumnName("created_at");
-                    b.HasKey("DocumentRequestCommentId").HasName("DocumentRequestComment_pkey");
-                    b.HasIndex(new[] { "DocumentRequestId", "CreatedAt" }, "DocumentRequestComment_request_created_idx");
-                    b.HasIndex(new[] { "AuthorAccountId" }, "DocumentRequestComment_author_account_id_idx");
-                    b.ToTable("DocumentRequestComment");
-                });
-
-            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentReview", b =>
-                {
-                    b.Property<Guid>("DocumentReviewId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("document_review_id");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("created_at");
-
-                    b.Property<Guid>("DocumentVersionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("document_version_id");
-
-                    b.Property<int>("Result")
-                        .HasColumnType("document_review_result")
-                        .HasColumnName("result");
-
-                    b.Property<string>("ReviewComment")
-                        .HasColumnType("text")
-                        .HasColumnName("review_comment");
-
-                    b.Property<DateTime>("ReviewedAt")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("reviewed_at");
-
-                    b.HasKey("DocumentReviewId")
-                        .HasName("DocumentReview_pkey");
-
-                    b.HasIndex("Result")
-                        .HasDatabaseName("DocumentReview_result_idx");
-
-                    b.HasIndex(new[] { "DocumentVersionId" }, "DocumentReview_document_version_id_idx");
-
-                    b.HasIndex(new[] { "ReviewedAt" }, "DocumentReview_reviewed_at_idx");
-
-                    b.ToTable("DocumentReview", null, t =>
-                        {
-                            t.HasComment("DocumentReview: Kết quả kiểm tra của một DocumentVersion cụ thể, ví dụ APPROVED, REJECTED hoặc REVISION_REQUIRED.");
-                        });
+                    b.ToTable("CustomsClearanceProof", (string)null);
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentAttachment", b =>
@@ -1205,13 +1469,13 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("document_attachment_id");
 
-                    b.Property<Guid>("DocumentVersionId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("document_version_id");
-
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<Guid>("DocumentVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_version_id");
 
                     b.Property<string>("FileName")
                         .IsRequired()
@@ -1249,6 +1513,190 @@ namespace Pegaxus.Repository.Migrations
                     b.ToTable("DocumentAttachment", null, t =>
                         {
                             t.HasComment("DocumentAttachment: Một file cụ thể thuộc cùng một lần nộp giấy tờ.");
+                        });
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequest", b =>
+                {
+                    b.Property<Guid>("DocumentRequestId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_request_id");
+
+                    b.Property<string>("CancellationReason")
+                        .HasColumnType("text")
+                        .HasColumnName("cancellation_reason");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("DocumentReviewId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_review_id");
+
+                    b.Property<Guid>("DossierRequirementId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("dossier_requirement_id");
+
+                    b.Property<DateOnly?>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<string>("ErrorCategory")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)")
+                        .HasColumnName("error_category");
+
+                    b.Property<DateTime?>("FulfilledAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("fulfilled_at");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("message");
+
+                    b.Property<string>("RequestCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("request_code");
+
+                    b.Property<int>("RequestType")
+                        .HasColumnType("document_request_type")
+                        .HasColumnName("request_type");
+
+                    b.Property<DateTime>("RequestedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("requested_at");
+
+                    b.Property<Guid>("RequestedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_account_id");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("document_request_status")
+                        .HasColumnName("status")
+                        .HasDefaultValueSql("'OPEN'::document_request_status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("DocumentRequestId")
+                        .HasName("DocumentRequest_pkey");
+
+                    b.HasIndex("RequestType")
+                        .HasDatabaseName("DocumentRequest_request_type_idx");
+
+                    b.HasIndex("RequestedByAccountId");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("DocumentRequest_status_idx");
+
+                    b.HasIndex(new[] { "DocumentReviewId" }, "DocumentRequest_document_review_id_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "DossierRequirementId" }, "DocumentRequest_dossier_requirement_id_idx");
+
+                    b.HasIndex(new[] { "RequestCode" }, "DocumentRequest_request_code_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "RequestedAt" }, "DocumentRequest_requested_at_idx");
+
+                    b.ToTable("DocumentRequest", null, t =>
+                        {
+                            t.HasComment("DocumentRequest: Yêu cầu gửi tới Customer để cung cấp, sửa, upload lại hoặc bổ sung thông tin cho một DossierRequirement.");
+                        });
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequestComment", b =>
+                {
+                    b.Property<Guid>("DocumentRequestCommentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_request_comment_id");
+
+                    b.Property<Guid>("AuthorAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("author_account_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DocumentRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_request_id");
+
+                    b.Property<string>("Message")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("message");
+
+                    b.HasKey("DocumentRequestCommentId")
+                        .HasName("DocumentRequestComment_pkey");
+
+                    b.HasIndex(new[] { "AuthorAccountId" }, "DocumentRequestComment_author_account_id_idx");
+
+                    b.HasIndex(new[] { "DocumentRequestId", "CreatedAt" }, "DocumentRequestComment_request_created_idx");
+
+                    b.ToTable("DocumentRequestComment", (string)null);
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentReview", b =>
+                {
+                    b.Property<Guid>("DocumentReviewId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_review_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid>("DocumentVersionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("document_version_id");
+
+                    b.Property<int>("Result")
+                        .HasColumnType("document_review_result")
+                        .HasColumnName("result");
+
+                    b.Property<string>("ReviewComment")
+                        .HasColumnType("text")
+                        .HasColumnName("review_comment");
+
+                    b.Property<DateTime>("ReviewedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("reviewed_at");
+
+                    b.Property<Guid>("ReviewedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("reviewed_by_account_id");
+
+                    b.HasKey("DocumentReviewId")
+                        .HasName("DocumentReview_pkey");
+
+                    b.HasIndex("Result")
+                        .HasDatabaseName("DocumentReview_result_idx");
+
+                    b.HasIndex("ReviewedByAccountId");
+
+                    b.HasIndex(new[] { "DocumentVersionId" }, "DocumentReview_document_version_id_idx");
+
+                    b.HasIndex(new[] { "ReviewedAt" }, "DocumentReview_reviewed_at_idx");
+
+                    b.ToTable("DocumentReview", null, t =>
+                        {
+                            t.HasComment("DocumentReview: Kết quả kiểm tra của một DocumentVersion cụ thể, ví dụ APPROVED, REJECTED hoặc REVISION_REQUIRED.");
                         });
                 });
 
@@ -1296,12 +1744,18 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("uploaded_at");
 
+                    b.Property<Guid>("UploadedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("uploaded_by_account_id");
+
                     b.Property<int>("VersionNo")
                         .HasColumnType("integer")
                         .HasColumnName("version_no");
 
                     b.HasKey("DocumentVersionId")
                         .HasName("DocumentVersion_pkey");
+
+                    b.HasIndex("UploadedByAccountId");
 
                     b.HasIndex(new[] { "ComplianceDocumentId" }, "DocumentVersion_compliance_document_id_idx");
 
@@ -1333,13 +1787,31 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("DeletedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("deleted_at");
+
+                    b.Property<Guid?>("DeletedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("deleted_by_account_id");
+
                     b.Property<DateOnly?>("DueDate")
                         .HasColumnType("date")
                         .HasColumnName("due_date");
 
+                    b.Property<Guid?>("HorseId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("horse_id");
+
                     b.Property<string>("Instruction")
                         .HasColumnType("text")
                         .HasColumnName("instruction");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_deleted");
 
                     b.Property<bool>("IsMandatory")
                         .ValueGeneratedOnAdd()
@@ -1365,6 +1837,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
+                    b.Property<DateOnly?>("ValidUntil")
+                        .HasColumnType("date")
+                        .HasColumnName("valid_until");
+
                     b.Property<string>("WaivedReason")
                         .HasColumnType("text")
                         .HasColumnName("waived_reason");
@@ -1372,8 +1848,16 @@ namespace Pegaxus.Repository.Migrations
                     b.HasKey("DossierRequirementId")
                         .HasName("DossierRequirement_pkey");
 
+                    b.HasIndex("DeletedByAccountId");
+
+                    b.HasIndex("HorseId");
+
                     b.HasIndex("Status")
                         .HasDatabaseName("DossierRequirement_status_idx");
+
+                    b.HasIndex(new[] { "ComplianceDossierId" }, "DossierRequirement_compliance_dossier_id_idx");
+
+                    b.HasIndex(new[] { "ComplianceRequirementId" }, "DossierRequirement_compliance_requirement_id_idx");
 
                     b.HasIndex(new[] { "ComplianceDossierId", "ComplianceRequirementId" }, "DossierRequirement_dossier_requirement_global_key")
                         .IsUnique()
@@ -1382,10 +1866,6 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "ComplianceDossierId", "ComplianceRequirementId", "HorseId" }, "DossierRequirement_dossier_requirement_horse_key")
                         .IsUnique()
                         .HasFilter("horse_id IS NOT NULL AND is_deleted = false");
-
-                    b.HasIndex(new[] { "ComplianceDossierId" }, "DossierRequirement_compliance_dossier_id_idx");
-
-                    b.HasIndex(new[] { "ComplianceRequirementId" }, "DossierRequirement_compliance_requirement_id_idx");
 
                     b.ToTable("DossierRequirement", null, t =>
                         {
@@ -1486,6 +1966,12 @@ namespace Pegaxus.Repository.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasColumnName("dossier_template_item_id");
+
+                    b.Property<bool>("AppliesPerHorse")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("applies_per_horse");
 
                     b.Property<Guid>("ComplianceRequirementId")
                         .HasColumnType("uuid")
@@ -1651,6 +2137,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date")
+                        .HasColumnName("date_of_birth");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
@@ -1658,10 +2148,6 @@ namespace Pegaxus.Repository.Migrations
                     b.Property<Guid?>("DeletedByAccountId")
                         .HasColumnType("uuid")
                         .HasColumnName("deleted_by_account_id");
-
-                    b.Property<DateOnly?>("DateOfBirth")
-                        .HasColumnType("date")
-                        .HasColumnName("date_of_birth");
 
                     b.Property<string>("EmployeeCode")
                         .IsRequired()
@@ -2064,6 +2550,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("customer_id");
 
+                    b.Property<DateOnly?>("DateOfBirth")
+                        .HasColumnType("date")
+                        .HasColumnName("date_of_birth");
+
                     b.Property<DateTime?>("DeletedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("deleted_at");
@@ -2385,6 +2875,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("description");
 
+                    b.Property<bool>("EmergencySettlementRequired")
+                        .HasColumnType("boolean")
+                        .HasColumnName("emergency_settlement_required");
+
                     b.Property<Guid>("EmployeeId")
                         .HasColumnType("uuid")
                         .HasColumnName("employee_id");
@@ -2435,6 +2929,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("title");
 
+                    b.Property<Guid?>("TransportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transport_id");
+
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
@@ -2450,6 +2948,8 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex("Status")
                         .HasDatabaseName("IncidentReport_status_idx");
+
+                    b.HasIndex("TransportId");
 
                     b.HasIndex(new[] { "EmployeeId" }, "IncidentReport_employee_id_idx");
 
@@ -2518,6 +3018,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("invoice_code");
 
+                    b.Property<int>("Type")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("invoice_type")
+                        .HasColumnName("type")
+                        .HasDefaultValueSql("'QUOTATION'::invoice_type");
+
                     b.Property<DateTime?>("IssuedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("issued_at");
@@ -2556,6 +3062,9 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex("Status")
                         .HasDatabaseName("Invoice_status_idx");
+
+                    b.HasIndex("Type")
+                        .HasDatabaseName("Invoice_type_idx");
 
                     b.HasIndex(new[] { "BookingId" }, "Invoice_booking_id_idx");
 
@@ -2797,6 +3306,73 @@ namespace Pegaxus.Repository.Migrations
                         });
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.MissingDocumentReminder", b =>
+                {
+                    b.Property<Guid>("MissingDocumentReminderId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("missing_document_reminder_id");
+
+                    b.Property<DateOnly?>("AutomaticDate")
+                        .HasColumnType("date")
+                        .HasColumnName("automatic_date");
+
+                    b.Property<DateTime?>("CancelledAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("cancelled_at");
+
+                    b.Property<Guid>("ComplianceDossierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("compliance_dossier_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("DueDate")
+                        .HasColumnType("date")
+                        .HasColumnName("due_date");
+
+                    b.Property<int>("EmailAttempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("email_attempts");
+
+                    b.Property<DateTime?>("EmailSentAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("email_sent_at");
+
+                    b.Property<DateTime?>("LastAttemptAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("last_attempt_at");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)")
+                        .HasColumnName("note");
+
+                    b.Property<Guid>("RecipientAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("recipient_account_id");
+
+                    b.Property<Guid[]>("RequirementIds")
+                        .IsRequired()
+                        .HasColumnType("uuid[]")
+                        .HasColumnName("requirement_ids");
+
+                    b.HasKey("MissingDocumentReminderId")
+                        .HasName("MissingDocumentReminder_pkey");
+
+                    b.HasIndex(new[] { "ComplianceDossierId", "AutomaticDate" }, "MissingDocumentReminder_daily_key")
+                        .IsUnique()
+                        .HasFilter("automatic_date IS NOT NULL");
+
+                    b.HasIndex(new[] { "EmailSentAt", "CancelledAt", "LastAttemptAt" }, "MissingDocumentReminder_pending_idx");
+
+                    b.HasIndex(new[] { "RecipientAccountId" }, "MissingDocumentReminder_recipient_idx");
+
+                    b.ToTable("MissingDocumentReminder", (string)null);
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.Notification", b =>
                 {
                     b.Property<Guid>("NotificationId")
@@ -2847,7 +3423,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("title");
 
-                    b.Property<Guid>("TransportId")
+                    b.Property<Guid?>("TransportId")
                         .HasColumnType("uuid")
                         .HasColumnName("transport_id");
 
@@ -2867,6 +3443,241 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "TransportId" }, "Notification_transport_id_idx");
 
                     b.ToTable("Notification", (string)null);
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.OutboxMessage", b =>
+                {
+                    b.Property<Guid>("OutboxMessageId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("outbox_message_id");
+
+                    b.Property<int>("Attempts")
+                        .HasColumnType("integer")
+                        .HasColumnName("attempts");
+
+                    b.Property<DateTime>("AvailableAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("available_at");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("LastError")
+                        .HasColumnType("text")
+                        .HasColumnName("last_error");
+
+                    b.Property<DateTime?>("LockedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("locked_at");
+
+                    b.Property<string>("MessageType")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("message_type");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("text")
+                        .HasColumnName("payload");
+
+                    b.Property<DateTime?>("ProcessedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("processed_at");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("OutboxMessageId")
+                        .HasName("OutboxMessage_pkey");
+
+                    b.HasIndex(new[] { "CreatedAt" }, "OutboxMessage_created_at_idx");
+
+                    b.HasIndex(new[] { "Status", "AvailableAt" }, "OutboxMessage_pending_idx");
+
+                    b.ToTable("OutboxMessage", (string)null);
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.ProofAttachment", b =>
+                {
+                    b.Property<Guid>("ProofAttachmentId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("proof_attachment_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CustomsClearanceProofId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("customs_clearance_proof_id");
+
+                    b.Property<string>("FileName")
+                        .IsRequired()
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("file_name");
+
+                    b.Property<long?>("FileSizeBytes")
+                        .HasColumnType("bigint")
+                        .HasColumnName("file_size_bytes");
+
+                    b.Property<string>("FileUrl")
+                        .IsRequired()
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)")
+                        .HasColumnName("file_url");
+
+                    b.Property<string>("MimeType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("mime_type");
+
+                    b.Property<Guid?>("QuarantineProofId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("quarantine_proof_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.HasKey("ProofAttachmentId")
+                        .HasName("ProofAttachment_pkey");
+
+                    b.HasIndex(new[] { "CustomsClearanceProofId", "SortOrder" }, "ProofAttachment_customs_clearance_proof_id_sort_order_key")
+                        .IsUnique()
+                        .HasFilter("customs_clearance_proof_id IS NOT NULL");
+
+                    b.HasIndex(new[] { "QuarantineProofId", "SortOrder" }, "ProofAttachment_quarantine_proof_id_sort_order_key")
+                        .IsUnique()
+                        .HasFilter("quarantine_proof_id IS NOT NULL");
+
+                    b.ToTable("ProofAttachment", null, t =>
+                        {
+                            t.HasCheckConstraint("ProofAttachment_exactly_one_proof_check", "(quarantine_proof_id IS NOT NULL) <> (customs_clearance_proof_id IS NOT NULL)");
+                        });
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.QuarantineProof", b =>
+                {
+                    b.Property<Guid>("QuarantineProofId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("quarantine_proof_id");
+
+                    b.Property<string>("BcpName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("bcp_name");
+
+                    b.Property<string>("BcpReceiptNumber")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("bcp_receipt_number");
+
+                    b.Property<Guid>("ComplianceDossierId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("compliance_dossier_id");
+
+                    b.Property<string>("Conditions")
+                        .HasColumnType("text")
+                        .HasColumnName("conditions");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateTime?>("FinalizedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("finalized_at");
+
+                    b.Property<DateTime?>("InspectionAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("inspection_at");
+
+                    b.Property<bool>("IsFinalized")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("is_finalized");
+
+                    b.Property<Guid?>("LocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("location_id");
+
+                    b.Property<string>("MicrochipChecklist")
+                        .HasColumnType("jsonb")
+                        .HasColumnName("microchip_checklist");
+
+                    b.Property<string>("OfficialVeterinarianName")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("official_veterinarian_name");
+
+                    b.Property<string>("RejectionReason")
+                        .HasColumnType("text")
+                        .HasColumnName("rejection_reason");
+
+                    b.Property<int>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("quarantine_proof_status")
+                        .HasColumnName("status")
+                        .HasDefaultValueSql("'PendingVerification'::quarantine_proof_status");
+
+                    b.Property<DateTime>("SubmittedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("submitted_at");
+
+                    b.Property<Guid>("SubmittedByEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("submitted_by_employee_id");
+
+                    b.Property<string>("SubmittedNote")
+                        .HasColumnType("text")
+                        .HasColumnName("submitted_note");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("VerificationNote")
+                        .HasColumnType("text")
+                        .HasColumnName("verification_note");
+
+                    b.Property<DateTime?>("VerifiedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("verified_at");
+
+                    b.Property<Guid?>("VerifiedByEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("verified_by_employee_id");
+
+                    b.HasKey("QuarantineProofId")
+                        .HasName("QuarantineProof_pkey");
+
+                    b.HasIndex("Status")
+                        .HasDatabaseName("QuarantineProof_status_idx");
+
+                    b.HasIndex(new[] { "ComplianceDossierId" }, "QuarantineProof_compliance_dossier_id_idx");
+
+                    b.HasIndex(new[] { "LocationId" }, "QuarantineProof_location_id_idx");
+
+                    b.HasIndex(new[] { "SubmittedByEmployeeId" }, "QuarantineProof_submitted_by_employee_id_idx");
+
+                    b.HasIndex(new[] { "VerifiedByEmployeeId" }, "QuarantineProof_verified_by_employee_id_idx");
+
+                    b.ToTable("QuarantineProof", (string)null);
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Receipt", b =>
@@ -3121,6 +3932,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("estimated_duration_minutes");
 
+                    b.Property<Guid?>("PrimaryRoutePlanId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("primary_route_plan_id");
+
                     b.Property<string>("RouteNote")
                         .HasColumnType("text")
                         .HasColumnName("route_note");
@@ -3147,11 +3962,14 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("transport_plan_id");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
                     b.HasKey("RoutePlanId")
                         .HasName("RoutePlan_pkey");
+
+                    b.HasIndex("PrimaryRoutePlanId");
 
                     b.HasIndex("Status")
                         .HasDatabaseName("RoutePlan_status_idx");
@@ -3159,8 +3977,7 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "RoutePlanCode" }, "RoutePlan_route_plan_code_key")
                         .IsUnique();
 
-                    b.HasIndex(new[] { "TransportPlanId" }, "RoutePlan_transport_plan_id_key")
-                        .IsUnique();
+                    b.HasIndex(new[] { "TransportPlanId" }, "RoutePlan_transport_plan_id_idx");
 
                     b.ToTable("RoutePlan", null, t =>
                         {
@@ -3191,6 +4008,20 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("driver_employee_id");
 
+                    b.Property<Guid?>("EscortEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("escort_employee_id");
+
+                    b.Property<decimal?>("OutsourcingCostAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("outsourcing_cost_amount");
+
+                    b.Property<string>("OutsourcingCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("outsourcing_currency");
+
                     b.Property<string>("Note")
                         .HasColumnType("text")
                         .HasColumnName("note");
@@ -3202,6 +4033,11 @@ namespace Pegaxus.Repository.Migrations
                     b.Property<DateTime?>("PlannedDepartureAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("planned_departure_at");
+
+                    b.Property<string>("ProviderReference")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)")
+                        .HasColumnName("provider_reference");
 
                     b.Property<Guid>("RouteId")
                         .HasColumnType("uuid")
@@ -3221,7 +4057,21 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("sequence_no");
 
+                    b.Property<string>("ServiceType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("service_type");
+
+                    b.Property<DateTime?>("SupersededAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("superseded_at");
+
+                    b.Property<Guid?>("TransportProviderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transport_provider_id");
+
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -3233,12 +4083,16 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex(new[] { "DriverEmployeeId" }, "RoutePlanRoute_driver_employee_id_idx");
 
+                    b.HasIndex(new[] { "EscortEmployeeId" }, "RoutePlanRoute_escort_employee_id_idx");
+
                     b.HasIndex(new[] { "RouteId" }, "RoutePlanRoute_route_id_idx");
 
                     b.HasIndex(new[] { "RoutePlanId" }, "RoutePlanRoute_route_plan_id_idx");
 
                     b.HasIndex(new[] { "RoutePlanId", "SequenceNo" }, "RoutePlanRoute_route_plan_id_sequence_no_idx")
                         .IsUnique();
+
+                    b.HasIndex(new[] { "TransportProviderId" }, "RoutePlanRoute_transport_provider_id_idx");
 
                     b.ToTable("RoutePlanRoute", null, t =>
                         {
@@ -3531,6 +4385,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("tax_code");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -3545,7 +4400,12 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "IsDeleted" }, "TransportProvider_is_deleted_idx");
 
                     b.HasIndex(new[] { "ProviderCode" }, "TransportProvider_provider_code_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
+
+                    b.HasIndex(new[] { "TaxCode" }, "TransportProvider_tax_code_key")
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex(new[] { "ProviderName" }, "TransportProvider_provider_name_idx");
 
@@ -3629,6 +4489,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("transport_mode");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -3662,10 +4523,12 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "IsDeleted" }, "Vehicle_is_deleted_idx");
 
                     b.HasIndex(new[] { "LicensePlate" }, "Vehicle_license_plate_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex(new[] { "VehicleCode" }, "Vehicle_vehicle_code_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.ToTable("Vehicle", null, t =>
                         {
@@ -3784,6 +4647,25 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("Notification");
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.AuditDossier", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "ActorAccount")
+                        .WithMany()
+                        .HasForeignKey("ActorAccountId")
+                        .IsRequired()
+                        .HasConstraintName("AuditDossier_actor_account_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.ComplianceDossier", "ComplianceDossier")
+                        .WithMany()
+                        .HasForeignKey("ComplianceDossierId")
+                        .IsRequired()
+                        .HasConstraintName("AuditDossier_compliance_dossier_id_fkey");
+
+                    b.Navigation("ActorAccount");
+
+                    b.Navigation("ComplianceDossier");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.AuthoritySubmission", b =>
                 {
                     b.HasOne("Pegaxus.Repository.Entities.ComplianceDossier", "ComplianceDossier")
@@ -3792,7 +4674,34 @@ namespace Pegaxus.Repository.Migrations
                         .IsRequired()
                         .HasConstraintName("AuthoritySubmission_compliance_dossier_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "SubmittedByAccount")
+                        .WithMany()
+                        .HasForeignKey("SubmittedByAccountId")
+                        .IsRequired()
+                        .HasConstraintName("AuthoritySubmission_submitted_by_account_id_fkey");
+
                     b.Navigation("ComplianceDossier");
+
+                    b.Navigation("SubmittedByAccount");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.AuthoritySubmissionEvidenceFile", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.AuthoritySubmission", "AuthoritySubmission")
+                        .WithMany("EvidenceFiles")
+                        .HasForeignKey("AuthoritySubmissionId")
+                        .IsRequired()
+                        .HasConstraintName("AuthoritySubmissionEvidenceFile_authority_submission_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Employee", "UploadedByEmployee")
+                        .WithMany()
+                        .HasForeignKey("UploadedByEmployeeId")
+                        .IsRequired()
+                        .HasConstraintName("AuthoritySubmissionEvidenceFile_uploaded_by_employee_id_fkey");
+
+                    b.Navigation("AuthoritySubmission");
+
+                    b.Navigation("UploadedByEmployee");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Booking", b =>
@@ -3811,6 +4720,33 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("AssignedEmployee");
 
                     b.Navigation("Customer");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.BookingEmployeeAssignment", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.Employee", "AssignedByEmployee")
+                        .WithMany("CreatedBookingAssignments")
+                        .HasForeignKey("AssignedByEmployeeId")
+                        .IsRequired()
+                        .HasConstraintName("BookingEmployeeAssignment_assigned_by_employee_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Booking", "Booking")
+                        .WithMany("EmployeeAssignments")
+                        .HasForeignKey("BookingId")
+                        .IsRequired()
+                        .HasConstraintName("BookingEmployeeAssignment_booking_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Employee", "Employee")
+                        .WithMany("BookingAssignments")
+                        .HasForeignKey("EmployeeId")
+                        .IsRequired()
+                        .HasConstraintName("BookingEmployeeAssignment_employee_id_fkey");
+
+                    b.Navigation("AssignedByEmployee");
+
+                    b.Navigation("Booking");
+
+                    b.Navigation("Employee");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.BookingHorse", b =>
@@ -3851,6 +4787,17 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("ChangedByAccount");
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.CatalogAuditLog", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "ActorAccount")
+                        .WithMany()
+                        .HasForeignKey("ActorAccountId")
+                        .IsRequired()
+                        .HasConstraintName("CatalogAuditLog_actor_account_id_fkey");
+
+                    b.Navigation("ActorAccount");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.Claim", b =>
                 {
                     b.HasOne("Pegaxus.Repository.Entities.Customer", "Customer")
@@ -3883,28 +4830,44 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.ComplianceDocument", b =>
                 {
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "CreatedByAccount")
+                        .WithMany()
+                        .HasForeignKey("CreatedByAccountId")
+                        .IsRequired()
+                        .HasConstraintName("ComplianceDocument_created_by_account_id_fkey");
+
                     b.HasOne("Pegaxus.Repository.Entities.DossierRequirement", "DossierRequirement")
                         .WithOne("ComplianceDocument")
                         .HasForeignKey("Pegaxus.Repository.Entities.ComplianceDocument", "DossierRequirementId")
                         .IsRequired()
                         .HasConstraintName("ComplianceDocument_dossier_requirement_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "UpdatedByAccount")
+                        .WithMany()
+                        .HasForeignKey("UpdatedByAccountId")
+                        .IsRequired()
+                        .HasConstraintName("ComplianceDocument_updated_by_account_id_fkey");
+
+                    b.Navigation("CreatedByAccount");
+
                     b.Navigation("DossierRequirement");
+
+                    b.Navigation("UpdatedByAccount");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.ComplianceDossier", b =>
                 {
-                    b.HasOne("Pegaxus.Repository.Entities.Transport", "Transport")
-                        .WithOne("ComplianceDossier")
-                        .HasForeignKey("Pegaxus.Repository.Entities.ComplianceDossier", "TransportId")
-                        .IsRequired()
-                        .HasConstraintName("ComplianceDossier_transport_id_fkey");
-
                     b.HasOne("Pegaxus.Repository.Entities.DossierTemplate", "DossierTemplate")
                         .WithMany()
                         .HasForeignKey("DossierTemplateId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("ComplianceDossier_dossier_template_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Transport", "Transport")
+                        .WithOne("ComplianceDossier")
+                        .HasForeignKey("Pegaxus.Repository.Entities.ComplianceDossier", "TransportId")
+                        .IsRequired()
+                        .HasConstraintName("ComplianceDossier_transport_id_fkey");
 
                     b.Navigation("DossierTemplate");
 
@@ -3958,66 +4921,35 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("DeletedByAccount");
                 });
 
-            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequestComment", b =>
+            modelBuilder.Entity("Pegaxus.Repository.Entities.CustomsClearanceProof", b =>
                 {
-                    b.HasOne("Pegaxus.Repository.Entities.DocumentRequest", "DocumentRequest").WithMany()
-                        .HasForeignKey("DocumentRequestId").IsRequired().OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("DocumentRequestComment_document_request_id_fkey");
-                    b.HasOne("Pegaxus.Repository.Entities.Account", "AuthorAccount").WithMany()
-                        .HasForeignKey("AuthorAccountId").IsRequired().OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("DocumentRequestComment_author_account_id_fkey");
-                    b.Navigation("DocumentRequest");
-                    b.Navigation("AuthorAccount");
-                });
+                    b.HasOne("Pegaxus.Repository.Entities.ComplianceDossier", "ComplianceDossier")
+                        .WithMany()
+                        .HasForeignKey("ComplianceDossierId")
+                        .IsRequired()
+                        .HasConstraintName("CustomsClearanceProof_compliance_dossier_id_fkey");
 
-            modelBuilder.Entity("Pegaxus.Repository.Entities.MissingDocumentReminder", b =>
-                {
-                    b.HasOne("Pegaxus.Repository.Entities.ComplianceDossier", "ComplianceDossier").WithMany()
-                        .HasForeignKey("ComplianceDossierId").IsRequired().OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("MissingDocumentReminder_dossier_fkey");
-                    b.HasOne("Pegaxus.Repository.Entities.Account", "RecipientAccount").WithMany()
-                        .HasForeignKey("RecipientAccountId").IsRequired().OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("MissingDocumentReminder_recipient_fkey");
+                    b.HasOne("Pegaxus.Repository.Entities.Location", null)
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .HasConstraintName("CustomsClearanceProof_location_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Employee", "SubmittedByEmployee")
+                        .WithMany()
+                        .HasForeignKey("SubmittedByEmployeeId")
+                        .IsRequired()
+                        .HasConstraintName("CustomsClearanceProof_submitted_by_employee_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Employee", "VerifiedByEmployee")
+                        .WithMany()
+                        .HasForeignKey("VerifiedByEmployeeId")
+                        .HasConstraintName("CustomsClearanceProof_verified_by_employee_id_fkey");
+
                     b.Navigation("ComplianceDossier");
-                    b.Navigation("RecipientAccount");
-                });
 
-            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequest", b =>
-                {
-                    b.HasOne("Pegaxus.Repository.Entities.DossierRequirement", "DossierRequirement")
-                        .WithMany("DocumentRequests")
-                        .HasForeignKey("DossierRequirementId")
-                        .IsRequired()
-                        .HasConstraintName("DocumentRequest_dossier_requirement_id_fkey");
+                    b.Navigation("SubmittedByEmployee");
 
-                    b.HasOne("Pegaxus.Repository.Entities.DocumentReview", "DocumentReview").WithMany()
-                        .HasForeignKey("DocumentReviewId").OnDelete(DeleteBehavior.Restrict)
-                        .HasConstraintName("DocumentRequest_document_review_id_fkey");
-                    b.Navigation("DocumentReview");
-
-                    b.Navigation("DossierRequirement");
-                });
-
-            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentReview", b =>
-                {
-                    b.HasOne("Pegaxus.Repository.Entities.DocumentVersion", "DocumentVersion")
-                        .WithMany("DocumentReviews")
-                        .HasForeignKey("DocumentVersionId")
-                        .IsRequired()
-                        .HasConstraintName("DocumentReview_document_version_id_fkey");
-
-                    b.Navigation("DocumentVersion");
-                });
-
-            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentVersion", b =>
-                {
-                    b.HasOne("Pegaxus.Repository.Entities.ComplianceDocument", "ComplianceDocument")
-                        .WithMany("DocumentVersions")
-                        .HasForeignKey("ComplianceDocumentId")
-                        .IsRequired()
-                        .HasConstraintName("DocumentVersion_compliance_document_id_fkey");
-
-                    b.Navigation("ComplianceDocument");
+                    b.Navigation("VerifiedByEmployee");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentAttachment", b =>
@@ -4029,6 +4961,92 @@ namespace Pegaxus.Repository.Migrations
                         .HasConstraintName("DocumentAttachment_document_version_id_fkey");
 
                     b.Navigation("DocumentVersion");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequest", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.DocumentReview", "DocumentReview")
+                        .WithMany()
+                        .HasForeignKey("DocumentReviewId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("DocumentRequest_document_review_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.DossierRequirement", "DossierRequirement")
+                        .WithMany("DocumentRequests")
+                        .HasForeignKey("DossierRequirementId")
+                        .IsRequired()
+                        .HasConstraintName("DocumentRequest_dossier_requirement_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "RequestedByAccount")
+                        .WithMany()
+                        .HasForeignKey("RequestedByAccountId")
+                        .IsRequired()
+                        .HasConstraintName("DocumentRequest_requested_by_account_id_fkey");
+
+                    b.Navigation("DocumentReview");
+
+                    b.Navigation("DossierRequirement");
+
+                    b.Navigation("RequestedByAccount");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentRequestComment", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "AuthorAccount")
+                        .WithMany()
+                        .HasForeignKey("AuthorAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("DocumentRequestComment_author_account_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.DocumentRequest", "DocumentRequest")
+                        .WithMany()
+                        .HasForeignKey("DocumentRequestId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("DocumentRequestComment_document_request_id_fkey");
+
+                    b.Navigation("AuthorAccount");
+
+                    b.Navigation("DocumentRequest");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentReview", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.DocumentVersion", "DocumentVersion")
+                        .WithMany("DocumentReviews")
+                        .HasForeignKey("DocumentVersionId")
+                        .IsRequired()
+                        .HasConstraintName("DocumentReview_document_version_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "ReviewedByAccount")
+                        .WithMany()
+                        .HasForeignKey("ReviewedByAccountId")
+                        .IsRequired()
+                        .HasConstraintName("DocumentReview_reviewed_by_account_id_fkey");
+
+                    b.Navigation("DocumentVersion");
+
+                    b.Navigation("ReviewedByAccount");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentVersion", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.ComplianceDocument", "ComplianceDocument")
+                        .WithMany("DocumentVersions")
+                        .HasForeignKey("ComplianceDocumentId")
+                        .IsRequired()
+                        .HasConstraintName("DocumentVersion_compliance_document_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "UploadedByAccount")
+                        .WithMany()
+                        .HasForeignKey("UploadedByAccountId")
+                        .IsRequired()
+                        .HasConstraintName("DocumentVersion_uploaded_by_account_id_fkey");
+
+                    b.Navigation("ComplianceDocument");
+
+                    b.Navigation("UploadedByAccount");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DossierRequirement", b =>
@@ -4045,9 +5063,23 @@ namespace Pegaxus.Repository.Migrations
                         .IsRequired()
                         .HasConstraintName("DossierRequirement_compliance_requirement_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "DeletedByAccount")
+                        .WithMany()
+                        .HasForeignKey("DeletedByAccountId")
+                        .HasConstraintName("DossierRequirement_deleted_by_account_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Horse", "Horse")
+                        .WithMany()
+                        .HasForeignKey("HorseId")
+                        .HasConstraintName("DossierRequirement_horse_id_fkey");
+
                     b.Navigation("ComplianceDossier");
 
                     b.Navigation("ComplianceRequirement");
+
+                    b.Navigation("DeletedByAccount");
+
+                    b.Navigation("Horse");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DossierTemplate", b =>
@@ -4269,6 +5301,11 @@ namespace Pegaxus.Repository.Migrations
                         .IsRequired()
                         .HasConstraintName("IncidentReport_location_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.Transport", null)
+                        .WithMany()
+                        .HasForeignKey("TransportId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.Navigation("Employee");
 
                     b.Navigation("Location");
@@ -4346,6 +5383,27 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("DeletedByAccount");
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.MissingDocumentReminder", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.ComplianceDossier", "ComplianceDossier")
+                        .WithMany()
+                        .HasForeignKey("ComplianceDossierId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("MissingDocumentReminder_dossier_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Account", "RecipientAccount")
+                        .WithMany()
+                        .HasForeignKey("RecipientAccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("MissingDocumentReminder_recipient_fkey");
+
+                    b.Navigation("ComplianceDossier");
+
+                    b.Navigation("RecipientAccount");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.Notification", b =>
                 {
                     b.HasOne("Pegaxus.Repository.Entities.Transport", "Transport")
@@ -4354,6 +5412,54 @@ namespace Pegaxus.Repository.Migrations
                         .HasConstraintName("Notification_transport_id_fkey");
 
                     b.Navigation("Transport");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.ProofAttachment", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.CustomsClearanceProof", "CustomsClearanceProof")
+                        .WithMany("Attachments")
+                        .HasForeignKey("CustomsClearanceProofId")
+                        .HasConstraintName("ProofAttachment_customs_clearance_proof_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.QuarantineProof", "QuarantineProof")
+                        .WithMany("Attachments")
+                        .HasForeignKey("QuarantineProofId")
+                        .HasConstraintName("ProofAttachment_quarantine_proof_id_fkey");
+
+                    b.Navigation("CustomsClearanceProof");
+
+                    b.Navigation("QuarantineProof");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.QuarantineProof", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.ComplianceDossier", "ComplianceDossier")
+                        .WithMany()
+                        .HasForeignKey("ComplianceDossierId")
+                        .IsRequired()
+                        .HasConstraintName("QuarantineProof_compliance_dossier_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Location", null)
+                        .WithMany()
+                        .HasForeignKey("LocationId")
+                        .HasConstraintName("QuarantineProof_location_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Employee", "SubmittedByEmployee")
+                        .WithMany()
+                        .HasForeignKey("SubmittedByEmployeeId")
+                        .IsRequired()
+                        .HasConstraintName("QuarantineProof_submitted_by_employee_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Employee", "VerifiedByEmployee")
+                        .WithMany()
+                        .HasForeignKey("VerifiedByEmployeeId")
+                        .HasConstraintName("QuarantineProof_verified_by_employee_id_fkey");
+
+                    b.Navigation("ComplianceDossier");
+
+                    b.Navigation("SubmittedByEmployee");
+
+                    b.Navigation("VerifiedByEmployee");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Receipt", b =>
@@ -4413,9 +5519,14 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.RoutePlan", b =>
                 {
+                    b.HasOne("Pegaxus.Repository.Entities.RoutePlan", null)
+                        .WithMany()
+                        .HasForeignKey("PrimaryRoutePlanId")
+                        .OnDelete(DeleteBehavior.Restrict);
+
                     b.HasOne("Pegaxus.Repository.Entities.TransportPlan", "TransportPlan")
-                        .WithOne("RoutePlan")
-                        .HasForeignKey("Pegaxus.Repository.Entities.RoutePlan", "TransportPlanId")
+                        .WithMany("RoutePlans")
+                        .HasForeignKey("TransportPlanId")
                         .IsRequired()
                         .HasConstraintName("RoutePlan_transport_plan_id_fkey");
 
@@ -4429,6 +5540,11 @@ namespace Pegaxus.Repository.Migrations
                         .HasForeignKey("DriverEmployeeId")
                         .HasConstraintName("RoutePlanRoute_driver_employee_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.Employee", "EscortEmployee")
+                        .WithMany("EscortRoutePlanRoutes")
+                        .HasForeignKey("EscortEmployeeId")
+                        .HasConstraintName("RoutePlanRoute_escort_employee_id_fkey");
+
                     b.HasOne("Pegaxus.Repository.Entities.Route", "Route")
                         .WithMany("RoutePlanRoutes")
                         .HasForeignKey("RouteId")
@@ -4441,11 +5557,20 @@ namespace Pegaxus.Repository.Migrations
                         .IsRequired()
                         .HasConstraintName("RoutePlanRoute_route_plan_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.TransportProvider", "TransportProvider")
+                        .WithMany("RoutePlanRoutes")
+                        .HasForeignKey("TransportProviderId")
+                        .HasConstraintName("RoutePlanRoute_transport_provider_id_fkey");
+
                     b.Navigation("DriverEmployee");
+
+                    b.Navigation("EscortEmployee");
 
                     b.Navigation("Route");
 
                     b.Navigation("RoutePlan");
+
+                    b.Navigation("TransportProvider");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.RoutePlanRouteVehicle", b =>
@@ -4589,11 +5714,18 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("Vehicles");
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.AuthoritySubmission", b =>
+                {
+                    b.Navigation("EvidenceFiles");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.Booking", b =>
                 {
                     b.Navigation("BookingHorses");
 
                     b.Navigation("BookingStatusHistories");
+
+                    b.Navigation("EmployeeAssignments");
 
                     b.Navigation("Invoices");
 
@@ -4637,10 +5769,16 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("Horses");
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.CustomsClearanceProof", b =>
+                {
+                    b.Navigation("Attachments");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.DocumentVersion", b =>
                 {
-                    b.Navigation("DocumentReviews");
                     b.Navigation("DocumentAttachments");
+
+                    b.Navigation("DocumentReviews");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.DossierRequirement", b =>
@@ -4664,11 +5802,17 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Employee", b =>
                 {
+                    b.Navigation("BookingAssignments");
+
                     b.Navigation("Bookings");
 
                     b.Navigation("CostApprovalDecisions");
 
+                    b.Navigation("CreatedBookingAssignments");
+
                     b.Navigation("EmployeeTransportPlans");
+
+                    b.Navigation("EscortRoutePlanRoutes");
 
                     b.Navigation("HandoverRecordFromEmployees");
 
@@ -4733,6 +5877,11 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("AccountNotifications");
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.QuarantineProof", b =>
+                {
+                    b.Navigation("Attachments");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.RefreshToken", b =>
                 {
                     b.Navigation("InverseReplacedByToken");
@@ -4776,13 +5925,15 @@ namespace Pegaxus.Repository.Migrations
                 {
                     b.Navigation("EmployeeTransportPlans");
 
-                    b.Navigation("RoutePlan");
+                    b.Navigation("RoutePlans");
 
                     b.Navigation("TransportPlanProviders");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.TransportProvider", b =>
                 {
+                    b.Navigation("RoutePlanRoutes");
+
                     b.Navigation("TransportPlanProviders");
                 });
 

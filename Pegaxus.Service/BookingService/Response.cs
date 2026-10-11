@@ -63,7 +63,7 @@ public class Response
     public class CustomerResponse
     {
         public Guid CustomerId { get; init; }
-        public string? CustomerCode { get; init; }
+        public required string CustomerCode { get; init; }
         public required string FullName { get; init; }
         public string? Phone { get; init; }
     }
@@ -163,7 +163,7 @@ public class Response
         public required string BookingCode { get; init; }
         public required string Status { get; init; }
         public required string CustomerName { get; init; }
-        public string? CustomerCode { get; init; }
+        public required string CustomerCode { get; init; }
         public required string OriginAddress { get; init; }
         public required string OriginCountry { get; init; }
         public required string DestinationAddress { get; init; }
@@ -235,6 +235,7 @@ public class Response
         public Guid BookingId { get; init; }
         public Guid TransportPlanId { get; init; }
         public Guid EmployeeId { get; init; }
+        public required string EmployeeCode { get; init; }
         public required string EmployeeName { get; init; }
         public required string Role { get; init; }
         public DateTimeOffset AssignedAt { get; init; }

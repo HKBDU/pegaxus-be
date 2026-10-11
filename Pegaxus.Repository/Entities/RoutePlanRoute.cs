@@ -26,6 +26,14 @@ public partial class RoutePlanRoute
 
     public Guid? TransportProviderId { get; set; }
 
+    public string? ServiceType { get; set; }
+
+    public string? ProviderReference { get; set; }
+
+    public decimal? OutsourcingCostAmount { get; set; }
+
+    public string? OutsourcingCurrency { get; set; }
+
     public DateTime? PlannedDepartureAt { get; set; }
 
     public DateTime? PlannedArrivalAt { get; set; }
@@ -35,6 +43,8 @@ public partial class RoutePlanRoute
     public DateTime? ActualArrivalAt { get; set; }
 
     public string? Note { get; set; }
+
+    public DateTime? SupersededAt { get; set; }
 
     public DateTime CreatedAt { get; set; }
 

@@ -36,7 +36,8 @@ public static class ResponseBuilder
         string message,
         string errorCode = "VALIDATION_ERROR",
         int code = 400,
-        string? traceId = null)
+        string? traceId = null,
+        object? value = null)
     {
         return new ApiResponse()
         {
@@ -45,6 +46,7 @@ public static class ResponseBuilder
             ErrorCode = errorCode,
             Message = message,
             Errors = errors,
+            Value = value,
             TraceId = traceId,
             Timestamp = DateTimeOffset.UtcNow
         };
