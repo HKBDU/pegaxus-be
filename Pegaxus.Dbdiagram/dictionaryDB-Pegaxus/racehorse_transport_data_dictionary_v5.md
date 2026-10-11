@@ -268,8 +268,8 @@
 | `city` | `varchar(100)` |  | No | Thành phố. |
 | `state_province` | `varchar(100)` |  | No | Bang/tỉnh/thành hoặc đơn vị hành chính tương đương. |
 | `country` | `varchar(100)` |  | Yes | Quốc gia. |
-| `latitude` | `decimal(10,7)` |  | No | Vĩ độ của Location. |
-| `longitude` | `decimal(10,7)` |  | No | Kinh độ của Location. |
+| `latitude` | `decimal(10,4)` |  | No | Vĩ độ của Location. |
+| `longitude` | `decimal(10,4)` |  | No | Kinh độ của Location. |
 | `location_note` | `text` |  | No | Ghi chú bổ sung về Location. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
