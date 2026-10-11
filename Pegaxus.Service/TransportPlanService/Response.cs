@@ -86,6 +86,8 @@ public static class Response
         public required string EmployeeCode { get; init; }
         public required string FullName { get; init; }
         public required string Role { get; init; }
+        public required string Email { get; init; }
+        public string? AvatarUrl { get; init; }
         public required string Responsibility { get; init; }
         public bool IsPrimary { get; init; }
         public DateTimeOffset AssignedAt { get; init; }

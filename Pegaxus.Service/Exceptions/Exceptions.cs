@@ -42,7 +42,11 @@ public class NotFoundException : Exceptions
 
 public class ConflictException : Exceptions
 {
-    public ConflictException(string message, string errorCode = "CONFLICT") : base(message, 409, errorCode) { }
+    public object? Value { get; }
+    public ConflictException(string message, string errorCode = "CONFLICT", object? value = null) : base(message, 409, errorCode)
+    {
+        Value = value;
+    }
 }
 
 public class TooManyRequestsException : Exceptions

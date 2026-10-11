@@ -20,9 +20,10 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     public async Task<Response.AssignmentsResponse> GetAsync(Guid transportPlanId, Guid accountId, CancellationToken cancellationToken = default)
     {
         await AuthorizeAsync(accountId, false, cancellationToken);
-        if (!await db.TransportPlans.AnyAsync(x => x.TransportPlanId == transportPlanId, cancellationToken))
-            throw new NotFoundException("Transport plan not found", "TRANSPORT_PLAN_NOT_FOUND");
-        var phase1 = await db.EmployeeTransportPlans.AsNoTracking().Include(x => x.Employee)
+        var plan = await db.TransportPlans.AsNoTracking().Include(x => x.Transport).ThenInclude(x => x.ComplianceDossier)
+            .SingleOrDefaultAsync(x => x.TransportPlanId == transportPlanId, cancellationToken)
+            ?? throw new NotFoundException("Transport plan not found", "TRANSPORT_PLAN_NOT_FOUND");
+        var phase1 = await db.EmployeeTransportPlans.AsNoTracking().Include(x => x.Employee).ThenInclude(x => x.Account)
             .Where(x => x.TransportPlanId == transportPlanId).ToListAsync(cancellationToken);
         var reader = await db.Employees.AsNoTracking().SingleAsync(x => x.AccountId == accountId, cancellationToken);
         if (reader.Role != EmployeeRole.LOGISTICS_MANAGER &&
@@ -38,13 +39,16 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         if (candidates.Count > 1) throw new ConflictException("Multiple confirmed PRIMARY routes exist for this plan.", "AMBIGUOUS_PRIMARY_ROUTE");
         var route = candidates.SingleOrDefault();
         var segments = route is null ? [] : await LoadSegmentsAsync(route.RoutePlanId, false, cancellationToken);
+        var specialist = phase1.FirstOrDefault(x => x.Responsibility == "TRANSPORT_SPECIALIST" && x.IsPrimary);
+        var coordinator = phase1.FirstOrDefault(x => x.Responsibility == "FLEET_ROUTE_COORDINATOR" && x.IsPrimary);
+        var dossier = plan.Transport.ComplianceDossier;
         return new(transportPlanId, new(
-            phase1.Any(x => x.IsPrimary && x.Responsibility == "TRANSPORT_SPECIALIST") &&
-                phase1.Any(x => x.IsPrimary && x.Responsibility == "FLEET_ROUTE_COORDINATOR"), route is not null,
-            Brief(phase1.FirstOrDefault(x => x.Responsibility == "TRANSPORT_SPECIALIST" && x.IsPrimary)?.Employee),
-            Brief(phase1.FirstOrDefault(x => x.Responsibility == "FLEET_ROUTE_COORDINATOR" && x.IsPrimary)?.Employee)),
+            specialist is not null && coordinator is not null, route is not null,
+            Brief(specialist?.Employee, specialist?.AssignedAt),
+            Brief(coordinator?.Employee, coordinator?.AssignedAt)),
             new(route is not null, route?.RoutePlanId, PersonnelComplete(segments), segments.Select(Map).ToArray()),
-            route is null ? null : Offset(route.UpdatedAt));
+            route is null ? null : Offset(route.UpdatedAt),
+            dossier is null ? null : new(dossier.ComplianceDossierId, dossier.DossierCode, dossier.Status.ToString()));
     }
 
     public async Task<Response.AssignResponse> AssignAsync(Guid routePlanId, Request.AssignRequest request, Guid accountId, CancellationToken cancellationToken = default)
@@ -143,7 +147,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             if (db.Database.IsNpgsql())
                 await db.Employees.Where(x => x.EmployeeId == id)
                     .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.EmployeeId, x => x.EmployeeId), cancellationToken);
-            var employee = await db.Employees.SingleOrDefaultAsync(x => x.EmployeeId == id, cancellationToken);
+            var employee = await db.Employees.Include(x => x.Account).SingleOrDefaultAsync(x => x.EmployeeId == id, cancellationToken);
             if (employee is null) throw new NotFoundException("Employee not found", "EMPLOYEE_NOT_FOUND");
             if (db.Database.IsRelational()) await db.Entry(employee).ReloadAsync(cancellationToken);
             var account = await db.Accounts.AsNoTracking().SingleAsync(x => x.AccountId == employee.AccountId, cancellationToken);
@@ -172,9 +176,19 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                     (!x.PlannedDepartureAt.HasValue || !x.PlannedArrivalAt.HasValue || x.PlannedArrivalAt <= x.PlannedDepartureAt ||
                      x.ActualDepartureAt.HasValue && x.PlannedArrivalAt < nowForConflict ||
                      x.PlannedDepartureAt <= segment.PlannedArrivalAt && x.PlannedArrivalAt >= segment.PlannedDepartureAt))
-                    .Select(x => x.RoutePlan.TransportPlan.Transport.TransportCode).FirstOrDefaultAsync(cancellationToken);
+                    .Select(x => new {
+                        x.RoutePlan.TransportPlan.Transport.TransportCode, x.RoutePlan.TransportPlan.PlanCode,
+                        FromLocationName = x.Route.FromLocation.LocationName, ToLocationName = x.Route.ToLocation.LocationName,
+                        x.PlannedDepartureAt, x.PlannedArrivalAt
+                    }).FirstOrDefaultAsync(cancellationToken);
                 if (conflict is not null || external is not null)
-                    throw new ConflictException($"{employees[employeeId].Role} {employees[employeeId].EmployeeCode} is already assigned to Transport {external ?? plan.Transport.TransportCode} during this time slot.", "SCHEDULE_CONFLICT");
+                    throw new ConflictException($"{employees[employeeId].Role} {employees[employeeId].EmployeeCode} is already assigned to Transport {external?.TransportCode ?? plan.Transport.TransportCode} during this time slot.",
+                        "SCHEDULE_CONFLICT", new Response.ScheduleConflictResponse(employeeId, employees[employeeId].EmployeeCode,
+                            employees[employeeId].Role.ToString(), segment.RoutePlanRouteId, external?.PlanCode ?? plan.PlanCode,
+                            external?.FromLocationName ?? conflict!.Route.FromLocation.LocationName,
+                            external?.ToLocationName ?? conflict!.Route.ToLocation.LocationName,
+                            Offset(external is not null ? external.PlannedDepartureAt : conflict!.PlannedDepartureAt),
+                            Offset(external is not null ? external.PlannedArrivalAt : conflict!.PlannedArrivalAt)));
             }
         }
         foreach (var segment in segments.Where(x => x.TransportProviderId.HasValue))
@@ -290,7 +304,8 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var count = await query.CountAsync(cancellationToken);
         var items = await query.OrderBy(x => x.EmployeeCode).ThenBy(x => x.EmployeeId)
             .Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize)
-            .Select(x => new Response.EmployeeBrief(x.EmployeeId, x.EmployeeCode, x.FullName, x.Role.ToString()))
+            .Select(x => new Response.EmployeeBrief(x.EmployeeId, x.EmployeeCode, x.FullName, x.Role.ToString(),
+                x.Account.Email, x.Account.AvatarUrl, null))
             .ToArrayAsync(cancellationToken);
         return new(items, request.PageIndex, request.PageSize, count, (int)Math.Ceiling(count / (double)request.PageSize));
     }
@@ -323,7 +338,9 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 await db.RoutePlanRoutes.Where(x => x.RoutePlanRouteId == segmentId)
                     .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanRouteId, x => x.RoutePlanRouteId), cancellationToken);
         }
-        var query = db.RoutePlanRoutes.Include(x => x.DriverEmployee).Include(x => x.EscortEmployee).Include(x => x.TransportProvider).Include(x => x.Route)
+        var query = db.RoutePlanRoutes.Include(x => x.DriverEmployee).ThenInclude(x => x!.Account)
+            .Include(x => x.EscortEmployee).ThenInclude(x => x!.Account).Include(x => x.TransportProvider)
+            .Include(x => x.Route).ThenInclude(x => x.FromLocation).Include(x => x.Route).ThenInclude(x => x.ToLocation)
             .Where(x => x.RoutePlanId == id).OrderBy(x => x.SequenceNo);
         if (!tracked) return await query.AsNoTracking().ToListAsync(cancellationToken);
         var result = await query.ToListAsync(cancellationToken);
@@ -345,7 +362,9 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     }
     private static bool Overlaps(RoutePlanRoute a, RoutePlanRoute b) => !b.PlannedDepartureAt.HasValue || !b.PlannedArrivalAt.HasValue ||
         b.PlannedArrivalAt <= b.PlannedDepartureAt || a.PlannedDepartureAt <= b.PlannedArrivalAt && a.PlannedArrivalAt >= b.PlannedDepartureAt;
-    private static Response.EmployeeBrief? Brief(Employee? employee) => employee is null ? null : new(employee.EmployeeId, employee.EmployeeCode, employee.FullName, employee.Role.ToString());
+    private static Response.EmployeeBrief? Brief(Employee? employee, DateTime? assignedAt = null) => employee is null ? null :
+        new(employee.EmployeeId, employee.EmployeeCode, employee.FullName, employee.Role.ToString(),
+            employee.Account.Email, employee.Account.AvatarUrl, Offset(assignedAt));
     private static Response.SegmentResponse Map(RoutePlanRoute x) => new(x.RoutePlanRouteId, x.SequenceNo, x.TransportProviderId.HasValue,
         Offset(x.PlannedDepartureAt), Offset(x.PlannedArrivalAt), Brief(x.DriverEmployee), Brief(x.EscortEmployee),
         x.TransportProvider is null ? null : new(x.TransportProvider.TransportProviderId, x.TransportProvider.ProviderCode, x.TransportProvider.ProviderName),

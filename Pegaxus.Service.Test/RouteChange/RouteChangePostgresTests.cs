@@ -94,6 +94,30 @@ public class RouteChangePostgresTests
     }
 
     [PostgresFact]
+    public async Task EmergencyMigration_PreservesExistingOutsourcingData()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        await using var db = scope.Db();
+        var fixture = await RouteChangeTests.Fixture.CreateAsync(db);
+        fixture.Current.ServiceType = "Freight";
+        fixture.Current.ProviderReference = "Existing carrier booking";
+        await db.SaveChangesAsync();
+
+        var migration = new Pegaxus.Repository.Migrations.EmergencyRouteChanges();
+        var generator = db.GetService<IMigrationsSqlGenerator>();
+        foreach (var operations in new[] { migration.DownOperations, migration.UpOperations })
+        {
+            foreach (var command in generator.Generate(operations))
+                await db.Database.ExecuteSqlRawAsync(command.CommandText);
+            var preserved = await db.RoutePlanRoutes.AsNoTracking()
+                .Where(x => x.RoutePlanRouteId == fixture.Current.RoutePlanRouteId)
+                .Select(x => new { x.ServiceType, x.ProviderReference }).SingleAsync();
+            Assert.Equal("Freight", preserved.ServiceType);
+            Assert.Equal("Existing carrier booking", preserved.ProviderReference);
+        }
+    }
+
+    [PostgresFact]
     public async Task Migration_UpDownUp_AndSnapshotMatchCurrentModel()
     {
         await using var scope = await DatabaseScope.CreateAsync();

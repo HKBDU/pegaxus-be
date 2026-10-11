@@ -327,6 +327,8 @@ public sealed class Service : IService
                         EmployeeCode = employee.EmployeeCode,
                         FullName = employee.FullName,
                         Role = employee.Role.ToString(),
+                        Email = employee.Account.Email,
+                        AvatarUrl = employee.Account.AvatarUrl,
                         Responsibility = item.Responsibility!,
                         IsPrimary = item.IsPrimary,
                         AssignedAt = AsUtc(item.AssignedAt)
@@ -362,6 +364,7 @@ public sealed class Service : IService
             .Include(item => item.Transport)
             .Include(item => item.EmployeeTransportPlans)
                 .ThenInclude(item => item.Employee)
+                    .ThenInclude(item => item.Account)
             .Include(item => item.RoutePlans)
                 .ThenInclude(item => item.RoutePlanRoutes)
             .SingleOrDefaultAsync(item => item.TransportPlanId == transportPlanId, cancellationToken);
@@ -476,6 +479,8 @@ public sealed class Service : IService
                     EmployeeCode = item.Employee.EmployeeCode,
                     FullName = item.Employee.FullName,
                     Role = item.Employee.Role.ToString(),
+                    Email = item.Employee.Account.Email,
+                    AvatarUrl = item.Employee.Account.AvatarUrl,
                     Responsibility = item.Responsibility!,
                     IsPrimary = item.IsPrimary,
                     AssignedAt = AsUtc(item.AssignedAt)
@@ -815,7 +820,6 @@ public sealed class Service : IService
             TransportPlan = plan
         };
         db.EmployeeTransportPlans.Add(assignment);
-        plan.EmployeeTransportPlans.Add(assignment);
     }
 
     private static void EnsureConcurrency(DateTime actualUpdatedAt, DateTimeOffset expectedUpdatedAt)

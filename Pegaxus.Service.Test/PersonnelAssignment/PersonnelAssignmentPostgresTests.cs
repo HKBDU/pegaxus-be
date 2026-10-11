@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Pegaxus.API.Middleware;
 using Pegaxus.API.Services;
 using Pegaxus.Repository.Entities;
@@ -51,7 +52,9 @@ public class PersonnelAssignmentPostgresTests
             {
                 await Execute(admin, db.Database.GenerateCreateScript());
                 actor = (await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER)).AccountId;
-                driver = (await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.DRIVER)).EmployeeId;
+                var driverEmployee = await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.DRIVER);
+                driverEmployee.Account.AvatarUrl = "https://example.com/driver.png";
+                driver = driverEmployee.EmployeeId;
                 escort1 = (await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.ESCORT)).EmployeeId;
                 escort2 = (await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.ESCORT)).EmployeeId;
                 replacement1 = (await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.DRIVER)).EmployeeId;
@@ -68,7 +71,7 @@ public class PersonnelAssignmentPostgresTests
                     Attempt(() => PersonnelAssignmentTests.CreateService(first).AssignAsync(route1, Assign(version, segment1, driver, escort1), actor)),
                     Attempt(() => PersonnelAssignmentTests.CreateService(second).AssignAsync(route2, Assign(version, segment2, driver, escort2), actor)));
                 Assert.Single(results, x => x is null);
-                Assert.Equal("SCHEDULE_CONFLICT", Assert.IsType<ConflictException>(Assert.Single(results, x => x is not null)).ErrorCode);
+                await AssertConflict(Assert.Single(results, x => x is not null)!, "SCHEDULE_CONFLICT");
             }
             Guid winner, winningSegment, winningEscort;
             await using (var db = new AppDbContext(options))
@@ -76,14 +79,33 @@ public class PersonnelAssignmentPostgresTests
                 var assigned = await db.RoutePlanRoutes.SingleAsync(x => x.DriverEmployeeId == driver);
                 winner = assigned.RoutePlanId; winningSegment = assigned.RoutePlanRouteId; winningEscort = assigned.EscortEmployeeId!.Value;
                 var route = await db.RoutePlans.SingleAsync(x => x.RoutePlanId == winner);
+                var blockingPlan = await db.TransportPlans.SingleAsync(x => x.TransportPlanId == route.TransportPlanId);
+                var employee = await db.Employees.Include(x => x.Account).SingleAsync(x => x.EmployeeId == driver);
+                var error = await Assert.ThrowsAsync<ConflictException>(() => PersonnelAssignmentTests.CreateService(db).AssignAsync(
+                    winner == route1 ? route2 : route1, Assign(version, winner == route1 ? segment2 : segment1,
+                        driver, winner == route1 ? escort2 : escort1), actor));
+                Assert.Equal("SCHEDULE_CONFLICT", error.ErrorCode);
+                var scheduleConflict = Assert.IsType<Response.ScheduleConflictResponse>(error.Value);
+                Assert.Equal(driver, scheduleConflict.EmployeeId); Assert.Equal(employee.EmployeeCode, scheduleConflict.EmployeeCode);
+                Assert.Equal("DRIVER", scheduleConflict.Role);
+                Assert.Equal(winner == route1 ? segment2 : segment1, scheduleConflict.RoutePlanRouteId);
+                Assert.Equal(blockingPlan.PlanCode, scheduleConflict.ConflictingTransportPlanCode);
+                Assert.Equal("Stable", scheduleConflict.ConflictingFromLocationName); Assert.Equal("Airport", scheduleConflict.ConflictingToLocationName);
+                Assert.Equal(new DateTimeOffset(DateTime.SpecifyKind(assigned.PlannedDepartureAt!.Value, DateTimeKind.Utc)), scheduleConflict.ConflictingPlannedDepartureAt);
+                Assert.Equal(new DateTimeOffset(DateTime.SpecifyKind(assigned.PlannedArrivalAt!.Value, DateTimeKind.Utc)), scheduleConflict.ConflictingPlannedArrivalAt);
                 version = PersonnelAssignmentTests.Version(route);
                 Assert.Equal(2, await db.EmployeeTransportPlans.CountAsync());
                 Assert.Single(await db.CatalogAuditLogs.ToListAsync());
                 Assert.Equal(4, await db.OutboxMessages.CountAsync()); // Two emails, two SignalR messages.
                 var view = await PersonnelAssignmentTests.CreateService(db).GetAsync(route.TransportPlanId, actor);
                 Assert.True(view.Phase2.IsPersonnelComplete);
-                var retry = await PersonnelAssignmentTests.CreateService(db).AssignAsync(winner, Assign(version, winningSegment, driver, winningEscort), actor);
-                Assert.Equal(version, retry.UpdatedAt); Assert.Equal(4, await db.OutboxMessages.CountAsync());
+                Assert.Equal(employee.Account.Email, view.Phase2.Segments[0].Driver!.Email);
+                Assert.Equal(employee.Account.AvatarUrl, view.Phase2.Segments[0].Driver!.AvatarUrl);
+                var retry = await Assert.ThrowsAsync<ConflictException>(() => PersonnelAssignmentTests.CreateService(db)
+                    .AssignAsync(winner, Assign(version, winningSegment, driver, winningEscort), actor));
+                Assert.Equal("SEGMENT_ALREADY_ASSIGNED", retry.ErrorCode);
+                Assert.Equal(version, PersonnelAssignmentTests.Version(await db.RoutePlans.AsNoTracking().SingleAsync(x => x.RoutePlanId == winner)));
+                Assert.Equal(4, await db.OutboxMessages.CountAsync());
             }
             await using (var first = new AppDbContext(options))
             await using (var second = new AppDbContext(options))
@@ -95,7 +117,7 @@ public class PersonnelAssignmentPostgresTests
                     Attempt(() => PersonnelAssignmentTests.CreateService(first).ReplaceAsync(winner, winningSegment, new() { LastUpdatedAt = version, DriverEmployeeId = replacement1, Reason = "Sick" }, actor)),
                     Attempt(() => PersonnelAssignmentTests.CreateService(second).ReplaceAsync(winner, winningSegment, new() { LastUpdatedAt = version, DriverEmployeeId = replacement2, Reason = "Sick" }, actor)));
                 Assert.Single(results, x => x is null);
-                Assert.Equal("ROUTE_PLAN_MODIFIED", Assert.IsType<ConflictException>(Assert.Single(results, x => x is not null)).ErrorCode);
+                await AssertConflict(Assert.Single(results, x => x is not null)!, "ROUTE_PLAN_MODIFIED");
             }
             long audits, notifications, outbox;
             Guid? currentDriver;
@@ -241,6 +263,17 @@ public class PersonnelAssignmentPostgresTests
     private static async Task<Exception?> Attempt(Func<Task> action)
     {
         try { await action(); return null; } catch (Exception ex) { return ex; }
+    }
+    private static async Task AssertConflict(Exception error, string errorCode)
+    {
+        var context = new Microsoft.AspNetCore.Http.DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        await new GlobalExceptionHandlerMiddleware(NullLogger<GlobalExceptionHandlerMiddleware>.Instance)
+            .InvokeAsync(context, _ => Task.FromException(error));
+        Assert.Equal(409, context.Response.StatusCode);
+        context.Response.Body.Position = 0;
+        using var body = await JsonDocument.ParseAsync(context.Response.Body);
+        Assert.Contains(body.RootElement.GetProperty("errorCode").GetString(), new[] { errorCode, "CONCURRENT_UPDATE" });
     }
     private static async Task Execute(NpgsqlConnection connection, string sql)
     {
