@@ -42,7 +42,7 @@ public interface IService
     Task<Response.RemovalResponse> RemoveRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.RemoveRequirementRequest request, CancellationToken cancellationToken = default);
 
     Task<IReadOnlyList<Response.TemplateOptionResponse>> GetTemplateOptionsAsync(Guid accountId, Guid bookingId, CancellationToken cancellationToken = default);
-    Task<Response.InitializationResponse> PreviewAsync(Guid accountId, Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken = default);
+    Task<Response.InitializationResponse> PreviewAsync(Guid accountId, Guid transportId, Request.InitializeRequest request, CancellationToken cancellationToken = default);
     Task<Response.InitializationResponse> InitializeAsync(Guid accountId, Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken = default);
 
     Task<Response.DashboardResponse> GetDashboardAsync(

@@ -53,7 +53,7 @@ public class SwaggerDocumentationTests
     [InlineData("/api/v1/bookings/{bookingId}", OperationType.Patch, "Update a booking.")]
     [InlineData("/api/v1/bookings/{bookingId}/negotiated-status", OperationType.Patch, "Record a negotiated booking status.")]
     [InlineData("/api/v1/bookings/{bookingId}/dossier-templates", OperationType.Get, "Suggest dossier templates for a booking.")]
-    [InlineData("/api/v1/bookings/{bookingId}/compliance-dossier/preview", OperationType.Post, "Preview a compliance dossier.")]
+    [InlineData("/api/v1/transports/{transportId}/compliance-dossier/preview", OperationType.Post, "Preview a compliance dossier.")]
     [InlineData("/api/v1/bookings/{bookingId}/compliance-dossier", OperationType.Post, "Initialize a compliance dossier.")]
     [InlineData("/api/v1/compliance-dossiers/{dossierId}/requirements", OperationType.Post, "Add a dossier requirement manually.")]
     [InlineData("/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/waive", OperationType.Patch, "Waive a dossier requirement.")]

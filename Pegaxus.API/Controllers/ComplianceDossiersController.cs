@@ -378,8 +378,8 @@ public sealed class ComplianceDossiersController : ControllerBase
     /// <summary>
     /// Preview a compliance dossier.
     /// </summary>
-    /// <remarks>Transport Specialists submit a template or custom items for an approved booking. Generates a prospective checklist without saving a dossier.</remarks>
-    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <remarks>Transport Specialists submit a template or custom items for an approved transport. Generates a prospective checklist without saving a dossier.</remarks>
+    /// <param name="transportId">The transport identifier (UUID).</param>
     /// <param name="request">The selected template or custom requirement items and optional booking concurrency timestamp.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the generated dossier preview.</returns>
@@ -387,11 +387,11 @@ public sealed class ComplianceDossiersController : ControllerBase
     /// <exception cref="ForbiddenException">The caller is not permitted to access the resource or perform this operation.</exception>
     /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
     /// <exception cref="ConflictException">The operation conflicts with the current state, a duplicate record, or a concurrent change.</exception>
-    [HttpPost("/api/v1/bookings/{bookingId:guid}/compliance-dossier/preview")]
+    [HttpPost("/api/v1/transports/{transportId:guid}/compliance-dossier/preview")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
-    public async Task<IActionResult> Preview(Guid bookingId, [FromBody] ComplianceDossierService.Request.InitializeRequest request,
+    public async Task<IActionResult> Preview(Guid transportId, [FromBody] ComplianceDossierService.Request.InitializeRequest request,
         CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await _service.PreviewAsync(GetAccountId(), bookingId, request, cancellationToken),
+        Ok(ResponseBuilder.SuccessResponse(await _service.PreviewAsync(GetAccountId(), transportId, request, cancellationToken),
             "ComplianceDossier preview generated successfully.", traceId: HttpContext.TraceIdentifier));
 
     /// <summary>
