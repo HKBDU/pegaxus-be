@@ -161,7 +161,10 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
     private static decimal Haversine(decimal lat1, decimal lon1, decimal lat2, decimal lon2) { const double earth = 6371; var dLat = (double)(lat2 - lat1) * Math.PI / 180; var dLon = (double)(lon2 - lon1) * Math.PI / 180; var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos((double)lat1 * Math.PI / 180) * Math.Cos((double)lat2 * Math.PI / 180) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2); return (decimal)(earth * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a))); }
     private static void ValidatePaging(int page, int size) { if (page < 1 || size is < 1 or > 100) throw new BadRequestException("Invalid pagination", "VALIDATION_ERROR"); }
     private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    private static DateTime UtcNow() => DateTime.UtcNow;
+    // The database stores timestamps as `timestamp without time zone`.
+    // Keep the UTC instant while writing an unspecified DateTime so Npgsql
+    // does not reject the value because of its Kind metadata.
+    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
     private static DateTimeOffset AsUtc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
     private static void EnsureConcurrency(DateTime actual, DateTimeOffset expected) { if (actual != expected.UtcDateTime) throw new ConflictException("Route was modified. Please reload the latest data.", "ROUTE_MODIFIED"); }
 }
