@@ -172,13 +172,13 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("quarantine_proof_status", new[] { "PendingVerification", "Passed", "PassedWithConditions", "Holdback", "Failed", "Rejected" })
             .HasPostgresEnum("receipt_status", new[] { "PENDING", "CONFIRMED", "FAILED", "REFUNDED" })
             .HasPostgresEnum("recipient_status", new[] { "PENDING", "DELIVERED", "READ", "FAILED" })
-            .HasPostgresEnum("route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED" })
+            .HasPostgresEnum("route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED", "PENDING_LEGAL_REVIEW", "PENDING_MANAGER_APPROVAL", "REJECTED_BY_MANAGER", "APPROVED" })
             .HasPostgresEnum("route_type", new[] { "PRIMARY", "BACKUP", "RETURN" })
             .HasPostgresEnum("transport_mode", new[] { "ROAD", "SEA", "AIR" })
             .HasPostgresEnum("transport_plan_status", new[] { "DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED" })
             .HasPostgresEnum("transport_status", new[] { "CREATED", "PLANNING", "READY", "IN_TRANSIT", "COMPLETED", "CANCELLED" })
             .HasPostgresEnum("vehicle_incident_type", new[] { "BREAKDOWN", "ACCIDENT", "TIRE_DAMAGE", "ENGINE_FAILURE", "TEMPERATURE_CONTROL_FAILURE", "EQUIPMENT_FAILURE", "OTHER" })
-            .HasPostgresEnum("vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE" });
+            .HasPostgresEnum("vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE", "SUSPENDED", "OUT_OF_SERVICE" });
 
         modelBuilder.Entity<Account>(entity =>
         {
@@ -2391,8 +2391,13 @@ public partial class AppDbContext : DbContext
             entity.Property(e => e.RouteId).HasColumnName("route_id");
             entity.Property(e => e.RoutePlanId).HasColumnName("route_plan_id");
             entity.Property(e => e.TransportProviderId).HasColumnName("transport_provider_id");
+            entity.Property(e => e.ServiceType).HasMaxLength(100).HasColumnName("service_type");
+            entity.Property(e => e.ProviderReference).HasMaxLength(255).HasColumnName("provider_reference");
+            entity.Property(e => e.OutsourcingCostAmount).HasPrecision(18, 2).HasColumnName("outsourcing_cost_amount");
+            entity.Property(e => e.OutsourcingCurrency).HasMaxLength(3).HasColumnName("outsourcing_currency");
             entity.Property(e => e.SequenceNo).HasColumnName("sequence_no");
             entity.Property(e => e.UpdatedAt)
+                .IsConcurrencyToken()
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
 
@@ -2571,7 +2576,9 @@ public partial class AppDbContext : DbContext
 
             entity.HasIndex(e => e.IsDeleted, "TransportProvider_is_deleted_idx");
 
-            entity.HasIndex(e => e.ProviderCode, "TransportProvider_provider_code_key").IsUnique();
+            entity.HasIndex(e => e.ProviderCode, "TransportProvider_provider_code_key").HasFilter("is_deleted = false").IsUnique();
+
+            entity.HasIndex(e => e.TaxCode, "TransportProvider_tax_code_key").HasFilter("is_deleted = false").IsUnique();
 
             entity.HasIndex(e => e.ProviderName, "TransportProvider_provider_name_idx");
 
@@ -2615,6 +2622,7 @@ public partial class AppDbContext : DbContext
                 .HasMaxLength(100)
                 .HasColumnName("tax_code");
             entity.Property(e => e.UpdatedAt)
+                .IsConcurrencyToken()
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
 
@@ -2631,9 +2639,9 @@ public partial class AppDbContext : DbContext
 
             entity.HasIndex(e => e.IsDeleted, "Vehicle_is_deleted_idx");
 
-            entity.HasIndex(e => e.LicensePlate, "Vehicle_license_plate_key").IsUnique();
+            entity.HasIndex(e => e.LicensePlate, "Vehicle_license_plate_key").IsUnique().HasFilter("is_deleted = false");
 
-            entity.HasIndex(e => e.VehicleCode, "Vehicle_vehicle_code_key").IsUnique();
+            entity.HasIndex(e => e.VehicleCode, "Vehicle_vehicle_code_key").IsUnique().HasFilter("is_deleted = false");
 
             entity.Property(e => e.VehicleId).HasColumnName("vehicle_id");
             entity.Property(e => e.CapacityHorses).HasColumnName("capacity_horses");
@@ -2666,6 +2674,7 @@ public partial class AppDbContext : DbContext
                 .HasColumnName("registration_number");
             entity.Property(e => e.SpecialEquipment).HasColumnName("special_equipment");
             entity.Property(e => e.UpdatedAt)
+                .IsConcurrencyToken()
                 .HasColumnType("timestamp without time zone")
                 .HasColumnName("updated_at");
             entity.Property(e => e.VehicleCode)

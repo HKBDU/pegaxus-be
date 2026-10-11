@@ -62,13 +62,13 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "provider_status", new[] { "ACTIVE", "INACTIVE", "SUSPENDED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "receipt_status", new[] { "PENDING", "CONFIRMED", "FAILED", "REFUNDED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "recipient_status", new[] { "PENDING", "DELIVERED", "READ", "FAILED" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED", "PENDING_LEGAL_REVIEW", "PENDING_MANAGER_APPROVAL", "REJECTED_BY_MANAGER", "APPROVED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_type", new[] { "PRIMARY", "BACKUP" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_mode", new[] { "ROAD", "SEA", "AIR" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_plan_status", new[] { "DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_status", new[] { "CREATED", "PLANNING", "READY", "IN_TRANSIT", "COMPLETED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_incident_type", new[] { "BREAKDOWN", "ACCIDENT", "TIRE_DAMAGE", "ENGINE_FAILURE", "TEMPERATURE_CONTROL_FAILURE", "EQUIPMENT_FAILURE", "OTHER" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "vehicle_status", new[] { "AVAILABLE", "ASSIGNED", "IN_USE", "MAINTENANCE", "INACTIVE", "SUSPENDED", "OUT_OF_SERVICE" });
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Account", b =>
@@ -3173,14 +3173,15 @@ namespace Pegaxus.Repository.Migrations
                     b.HasKey("RoutePlanId")
                         .HasName("RoutePlan_pkey");
 
+                    b.Property<DateTime>("UpdatedAt").IsConcurrencyToken();
+
                     b.HasIndex("Status")
                         .HasDatabaseName("RoutePlan_status_idx");
 
                     b.HasIndex(new[] { "RoutePlanCode" }, "RoutePlan_route_plan_code_key")
                         .IsUnique();
 
-                    b.HasIndex(new[] { "TransportPlanId" }, "RoutePlan_transport_plan_id_key")
-                        .IsUnique();
+                    b.HasIndex(new[] { "TransportPlanId" }, "RoutePlan_transport_plan_id_idx");
 
                     b.ToTable("RoutePlan", null, t =>
                         {
@@ -3210,6 +3211,34 @@ namespace Pegaxus.Repository.Migrations
                     b.Property<Guid?>("DriverEmployeeId")
                         .HasColumnType("uuid")
                         .HasColumnName("driver_employee_id");
+
+                    b.Property<Guid?>("EscortEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("escort_employee_id");
+
+                    b.Property<Guid?>("TransportProviderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("transport_provider_id");
+
+                    b.Property<string>("ServiceType")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("service_type");
+
+                    b.Property<string>("ProviderReference")
+                        .HasMaxLength(255)
+                        .HasColumnType("character varying(255)")
+                        .HasColumnName("provider_reference");
+
+                    b.Property<decimal?>("OutsourcingCostAmount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("outsourcing_cost_amount");
+
+                    b.Property<string>("OutsourcingCurrency")
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)")
+                        .HasColumnName("outsourcing_currency");
 
                     b.Property<string>("Note")
                         .HasColumnType("text")
@@ -3248,10 +3277,16 @@ namespace Pegaxus.Repository.Migrations
                     b.HasKey("RoutePlanRouteId")
                         .HasName("RoutePlanRoute_pkey");
 
+                    b.Property<DateTime>("UpdatedAt").IsConcurrencyToken();
+
                     b.HasIndex("RouteType")
                         .HasDatabaseName("RoutePlanRoute_route_type_idx");
 
                     b.HasIndex(new[] { "DriverEmployeeId" }, "RoutePlanRoute_driver_employee_id_idx");
+
+                    b.HasIndex(new[] { "EscortEmployeeId" }, "RoutePlanRoute_escort_employee_id_idx");
+
+                    b.HasIndex(new[] { "TransportProviderId" }, "RoutePlanRoute_transport_provider_id_idx");
 
                     b.HasIndex(new[] { "RouteId" }, "RoutePlanRoute_route_id_idx");
 
@@ -3551,6 +3586,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("tax_code");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -3565,7 +3601,12 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "IsDeleted" }, "TransportProvider_is_deleted_idx");
 
                     b.HasIndex(new[] { "ProviderCode" }, "TransportProvider_provider_code_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
+
+                    b.HasIndex(new[] { "TaxCode" }, "TransportProvider_tax_code_key")
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex(new[] { "ProviderName" }, "TransportProvider_provider_name_idx");
 
@@ -3649,6 +3690,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("transport_mode");
 
                     b.Property<DateTime>("UpdatedAt")
+                        .IsConcurrencyToken()
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("updated_at");
 
@@ -3682,10 +3724,12 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "IsDeleted" }, "Vehicle_is_deleted_idx");
 
                     b.HasIndex(new[] { "LicensePlate" }, "Vehicle_license_plate_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex(new[] { "VehicleCode" }, "Vehicle_vehicle_code_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.ToTable("Vehicle", null, t =>
                         {
@@ -4434,8 +4478,8 @@ namespace Pegaxus.Repository.Migrations
             modelBuilder.Entity("Pegaxus.Repository.Entities.RoutePlan", b =>
                 {
                     b.HasOne("Pegaxus.Repository.Entities.TransportPlan", "TransportPlan")
-                        .WithOne("RoutePlan")
-                        .HasForeignKey("Pegaxus.Repository.Entities.RoutePlan", "TransportPlanId")
+                        .WithMany("RoutePlans")
+                        .HasForeignKey("TransportPlanId")
                         .IsRequired()
                         .HasConstraintName("RoutePlan_transport_plan_id_fkey");
 
@@ -4448,6 +4492,16 @@ namespace Pegaxus.Repository.Migrations
                         .WithMany("RoutePlanRoutes")
                         .HasForeignKey("DriverEmployeeId")
                         .HasConstraintName("RoutePlanRoute_driver_employee_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Employee", "EscortEmployee")
+                        .WithMany("EscortRoutePlanRoutes")
+                        .HasForeignKey("EscortEmployeeId")
+                        .HasConstraintName("RoutePlanRoute_escort_employee_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.TransportProvider", "TransportProvider")
+                        .WithMany("RoutePlanRoutes")
+                        .HasForeignKey("TransportProviderId")
+                        .HasConstraintName("RoutePlanRoute_transport_provider_id_fkey");
 
                     b.HasOne("Pegaxus.Repository.Entities.Route", "Route")
                         .WithMany("RoutePlanRoutes")
@@ -4462,6 +4516,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasConstraintName("RoutePlanRoute_route_plan_id_fkey");
 
                     b.Navigation("DriverEmployee");
+
+                    b.Navigation("EscortEmployee");
+
+                    b.Navigation("TransportProvider");
 
                     b.Navigation("Route");
 
@@ -4796,7 +4854,7 @@ namespace Pegaxus.Repository.Migrations
                 {
                     b.Navigation("EmployeeTransportPlans");
 
-                    b.Navigation("RoutePlan");
+                    b.Navigation("RoutePlans");
 
                     b.Navigation("TransportPlanProviders");
                 });
