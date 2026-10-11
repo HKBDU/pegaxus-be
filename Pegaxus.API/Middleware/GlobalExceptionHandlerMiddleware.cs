@@ -47,6 +47,9 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
             DbUpdateConcurrencyException => StatusCodes.Status409Conflict,
             PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } => StatusCodes.Status409Conflict,
             DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } } => StatusCodes.Status409Conflict,
+            InvalidOperationException { InnerException:
+                PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } or
+                DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } } } => StatusCodes.Status409Conflict,
             ArgumentException => StatusCodes.Status400BadRequest,
             UnauthorizedAccessException => StatusCodes.Status401Unauthorized,
             KeyNotFoundException => StatusCodes.Status404NotFound,

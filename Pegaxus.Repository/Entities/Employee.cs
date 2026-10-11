@@ -45,10 +45,6 @@ public partial class Employee
 
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 
-    public virtual ICollection<BookingEmployeeAssignment> BookingAssignments { get; set; } = new List<BookingEmployeeAssignment>();
-
-    public virtual ICollection<BookingEmployeeAssignment> CreatedBookingAssignments { get; set; } = new List<BookingEmployeeAssignment>();
-
     public virtual ICollection<CostApprovalDecision> CostApprovalDecisions { get; set; } = new List<CostApprovalDecision>();
 
     public virtual Account? DeletedByAccount { get; set; }
