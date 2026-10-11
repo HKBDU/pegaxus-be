@@ -137,9 +137,13 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
         try
         {
             using var json = JsonDocument.Parse(await response.Content.ReadAsStreamAsync(token));
-            var properties = json.RootElement.GetProperty("features")[0].GetProperty("properties");
-            var distance = properties.GetProperty("distance").GetDecimal() / 1000m;
-            var duration = (int)Math.Ceiling(properties.GetProperty("time").GetDouble() / 60d);
+            var results = json.RootElement.GetProperty("results");
+            if (results.ValueKind != JsonValueKind.Array || results.GetArrayLength() == 0)
+                throw new JsonException("Geoapify returned no route results");
+
+            var route = results[0];
+            var distance = route.GetProperty("distance").GetDecimal() / 1000m;
+            var duration = (int)Math.Ceiling(route.GetProperty("time").GetDouble() / 60d);
             return (Math.Round(distance, 1), duration);
         }
         catch (Exception ex) when (ex is KeyNotFoundException or InvalidOperationException or JsonException or FormatException)
