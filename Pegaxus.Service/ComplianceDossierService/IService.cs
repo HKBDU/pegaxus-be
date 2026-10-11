@@ -43,7 +43,7 @@ public interface IService
 
     Task<IReadOnlyList<Response.TemplateOptionResponse>> GetTemplateOptionsAsync(Guid accountId, Guid bookingId, CancellationToken cancellationToken = default);
     Task<Response.InitializationResponse> PreviewAsync(Guid accountId, Guid transportId, Request.InitializeRequest request, CancellationToken cancellationToken = default);
-    Task<Response.InitializationResponse> InitializeAsync(Guid accountId, Guid transportId, Request.InitializeRequest request, CancellationToken cancellationToken = default);
+    Task<Response.InitializationResponse> InitializeAsync(Guid accountId, Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken = default);
 
     Task<Response.DashboardResponse> GetDashboardAsync(
         Guid accountId,

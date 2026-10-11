@@ -26,7 +26,17 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
                 throw;
 
             var statusCode = MapStatusCode(ex);
-            _logger.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+            // Logging must not replace the original API error response. Some hosts
+            // (notably Windows EventLog without source permissions) can throw while
+            // writing a log entry, which otherwise closes the HTTP response early.
+            try
+            {
+                _logger.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+            }
+            catch
+            {
+                // Preserve the mapped error response when a logging provider fails.
+            }
 
             context.Response.Clear();
             context.Response.StatusCode = statusCode;

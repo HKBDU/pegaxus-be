@@ -44,7 +44,7 @@ public sealed partial class Service
     }
 
     public async Task<Response.InitializationResponse> InitializeAsync(
-        Guid accountId, Guid transportId, Request.InitializeRequest request, CancellationToken cancellationToken = default)
+        Guid accountId, Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken = default)
     {
         await RequireSpecialistAsync(accountId, cancellationToken);
         await using var transaction = _db.Database.IsRelational()
@@ -53,10 +53,10 @@ public sealed partial class Service
         // The negotiated status change takes the same lock before changing the booking or its dossier.
         if (_db.Database.IsRelational())
             // Updating the key to itself holds a row lock until the transaction ends.
-            await _db.Transports.Where(item => item.TransportId == transportId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.TransportId, item => item.TransportId), cancellationToken);
+            await _db.Bookings.Where(item => item.BookingId == bookingId)
+                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.BookingId, item => item.BookingId), cancellationToken);
 
-        var (booking, requirements) = await PrepareInitializationAsync(transportId, request, cancellationToken);
+        var (booking, requirements) = await PrepareInitializationAsync(bookingId, request, cancellationToken);
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         var dossier = new ComplianceDossier
         {
@@ -94,12 +94,12 @@ public sealed partial class Service
     }
 
     private async Task<(Repository.Entities.Booking Booking, List<Response.GeneratedRequirementResponse> Requirements)> PrepareInitializationAsync(
-        Guid transportId, Request.InitializeRequest request, CancellationToken cancellationToken)
+        Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken)
     {
         var validation = await _initializeValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
             throw new BadRequestException(string.Join(" ", validation.Errors.Select(error => error.ErrorMessage)));
-        var booking = await GetInitializationBookingByTransportAsync(transportId, request.BookingUpdatedAt, cancellationToken);
+        var booking = await GetInitializationBookingByBookingAsync(bookingId, request.BookingUpdatedAt, cancellationToken);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var items = request.Items;
         if (request.DossierTemplateId is Guid templateId)
@@ -146,17 +146,18 @@ public sealed partial class Service
         return (booking, result);
     }
 
-    private async Task<Repository.Entities.Booking> GetInitializationBookingByTransportAsync(
-        Guid transportId, DateTimeOffset? expectedUpdatedAt, CancellationToken cancellationToken)
+    private async Task<Repository.Entities.Booking> GetInitializationBookingByBookingAsync(
+        Guid bookingId, DateTimeOffset? expectedUpdatedAt, CancellationToken cancellationToken)
     {
-        var transport = await _db.Transports.AsNoTracking()
-            .Include(value => value.Booking).ThenInclude(value => value.Customer)
-            .Include(value => value.Booking).ThenInclude(value => value.BookingHorses).ThenInclude(value => value.Horse)
-            .Include(value => value.Booking).ThenInclude(value => value.Transport)
-            .Include(value => value.ComplianceDossier)
-            .SingleOrDefaultAsync(value => value.TransportId == transportId, cancellationToken)
-            ?? throw new NotFoundException("Transport not found.", "TRANSPORT_NOT_FOUND");
-        var booking = transport.Booking;
+        var booking = await _db.Bookings.AsNoTracking()
+            .Include(value => value.Customer)
+            .Include(value => value.BookingHorses).ThenInclude(value => value.Horse)
+            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossier)
+            .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
+            ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
+        var transport = booking.Transport;
+        if (transport is null)
+            throw new NotFoundException("Transport not found.", "TRANSPORT_NOT_FOUND");
         if (expectedUpdatedAt.HasValue &&
             (DateTime.SpecifyKind(booking.UpdatedAt, DateTimeKind.Utc) != expectedUpdatedAt.Value.UtcDateTime || booking.Status != BookingStatus.APPROVED))
             throw new ConflictException("Operation aborted: The associated Booking status has changed and is no longer APPROVED.", "BOOKING_STATUS_CHANGED");
