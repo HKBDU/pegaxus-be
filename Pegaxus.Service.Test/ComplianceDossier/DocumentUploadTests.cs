@@ -400,7 +400,8 @@ public class DocumentUploadTests
             ValidUntil = booking.RequestedDepartureDate.AddDays(14),
             ComplianceRequirement = new ComplianceRequirement
             {
-                ComplianceRequirementId = Guid.NewGuid(), RequirementCode = "PASS", RequirementName = "Horse Passport", ValidityRequired = true
+                ComplianceRequirementId = Guid.NewGuid(), RequirementCode = "PASS", RequirementName = "Horse Passport",
+                Category = ComplianceRequirementCategory.HorseIdentity, ValidityRequired = true
             }
         };
         var dossier = new Pegaxus.Repository.Entities.ComplianceDossier

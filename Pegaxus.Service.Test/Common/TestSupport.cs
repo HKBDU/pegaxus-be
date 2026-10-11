@@ -44,6 +44,7 @@ internal static class TestSupport
         {
             CustomerId = Guid.NewGuid(),
             AccountId = account.AccountId,
+            CustomerCode = $"CUS-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(0, 10_000):D4}",
             Account = account,
             FullName = "Test Customer",
             CreatedAt = now,
