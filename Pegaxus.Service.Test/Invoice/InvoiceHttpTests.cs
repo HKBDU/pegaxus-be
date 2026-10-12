@@ -27,7 +27,7 @@ namespace Pegaxus.Service.Test;
 public class InvoiceHttpTests
 {
     [Fact]
-    public async Task SuggestionCreateAndUpdate_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
+    public async Task SuggestionCreateUpdateAndList_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
     {
         await using var db = TestSupport.CreateDb();
         var f = await InvoiceTests.Fixture.CreateAsync(db);
@@ -48,6 +48,7 @@ public class InvoiceHttpTests
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
         builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ =>
             new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService()));
         builder.Services.AddControllers().AddApplicationPart(typeof(BookingController).Assembly)
@@ -123,6 +124,13 @@ public class InvoiceHttpTests
         var stale = await client.PutAsJsonAsync($"/api/v1/invoices/{invoiceId}", updateRequest);
         Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
         Assert.Equal("INVOICE_MODIFIED", (await stale.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        var listed = await client.GetAsync($"/api/v1/invoices?bookingId={f.Booking.BookingId}");
+        Assert.Equal(HttpStatusCode.OK, listed.StatusCode);
+        var list = (await listed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.Equal(1, list.GetProperty("totalItems").GetInt32());
+        Assert.Equal(1, list.GetProperty("items").GetArrayLength());
+        Assert.Equal(invoiceId, list.GetProperty("items")[0].GetProperty("invoiceId").GetGuid());
+        Assert.Equal(2.4m, list.GetProperty("items")[0].GetProperty("totalAmount").GetDecimal());
         var duplicate = await client.PostAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
         Assert.Equal("INVOICE_ALREADY_EXISTS", (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());

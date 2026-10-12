@@ -48,6 +48,7 @@ public class InvoiceUpdateHttpTests
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
         builder.Services.AddControllers().AddApplicationPart(typeof(InvoicesController).Assembly)
             .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = context =>
                 new BadRequestObjectResult(ResponseBuilder.ErrorResponse(
