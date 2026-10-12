@@ -187,6 +187,9 @@ builder.Services.AddScoped<IValidator<AuthService.Request.ResetPasswordRequest>,
 builder.Services.AddScoped<BookingService.IService, BookingService.Service>();
 builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IService, Pegaxus.Service.InvoiceService.Service>();
 builder.Services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.ListRequest>, Pegaxus.Service.InvoiceService.Validator.ListRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.UpdateRequest>, Pegaxus.Service.InvoiceService.Validator.UpdateRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.CreateRequest>, Pegaxus.Service.InvoiceService.Validator.CreateRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.SuggestionRequest>, Pegaxus.Service.InvoiceService.Validator.SuggestionRequestValidator>();
 builder.Services.AddScoped<TransportPlanService.IService, TransportPlanService.Service>();
 builder.Services.AddScoped<RoutePlanService.IService, RoutePlanService.Service>();
 builder.Services.AddScoped<LocationService.IService, LocationService.Service>();

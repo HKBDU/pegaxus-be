@@ -236,7 +236,9 @@ public class InvoiceListTests
             db.AddRange(transport, oldPlan, latest, cancelled);
             db.Invoices.AddRange(invoices);
             await db.SaveChangesAsync();
-            return new(account, employee, booking, other, oldPlan, latest, cancelled, invoices, new ListInvoiceService(db, new ListRequestValidator()));
+            return new(account, employee, booking, other, oldPlan, latest, cancelled, invoices,
+                new ListInvoiceService(db, TimeProvider.System, new CreateRequestValidator(TimeProvider.System),
+                    new SuggestionRequestValidator(), new UpdateRequestValidator(TimeProvider.System), new ListRequestValidator()));
         }
         internal static DateTime Day(int day) => new(2026, 10, day, 0, 0, 0, DateTimeKind.Unspecified);
         internal static DateTimeOffset Offset(DateTime date) => new(DateTime.SpecifyKind(date, DateTimeKind.Utc));
