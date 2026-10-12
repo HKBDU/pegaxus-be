@@ -49,6 +49,10 @@ public class InvoiceCancellationPostgresTests
                 var outbox = await verify.OutboxMessages.ToListAsync(); Assert.Equal(2, outbox.Count);
                 Assert.Equal(customer.Email, OutboxQueue.Deserialize<EmailPayload>(outbox.Single(x => x.MessageType == MessageTypes.Email).Payload).To);
                 Assert.Equal(customer.AccountId, OutboxQueue.Deserialize<SignalRAccountPayload>(outbox.Single(x => x.MessageType == MessageTypes.SignalRAccount).Payload).AccountId);
+                var details = await InvoiceCancellationTests.CreateService(verify).GetAsync(customer.AccountId, invoice.InvoiceId);
+                Assert.Equal("CANCELLED", details.Status);
+                Assert.Equal(cancelled.CancellationReason, details.CancellationReason);
+                Assert.Empty(details.AvailableActions);
             }
 
             var fresh = await InvoiceCancellationTests.SeedAsync(seed);

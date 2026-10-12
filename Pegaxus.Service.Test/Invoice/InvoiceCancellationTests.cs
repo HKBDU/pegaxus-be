@@ -19,7 +19,9 @@ public class InvoiceCancellationTests
     }
     internal static readonly Clock TestClock = new();
     internal static CancellationService CreateService(AppDbContext db, INotificationRealtimeService? realtime = null) => new(db,
-        TestClock, new CancelRequestValidator(), new Pegaxus.Service.NotificationService.Service(db, realtime ?? new NoopNotificationRealtimeService()));
+        TestClock, new CreateRequestValidator(TestClock), new SuggestionRequestValidator(), new UpdateRequestValidator(TestClock),
+        new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(TestClock),
+        new CancelRequestValidator(), new Pegaxus.Service.NotificationService.Service(db, realtime ?? new NoopNotificationRealtimeService()));
     internal static Request.CancelRequest ValidRequest() => new() { CancellationReason = "  Wrong unit price on the transport fee line  " };
     internal static async Task<(Account Actor, Account Customer, Invoice Invoice, TransportPlan Plan)> SeedAsync(AppDbContext db,
         InvoiceType type = InvoiceType.DEPOSIT, InvoiceStatus status = InvoiceStatus.ISSUED)
