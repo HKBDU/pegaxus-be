@@ -12,10 +12,7 @@ namespace Pegaxus.Service.Test;
 public class InvoiceOnlinePaymentTests
 {
     internal static readonly DateTime Now = new(2026, 11, 10, 4, 0, 0);
-    internal sealed class Clock : TimeProvider
-    {
-        public override DateTimeOffset GetUtcNow() => new(DateTime.SpecifyKind(Now, DateTimeKind.Utc));
-    }
+    internal static readonly NullLogger<Invoices.Service> Logger = NullLogger<Invoices.Service>.Instance;
     internal sealed class Gateway : Pegaxus.Service.PaymentGatewayService.IService
     {
         internal int Calls;
@@ -39,7 +36,7 @@ public class InvoiceOnlinePaymentTests
         }
     }
     internal static Invoices.Service CreateService(AppDbContext db, Pegaxus.Service.PaymentGatewayService.IService gateway) =>
-        new(db, gateway, new Clock(), NullLogger<Invoices.Service>.Instance);
+        InvoicePaymentTests.CreateService(db, gateway: gateway);
 
     internal static async Task<(Account Customer, Account Manager, Invoice Invoice)> SeedAsync(AppDbContext db)
     {

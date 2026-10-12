@@ -27,7 +27,7 @@ public class InvoiceOnlinePaymentPostgresTests
         try
         {
             await seed.Database.EnsureCreatedAsync();
-            var (customer, _, invoice) = await InvoiceOnlinePaymentTests.SeedAsync(seed);
+            var (customer, manager, invoice) = await InvoiceOnlinePaymentTests.SeedAsync(seed);
             var old = InvoiceOnlinePaymentTests.Receipt(invoice, ReceiptStatus.PENDING, "RCP-20261109-0001");
             seed.Receipts.Add(old); await seed.SaveChangesAsync();
             await using (var db = new AppDbContext(options))
@@ -111,8 +111,8 @@ public class InvoiceOnlinePaymentPostgresTests
                     var result = await winner;
                     Assert.Equal(invoice.TotalAmount, result.Receipt.Amount);
                     var failure = await Record.ExceptionAsync(() => competitor);
-                    var error = Assert.IsType<PostgresException>(failure?.InnerException ?? failure);
-                    Assert.Equal(PostgresErrorCodes.SerializationFailure, error.SqlState);
+                    var error = Assert.IsType<ConflictException>(failure);
+                    Assert.Equal("CONCURRENT_UPDATE", error.ErrorCode);
                     Assert.Equal(1, gateway.Calls); Assert.Equal(0, competingGateway.Calls);
                 }
                 finally { release.TrySetResult(); }
@@ -126,6 +126,14 @@ public class InvoiceOnlinePaymentPostgresTests
                 Assert.Equal(InvoiceStatus.ISSUED, unchanged.Status); Assert.Equal(invoice.UpdatedAt, unchanged.UpdatedAt);
                 Assert.Null(unchanged.PaidAt); Assert.Empty(await verify.InvoiceStatusHistories.ToListAsync());
                 Assert.Empty(await verify.Notifications.ToListAsync()); Assert.Empty(await verify.OutboxMessages.ToListAsync());
+                var details = await InvoicePaymentTests.CreateService(verify).GetAsync(customer.AccountId, invoice.InvoiceId);
+                Assert.Equal("PENDING", Assert.Single(details.Receipts, x => x.Status == "PENDING").Status);
+            }
+            await using (var db = new AppDbContext(options))
+            {
+                var error = await Assert.ThrowsAsync<ConflictException>(() => InvoiceCancellationTests.CreateService(db)
+                    .CancelAsync(invoice.InvoiceId, InvoiceCancellationTests.ValidRequest(), manager.AccountId));
+                Assert.Equal("PAYMENT_IN_PROGRESS", error.ErrorCode);
             }
             await using (var reader = new AppDbContext(options))
             {
@@ -144,6 +152,30 @@ public class InvoiceOnlinePaymentPostgresTests
                 Assert.Equal("INVOICE_NOT_FOUND", (await Assert.ThrowsAsync<NotFoundException>(() => service
                     .InitiateOnlinePaymentAsync(invoice.InvoiceId, customer.AccountId))).ErrorCode);
                 Assert.Equal(0, gateway.Calls);
+            }
+            await using (var writer = new AppDbContext(options))
+            {
+                await writer.Bookings.Where(x => x.BookingId == invoice.BookingId).ExecuteUpdateAsync(s => s.SetProperty(x => x.CustomerId, customer.CustomerAccount!.CustomerId));
+                await writer.Invoices.Where(x => x.InvoiceId == invoice.InvoiceId).ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, InvoiceStatus.ISSUED));
+            }
+            await using (var db = new AppDbContext(options))
+            {
+                var gateway = new InvoiceOnlinePaymentTests.Gateway();
+                var service = InvoiceOnlinePaymentTests.CreateService(db, gateway);
+                await service.RecordPaymentAsync(invoice.InvoiceId, new()
+                { Amount = invoice.TotalAmount, Currency = invoice.Currency, PaymentMethod = "BANK_TRANSFER" }, manager.AccountId);
+                Assert.Equal("INVALID_INVOICE_STATUS", (await Assert.ThrowsAsync<ConflictException>(() => service
+                    .InitiateOnlinePaymentAsync(invoice.InvoiceId, customer.AccountId))).ErrorCode);
+                Assert.Equal(0, gateway.Calls);
+            }
+            await using (var verify = new AppDbContext(options))
+            {
+                Assert.Equal(0, await verify.Receipts.CountAsync(x => x.Status == ReceiptStatus.PENDING));
+                Assert.Equal(2, await verify.Receipts.CountAsync(x => x.Status == ReceiptStatus.FAILED));
+                var details = await InvoicePaymentTests.CreateService(verify).GetAsync(customer.AccountId, invoice.InvoiceId);
+                Assert.Equal("PAID", details.Status);
+                Assert.Equal(manager.AccountId, Assert.Single(details.Receipts, x => x.Status == "CONFIRMED").RecordedBy!.AccountId);
+                Assert.Equal(InvoiceHistoryType.RECORD_PAYMENT, Assert.Single(await verify.InvoiceStatusHistories.ToListAsync()).Type);
             }
         }
         finally { await seed.Database.EnsureDeletedAsync(); }

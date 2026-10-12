@@ -26,7 +26,6 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "audit_visibility", new[] { "Public", "Internal" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "authority_evidence_type", new[] { "Acceptance", "Rejection", "AdditionalInformation", "Other" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "authority_submission_status", new[] { "DRAFT", "SUBMITTED", "PENDING", "APPROVED", "REJECTED", "RETURNED" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "booking_assignment_status", new[] { "ACTIVE", "REVOKED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "booking_history_type", new[] { "SUBMIT", "APPROVE", "REJECT", "CANCEL" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "booking_status", new[] { "DRAFT", "PENDING", "APPROVED", "REJECTED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "claim_resolution_type", new[] { "COMPENSATION", "PARTIAL_COMPENSATION", "REFUND", "SERVICE_RECOVERY", "NO_COMPENSATION", "OTHER" });
@@ -550,64 +549,6 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "RequestedDepartureDate" }, "Booking_requested_departure_date_idx");
 
                     b.ToTable("Booking", (string)null);
-                });
-
-            modelBuilder.Entity("Pegaxus.Repository.Entities.BookingEmployeeAssignment", b =>
-                {
-                    b.Property<Guid>("BookingEmployeeAssignmentId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("uuid")
-                        .HasColumnName("booking_employee_assignment_id");
-
-                    b.Property<DateTime>("AssignedAt")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("assigned_at");
-
-                    b.Property<Guid>("AssignedByEmployeeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("assigned_by_employee_id");
-
-                    b.Property<int>("AssignmentRole")
-                        .HasColumnType("employee_role")
-                        .HasColumnName("assignment_role");
-
-                    b.Property<Guid>("BookingId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("booking_id");
-
-                    b.Property<Guid>("EmployeeId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("employee_id");
-
-                    b.Property<string>("Note")
-                        .HasColumnType("text")
-                        .HasColumnName("note");
-
-                    b.Property<DateTime?>("RevokedAt")
-                        .HasColumnType("timestamp without time zone")
-                        .HasColumnName("revoked_at");
-
-                    b.Property<int>("Status")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("booking_assignment_status")
-                        .HasColumnName("status")
-                        .HasDefaultValueSql("'ACTIVE'::booking_assignment_status");
-
-                    b.HasKey("BookingEmployeeAssignmentId")
-                        .HasName("BookingEmployeeAssignment_pkey");
-
-                    b.HasIndex("Status")
-                        .HasDatabaseName("BookingEmployeeAssignment_status_idx");
-
-                    b.HasIndex(new[] { "BookingId", "AssignmentRole" }, "BookingEmployeeAssignment_active_role_idx")
-                        .IsUnique()
-                        .HasFilter("status = 'ACTIVE'");
-
-                    b.HasIndex(new[] { "AssignedByEmployeeId" }, "BookingEmployeeAssignment_assigned_by_employee_id_idx");
-
-                    b.HasIndex(new[] { "EmployeeId" }, "BookingEmployeeAssignment_employee_id_idx");
-
-                    b.ToTable("BookingEmployeeAssignment", (string)null);
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.BookingHorse", b =>
@@ -4722,33 +4663,6 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("Customer");
                 });
 
-            modelBuilder.Entity("Pegaxus.Repository.Entities.BookingEmployeeAssignment", b =>
-                {
-                    b.HasOne("Pegaxus.Repository.Entities.Employee", "AssignedByEmployee")
-                        .WithMany("CreatedBookingAssignments")
-                        .HasForeignKey("AssignedByEmployeeId")
-                        .IsRequired()
-                        .HasConstraintName("BookingEmployeeAssignment_assigned_by_employee_id_fkey");
-
-                    b.HasOne("Pegaxus.Repository.Entities.Booking", "Booking")
-                        .WithMany("EmployeeAssignments")
-                        .HasForeignKey("BookingId")
-                        .IsRequired()
-                        .HasConstraintName("BookingEmployeeAssignment_booking_id_fkey");
-
-                    b.HasOne("Pegaxus.Repository.Entities.Employee", "Employee")
-                        .WithMany("BookingAssignments")
-                        .HasForeignKey("EmployeeId")
-                        .IsRequired()
-                        .HasConstraintName("BookingEmployeeAssignment_employee_id_fkey");
-
-                    b.Navigation("AssignedByEmployee");
-
-                    b.Navigation("Booking");
-
-                    b.Navigation("Employee");
-                });
-
             modelBuilder.Entity("Pegaxus.Repository.Entities.BookingHorse", b =>
                 {
                     b.HasOne("Pegaxus.Repository.Entities.Booking", "Booking")
@@ -5725,8 +5639,6 @@ namespace Pegaxus.Repository.Migrations
 
                     b.Navigation("BookingStatusHistories");
 
-                    b.Navigation("EmployeeAssignments");
-
                     b.Navigation("Invoices");
 
                     b.Navigation("Transport");
@@ -5802,13 +5714,9 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Employee", b =>
                 {
-                    b.Navigation("BookingAssignments");
-
                     b.Navigation("Bookings");
 
                     b.Navigation("CostApprovalDecisions");
-
-                    b.Navigation("CreatedBookingAssignments");
 
                     b.Navigation("EmployeeTransportPlans");
 
