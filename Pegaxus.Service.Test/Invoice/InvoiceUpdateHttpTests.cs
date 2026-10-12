@@ -50,6 +50,9 @@ public class InvoiceUpdateHttpTests
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.BookingListRequest>, BookingListRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
+        builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
+        builder.Services.AddSingleton<NotificationService.INotificationRealtimeService, NotificationService.NoopNotificationRealtimeService>();
         builder.Services.AddControllers().AddApplicationPart(typeof(InvoicesController).Assembly)
             .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = context =>
                 new BadRequestObjectResult(ResponseBuilder.ErrorResponse(

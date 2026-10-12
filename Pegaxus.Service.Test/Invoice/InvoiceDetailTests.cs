@@ -254,7 +254,8 @@ public class InvoiceDetailTests
             await db.SaveChangesAsync();
             return new(account, creator, recorder, booking, horse!, transport, latest, invoice, otherInvoice, items, receipts,
                 new DetailService(db, TimeProvider.System, new CreateRequestValidator(TimeProvider.System), new SuggestionRequestValidator(),
-                    new UpdateRequestValidator(TimeProvider.System), new ListRequestValidator(), new BookingListRequestValidator()));
+                    new UpdateRequestValidator(TimeProvider.System), new ListRequestValidator(), new BookingListRequestValidator(),
+                    new IssueRequestValidator(), new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService())));
         }
         internal static DateTime Day(int day) => new(2026, 10, day, 0, 0, 0, DateTimeKind.Unspecified);
         internal static DateTimeOffset Offset(DateTime date) => new(DateTime.SpecifyKind(date, DateTimeKind.Utc));

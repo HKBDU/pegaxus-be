@@ -152,7 +152,9 @@ public class InvoiceUpdatePostgresTests : IAsyncLifetime
     private AppDbContext CreateDb(params IInterceptor[] interceptors) => new(
         new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(_source!).AddInterceptors(interceptors).Options);
     private static DraftInvoiceService Service(AppDbContext db) => new(db, InvoiceUpdateTests.Fixture.Clock,
-        new CreateRequestValidator(InvoiceUpdateTests.Fixture.Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(InvoiceUpdateTests.Fixture.Clock), new ListRequestValidator(), new BookingListRequestValidator());
+        new CreateRequestValidator(InvoiceUpdateTests.Fixture.Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(InvoiceUpdateTests.Fixture.Clock),
+        new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(),
+        new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService()));
 
     private sealed class EnumNameTranslator : INpgsqlNameTranslator
     {

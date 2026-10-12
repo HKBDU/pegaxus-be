@@ -27,7 +27,7 @@ namespace Pegaxus.Service.Test;
 public class InvoiceHttpTests
 {
     [Fact]
-    public async Task SuggestionCreateUpdateListsAndDetails_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
+    public async Task SuggestionCreateUpdateListsDetailsAndIssue_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
     {
         await using var db = TestSupport.CreateDb();
         var f = await InvoiceTests.Fixture.CreateAsync(db);
@@ -50,6 +50,9 @@ public class InvoiceHttpTests
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.BookingListRequest>, BookingListRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
+        builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
+        builder.Services.AddSingleton<NotificationService.INotificationRealtimeService, NotificationService.NoopNotificationRealtimeService>();
         builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ =>
             new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService()));
         builder.Services.AddControllers().AddApplicationPart(typeof(BookingController).Assembly)
@@ -162,6 +165,23 @@ public class InvoiceHttpTests
         var duplicateSuggestion = await client.GetAsync(path + "/suggestion?type=QUOTATION");
         Assert.Equal(HttpStatusCode.Conflict, duplicateSuggestion.StatusCode);
         Assert.Equal("INVOICE_ALREADY_EXISTS", (await duplicateSuggestion.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        var issuedResponse = await client.PostAsJsonAsync($"/api/v1/invoices/{invoiceId}/issue",
+            new Request.IssueRequest { LastUpdatedAt = edited.GetProperty("updatedAt").GetDateTimeOffset() });
+        Assert.Equal(HttpStatusCode.OK, issuedResponse.StatusCode);
+        var issued = (await issuedResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.Equal(invoiceId, issued.GetProperty("invoiceId").GetGuid());
+        Assert.Equal("ISSUED", issued.GetProperty("status").GetString());
+        Assert.Equal(2.4m, issued.GetProperty("grandTotal").GetDecimal());
+        Assert.Equal(2, await db.InvoiceStatusHistories.CountAsync());
+        Assert.Single(await db.OutboxMessages.ToListAsync());
+        SignIn("Customer", f.Booking.Customer.AccountId);
+        var issuedDetails = await client.GetAsync($"/api/v1/invoices/{invoiceId}");
+        Assert.Equal(HttpStatusCode.OK, issuedDetails.StatusCode);
+        Assert.Equal("ISSUED", (await issuedDetails.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value").GetProperty("status").GetString());
+        var visibleInvoices = (await client.GetFromJsonAsync<JsonElement>(path)).GetProperty("value");
+        Assert.Equal(1, visibleInvoices.GetProperty("totalItems").GetInt32());
+        Assert.Equal(invoiceId, visibleInvoices.GetProperty("items")[0].GetProperty("invoiceId").GetGuid());
+        SignIn(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER));
         f.Employee.Role = EmployeeRole.DRIVER;
         await db.SaveChangesAsync();
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(path, request)).StatusCode);

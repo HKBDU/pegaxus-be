@@ -13,6 +13,22 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/invoices")]
 public sealed class InvoicesController(InvoiceService.IService service) : ControllerBase
 {
+    /// <summary>Issue a draft invoice to its booking customer.</summary>
+    /// <remarks>Requires an active Logistics Manager and the last observed updatedAt. Checks fee lines, positive total and FINAL deposit deductions. Invoice, ISSUE history, customer notification and email outbox commit atomically.</remarks>
+    /// <param name="invoiceId">The invoice identifier (UUID).</param>
+    /// <param name="request">The last observed invoice version.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the issued invoice; 400 for invalid input, 401 or 403 for unauthorized access, 404 for a missing invoice, 409 for status, version or deposit conflicts, or 422 for missing fees or a nonpositive total.</returns>
+    [HttpPost("{invoiceId:guid}/issue")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> Issue(Guid invoiceId, [FromBody] InvoiceService.Request.IssueRequest request, CancellationToken cancellationToken)
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
+        if (!Guid.TryParse(value, out var accountId)) throw new UnauthorizedException("The authenticated account identifier is invalid");
+        return Ok(ResponseBuilder.SuccessResponse(await service.IssueAsync(invoiceId, request, accountId, cancellationToken),
+            "Invoice issued successfully", traceId: HttpContext.TraceIdentifier));
+    }
+
     /// <summary>Get invoice details.</summary>
     /// <remarks>Active Logistics Managers may view every invoice. Customers may view only previously issued invoices of their own bookings. A missing invoice or another customer's invoice returns 404 INVOICE_NOT_FOUND; an owned draft or invoice cancelled before issuance returns 403 FORBIDDEN. Includes ordered cost lines, deposit deductions, customer and contact details, booking, transport, newest non-cancelled transport plan, receipts and actions allowed for the caller. Payment and item dates remain null until the pending Flow 6 fields exist. This endpoint does not modify data.</remarks>
     /// <param name="invoiceId">The invoice identifier (UUID).</param>
