@@ -150,6 +150,13 @@ public sealed class Service(AppDbContext db) : IService
     private static DateTimeOffset AsUtc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
     private static void EnsureConcurrency(DateTime actual, DateTimeOffset expected)
     {
-        if (actual != expected.UtcDateTime) throw new ConflictException("Location was modified. Please reload the latest data.", "LOCATION_MODIFIED");
+        // Truncate to microseconds: PostgreSQL `timestamp` has 6-digit precision,
+        // but .NET DateTime uses ticks (7 digits). JSON round-trip drops the last
+        // tick digit on the client side, causing false-positive concurrency failures.
+        const long MicrosecondTicks = TimeSpan.TicksPerMillisecond / 1000;
+        var actualTrunc = new DateTime(actual.Ticks / MicrosecondTicks * MicrosecondTicks, actual.Kind);
+        var expectedTrunc = new DateTime(expected.UtcDateTime.Ticks / MicrosecondTicks * MicrosecondTicks, expected.UtcDateTime.Kind);
+        if (actualTrunc != expectedTrunc)
+            throw new ConflictException("Location was modified. Please reload the latest data.", "LOCATION_MODIFIED");
     }
 }
