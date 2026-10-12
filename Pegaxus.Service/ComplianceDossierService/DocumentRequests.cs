@@ -118,8 +118,15 @@ public sealed partial class Service
                     OutboxQueue.AddEmail(_db, new MailService.MailContent
                     {
                         To = customerEmail,
-                        Subject = $"DocumentRequest {revision.RequestCode}: re-upload required",
-                        Body = $"<p>{WebUtility.HtmlEncode(note)}</p><p>{WebUtility.HtmlEncode(note).Replace("\n", "<br>")}</p><p>Revision deadline: {request.RevisionDeadline:yyyy-MM-dd}</p>"
+                        Subject = $"Document re-upload required — {revision.RequestCode}",
+                        Body = EmailBodies.DocumentReuploadBody(
+                            requestCode: revision.RequestCode,
+                            requirementName: requirement.ComplianceRequirement.RequirementName,
+                            horseName: requirement.Horse?.HorseName,
+                            errorCategory: revision.ErrorCategory ?? "",
+                            note: note,
+                            revisionDeadline: request.RevisionDeadline,
+                            actionUrl: null)
                     }, now);
                 await _db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
@@ -150,8 +157,16 @@ public sealed partial class Service
             var revision = response.DocumentRequest;
             await mailService.SendMail(new MailService.MailContent
             {
-                To = customerEmail, Subject = $"DocumentRequest {revision.RequestCode}: re-upload required",
-                Body = $"<p>{WebUtility.HtmlEncode(revision.ErrorCategory)}</p><p>{WebUtility.HtmlEncode(revision.Message).Replace("\n", "<br>")}</p><p>Revision deadline: {revision.DueDate:yyyy-MM-dd}</p>"
+                To = customerEmail,
+                Subject = $"Document re-upload required — {revision.RequestCode}",
+                Body = EmailBodies.DocumentReuploadBody(
+                    requestCode: revision.RequestCode,
+                    requirementName: revision.RequestCode,   // DTO does not carry RequirementName
+                    horseName: null,
+                    errorCategory: revision.ErrorCategory ?? "",
+                    note: revision.Message,
+                    revisionDeadline: revision.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                    actionUrl: null)
             }).WaitAsync(TimeSpan.FromSeconds(2));
             response.EmailSent = true;
         }

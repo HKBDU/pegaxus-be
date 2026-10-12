@@ -208,8 +208,18 @@ public sealed partial class Service
             {
                 await mail.SendMail(new MailService.MailContent
                 {
-                    To = recipient.Email, Subject = $"Nhắc nộp giấy tờ - {dossier.DossierCode}",
-                    Body = $"<p>{WebUtility.HtmlEncode(MissingReminderMessage(dossier, missing, reminder.DueDate, reminder.Note)).Replace("\n", "<br>")}</p>"
+                    To = recipient.Email,
+                    Subject = $"Missing documents reminder — {dossier.DossierCode}",
+                    Body = EmailBodies.MissingDocumentsBody(
+                        dossierCode: dossier.DossierCode,
+                        bookingCode: dossier.Transport.Booking.BookingCode,
+                        generalDueDate: reminder.DueDate,
+                        note: reminder.Note,
+                        actionUrl: null,
+                        missingItems: missing.Select(item => new EmailBodies.MissingItem(
+                            RequirementName: item.ComplianceRequirement.RequirementName,
+                            HorseName: item.Horse?.HorseName,
+                            DueDate: item.DueDate)))
                 }, timeout.Token);
                 reminder.EmailSentAt = ReminderNow();
             }
