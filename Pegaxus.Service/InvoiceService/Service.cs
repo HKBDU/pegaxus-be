@@ -84,3 +84,4 @@ public sealed class Service(AppDbContext db) : IService
 
     private static DateTimeOffset? Offset(DateTime? value) => value.HasValue ? new(DateTime.SpecifyKind(value.Value, DateTimeKind.Utc)) : null;
 }
+
