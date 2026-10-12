@@ -9,7 +9,7 @@ namespace Pegaxus.Service.Test;
 
 public class InvoiceHistoryTests
 {
-    internal static HistoryService CreateService(AppDbContext db) => new(db);
+    internal static HistoryService CreateService(AppDbContext db) => InvoiceIssueTests.CreateService(db);
     internal static async Task<(Account Manager, Account Customer, Invoice Invoice, InvoiceStatusHistory[] Histories)> SeedAsync(AppDbContext db)
     {
         var (managerAccount, _) = await TestSupport.AddLogisticsManagerAsync(db);

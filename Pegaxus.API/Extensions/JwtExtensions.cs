@@ -22,7 +22,7 @@ public static class JwtExtensions
     public const string DriverPolicy = "DriverPolicy";
     public const string EscortPolicy = "EscortPolicy";
     public const string CustomerOrEmployeePolicy = "CustomerOrEmployeePolicy";
-    public const string InvoiceViewerPolicy = nameof(InvoiceViewerPolicy);
+    public const string CustomerOrLogisticsManagerPolicy = "CustomerOrLogisticsManagerPolicy";
     public const string CustomerOrTransportSpecialistPolicy = "CustomerOrTransportSpecialistPolicy";
     public const string TransportSpecialistOrFleetRouteCoordinatorPolicy = "TransportSpecialistOrFleetRouteCoordinatorPolicy";
     public const string LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy = "LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy";
@@ -106,9 +106,12 @@ public static class JwtExtensions
                     OnForbidden = async context =>
                     {
                         context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        var invoiceListDenied = HttpMethods.IsGet(context.Request.Method) &&
+                            string.Equals(context.Request.Path.Value?.TrimEnd('/'), "/api/v1/invoices", StringComparison.OrdinalIgnoreCase) &&
+                            context.HttpContext.User.IsInRole(JwtServices.GetRoleName(AccountType.CUSTOMER));
                         await context.Response.WriteAsJsonAsync(ResponseBuilder.ErrorResponse(
                             null,
-                            "You do not have permission to perform this action",
+                            invoiceListDenied ? "Customer cannot access the invoice list" : "You do not have permission to perform this action",
                             "FORBIDDEN",
                             StatusCodes.Status403Forbidden));
                     },
@@ -143,6 +146,9 @@ public static class JwtExtensions
 
         services.AddAuthorization(options =>
         {
+            options.AddPolicy(CustomerOrLogisticsManagerPolicy, policy =>
+                policy.RequireAuthenticatedUser().RequireRole(JwtServices.GetRoleName(AccountType.CUSTOMER),
+                    JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER)));
             options.AddPolicy(LogisticsManagerOrFleetRouteCoordinatorPolicy, policy =>
                 policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER),
                     JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR)));
@@ -173,9 +179,6 @@ public static class JwtExtensions
 
             options.AddPolicy(CustomerOrEmployeePolicy, policy =>
                 policy.RequireRole(JwtServices.GetRoleName(AccountType.CUSTOMER), JwtServices.GetRoleName(AccountType.EMPLOYEE)));
-            options.AddPolicy(InvoiceViewerPolicy, policy =>
-                policy.RequireAuthenticatedUser().RequireRole(JwtServices.GetRoleName(AccountType.CUSTOMER),
-                    JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER)));
 
             options.AddPolicy(TransportSpecialistOrLogisticsManagerPolicy, policy =>
                 policy.RequireRole(JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER)));

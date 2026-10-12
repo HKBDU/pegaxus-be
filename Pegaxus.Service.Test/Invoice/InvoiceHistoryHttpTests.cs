@@ -106,7 +106,7 @@ public class InvoiceHistoryHttpTests
         builder.Services.AddSingleton<IConfiguration>(builder.Configuration); builder.Services.AddSingleton(db);
         builder.Services.AddControllers().AddApplicationPart(typeof(InvoicesController).Assembly);
         builder.Services.AddJwtServices(builder.Configuration);
-        builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IService, Pegaxus.Service.InvoiceService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IService>(_ => InvoiceHistoryTests.CreateService(db));
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         var app = builder.Build(); app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
         app.UseAuthentication(); app.UseAuthorization(); app.MapControllers(); await app.StartAsync(); return app;
