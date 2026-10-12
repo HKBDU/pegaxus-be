@@ -202,6 +202,8 @@ builder.Services.AddScoped<HorseService.IService, HorseService.Service>();
 builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.Configure<Pegaxus.Service.PaymentService.SePayWebhookOptions>(builder.Configuration.GetSection("SePayWebhookOptions"));
+builder.Services.AddScoped<Pegaxus.Service.PaymentService.IService, Pegaxus.Service.PaymentService.Service>();
 builder.Services.AddScoped<Pegaxus.Service.RouteChangeService.IService, Pegaxus.Service.RouteChangeService.Service>();
 builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.CreateRequest>, Pegaxus.Service.RouteChangeService.Validator.CreateRequestValidator>();
 builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.DecisionRequest>, Pegaxus.Service.RouteChangeService.Validator.DecisionRequestValidator>();
