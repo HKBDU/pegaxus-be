@@ -59,6 +59,7 @@ services:
       MailOptions__Password: ${MailOptions__Password:-}
       MailOptions__Host: ${MailOptions__Host:-smtp.gmail.com}
       MailOptions__Port: ${MailOptions__Port:-587}
+      SePayWebhookOptions__SecretKey: ${SePayWebhookOptions__SecretKey:-}
       SePayOptions__MerchantId: ${SePayOptions__MerchantId:-}
       SePayOptions__SecretKey: ${SePayOptions__SecretKey:-}
       SePayOptions__Environment: ${SePayOptions__Environment:-sandbox}

@@ -6,7 +6,7 @@ using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.InvoiceService.Validator;
 using Pegaxus.Service.NotificationService;
 using Pegaxus.Service.OutboxService;
-using PaymentService = Pegaxus.Service.InvoiceService.Service;
+using InvoicePaymentService = Pegaxus.Service.InvoiceService.Service;
 using Request = Pegaxus.Service.InvoiceService.Request;
 
 namespace Pegaxus.Service.Test;
@@ -18,7 +18,7 @@ public class InvoicePaymentTests
         public override DateTimeOffset GetUtcNow() => new(2026, 11, 10, 4, 0, 0, TimeSpan.Zero);
     }
     internal static readonly Clock TestClock = new();
-    internal static PaymentService CreateService(AppDbContext db, INotificationRealtimeService? realtime = null,
+    internal static InvoicePaymentService CreateService(AppDbContext db, INotificationRealtimeService? realtime = null,
         Pegaxus.Service.PaymentGatewayService.IService? gateway = null) => new(db,
         gateway ?? new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger,
         TestClock, new CreateRequestValidator(TestClock), new SuggestionRequestValidator(), new UpdateRequestValidator(TestClock),
