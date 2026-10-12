@@ -45,6 +45,7 @@ public class InvoiceHttpTests
         builder.Services.AddSingleton(InvoiceTests.Fixture.Clock);
         builder.Services.AddScoped<IService, InvoiceService.Service>();
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ =>
             new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService()));
         builder.Services.AddControllers().AddApplicationPart(typeof(BookingController).Assembly)
@@ -70,6 +71,11 @@ public class InvoiceHttpTests
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(path, request)).StatusCode);
         }
         SignIn(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER));
+        var suggestion = await client.GetAsync(path + "/suggestion?type=QUOTATION");
+        Assert.Equal(HttpStatusCode.OK, suggestion.StatusCode);
+        var preview = (await suggestion.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.False(preview.GetProperty("isPaymentRequired").GetBoolean());
+        Assert.Equal(0, preview.GetProperty("items").GetArrayLength());
         request.Items = [InvoiceTests.Fixture.Item(0, 1)];
         var invalid = await client.PostAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
@@ -98,6 +104,9 @@ public class InvoiceHttpTests
         var duplicate = await client.PostAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
         Assert.Equal("INVOICE_ALREADY_EXISTS", (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        var duplicateSuggestion = await client.GetAsync(path + "/suggestion?type=QUOTATION");
+        Assert.Equal(HttpStatusCode.Conflict, duplicateSuggestion.StatusCode);
+        Assert.Equal("INVOICE_ALREADY_EXISTS", (await duplicateSuggestion.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
         f.Employee.Role = EmployeeRole.DRIVER;
         await db.SaveChangesAsync();
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(path, request)).StatusCode);

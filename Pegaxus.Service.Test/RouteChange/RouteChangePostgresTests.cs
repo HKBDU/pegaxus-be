@@ -58,8 +58,7 @@ public class RouteChangePostgresTests
             try { return (await Service(db).DecideAsync(routeId, managerId,
                 new() { Decision = decision, LastUpdatedAt = version, Note = "Manager reviewed the emergency" })).Status; }
             catch (ConflictException error) { return error.ErrorCode; }
-            catch (PostgresException error) when (error.SqlState == PostgresErrorCodes.SerializationFailure) { return "ROUTE_PLAN_MODIFIED"; }
-            catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure }) { return "ROUTE_PLAN_MODIFIED"; }
+            catch (Exception error) when (error.GetBaseException() is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure }) { return "ROUTE_PLAN_MODIFIED"; }
         }
         var results = await Task.WhenAll(Decide("APPROVE"), Decide("REJECT"));
         Assert.Single(results, x => x == "ROUTE_PLAN_MODIFIED");
@@ -126,7 +125,9 @@ public class RouteChangePostgresTests
         var migrator = db.GetInfrastructure().GetRequiredService<IMigrator>();
         await migrator.MigrateAsync("20261006100000_AlignRoutePlanningWithDbV7");
         await migrator.MigrateAsync();
-        Assert.False(db.Database.HasPendingModelChanges());
+        // EF 8 finalizes the cached snapshot on the first check; use a fresh context after migration.
+        await using var check = scope.Db();
+        Assert.False(check.Database.HasPendingModelChanges());
     }
 
     private static async Task CheckOutboxClaimsAsync(DbContextOptions<AppDbContext> options)

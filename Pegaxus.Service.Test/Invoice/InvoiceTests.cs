@@ -316,7 +316,7 @@ public class InvoiceTests
             db.AddRange(transport, plan);
             await db.SaveChangesAsync();
             return new(account, employee, booking, horse!, transport, plan,
-                new DraftInvoiceService(db, Clock, new CreateRequestValidator(Clock)));
+                new DraftInvoiceService(db, Clock, new CreateRequestValidator(Clock), new SuggestionRequestValidator()));
         }
         internal static Request.CreateRequest Request(string type = "QUOTATION") => new()
         {
