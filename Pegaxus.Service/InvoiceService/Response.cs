@@ -21,7 +21,7 @@ public static class Response
         // shortcut: itemDate remains null until Flow 6 P-03 exists; R16 defers emergency cost links.
         public DateOnly? ItemDate => null;
         public Guid? EmergencyCostRequestId => null;
-    }
+    } 
     public sealed record HorseResponse(Guid HorseId, string HorseName);
     public sealed record SummaryResponse(decimal Subtotal, decimal Discount, decimal Tax, decimal TaxRatePercent, decimal DepositDeduction, decimal GrandTotal);
     public sealed record BookingResponse(Guid BookingId, string BookingCode, string Status, string OriginAddress, string OriginCountry,
