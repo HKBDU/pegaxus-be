@@ -5,6 +5,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
@@ -12,16 +13,89 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
 using Pegaxus.Service.OutboxService;
+using AppException = Pegaxus.Service.Exceptions.Exceptions;
 
 namespace Pegaxus.Service.InvoiceService;
 
-public sealed class Service(AppDbContext db, TimeProvider clock, IValidator<Request.CreateRequest> validator,
+public sealed class Service(AppDbContext db, PaymentGatewayService.IService gateway, ILogger<Service> logger,
+    TimeProvider clock, IValidator<Request.CreateRequest> validator,
     IValidator<Request.SuggestionRequest> suggestionValidator, IValidator<Request.UpdateRequest> updateValidator,
     IValidator<Request.ListRequest> listValidator, IValidator<Request.BookingListRequest> bookingListValidator,
     IValidator<Request.IssueRequest> issueValidator, IValidator<Request.RecordPaymentRequest> paymentValidator,
     IValidator<Request.CancelRequest> cancelValidator, NotificationService.IService notifications) : IService
 {
     private const decimal MaxAmount = 9_999_999_999_999_999.99m;
+
+    public async Task<Response.OnlinePaymentResponse> InitiateOnlinePaymentAsync(Guid invoiceId, Guid accountId,
+        CancellationToken cancellationToken = default)
+    {
+        var account = await db.Accounts.AsNoTracking().Include(x => x.CustomerAccount)
+            .SingleOrDefaultAsync(x => x.AccountId == accountId, cancellationToken);
+        if (account is null || account.IsDeleted || account.Status != AccountStatus.ACTIVE)
+            throw new UnauthorizedException("The account is inactive or unavailable");
+        if (account.AccountType != AccountType.CUSTOMER)
+            throw new ForbiddenException("Only Customers can initiate online payments");
+        if (account.CustomerAccount is not { IsDeleted: false } customer)
+            throw new UnauthorizedException("The customer profile is unavailable");
+
+        try
+        {
+            await using var transaction = db.Database.IsRelational()
+                ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
+                : await db.Database.BeginTransactionAsync(cancellationToken);
+            var invoices = db.Invoices.AsNoTracking().Where(x => x.InvoiceId == invoiceId &&
+                x.Booking.CustomerId == customer.CustomerId && x.IssuedAt != null);
+            // Serialize checkout with manual payment and cancellation without changing invoice values.
+            if (db.Database.IsRelational())
+                await invoices.ExecuteUpdateAsync(s => s.SetProperty(x => x.InvoiceId, x => x.InvoiceId), cancellationToken);
+            var invoice = await invoices.SingleOrDefaultAsync(cancellationToken)
+                ?? throw new NotFoundException("Invoice not found", "INVOICE_NOT_FOUND");
+            if (invoice.Type is not (InvoiceType.DEPOSIT or InvoiceType.FINAL or InvoiceType.SUPPLEMENTARY))
+                throw new UnprocessableEntityException("This invoice type cannot be paid", "UNPAYABLE_INVOICE_TYPE");
+            if (invoice.Status is not (InvoiceStatus.ISSUED or InvoiceStatus.OVERDUE))
+                throw new ConflictException($"Cannot pay an invoice in status {invoice.Status}", "INVALID_INVOICE_STATUS");
+            if (await db.Receipts.AnyAsync(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.CONFIRMED, cancellationToken))
+                throw new ConflictException("Cannot pay an invoice that already has a confirmed payment", "INVALID_INVOICE_STATUS");
+            if (invoice.TotalAmount <= 0)
+                throw new UnprocessableEntityException("Invoice total must be greater than 0", "INVOICE_TOTAL_NOT_POSITIVE");
+
+            var now = Timestamp(clock.GetUtcNow().UtcDateTime);
+            var pending = db.Receipts.Where(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.PENDING);
+            if (db.Database.IsRelational())
+                await pending.ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, ReceiptStatus.FAILED).SetProperty(x => x.UpdatedAt, now), cancellationToken);
+            else
+                foreach (var previous in await pending.ToListAsync(cancellationToken)) { previous.Status = ReceiptStatus.FAILED; previous.UpdatedAt = now; }
+            var receipt = new Receipt
+            {
+                ReceiptId = Guid.NewGuid(), ReceiptCode = await GenerateReceiptCodeAsync(now, cancellationToken),
+                InvoiceId = invoiceId, Amount = invoice.TotalAmount, Currency = invoice.Currency,
+                PaymentMethod = PaymentMethod.BANK_TRANSFER, Status = ReceiptStatus.PENDING, CreatedAt = now, UpdatedAt = now
+            };
+            db.Receipts.Add(receipt);
+            await db.SaveChangesAsync(cancellationToken);
+
+            PaymentGatewayService.Checkout checkout;
+            try
+            {
+                checkout = await gateway.CreateCheckoutAsync(invoiceId, receipt.ReceiptCode, receipt.Amount, receipt.Currency, cancellationToken);
+                if (!Uri.TryCreate(checkout.PaymentUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length != 0)
+                    throw new InvalidDataException("The gateway returned an invalid payment URL");
+            }
+            catch (Exception exception) when (exception is not UnprocessableEntityException &&
+                (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested))
+            {
+                logger.LogWarning(exception, "Payment gateway failed for receipt {ReceiptCode}", receipt.ReceiptCode);
+                throw new AppException("Payment gateway is unavailable. Please try again later", 502, "PAYMENT_GATEWAY_ERROR");
+            }
+            await transaction.CommitAsync(cancellationToken);
+            return new(new(receipt.ReceiptId, receipt.ReceiptCode, receipt.Amount, receipt.Currency,
+                receipt.PaymentMethod.ToString(), receipt.Status.ToString(), null, null, null, null, null), checkout.PaymentUrl, checkout.Fields);
+        }
+        catch (Exception ex) when (ex is DbUpdateConcurrencyException || ex.GetBaseException() is PostgresException
+            { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } or PostgresException
+            { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "Receipt_receipt_code_key" })
+        { throw new ConflictException("The record changed. Reload it and try again.", "CONCURRENT_UPDATE"); }
+    }
 
     public async Task<IReadOnlyList<Response.StatusHistoryResponse>> GetStatusHistoryAsync(Guid invoiceId, Guid accountId,
         CancellationToken cancellationToken = default)

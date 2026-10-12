@@ -18,7 +18,9 @@ public class InvoicePaymentTests
         public override DateTimeOffset GetUtcNow() => new(2026, 11, 10, 4, 0, 0, TimeSpan.Zero);
     }
     internal static readonly Clock TestClock = new();
-    internal static PaymentService CreateService(AppDbContext db, INotificationRealtimeService? realtime = null) => new(db,
+    internal static PaymentService CreateService(AppDbContext db, INotificationRealtimeService? realtime = null,
+        Pegaxus.Service.PaymentGatewayService.IService? gateway = null) => new(db,
+        gateway ?? new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger,
         TestClock, new CreateRequestValidator(TestClock), new SuggestionRequestValidator(), new UpdateRequestValidator(TestClock),
         new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(TestClock), new CancelRequestValidator(),
         new Pegaxus.Service.NotificationService.Service(db, realtime ?? new NoopNotificationRealtimeService()));

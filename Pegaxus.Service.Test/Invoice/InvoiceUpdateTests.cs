@@ -326,7 +326,8 @@ public class InvoiceUpdateTests
             db.AddRange(transport, plan, invoice, history);
             await db.SaveChangesAsync();
             return new(account, employee, booking, horse!, transport, plan, invoice, history,
-                new DraftInvoiceService(db, Clock, new CreateRequestValidator(Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(Clock),
+                new DraftInvoiceService(db, new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger,
+                    Clock, new CreateRequestValidator(Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(Clock),
                     new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(Clock), new CancelRequestValidator(),
                     new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService())));
         }

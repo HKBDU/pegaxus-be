@@ -45,6 +45,7 @@ public class InvoiceUpdateHttpTests
         builder.Services.AddSingleton(db);
         builder.Services.AddSingleton(InvoiceUpdateTests.Fixture.Clock);
         builder.Services.AddScoped<IService, InvoiceService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IService, InvoiceOnlinePaymentTests.Gateway>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();

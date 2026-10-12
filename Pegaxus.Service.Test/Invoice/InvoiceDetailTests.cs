@@ -253,7 +253,8 @@ public class InvoiceDetailTests
                 History(otherInvoice.InvoiceId, InvoiceHistoryType.RECORD_PAYMENT, creator.AccountId, 10));
             await db.SaveChangesAsync();
             return new(account, creator, recorder, booking, horse!, transport, latest, invoice, otherInvoice, items, receipts,
-                new DetailService(db, TimeProvider.System, new CreateRequestValidator(TimeProvider.System), new SuggestionRequestValidator(),
+                new DetailService(db, new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger,
+                    TimeProvider.System, new CreateRequestValidator(TimeProvider.System), new SuggestionRequestValidator(),
                     new UpdateRequestValidator(TimeProvider.System), new ListRequestValidator(), new BookingListRequestValidator(),
                     new IssueRequestValidator(), new RecordPaymentRequestValidator(TimeProvider.System), new CancelRequestValidator(), new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService())));
         }

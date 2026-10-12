@@ -151,7 +151,8 @@ public class InvoiceUpdatePostgresTests : IAsyncLifetime
 
     private AppDbContext CreateDb(params IInterceptor[] interceptors) => new(
         new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(_source!).AddInterceptors(interceptors).Options);
-    private static DraftInvoiceService Service(AppDbContext db) => new(db, InvoiceUpdateTests.Fixture.Clock,
+    private static DraftInvoiceService Service(AppDbContext db) => new(db,
+        new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger, InvoiceUpdateTests.Fixture.Clock,
         new CreateRequestValidator(InvoiceUpdateTests.Fixture.Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(InvoiceUpdateTests.Fixture.Clock),
         new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(InvoiceUpdateTests.Fixture.Clock), new CancelRequestValidator(),
         new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService()));

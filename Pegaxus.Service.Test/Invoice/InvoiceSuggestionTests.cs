@@ -290,6 +290,7 @@ public class InvoiceSuggestionTests
         builder.Services.AddScoped<GlobalExceptionHandlerMiddleware>();
         builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ => new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService()));
         builder.Services.AddScoped<InvoiceService.IService, InvoiceService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IService, InvoiceOnlinePaymentTests.Gateway>();
         builder.Services.AddScoped<IValidator<InvoiceService.Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddSingleton(InvoiceTests.Fixture.Clock);
         builder.Services.AddScoped<IValidator<InvoiceService.Request.CreateRequest>, CreateRequestValidator>();
@@ -352,7 +353,8 @@ public class InvoiceSuggestionTests
         }
     }
 
-    private static InvoiceService.Service Service(AppDbContext db) => new(db, InvoiceTests.Fixture.Clock,
+    private static InvoiceService.Service Service(AppDbContext db) => new(db,
+        new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger, InvoiceTests.Fixture.Clock,
         new CreateRequestValidator(InvoiceTests.Fixture.Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(InvoiceTests.Fixture.Clock),
         new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(InvoiceTests.Fixture.Clock), new CancelRequestValidator(),
         new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService()));

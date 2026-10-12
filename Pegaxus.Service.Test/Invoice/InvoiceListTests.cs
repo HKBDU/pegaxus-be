@@ -237,7 +237,8 @@ public class InvoiceListTests
             db.Invoices.AddRange(invoices);
             await db.SaveChangesAsync();
             return new(account, employee, booking, other, oldPlan, latest, cancelled, invoices,
-                new ListInvoiceService(db, TimeProvider.System, new CreateRequestValidator(TimeProvider.System),
+                new ListInvoiceService(db, new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger,
+                    TimeProvider.System, new CreateRequestValidator(TimeProvider.System),
                     new SuggestionRequestValidator(), new UpdateRequestValidator(TimeProvider.System), new ListRequestValidator(), new BookingListRequestValidator(),
                     new IssueRequestValidator(), new RecordPaymentRequestValidator(TimeProvider.System), new CancelRequestValidator(), new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService())));
         }

@@ -19,7 +19,8 @@ public class InvoiceIssueTests
     }
     internal static readonly Clock TestClock = new();
     internal static IssuanceService CreateService(AppDbContext db, INotificationRealtimeService? realtime = null) =>
-        new(db, TestClock, new CreateRequestValidator(TestClock), new SuggestionRequestValidator(), new UpdateRequestValidator(TestClock),
+        new(db, new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger,
+            TestClock, new CreateRequestValidator(TestClock), new SuggestionRequestValidator(), new UpdateRequestValidator(TestClock),
             new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(TestClock), new CancelRequestValidator(),
             new Pegaxus.Service.NotificationService.Service(db, realtime ?? new NoopNotificationRealtimeService()));
     internal static Request.IssueRequest Version(Invoice invoice) => new()

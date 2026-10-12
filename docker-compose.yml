@@ -59,6 +59,10 @@ services:
       MailOptions__Password: ${MailOptions__Password:-}
       MailOptions__Host: ${MailOptions__Host:-smtp.gmail.com}
       MailOptions__Port: ${MailOptions__Port:-587}
+      SePayOptions__MerchantId: ${SePayOptions__MerchantId:-}
+      SePayOptions__SecretKey: ${SePayOptions__SecretKey:-}
+      SePayOptions__Environment: ${SePayOptions__Environment:-sandbox}
+      SePayOptions__InvoiceDetailsUrlTemplate: ${SePayOptions__InvoiceDetailsUrlTemplate:-}
     ports:
       - "${API_PORT:-5000}:8080"
     networks:
