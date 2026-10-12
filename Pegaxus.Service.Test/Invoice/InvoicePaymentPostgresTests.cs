@@ -55,6 +55,14 @@ public class InvoicePaymentPostgresTests
                 var approved = await verify.TransportPlans.SingleAsync(x => x.TransportPlanId == plan.TransportPlanId);
                 Assert.Equal(TransportPlanStatus.APPROVED, approved.Status); Assert.Equal(actor.EmployeeAccount!.EmployeeId, approved.ApprovedByEmployeeId);
                 Assert.Equal(paid.PaidAt, approved.ApprovedAt);
+                var service = InvoicePaymentTests.CreateService(verify);
+                var details = await service.GetAsync(actor.AccountId, invoice.InvoiceId);
+                Assert.Equal(InvoiceStatus.PAID.ToString(), details.Status);
+                Assert.Equal(3, details.Receipts.Count);
+                Assert.Equal(actor.AccountId, Assert.Single(details.Receipts, x => x.Status == "CONFIRMED").RecordedBy!.AccountId);
+                var customerDetails = await service.GetAsync(customer.AccountId, invoice.InvoiceId);
+                Assert.Equal(details.Receipts.ToArray(), customerDetails.Receipts.ToArray());
+                Assert.Empty(customerDetails.AvailableActions);
             }
 
             var fresh = await InvoicePaymentTests.SeedAsync(seed);

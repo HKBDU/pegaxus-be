@@ -30,7 +30,7 @@ public class InvoicePaymentHttpTests
     public async Task Http_ReceiptInvoiceEffectsAndErrors_MatchContract()
     {
         await using var db = TestSupport.CreateDb();
-        var (actor, _, invoice, _) = await InvoicePaymentTests.SeedAsync(db, InvoiceType.FINAL);
+        var (actor, customer, invoice, _) = await InvoicePaymentTests.SeedAsync(db, InvoiceType.FINAL);
         await using var app = await StartAsync(db);
         using var client = Client(app, actor.AccountId, "LogisticsManager");
         var url = $"/api/v1/invoices/{invoice.InvoiceId}/receipts";
@@ -68,6 +68,18 @@ public class InvoicePaymentHttpTests
         Assert.True(value.GetProperty("effects").GetProperty("creditNoteUnlocked").GetBoolean());
         var repeat = await Error(await client.PostAsJsonAsync(url, request), 409, "INVALID_INVOICE_STATUS");
         Assert.Equal("Cannot pay an invoice in status PAID", repeat.GetProperty("message").GetString());
+        var details = (await client.GetFromJsonAsync<JsonElement>($"/api/v1/invoices/{invoice.InvoiceId}")).GetProperty("value");
+        Assert.Equal("PAID", details.GetProperty("status").GetString());
+        Assert.Equal(receipt.GetRawText(), Assert.Single(details.GetProperty("receipts").EnumerateArray()).GetRawText());
+        Assert.Equal("CREATE_ANOTHER", Assert.Single(details.GetProperty("availableActions").EnumerateArray()).GetString());
+        using var customerClient = Client(app, customer.AccountId, "Customer");
+        await Error(await customerClient.PostAsJsonAsync(url, request), 403, "FORBIDDEN");
+        var customerDetails = (await customerClient.GetFromJsonAsync<JsonElement>($"/api/v1/invoices/{invoice.InvoiceId}")).GetProperty("value");
+        Assert.Equal("PAID", customerDetails.GetProperty("status").GetString());
+        Assert.Equal(receipt.GetRawText(), Assert.Single(customerDetails.GetProperty("receipts").EnumerateArray()).GetRawText());
+        Assert.Empty(customerDetails.GetProperty("availableActions").EnumerateArray());
+        var list = (await customerClient.GetFromJsonAsync<JsonElement>($"/api/v1/bookings/{invoice.BookingId}/invoices")).GetProperty("value");
+        Assert.Equal("PAID", Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("status").GetString());
     }
 
     [Theory]
@@ -154,6 +166,12 @@ public class InvoicePaymentHttpTests
                 "The request data is invalid")));
         builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IService, Pegaxus.Service.InvoiceService.Service>();
+        builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.BookingListRequest>, BookingListRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
         builder.Services.AddScoped<Pegaxus.Service.NotificationService.IService, Pegaxus.Service.NotificationService.Service>();
         builder.Services.AddSingleton<INotificationRealtimeService, NoopNotificationRealtimeService>();

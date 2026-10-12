@@ -19,7 +19,9 @@ public class InvoicePaymentTests
     }
     internal static readonly Clock TestClock = new();
     internal static PaymentService CreateService(AppDbContext db, INotificationRealtimeService? realtime = null) => new(db,
-        TestClock, new RecordPaymentRequestValidator(TestClock), new Pegaxus.Service.NotificationService.Service(db, realtime ?? new NoopNotificationRealtimeService()));
+        TestClock, new CreateRequestValidator(TestClock), new SuggestionRequestValidator(), new UpdateRequestValidator(TestClock),
+        new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(TestClock),
+        new Pegaxus.Service.NotificationService.Service(db, realtime ?? new NoopNotificationRealtimeService()));
     internal static Request.RecordPaymentRequest ValidRequest() => new()
     { Amount = 120, Currency = "EUR", PaymentMethod = "BANK_TRANSFER", TransactionReference = " FT26314123456 ", Note = " Matched statement " };
 
@@ -79,7 +81,7 @@ public class InvoicePaymentTests
         Assert.Equal("FT26314123456", result.Receipt.TransactionReference); Assert.Equal("Matched statement", result.Receipt.Note);
         Assert.Equal(request.PaidAt.Value.ToUniversalTime(), result.Receipt.PaidAt);
         Assert.Equal(TestClock.GetUtcNow(), result.Receipt.ConfirmedAt);
-        Assert.Equal(actor.AccountId, result.Receipt.RecordedBy.AccountId); Assert.Equal("Test Manager", result.Receipt.RecordedBy.FullName);
+        Assert.Equal(actor.AccountId, result.Receipt.RecordedBy!.AccountId); Assert.Equal("Test Manager", result.Receipt.RecordedBy.FullName);
         Assert.Equal("PAID", result.Invoice.Status); Assert.Equal(invoice.InvoiceCode, result.Invoice.InvoiceNumber);
         Assert.Equal(TestClock.GetUtcNow(), result.Invoice.PaidAt); Assert.Equal(result.Invoice.PaidAt, result.Invoice.UpdatedAt);
         Assert.Equal(new[] { "CREATE_ANOTHER" }, result.Invoice.AvailableActions);
@@ -176,6 +178,24 @@ public class InvoicePaymentTests
         Assert.Equal(changed ? TransportPlanStatus.APPROVED : latestStatus, latest.Status);
         Assert.Equal(TransportPlanStatus.PENDING, older.Status); Assert.Equal(TransportPlanStatus.CANCELLED, cancelled.Status);
         if (!changed) { Assert.Null(latest.ApprovedAt); Assert.Equal(older.UpdatedAt, latest.UpdatedAt); }
+    }
+
+    [Fact]
+    public async Task Deposit_EqualPlanCreationTimes_ApprovesThePlanShownInDetails()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (actor, _, invoice, older) = await SeedAsync(db);
+        var latest = new TransportPlan { TransportPlanId = Guid.Parse("ffffffff-ffff-ffff-ffff-ffffffffffff"),
+            TransportId = older.TransportId, PlanCode = "TP-latest", Status = TransportPlanStatus.PENDING,
+            CreatedAt = older.CreatedAt, UpdatedAt = older.UpdatedAt };
+        db.TransportPlans.Add(latest); await db.SaveChangesAsync();
+        var service = CreateService(db);
+        var details = await service.GetAsync(actor.AccountId, invoice.InvoiceId);
+        Assert.Equal(latest.TransportPlanId, details.TransportPlan!.TransportPlanId);
+        var result = await service.RecordPaymentAsync(invoice.InvoiceId, ValidRequest(), actor.AccountId);
+        Assert.Equal("APPROVED", result.Effects.TransportPlanStatus);
+        Assert.Equal(TransportPlanStatus.APPROVED, latest.Status);
+        Assert.Equal(TransportPlanStatus.PENDING, older.Status);
     }
 
     [Fact]
