@@ -130,7 +130,6 @@ public partial class AppDbContext : DbContext
             .HasPostgresEnum("authority_evidence_type", new[] { "Acceptance", "Rejection", "AdditionalInformation", "Other" })
             .HasPostgresEnum("audit_visibility", new[] { "Public", "Internal" })
             .HasPostgresEnum("booking_history_type", new[] { "SUBMIT", "APPROVE", "REJECT", "CANCEL" })
-            .HasPostgresEnum("booking_assignment_status", new[] { "ACTIVE", "REVOKED" })
             .HasPostgresEnum("booking_status", new[] { "DRAFT", "PENDING", "APPROVED", "REJECTED", "CANCELLED" })
             .HasPostgresEnum("claim_resolution_type", new[] { "COMPENSATION", "PARTIAL_COMPENSATION", "REFUND", "SERVICE_RECOVERY", "NO_COMPENSATION", "OTHER" })
             .HasPostgresEnum("claim_status", new[] { "PENDING", "APPROVED", "REJECTED", "RESOLVED", "CANCELLED" })

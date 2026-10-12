@@ -198,7 +198,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         if (db.Database.IsNpgsql())
         {
             try { await query.ExecuteUpdateAsync(setters => setters.SetProperty(x => x.VehicleId, x => x.VehicleId), cancellationToken); }
-            catch (PostgresException error) when (error.SqlState is PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected)
+            catch (Exception error) when (error.GetBaseException() is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected })
             { throw Modified(); }
         }
         var vehicle = await query.SingleOrDefaultAsync(cancellationToken) ?? throw NotFound();
@@ -237,7 +237,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 ReferenceType = nameof(Vehicle), ReferenceId = vehicle.VehicleId, CreatedAt = vehicle.UpdatedAt });
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw Modified(); }
-        catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected })
+        catch (Exception ex) when (ex.GetBaseException() is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected })
         { throw Modified(); }
         catch (DbUpdateException ex) when (ex.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "Vehicle_vehicle_code_key" })
         { throw DuplicateCode(); }

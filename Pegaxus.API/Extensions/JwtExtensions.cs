@@ -106,9 +106,12 @@ public static class JwtExtensions
                     OnForbidden = async context =>
                     {
                         context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                        var invoiceListDenied = HttpMethods.IsGet(context.Request.Method) &&
+                            string.Equals(context.Request.Path.Value?.TrimEnd('/'), "/api/v1/invoices", StringComparison.OrdinalIgnoreCase) &&
+                            context.HttpContext.User.IsInRole(JwtServices.GetRoleName(AccountType.CUSTOMER));
                         await context.Response.WriteAsJsonAsync(ResponseBuilder.ErrorResponse(
                             null,
-                            "You do not have permission to perform this action",
+                            invoiceListDenied ? "Customer cannot access the invoice list" : "You do not have permission to perform this action",
                             "FORBIDDEN",
                             StatusCodes.Status403Forbidden));
                     },

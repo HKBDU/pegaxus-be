@@ -3,6 +3,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.InvoiceService.Validator;
 using DetailService = Pegaxus.Service.InvoiceService.Service;
 
 namespace Pegaxus.Service.Test;
@@ -251,7 +252,9 @@ public class InvoiceDetailTests
                 History(invoice.InvoiceId, InvoiceHistoryType.ISSUE, creator.AccountId, 9),
                 History(otherInvoice.InvoiceId, InvoiceHistoryType.RECORD_PAYMENT, creator.AccountId, 10));
             await db.SaveChangesAsync();
-            return new(account, creator, recorder, booking, horse!, transport, latest, invoice, otherInvoice, items, receipts, new DetailService(db));
+            return new(account, creator, recorder, booking, horse!, transport, latest, invoice, otherInvoice, items, receipts,
+                new DetailService(db, TimeProvider.System, new CreateRequestValidator(TimeProvider.System), new SuggestionRequestValidator(),
+                    new UpdateRequestValidator(TimeProvider.System), new ListRequestValidator(), new BookingListRequestValidator()));
         }
         internal static DateTime Day(int day) => new(2026, 10, day, 0, 0, 0, DateTimeKind.Unspecified);
         internal static DateTimeOffset Offset(DateTime date) => new(DateTime.SpecifyKind(date, DateTimeKind.Utc));

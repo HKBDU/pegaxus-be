@@ -3,6 +3,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
+using FluentValidation;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -16,6 +17,8 @@ using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.InvoiceService;
+using Pegaxus.Service.InvoiceService.Validator;
 using Pegaxus.Service.JwtService;
 using Pegaxus.Service.Models;
 
@@ -143,6 +146,7 @@ public class InvoiceDetailHttpTests
             ["JwtOptions:Issuer"] = "invoice-detail-tests", ["JwtOptions:Audience"] = "invoice-detail-tests" });
         builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
         builder.Services.AddSingleton(db);
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddControllers().AddApplicationPart(typeof(InvoicesController).Assembly).ConfigureApiBehaviorOptions(options =>
             options.InvalidModelStateResponseFactory = context => new BadRequestObjectResult(ResponseBuilder.ErrorResponse(
                 context.ModelState.Where(entry => entry.Value!.Errors.Count > 0).SelectMany(entry => entry.Value!.Errors.Select(error => new {
@@ -150,6 +154,11 @@ public class InvoiceDetailHttpTests
                 "The request data is invalid", traceId: context.HttpContext.TraceIdentifier)));
         builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IService, Pegaxus.Service.InvoiceService.Service>();
+        builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.BookingListRequest>, BookingListRequestValidator>();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
