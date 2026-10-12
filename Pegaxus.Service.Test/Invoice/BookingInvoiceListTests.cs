@@ -216,7 +216,9 @@ public class BookingInvoiceListTests
                     PaidAt = index == 2 ? Day(6) : null, CreatedAt = Day(index + 1), UpdatedAt = Day(index + 1).AddHours(1) });
             db.Invoices.AddRange(invoices);
             await db.SaveChangesAsync();
-            return new(account, employee, booking, other, empty, latest, invoices, new BookingInvoiceService(db, new BookingListRequestValidator()));
+            return new(account, employee, booking, other, empty, latest, invoices,
+                new BookingInvoiceService(db, TimeProvider.System, new CreateRequestValidator(TimeProvider.System),
+                    new SuggestionRequestValidator(), new UpdateRequestValidator(TimeProvider.System), new ListRequestValidator(), new BookingListRequestValidator()));
         }
         internal static DateTime Day(int day) => new(2026, 10, day, 0, 0, 0, DateTimeKind.Unspecified);
         internal static DateTimeOffset Offset(DateTime date) => new(DateTime.SpecifyKind(date, DateTimeKind.Utc));

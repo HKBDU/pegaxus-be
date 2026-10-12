@@ -140,6 +140,7 @@ public class BookingInvoiceListHttpTests
             ["JwtOptions:Issuer"] = "booking-invoice-tests", ["JwtOptions:Audience"] = "booking-invoice-tests" });
         builder.Services.AddSingleton<IConfiguration>(builder.Configuration);
         builder.Services.AddSingleton(db);
+        builder.Services.AddSingleton(TimeProvider.System);
         builder.Services.AddControllers().AddApplicationPart(typeof(BookingInvoicesController).Assembly).ConfigureApiBehaviorOptions(options =>
             options.InvalidModelStateResponseFactory = context => new BadRequestObjectResult(ResponseBuilder.ErrorResponse(
                 context.ModelState.Where(entry => entry.Value!.Errors.Count > 0).SelectMany(entry => entry.Value!.Errors.Select(error => new {
@@ -148,6 +149,10 @@ public class BookingInvoiceListHttpTests
         builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IService, Pegaxus.Service.InvoiceService.Service>();
         builder.Services.AddScoped<IValidator<Request.BookingListRequest>, BookingListRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
