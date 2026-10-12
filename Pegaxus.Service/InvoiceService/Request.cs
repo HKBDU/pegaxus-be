@@ -4,6 +4,21 @@ namespace Pegaxus.Service.InvoiceService;
 
 public static class Request
 {
+    public sealed class SuggestionRequest
+    {
+        public string Type { get; set; } = string.Empty;
+    }
+
+    public sealed class CreateRequest
+    {
+        public string Type { get; set; } = string.Empty;
+        public string Currency { get; set; } = string.Empty;
+        public DateOnly? DueDate { get; set; }
+        public string? Note { get; set; }
+        public JsonElement? Payment { get; set; }
+        public List<ItemRequest>? Items { get; set; }
+    }
+
     public sealed class UpdateRequest
     {
         public DateTimeOffset? LastUpdatedAt { get; set; }

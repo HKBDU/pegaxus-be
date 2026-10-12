@@ -2,6 +2,10 @@ namespace Pegaxus.Service.InvoiceService;
 
 public static class Response
 {
+    public sealed record SuggestionResponse(Guid BookingId, string BookingCode, string BookingStatus,
+        Guid TransportId, string TransportStatus, string Type, string? Currency, bool IsPaymentRequired,
+        IReadOnlyList<ItemResponse> Items);
+
     public sealed class DraftResponse
     {
         public Guid InvoiceId { get; init; }
@@ -38,12 +42,9 @@ public static class Response
     public sealed record TransportResponse(Guid TransportId, string TransportCode, string Status);
     public sealed record PlanResponse(Guid TransportPlanId, string PlanCode, string Status);
     public sealed record HorseResponse(Guid HorseId, string HorseName);
-    public sealed record ItemResponse(Guid InvoiceItemId, string ItemType, string Description, decimal Quantity,
-        decimal Price, decimal Total, HorseResponse? Horse, bool IsDepositDeduction, string? Note)
-    {
-        public DateOnly? ItemDate => null;
-        public Guid? EmergencyCostRequestId => null;
-    }
+    public sealed record ItemResponse(Guid? InvoiceItemId, string ItemType, string Description, DateOnly? ItemDate,
+        decimal Quantity, decimal Price, decimal Total, HorseResponse? Horse, Guid? EmergencyCostRequestId,
+        bool IsDepositDeduction, string? Note);
     public sealed record SummaryResponse(decimal Subtotal, decimal Tax, decimal DepositDeduction, decimal GrandTotal)
     {
         public decimal Discount => 0;

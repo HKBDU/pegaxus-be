@@ -46,6 +46,8 @@ public class InvoiceUpdateHttpTests
         builder.Services.AddSingleton(InvoiceUpdateTests.Fixture.Clock);
         builder.Services.AddScoped<IService, InvoiceService.Service>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddControllers().AddApplicationPart(typeof(InvoicesController).Assembly)
             .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = context =>
                 new BadRequestObjectResult(ResponseBuilder.ErrorResponse(
