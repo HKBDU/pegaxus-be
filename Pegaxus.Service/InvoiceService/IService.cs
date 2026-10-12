@@ -2,6 +2,9 @@ namespace Pegaxus.Service.InvoiceService;
 
 public interface IService
 {
+    Task<IReadOnlyList<Response.StatusHistoryResponse>> GetStatusHistoryAsync(Guid invoiceId, Guid accountId,
+        CancellationToken cancellationToken = default);
+
     Task<Response.CancelResponse> CancelAsync(Guid invoiceId, Request.CancelRequest request, Guid accountId,
         CancellationToken cancellationToken = default);
 

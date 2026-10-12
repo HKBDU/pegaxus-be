@@ -82,6 +82,10 @@ public class InvoicePaymentHttpTests
         Assert.Empty(customerDetails.GetProperty("availableActions").EnumerateArray());
         var list = (await customerClient.GetFromJsonAsync<JsonElement>($"/api/v1/bookings/{invoice.BookingId}/invoices")).GetProperty("value");
         Assert.Equal("PAID", Assert.Single(list.GetProperty("items").EnumerateArray()).GetProperty("status").GetString());
+        var history = (await customerClient.GetFromJsonAsync<JsonElement>($"/api/v1/invoices/{invoice.InvoiceId}/status-history")).GetProperty("value");
+        var paymentEvent = Assert.Single(history.EnumerateArray());
+        Assert.Equal("RECORD_PAYMENT", paymentEvent.GetProperty("type").GetString());
+        Assert.Equal(actor.AccountId, paymentEvent.GetProperty("changedBy").GetProperty("accountId").GetGuid());
     }
 
     [Theory]
