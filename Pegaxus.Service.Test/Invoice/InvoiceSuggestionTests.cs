@@ -297,6 +297,7 @@ public class InvoiceSuggestionTests
         builder.Services.AddScoped<IValidator<InvoiceService.Request.ListRequest>, ListRequestValidator>();
         builder.Services.AddScoped<IValidator<InvoiceService.Request.BookingListRequest>, BookingListRequestValidator>();
         builder.Services.AddScoped<IValidator<InvoiceService.Request.IssueRequest>, IssueRequestValidator>();
+        builder.Services.AddScoped<IValidator<InvoiceService.Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
         builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
         builder.Services.AddSingleton<NotificationService.INotificationRealtimeService, NotificationService.NoopNotificationRealtimeService>();
         await using var app = builder.Build();
@@ -352,7 +353,7 @@ public class InvoiceSuggestionTests
 
     private static InvoiceService.Service Service(AppDbContext db) => new(db, InvoiceTests.Fixture.Clock,
         new CreateRequestValidator(InvoiceTests.Fixture.Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(InvoiceTests.Fixture.Clock),
-        new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(),
+        new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(InvoiceTests.Fixture.Clock),
         new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService()));
 
     private static async Task<(Account, Employee, Booking, Transport)> SeedAsync(AppDbContext db)

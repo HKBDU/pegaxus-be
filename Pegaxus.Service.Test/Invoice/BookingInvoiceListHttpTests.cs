@@ -154,6 +154,7 @@ public class BookingInvoiceListHttpTests
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
         builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
         builder.Services.AddSingleton<NotificationService.INotificationRealtimeService, NotificationService.NoopNotificationRealtimeService>();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();

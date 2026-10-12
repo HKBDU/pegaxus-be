@@ -110,6 +110,7 @@ public class InvoiceIssueHttpTests
         builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IService, Pegaxus.Service.InvoiceService.Service>();
         builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
