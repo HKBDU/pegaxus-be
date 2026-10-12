@@ -2,6 +2,9 @@ namespace Pegaxus.Service.InvoiceService;
 
 public interface IService
 {
+    Task<Response.ListResponse> GetByBookingAsync(Guid accountId, Guid bookingId, Request.BookingListRequest request,
+        CancellationToken cancellationToken = default);
+
     Task<Response.ListResponse> GetListAsync(Guid accountId, Request.ListRequest request,
         CancellationToken cancellationToken = default);
 

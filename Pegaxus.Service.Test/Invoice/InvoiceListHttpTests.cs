@@ -135,6 +135,7 @@ public class InvoiceListHttpTests
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.BookingListRequest>, BookingListRequestValidator>();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>();

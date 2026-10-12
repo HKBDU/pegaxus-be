@@ -27,7 +27,7 @@ namespace Pegaxus.Service.Test;
 public class InvoiceHttpTests
 {
     [Fact]
-    public async Task SuggestionCreateUpdateAndList_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
+    public async Task SuggestionCreateUpdateAndLists_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
     {
         await using var db = TestSupport.CreateDb();
         var f = await InvoiceTests.Fixture.CreateAsync(db);
@@ -49,6 +49,7 @@ public class InvoiceHttpTests
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.BookingListRequest>, BookingListRequestValidator>();
         builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ =>
             new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService()));
         builder.Services.AddControllers().AddApplicationPart(typeof(BookingController).Assembly)
@@ -131,6 +132,19 @@ public class InvoiceHttpTests
         Assert.Equal(1, list.GetProperty("items").GetArrayLength());
         Assert.Equal(invoiceId, list.GetProperty("items")[0].GetProperty("invoiceId").GetGuid());
         Assert.Equal(2.4m, list.GetProperty("items")[0].GetProperty("totalAmount").GetDecimal());
+        var bookingList = await client.GetAsync(path);
+        Assert.Equal(HttpStatusCode.OK, bookingList.StatusCode);
+        var bookingInvoices = (await bookingList.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.Equal(1, bookingInvoices.GetProperty("totalItems").GetInt32());
+        Assert.Equal(invoiceId, bookingInvoices.GetProperty("items")[0].GetProperty("invoiceId").GetGuid());
+        Assert.Equal(2.4m, bookingInvoices.GetProperty("items")[0].GetProperty("totalAmount").GetDecimal());
+        SignIn("Customer", f.Booking.Customer.AccountId);
+        var customerList = await client.GetAsync(path);
+        Assert.Equal(HttpStatusCode.OK, customerList.StatusCode);
+        var customerInvoices = (await customerList.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.Equal(0, customerInvoices.GetProperty("totalItems").GetInt32());
+        Assert.Equal(0, customerInvoices.GetProperty("items").GetArrayLength());
+        SignIn(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER));
         var duplicate = await client.PostAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
         Assert.Equal("INVOICE_ALREADY_EXISTS", (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
@@ -145,10 +159,10 @@ public class InvoiceHttpTests
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.PostAsJsonAsync(path, request)).StatusCode);
         await app.StopAsync();
 
-        void SignIn(string role)
+        void SignIn(string role, Guid? accountId = null)
         {
             var token = new JwtServices(builder.Configuration).GenerateAccessToken(
-                [new Claim(ClaimTypes.NameIdentifier, f.Account.AccountId.ToString()), new Claim(ClaimTypes.Role, role)]);
+                [new Claim(ClaimTypes.NameIdentifier, (accountId ?? f.Account.AccountId).ToString()), new Claim(ClaimTypes.Role, role)]);
             client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
         }
     }
