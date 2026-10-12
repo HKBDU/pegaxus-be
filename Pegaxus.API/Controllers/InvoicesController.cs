@@ -13,6 +13,22 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/invoices")]
 public sealed class InvoicesController(InvoiceService.IService service) : ControllerBase
 {
+    /// <summary>Cancel an unpaid invoice with a reason.</summary>
+    /// <remarks>Requires an active Logistics Manager and at least 10 characters after trimming the reason. Blocks confirmed or pending payments. Cancellation, CANCEL history and notifications for previously issued invoices commit atomically.</remarks>
+    /// <param name="invoiceId">The invoice identifier (UUID).</param>
+    /// <param name="request">The reason for cancellation.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the cancelled invoice; 400 for invalid input, 401 or 403 for unauthorized access, 404 for a missing invoice, 409 for status, pending payments or concurrent changes, or 422 for confirmed payment.</returns>
+    [HttpPost("{invoiceId:guid}/cancel")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> Cancel(Guid invoiceId, [FromBody] InvoiceService.Request.CancelRequest request, CancellationToken cancellationToken)
+    {
+        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
+        if (!Guid.TryParse(value, out var accountId)) throw new UnauthorizedException("The authenticated account identifier is invalid");
+        return Ok(ResponseBuilder.SuccessResponse(await service.CancelAsync(invoiceId, request, accountId, cancellationToken),
+            "Invoice cancelled successfully", traceId: HttpContext.TraceIdentifier));
+    }
+
     /// <summary>Record full manual payment or a credit note payout.</summary>
     /// <remarks>Requires an active Logistics Manager. Confirms one receipt, fails pending receipts, marks the invoice PAID and records history and customer notifications atomically. A deposit approves the latest eligible transport plan; a paid FINAL unlocks credit notes.</remarks>
     /// <param name="invoiceId">The invoice identifier (UUID).</param>

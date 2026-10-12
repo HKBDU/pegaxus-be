@@ -2,6 +2,9 @@ namespace Pegaxus.Service.InvoiceService;
 
 public static class Response
 {
+    public sealed record CancelResponse(Guid InvoiceId, string InvoiceNumber, string Status, DateTimeOffset CancelledAt,
+        string CancellationReason, IReadOnlyList<string> AvailableActions, DateTimeOffset UpdatedAt);
+
     public sealed record RecordPaymentResponse(ReceiptResponse Receipt, PaidInvoiceResponse Invoice, PaymentEffects Effects);
     public sealed record PaidInvoiceResponse(Guid InvoiceId, string InvoiceNumber, string Type, string Status,
         DateTimeOffset PaidAt, IReadOnlyList<string> AvailableActions, DateTimeOffset UpdatedAt);

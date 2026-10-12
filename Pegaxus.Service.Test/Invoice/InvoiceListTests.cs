@@ -239,7 +239,7 @@ public class InvoiceListTests
             return new(account, employee, booking, other, oldPlan, latest, cancelled, invoices,
                 new ListInvoiceService(db, TimeProvider.System, new CreateRequestValidator(TimeProvider.System),
                     new SuggestionRequestValidator(), new UpdateRequestValidator(TimeProvider.System), new ListRequestValidator(), new BookingListRequestValidator(),
-                    new IssueRequestValidator(), new RecordPaymentRequestValidator(TimeProvider.System), new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService())));
+                    new IssueRequestValidator(), new RecordPaymentRequestValidator(TimeProvider.System), new CancelRequestValidator(), new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService())));
         }
         internal static DateTime Day(int day) => new(2026, 10, day, 0, 0, 0, DateTimeKind.Unspecified);
         internal static DateTimeOffset Offset(DateTime date) => new(DateTime.SpecifyKind(date, DateTimeKind.Utc));

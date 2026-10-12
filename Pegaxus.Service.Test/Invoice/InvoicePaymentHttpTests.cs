@@ -68,6 +68,8 @@ public class InvoicePaymentHttpTests
         Assert.True(value.GetProperty("effects").GetProperty("creditNoteUnlocked").GetBoolean());
         var repeat = await Error(await client.PostAsJsonAsync(url, request), 409, "INVALID_INVOICE_STATUS");
         Assert.Equal("Cannot pay an invoice in status PAID", repeat.GetProperty("message").GetString());
+        await Error(await client.PostAsJsonAsync($"/api/v1/invoices/{invoice.InvoiceId}/cancel",
+            InvoiceCancellationTests.ValidRequest()), 422, "INVOICE_HAS_PAYMENT");
         var details = (await client.GetFromJsonAsync<JsonElement>($"/api/v1/invoices/{invoice.InvoiceId}")).GetProperty("value");
         Assert.Equal("PAID", details.GetProperty("status").GetString());
         Assert.Equal(receipt.GetRawText(), Assert.Single(details.GetProperty("receipts").EnumerateArray()).GetRawText());
@@ -173,6 +175,7 @@ public class InvoicePaymentHttpTests
         builder.Services.AddScoped<IValidator<Request.BookingListRequest>, BookingListRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.CancelRequest>, CancelRequestValidator>();
         builder.Services.AddScoped<Pegaxus.Service.NotificationService.IService, Pegaxus.Service.NotificationService.Service>();
         builder.Services.AddSingleton<INotificationRealtimeService, NoopNotificationRealtimeService>();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();

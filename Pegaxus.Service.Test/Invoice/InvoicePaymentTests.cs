@@ -20,7 +20,7 @@ public class InvoicePaymentTests
     internal static readonly Clock TestClock = new();
     internal static PaymentService CreateService(AppDbContext db, INotificationRealtimeService? realtime = null) => new(db,
         TestClock, new CreateRequestValidator(TestClock), new SuggestionRequestValidator(), new UpdateRequestValidator(TestClock),
-        new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(TestClock),
+        new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(TestClock), new CancelRequestValidator(),
         new Pegaxus.Service.NotificationService.Service(db, realtime ?? new NoopNotificationRealtimeService()));
     internal static Request.RecordPaymentRequest ValidRequest() => new()
     { Amount = 120, Currency = "EUR", PaymentMethod = "BANK_TRANSFER", TransactionReference = " FT26314123456 ", Note = " Matched statement " };

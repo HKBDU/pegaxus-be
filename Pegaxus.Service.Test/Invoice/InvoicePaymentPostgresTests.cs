@@ -56,6 +56,8 @@ public class InvoicePaymentPostgresTests
                 Assert.Equal(TransportPlanStatus.APPROVED, approved.Status); Assert.Equal(actor.EmployeeAccount!.EmployeeId, approved.ApprovedByEmployeeId);
                 Assert.Equal(paid.PaidAt, approved.ApprovedAt);
                 var service = InvoicePaymentTests.CreateService(verify);
+                Assert.Equal("INVOICE_HAS_PAYMENT", (await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
+                    service.CancelAsync(invoice.InvoiceId, InvoiceCancellationTests.ValidRequest(), actor.AccountId))).ErrorCode);
                 var details = await service.GetAsync(actor.AccountId, invoice.InvoiceId);
                 Assert.Equal(InvoiceStatus.PAID.ToString(), details.Status);
                 Assert.Equal(3, details.Receipts.Count);

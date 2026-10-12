@@ -210,6 +210,7 @@ builder.Services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
 builder.Services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.RecordPaymentRequest>, Pegaxus.Service.InvoiceService.Validator.RecordPaymentRequestValidator>();
+builder.Services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.CancelRequest>, Pegaxus.Service.InvoiceService.Validator.CancelRequestValidator>();
 builder.Services.AddScoped<Pegaxus.Service.RouteChangeService.IService, Pegaxus.Service.RouteChangeService.Service>();
 builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.CreateRequest>, Pegaxus.Service.RouteChangeService.Validator.CreateRequestValidator>();
 builder.Services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.DecisionRequest>, Pegaxus.Service.RouteChangeService.Validator.DecisionRequestValidator>();

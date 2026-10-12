@@ -27,7 +27,7 @@ namespace Pegaxus.Service.Test;
 public class InvoiceHttpTests
 {
     [Fact]
-    public async Task SuggestionCreateUpdateListsDetailsAndIssue_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
+    public async Task SuggestionCreateUpdateListsDetailsIssueAndCancel_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
     {
         await using var db = TestSupport.CreateDb();
         var f = await InvoiceTests.Fixture.CreateAsync(db);
@@ -52,6 +52,7 @@ public class InvoiceHttpTests
         builder.Services.AddScoped<IValidator<Request.BookingListRequest>, BookingListRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.CancelRequest>, CancelRequestValidator>();
         builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
         builder.Services.AddSingleton<NotificationService.INotificationRealtimeService, NotificationService.NoopNotificationRealtimeService>();
         builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ =>
@@ -182,7 +183,26 @@ public class InvoiceHttpTests
         var visibleInvoices = (await client.GetFromJsonAsync<JsonElement>(path)).GetProperty("value");
         Assert.Equal(1, visibleInvoices.GetProperty("totalItems").GetInt32());
         Assert.Equal(invoiceId, visibleInvoices.GetProperty("items")[0].GetProperty("invoiceId").GetGuid());
+        var cancellation = InvoiceCancellationTests.ValidRequest();
+        var cancelPath = $"/api/v1/invoices/{invoiceId}/cancel";
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(cancelPath, cancellation)).StatusCode);
         SignIn(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER));
+        var cancelResponse = await client.PostAsJsonAsync(cancelPath, cancellation);
+        Assert.Equal(HttpStatusCode.OK, cancelResponse.StatusCode);
+        var cancelled = (await cancelResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.Equal("CANCELLED", cancelled.GetProperty("status").GetString());
+        Assert.Equal(cancellation.CancellationReason.Trim(), cancelled.GetProperty("cancellationReason").GetString());
+        Assert.Equal(3, await db.InvoiceStatusHistories.CountAsync());
+        Assert.Equal(2, await db.OutboxMessages.CountAsync());
+        SignIn("Customer", f.Booking.Customer.AccountId);
+        var cancelledDetails = (await client.GetFromJsonAsync<JsonElement>($"/api/v1/invoices/{invoiceId}")).GetProperty("value");
+        Assert.Equal("CANCELLED", cancelledDetails.GetProperty("status").GetString());
+        Assert.Equal(cancelled.GetProperty("cancelledAt").GetDateTimeOffset(), cancelledDetails.GetProperty("cancelledAt").GetDateTimeOffset());
+        Assert.Empty(cancelledDetails.GetProperty("availableActions").EnumerateArray());
+        SignIn(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER));
+        var replacement = await client.PostAsJsonAsync(path, request);
+        Assert.Equal(HttpStatusCode.Created, replacement.StatusCode);
+        Assert.NotEqual(invoiceId, (await replacement.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value").GetProperty("invoiceId").GetGuid());
         f.Employee.Role = EmployeeRole.DRIVER;
         await db.SaveChangesAsync();
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(path, request)).StatusCode);

@@ -327,7 +327,7 @@ public class InvoiceUpdateTests
             await db.SaveChangesAsync();
             return new(account, employee, booking, horse!, transport, plan, invoice, history,
                 new DraftInvoiceService(db, Clock, new CreateRequestValidator(Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(Clock),
-                    new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(Clock),
+                    new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(Clock), new CancelRequestValidator(),
                     new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService())));
         }
         internal Request.UpdateRequest Request() => new()
