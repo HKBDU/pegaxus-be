@@ -9,6 +9,7 @@ using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.Models;
 
 using BookingService = Pegaxus.Service.BookingService;
+using InvoiceService = Pegaxus.Service.InvoiceService;
 
 namespace Pegaxus.API.Controllers;
 
@@ -22,6 +23,30 @@ public class BookingController : ControllerBase
     public BookingController(BookingService.IService service)
     {
         _service = service;
+    }
+
+    /// <summary>
+    /// Create a draft invoice.
+    /// </summary>
+    /// <remarks>Only active Logistics Managers may create invoices for APPROVED bookings. The server validates transport status and duplicate invoices, calculates fixed 20 percent tax without discounts, adds paid deposit deductions for FINAL, and records CREATE history atomically. Empty draft items are allowed. Payment and itemDate fields are ignored until their database fields are available.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="request">The invoice type, EUR or VND currency, due date and manually entered fee items.</param>
+    /// <param name="invoiceService">The injected invoice service.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>201 Created with the complete draft invoice, calculated totals and available actions.</returns>
+    /// <exception cref="BadRequestException">Request fields, monetary precision or horse references are invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not an active Logistics Manager.</exception>
+    /// <exception cref="NotFoundException">The booking does not exist.</exception>
+    /// <exception cref="ConflictException">The booking or transport status is invalid, a conflicting invoice exists, or data changed concurrently.</exception>
+    /// <exception cref="UnprocessableEntityException">A CREDIT_NOTE requires a paid FINAL invoice; FINAL currency must match all paid deposits.</exception>
+    [HttpPost("{bookingId:guid}/invoices")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> CreateInvoice(Guid bookingId, [FromBody] InvoiceService.Request.CreateRequest request,
+        [FromServices] InvoiceService.IService invoiceService, CancellationToken cancellationToken)
+    {
+        var response = await invoiceService.CreateAsync(GetAccountId(), bookingId, request, cancellationToken);
+        return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(response,
+            "Invoice created successfully", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
     }
 
     /// <summary>
