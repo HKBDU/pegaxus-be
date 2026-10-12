@@ -27,7 +27,7 @@ namespace Pegaxus.Service.Test;
 public class InvoiceHttpTests
 {
     [Fact]
-    public async Task SuggestionCreateUpdateAndLists_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
+    public async Task SuggestionCreateUpdateListsAndDetails_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
     {
         await using var db = TestSupport.CreateDb();
         var f = await InvoiceTests.Fixture.CreateAsync(db);
@@ -138,12 +138,23 @@ public class InvoiceHttpTests
         Assert.Equal(1, bookingInvoices.GetProperty("totalItems").GetInt32());
         Assert.Equal(invoiceId, bookingInvoices.GetProperty("items")[0].GetProperty("invoiceId").GetGuid());
         Assert.Equal(2.4m, bookingInvoices.GetProperty("items")[0].GetProperty("totalAmount").GetDecimal());
+        var detailResponse = await client.GetAsync($"/api/v1/invoices/{invoiceId}");
+        Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
+        var detail = (await detailResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.Equal(invoiceId, detail.GetProperty("invoiceId").GetGuid());
+        Assert.Equal("DRAFT", detail.GetProperty("status").GetString());
+        Assert.Equal(item.InvoiceItemId, detail.GetProperty("items")[0].GetProperty("invoiceItemId").GetGuid());
+        Assert.Equal(2.4m, detail.GetProperty("summary").GetProperty("grandTotal").GetDecimal());
+        Assert.Equal(edited.GetProperty("updatedAt").GetDateTimeOffset(), detail.GetProperty("updatedAt").GetDateTimeOffset());
         SignIn("Customer", f.Booking.Customer.AccountId);
         var customerList = await client.GetAsync(path);
         Assert.Equal(HttpStatusCode.OK, customerList.StatusCode);
         var customerInvoices = (await customerList.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
         Assert.Equal(0, customerInvoices.GetProperty("totalItems").GetInt32());
         Assert.Equal(0, customerInvoices.GetProperty("items").GetArrayLength());
+        var customerDetail = await client.GetAsync($"/api/v1/invoices/{invoiceId}");
+        Assert.Equal(HttpStatusCode.Forbidden, customerDetail.StatusCode);
+        Assert.Equal("Customer cannot view draft invoices", (await customerDetail.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("message").GetString());
         SignIn(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER));
         var duplicate = await client.PostAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
