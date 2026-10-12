@@ -9,6 +9,7 @@ using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.Models;
 
 using BookingService = Pegaxus.Service.BookingService;
+using InvoiceService = Pegaxus.Service.InvoiceService;
 
 namespace Pegaxus.API.Controllers;
 
@@ -22,6 +23,31 @@ public class BookingController : ControllerBase
     public BookingController(BookingService.IService service)
     {
         _service = service;
+    }
+
+    /// <summary>
+    /// Check invoice eligibility and preview deposit deductions.
+    /// </summary>
+    /// <remarks>Only Logistics Managers may check an APPROVED booking. Invoice type determines the allowed transport status, duplicate checks and paid FINAL prerequisite for CREDIT_NOTE. FINAL previews contain one read-only deduction per paid deposit; other types return no fee suggestions. This endpoint does not write data.</remarks>
+    /// <param name="bookingId">The booking identifier (UUID).</param>
+    /// <param name="request">The required invoice type: QUOTATION, DEPOSIT, FINAL, SUPPLEMENTARY or CREDIT_NOTE.</param>
+    /// <param name="invoiceService">The injected invoice service.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with booking and transport details, payment requirement and deposit deduction previews.</returns>
+    /// <exception cref="BadRequestException">The invoice type is missing or invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not an active Logistics Manager.</exception>
+    /// <exception cref="NotFoundException">The booking does not exist.</exception>
+    /// <exception cref="ConflictException">The booking or transport status is invalid, or a conflicting invoice exists.</exception>
+    /// <exception cref="UnprocessableEntityException">A CREDIT_NOTE requires a paid FINAL invoice; FINAL deductions cannot combine deposits with different currencies.</exception>
+    [HttpGet("{bookingId:guid}/invoices/suggestion")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> GetInvoiceSuggestion(Guid bookingId,
+        [FromQuery] InvoiceService.Request.SuggestionRequest request,
+        [FromServices] InvoiceService.IService invoiceService, CancellationToken cancellationToken)
+    {
+        var response = await invoiceService.GetSuggestionAsync(GetAccountId(), bookingId, request, cancellationToken);
+        return Ok(ResponseBuilder.SuccessResponse(response, "Invoice precheck retrieved successfully",
+            traceId: HttpContext.TraceIdentifier));
     }
 
     /// <summary>
