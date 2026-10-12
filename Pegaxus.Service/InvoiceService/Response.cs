@@ -27,7 +27,7 @@ public static class Response
         public DateTimeOffset? CancelledAt => null;
         public string? CancellationReason => null;
         public required BookingResponse Booking { get; init; }
-        public required TransportResponse Transport { get; init; }
+        public TransportResponse? Transport { get; init; }
         public PlanResponse? TransportPlan { get; init; }
         public IReadOnlyList<object> Receipts => Array.Empty<object>();
         public IReadOnlyList<string> AvailableActions => ["EDIT", "ISSUE", "CANCEL", "CREATE_ANOTHER"];

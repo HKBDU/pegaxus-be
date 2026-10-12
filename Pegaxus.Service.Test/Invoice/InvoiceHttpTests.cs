@@ -4,6 +4,7 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentValidation;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
@@ -26,7 +27,7 @@ namespace Pegaxus.Service.Test;
 public class InvoiceHttpTests
 {
     [Fact]
-    public async Task Create_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
+    public async Task SuggestionCreateAndUpdate_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
     {
         await using var db = TestSupport.CreateDb();
         var f = await InvoiceTests.Fixture.CreateAsync(db);
@@ -46,6 +47,7 @@ public class InvoiceHttpTests
         builder.Services.AddScoped<IService, InvoiceService.Service>();
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
+        builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ =>
             new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService()));
         builder.Services.AddControllers().AddApplicationPart(typeof(BookingController).Assembly)
@@ -101,6 +103,26 @@ public class InvoiceHttpTests
             Assert.Equal(JsonValueKind.Null, value.GetProperty(field).ValueKind);
         Assert.Equal(4, value.GetProperty("availableActions").GetArrayLength());
         Assert.Equal(0, value.GetProperty("receipts").GetArrayLength());
+        var invoiceId = value.GetProperty("invoiceId").GetGuid();
+        var item = request.Items[0];
+        item.InvoiceItemId = value.GetProperty("items")[0].GetProperty("invoiceItemId").GetGuid();
+        item.Quantity = 2;
+        var updateRequest = new Request.UpdateRequest
+        {
+            LastUpdatedAt = value.GetProperty("updatedAt").GetDateTimeOffset(), Currency = request.Currency,
+            DueDate = request.DueDate, Items = [item]
+        };
+        var updated = await client.PutAsJsonAsync($"/api/v1/invoices/{invoiceId}", updateRequest);
+        Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
+        var edited = (await updated.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.Equal(invoiceId, edited.GetProperty("invoiceId").GetGuid());
+        Assert.Equal(item.InvoiceItemId, edited.GetProperty("items")[0].GetProperty("invoiceItemId").GetGuid());
+        Assert.Equal(2.4m, edited.GetProperty("summary").GetProperty("grandTotal").GetDecimal());
+        Assert.True(edited.GetProperty("updatedAt").GetDateTimeOffset() > updateRequest.LastUpdatedAt);
+        Assert.Single(await db.InvoiceStatusHistories.ToListAsync());
+        var stale = await client.PutAsJsonAsync($"/api/v1/invoices/{invoiceId}", updateRequest);
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal("INVOICE_MODIFIED", (await stale.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
         var duplicate = await client.PostAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
         Assert.Equal("INVOICE_ALREADY_EXISTS", (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());

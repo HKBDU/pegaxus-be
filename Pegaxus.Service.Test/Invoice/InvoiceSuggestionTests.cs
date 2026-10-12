@@ -293,6 +293,7 @@ public class InvoiceSuggestionTests
         builder.Services.AddScoped<IValidator<InvoiceService.Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddSingleton(InvoiceTests.Fixture.Clock);
         builder.Services.AddScoped<IValidator<InvoiceService.Request.CreateRequest>, CreateRequestValidator>();
+        builder.Services.AddScoped<IValidator<InvoiceService.Request.UpdateRequest>, UpdateRequestValidator>();
         await using var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
         app.UseAuthentication();
@@ -345,7 +346,7 @@ public class InvoiceSuggestionTests
     }
 
     private static InvoiceService.Service Service(AppDbContext db) => new(db, InvoiceTests.Fixture.Clock,
-        new CreateRequestValidator(InvoiceTests.Fixture.Clock), new SuggestionRequestValidator());
+        new CreateRequestValidator(InvoiceTests.Fixture.Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(InvoiceTests.Fixture.Clock));
 
     private static async Task<(Account, Employee, Booking, Transport)> SeedAsync(AppDbContext db)
     {
