@@ -65,6 +65,9 @@ public class InvoicePaymentPostgresTests
                 var customerDetails = await service.GetAsync(customer.AccountId, invoice.InvoiceId);
                 Assert.Equal(details.Receipts.ToArray(), customerDetails.Receipts.ToArray());
                 Assert.Empty(customerDetails.AvailableActions);
+                var history = Assert.Single(await service.GetStatusHistoryAsync(invoice.InvoiceId, customer.AccountId));
+                Assert.Equal("RECORD_PAYMENT", history.Type);
+                Assert.Equal(actor.AccountId, history.ChangedBy.AccountId);
             }
 
             var fresh = await InvoicePaymentTests.SeedAsync(seed);

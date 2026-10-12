@@ -27,7 +27,7 @@ namespace Pegaxus.Service.Test;
 public class InvoiceHttpTests
 {
     [Fact]
-    public async Task SuggestionCreateUpdateListsDetailsIssueAndCancel_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
+    public async Task SuggestionCreateUpdateListsDetailsIssueCancelAndHistory_ActualJwtHttpContractEnforcesRolesAndReturnsCompleteDraft()
     {
         await using var db = TestSupport.CreateDb();
         var f = await InvoiceTests.Fixture.CreateAsync(db);
@@ -128,6 +128,9 @@ public class InvoiceHttpTests
         Assert.Equal(2.4m, edited.GetProperty("summary").GetProperty("grandTotal").GetDecimal());
         Assert.True(edited.GetProperty("updatedAt").GetDateTimeOffset() > updateRequest.LastUpdatedAt);
         Assert.Single(await db.InvoiceStatusHistories.ToListAsync());
+        var historyPath = $"/api/v1/invoices/{invoiceId}/status-history";
+        var draftHistory = (await client.GetFromJsonAsync<JsonElement>(historyPath)).GetProperty("value");
+        Assert.Equal("CREATE", Assert.Single(draftHistory.EnumerateArray()).GetProperty("type").GetString());
         var stale = await client.PutAsJsonAsync($"/api/v1/invoices/{invoiceId}", updateRequest);
         Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
         Assert.Equal("INVOICE_MODIFIED", (await stale.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
@@ -161,6 +164,7 @@ public class InvoiceHttpTests
         var customerDetail = await client.GetAsync($"/api/v1/invoices/{invoiceId}");
         Assert.Equal(HttpStatusCode.Forbidden, customerDetail.StatusCode);
         Assert.Equal("Customer cannot view draft invoices", (await customerDetail.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("message").GetString());
+        Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(historyPath)).StatusCode);
         SignIn(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER));
         var duplicate = await client.PostAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
@@ -181,6 +185,8 @@ public class InvoiceHttpTests
         var issuedDetails = await client.GetAsync($"/api/v1/invoices/{invoiceId}");
         Assert.Equal(HttpStatusCode.OK, issuedDetails.StatusCode);
         Assert.Equal("ISSUED", (await issuedDetails.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value").GetProperty("status").GetString());
+        var issuedHistory = (await client.GetFromJsonAsync<JsonElement>(historyPath)).GetProperty("value");
+        Assert.Equal("ISSUE", Assert.Single(issuedHistory.EnumerateArray()).GetProperty("type").GetString());
         var visibleInvoices = (await client.GetFromJsonAsync<JsonElement>(path)).GetProperty("value");
         Assert.Equal(1, visibleInvoices.GetProperty("totalItems").GetInt32());
         Assert.Equal(invoiceId, visibleInvoices.GetProperty("items")[0].GetProperty("invoiceId").GetGuid());
@@ -200,7 +206,14 @@ public class InvoiceHttpTests
         Assert.Equal("CANCELLED", cancelledDetails.GetProperty("status").GetString());
         Assert.Equal(cancelled.GetProperty("cancelledAt").GetDateTimeOffset(), cancelledDetails.GetProperty("cancelledAt").GetDateTimeOffset());
         Assert.Empty(cancelledDetails.GetProperty("availableActions").EnumerateArray());
+        var customerHistory = (await client.GetFromJsonAsync<JsonElement>(historyPath)).GetProperty("value");
+        Assert.Equal(new[] { "CANCEL", "ISSUE" }, customerHistory.EnumerateArray()
+            .Select(x => x.GetProperty("type").GetString()).OrderBy(x => x, StringComparer.Ordinal));
+        var cancelEvent = Assert.Single(customerHistory.EnumerateArray(), x => x.GetProperty("type").GetString() == "CANCEL");
+        Assert.Equal(cancellation.CancellationReason.Trim(), cancelEvent.GetProperty("reason").GetString());
+        Assert.Equal(f.Account.AccountId, cancelEvent.GetProperty("changedBy").GetProperty("accountId").GetGuid());
         SignIn(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER));
+        Assert.Equal(3, (await client.GetFromJsonAsync<JsonElement>(historyPath)).GetProperty("value").GetArrayLength());
         var replacement = await client.PostAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.Created, replacement.StatusCode);
         Assert.NotEqual(invoiceId, (await replacement.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value").GetProperty("invoiceId").GetGuid());

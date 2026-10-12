@@ -53,6 +53,8 @@ public class InvoiceCancellationPostgresTests
                 Assert.Equal("CANCELLED", details.Status);
                 Assert.Equal(cancelled.CancellationReason, details.CancellationReason);
                 Assert.Empty(details.AvailableActions);
+                Assert.Equal(cancelled.CancellationReason, Assert.Single(await InvoiceCancellationTests.CreateService(verify)
+                    .GetStatusHistoryAsync(invoice.InvoiceId, customer.AccountId)).Reason);
             }
 
             var fresh = await InvoiceCancellationTests.SeedAsync(seed);
