@@ -950,8 +950,13 @@ public partial class Service : IService
         var approvalMail = new MailService.MailContent
         {
             To = booking.Customer.Account.Email,
-            Subject = "Booking approved",
-            Body = $"<p>Booking <strong>{WebUtility.HtmlEncode(booking.BookingCode)}</strong> has been approved.</p>"
+            Subject = $"Booking approved — {booking.BookingCode}",
+            Body = EmailBodies.BookingApprovedBody(
+                customerName: booking.Customer.FullName,
+                bookingCode: booking.BookingCode,
+                transportCode: transport.TransportCode,
+                departureDate: booking.RequestedDepartureDate,
+                actionUrl: null)
         };
         if (OutboxQueue.IsEnabled(_db))
             OutboxQueue.AddEmail(_db, approvalMail, now);
@@ -1001,8 +1006,12 @@ public partial class Service : IService
         var rejectionMail = new MailService.MailContent
         {
             To = booking.Customer.Account.Email,
-            Subject = "Booking rejected",
-            Body = $"<p>Booking <strong>{WebUtility.HtmlEncode(booking.BookingCode)}</strong> has been rejected.</p><p>Reason: {WebUtility.HtmlEncode(reason)}</p>"
+            Subject = $"Booking rejected — {booking.BookingCode}",
+            Body = EmailBodies.BookingRejectedBody(
+                customerName: booking.Customer.FullName,
+                bookingCode: booking.BookingCode,
+                reason: reason,
+                actionUrl: null)
         };
         if (OutboxQueue.IsEnabled(_db))
             OutboxQueue.AddEmail(_db, rejectionMail, now);
