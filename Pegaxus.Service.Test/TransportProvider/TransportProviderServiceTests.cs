@@ -33,6 +33,8 @@ using Claim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Test;
 
+// These tests create schemas in a shared database; parallel runs make Npgsql see duplicate enum type names.
+[Collection("PostgresSharedDatabase")]
 public class TransportProviderServiceTests
 {
     [Fact]
@@ -256,7 +258,7 @@ public class TransportProviderServiceTests
             foreach (var type in typeof(ProviderStatus).Assembly.GetTypes().Where(type => type.IsEnum && type.Namespace == typeof(ProviderStatus).Namespace))
                 sourceBuilder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
             await using var source = sourceBuilder.Build();
-            var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options;
+            var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options;
             await using var db = new AppDbContext(options);
             await new NpgsqlCommand(db.Database.GenerateCreateScript(), admin).ExecuteNonQueryAsync();
             await db.Database.ExecuteSqlRawAsync("DROP INDEX \"TransportProvider_tax_code_key\"; DROP INDEX \"TransportProvider_provider_code_key\"; CREATE UNIQUE INDEX \"TransportProvider_provider_code_key\" ON \"TransportProvider\" (provider_code)");

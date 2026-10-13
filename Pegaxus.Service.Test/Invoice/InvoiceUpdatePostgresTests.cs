@@ -151,7 +151,7 @@ public class InvoiceUpdatePostgresTests : IAsyncLifetime
     }
 
     private AppDbContext CreateDb(params IInterceptor[] interceptors) => new(
-        new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(_source!).AddInterceptors(interceptors).Options);
+        new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(_source!).AddInterceptors(interceptors).Options);
     private static DraftInvoiceService Service(AppDbContext db) => new(db,
         new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger, InvoiceUpdateTests.Fixture.Clock,
         new CreateRequestValidator(InvoiceUpdateTests.Fixture.Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(InvoiceUpdateTests.Fixture.Clock),

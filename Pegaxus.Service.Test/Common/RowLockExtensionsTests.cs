@@ -34,7 +34,7 @@ public class RowLockExtensionsTests
                      .Where(item => item.IsEnum && item.Namespace == typeof(AccountStatus).Namespace))
             builder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
         await using var source = builder.Build();
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options;
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options;
         await using var seed = new AppDbContext(options);
         try
         {

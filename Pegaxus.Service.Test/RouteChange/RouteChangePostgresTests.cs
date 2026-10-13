@@ -37,7 +37,7 @@ public class RouteChangePostgresTests
         Assert.Equal(4, await check.Notifications.CountAsync());
         Assert.Equal(4, await check.OutboxMessages.CountAsync());
         Assert.Empty(await check.IncidentReports.ToListAsync());
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scope.Source).Options;
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(scope.Source).Options;
         await CheckOutboxClaimsAsync(options);
         await CheckRequirementReferenceRaceAsync(options, f.Manager.AccountId);
     }
@@ -248,7 +248,7 @@ public class RouteChangePostgresTests
     private sealed class DatabaseScope(string admin, string name, NpgsqlDataSource source) : IAsyncDisposable
     {
         internal NpgsqlDataSource Source => source;
-        internal AppDbContext Db() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options);
+        internal AppDbContext Db() => new(new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options);
         internal static async Task<DatabaseScope> CreateAsync()
         {
             var admin = Environment.GetEnvironmentVariable("PEGAXUS_TEST_CONNECTION_STRING")!;

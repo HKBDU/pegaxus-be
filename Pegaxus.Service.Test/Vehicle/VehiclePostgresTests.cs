@@ -17,6 +17,8 @@ using Pegaxus.Service.VehicleService;
 
 namespace Pegaxus.Service.Test;
 
+// These tests create schemas in a shared database; parallel runs make Npgsql see duplicate enum type names.
+[Collection("PostgresSharedDatabase")]
 public class VehiclePostgresTests
 {
     private sealed class PostgresFactAttribute : FactAttribute
@@ -48,7 +50,7 @@ public class VehiclePostgresTests
         foreach (var type in typeof(VehicleStatus).Assembly.GetTypes().Where(x => x.IsEnum && x.Namespace == typeof(VehicleStatus).Namespace))
             sourceBuilder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
         await using var source = sourceBuilder.Build();
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options;
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options;
         try
         {
             await using (var modelDb = new AppDbContext(options))

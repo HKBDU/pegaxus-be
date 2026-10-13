@@ -188,7 +188,7 @@ public class LinqConcurrencyTests : IAsyncLifetime
     }
 
     private AppDbContext CreateDb(params IInterceptor[] interceptors) => new(
-        new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(_source!)
+        new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(_source!)
             .AddInterceptors(interceptors).Options);
 
     private sealed class EnumNameTranslator : INpgsqlNameTranslator

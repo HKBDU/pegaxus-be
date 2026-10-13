@@ -27,7 +27,7 @@ public class InvoiceDetailPostgresTests
             builder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
         await using var source = builder.Build();
         var commands = new ReadCommands();
-        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).AddInterceptors(commands).Options);
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).AddInterceptors(commands).Options);
         try
         {
             await db.Database.EnsureCreatedAsync();

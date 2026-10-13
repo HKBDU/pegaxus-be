@@ -354,7 +354,8 @@ public class DocumentUploadTests
     {
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .ReplaceService<IDbContextTransactionManager, LostCommitTransactionManager>().Options);
+            .ReplaceService<IDbContextTransactionManager, LostCommitTransactionManager>()
+            .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)).Options);
         var (account, dossier, requirement) = await SeedAsync(db);
         var storage = new RecordingStorage();
         await Assert.ThrowsAsync<IOException>(() => CreateService(db, storage).UploadDocumentAsync(account.AccountId,

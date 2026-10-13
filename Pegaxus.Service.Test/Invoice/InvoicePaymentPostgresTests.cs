@@ -19,7 +19,7 @@ public class InvoicePaymentPostgresTests
         foreach (var type in typeof(InvoiceStatus).Assembly.GetTypes().Where(x => x.IsEnum && x.Namespace == typeof(InvoiceStatus).Namespace))
             builder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
         await using var source = builder.Build();
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options;
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options;
         await using var seed = new AppDbContext(options);
         try
         {

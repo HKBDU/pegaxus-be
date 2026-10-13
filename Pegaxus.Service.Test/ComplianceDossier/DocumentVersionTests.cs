@@ -231,7 +231,8 @@ public class DocumentVersionTests
         await CreateService(originalDb, new RecordingStorage()).UploadDocumentAsync(account.AccountId, dossier.ComplianceDossierId,
             requirement.DossierRequirementId, ValidRequest(dossier));
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(name, root).ReplaceService<IDbContextTransactionManager, LostCommitTransactionManager>().Options);
+            .UseInMemoryDatabase(name, root).ReplaceService<IDbContextTransactionManager, LostCommitTransactionManager>()
+            .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)).Options);
         var storage = new RecordingStorage();
         await Assert.ThrowsAsync<IOException>(() => CreateService(db, storage).SubmitDocumentVersionAsync(account.AccountId,
             dossier.ComplianceDossierId, requirement.DossierRequirementId, ValidRequest(dossier)));

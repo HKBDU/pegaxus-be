@@ -33,6 +33,8 @@ using ClaimTypes = System.Security.Claims.ClaimTypes;
 
 namespace Pegaxus.Service.Test;
 
+// These tests create schemas in a shared database; parallel runs make Npgsql see duplicate enum type names.
+[Collection("PostgresSharedDatabase")]
 public class RouteOutsourcingTests
 {
     [Fact]
@@ -343,7 +345,7 @@ public class RouteOutsourcingTests
             foreach (var type in typeof(ProviderStatus).Assembly.GetTypes().Where(type => type.IsEnum && type.Namespace == typeof(ProviderStatus).Namespace))
                 sourceBuilder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
             await using var source = sourceBuilder.Build();
-            var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options;
+            var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options;
             await using var db = new AppDbContext(options);
             var script = db.Database.GenerateCreateScript();
             var oldScript = script.Replace("'CANCELLED', 'PENDING_LEGAL_REVIEW', 'PENDING_MANAGER_APPROVAL', 'REJECTED_BY_MANAGER', 'APPROVED'", "'CANCELLED'");

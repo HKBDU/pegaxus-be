@@ -14,6 +14,8 @@ using Pegaxus.Service.PersonnelAssignmentService;
 
 namespace Pegaxus.Service.Test;
 
+// These tests create schemas in a shared database; parallel runs make Npgsql see duplicate enum type names.
+[Collection("PostgresSharedDatabase")]
 public class PersonnelAssignmentPostgresTests
 {
     private sealed class EnumTranslator : INpgsqlNameTranslator
@@ -35,7 +37,7 @@ public class PersonnelAssignmentPostgresTests
         foreach (var type in typeof(EmployeeRole).Assembly.GetTypes().Where(x => x.IsEnum && x.Namespace == typeof(EmployeeRole).Namespace))
             builder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
         await using var source = builder.Build();
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options;
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options;
         try
         {
             Guid actor, driver, escort1, escort2, route1, route2, segment1, segment2, replacement1, replacement2;
