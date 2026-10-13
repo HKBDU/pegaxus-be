@@ -5,8 +5,8 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
-using Pegaxus.Service.PersonnelAssignmentService;
 using Pegaxus.Service.PersonnelAssignmentService.Validator;
+
 using Request = Pegaxus.Service.PersonnelAssignmentService.Request;
 using Response = Pegaxus.Service.PersonnelAssignmentService.Response;
 using AssignmentService = Pegaxus.Service.PersonnelAssignmentService.Service;
@@ -68,7 +68,7 @@ public class PersonnelAssignmentTests
         Assert.True((await CreateService(db).GetAsync(plan.TransportPlanId, manager.AccountId)).Phase1.IsAssigned);
         var specialist = assignments.Single(x => x.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST);
         var coordinator = assignments.Single(x => x.Employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR);
-        var error = await Assert.ThrowsAsync<ConflictException>(() => new Pegaxus.Service.TransportPlanService.Service(db)
+        var error = await Assert.ThrowsAsync<ConflictException>(() => new Pegaxus.Service.TransportPlanService.Service(db, TestSupport.CreateNotifications(db))
             .AssignPhase1Async(manager.AccountId, plan.TransportPlanId, new() {
                 TransportSpecialistId = specialist.EmployeeId, RouteCoordinatorId = coordinator.EmployeeId }));
         Assert.Equal("PHASE1_ALREADY_ASSIGNED", error.ErrorCode);
@@ -372,7 +372,7 @@ public class PersonnelAssignmentTests
         var specialist = await EmployeeAsync(db, EmployeeRole.TRANSPORT_SPECIALIST);
         var coordinator = await EmployeeAsync(db, EmployeeRole.FLEET_ROUTE_COORDINATOR);
         var (route, _) = await RouteAsync(db, RoutePlanStatus.DRAFT);
-        var service = new Pegaxus.Service.TransportPlanService.Service(db);
+        var service = new Pegaxus.Service.TransportPlanService.Service(db, TestSupport.CreateNotifications(db));
         var request = new Pegaxus.Service.TransportPlanService.Request.Phase1AssignmentRequest {
             TransportSpecialistId = specialist.EmployeeId, RouteCoordinatorId = coordinator.EmployeeId };
         specialist.IsActive = false; await db.SaveChangesAsync();

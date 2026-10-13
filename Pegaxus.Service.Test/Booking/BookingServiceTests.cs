@@ -3,6 +3,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+
 using BookingRequest = Pegaxus.Service.BookingService.Request;
 using BookingServiceImpl = Pegaxus.Service.BookingService.Service;
 using TransportPlanServiceImpl = Pegaxus.Service.TransportPlanService.Service;
@@ -466,14 +467,14 @@ public class BookingServiceTests
     }
 
     private static BookingServiceImpl CreateService(AppDbContext db) =>
-        new(db, TestSupport.CreateMailService());
+        new(db, TestSupport.CreateMailService(), TestSupport.CreateNotifications(db));
 
     private static TransportPlanServiceImpl CreateTransportPlanService(AppDbContext db) =>
-        new(db);
+        new(db, TestSupport.CreateNotifications(db));
 
     private static BookingServiceImpl CreateService(AppDbContext db, out TestSupport.RecordingMailService mailService)
     {
         mailService = TestSupport.CreateMailService();
-        return new BookingServiceImpl(db, mailService);
+        return new BookingServiceImpl(db, mailService, TestSupport.CreateNotifications(db));
     }
 }

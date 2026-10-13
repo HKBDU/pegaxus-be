@@ -1,5 +1,5 @@
-using System.Text.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -11,8 +11,8 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MediaService;
+
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
-using DossierRequest = Pegaxus.Service.ComplianceDossierService.Request;
 
 namespace Pegaxus.Service.Test;
 

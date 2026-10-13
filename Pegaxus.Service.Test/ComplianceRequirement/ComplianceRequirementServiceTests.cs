@@ -1,16 +1,16 @@
-using Microsoft.EntityFrameworkCore;
-using Pegaxus.Repository.Entities;
+using System.Reflection;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
-using System.Reflection;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
 using Pegaxus.API.Controllers;
+using Pegaxus.Repository.Entities;
+using Pegaxus.Service.ComplianceRequirementService.Validator;
 using Pegaxus.Service.Exceptions;
+
 using CatalogRequest = Pegaxus.Service.ComplianceRequirementService.Request;
 using CatalogService = Pegaxus.Service.ComplianceRequirementService.Service;
-using Pegaxus.Service.ComplianceRequirementService.Validator;
 
 namespace Pegaxus.Service.Test;
 

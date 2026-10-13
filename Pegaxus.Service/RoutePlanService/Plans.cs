@@ -1,0 +1,298 @@
+using System.Data;
+using Microsoft.EntityFrameworkCore;
+using Pegaxus.Repository.Entities;
+using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Exceptions;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
+
+using static Pegaxus.Service.Common.DbTime;
+
+using NotificationService = Pegaxus.Service.NotificationService;
+
+namespace Pegaxus.Service.RoutePlanService;
+
+public sealed partial class Service
+{
+    public async Task<Response.DetailResponse> CreateAsync(Guid accountId, Guid transportPlanId, Request.SaveRequest request, CancellationToken cancellationToken = default)
+    {
+        var employee = await RequireEmployeeAsync(accountId, cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableOrNoneAsync(cancellationToken);
+        var plan = await LoadPlanAsync(transportPlanId, cancellationToken);
+        await EnsurePlanCanBeUsedAsync(plan, cancellationToken);
+        var routeType = ParseRouteType(request.RouteType);
+        EnsureWriteRole(employee.Role, routeType);
+        if (routeType == RouteType.RETURN && !plan.EmployeeTransportPlans.Any(x => x.EmployeeId == employee.EmployeeId &&
+                x.Responsibility == "FLEET_ROUTE_COORDINATOR"))
+            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan may create RETURN.");
+        ValidateSaveRequest(request, routeType);
+
+        var primary = plan.RoutePlans.FirstOrDefault(item => item.Status != RoutePlanStatus.CANCELLED && GetRouteType(item) == RouteType.PRIMARY);
+        if (routeType == RouteType.PRIMARY && primary is not null)
+            throw new ConflictException("A primary route plan already exists for this transport plan", "PRIMARY_ROUTE_PLAN_EXISTS");
+        if (routeType == RouteType.BACKUP && primary is null)
+            throw new ConflictException("A backup route plan requires an existing primary route plan", "PRIMARY_ROUTE_PLAN_REQUIRED");
+        if (routeType == RouteType.BACKUP)
+            EnsureDossierAllowsBackup(plan.Transport.ComplianceDossier);
+        if (routeType == RouteType.RETURN)
+        {
+            if (primary is null) throw new ConflictException("A return route requires an existing PRIMARY.", "PRIMARY_ROUTE_PLAN_REQUIRED");
+            if (plan.Transport.Status != TransportStatus.IN_TRANSIT)
+                throw new ConflictException("A return route plan can only be created while the transport is in transit", "TRANSPORT_NOT_IN_TRANSIT");
+            if (plan.Transport.ComplianceDossier?.Status != ComplianceDossierStatus.APPROVED)
+                throw new ConflictException("A return route plan requires an approved compliance dossier (Transport is in transit)", "DOSSIER_NOT_APPROVED");
+            if (plan.RoutePlans.Any(item => item.Status != RoutePlanStatus.CANCELLED && GetRouteType(item) == RouteType.RETURN))
+                throw new ConflictException("A return route plan already exists for this transport plan", "RETURN_ROUTE_PLAN_EXISTS");
+        }
+
+        var materializedSegments = await MaterializeSegmentsAsync(request.Segments, routeType, plan, null, cancellationToken);
+        ValidateRouteRules(materializedSegments, plan, routeType, primary);
+        var now = UtcNowTruncated();
+        var routePlan = new RoutePlan
+        {
+            RoutePlanId = Guid.NewGuid(),
+            TransportPlanId = transportPlanId,
+            RoutePlanCode = await GenerateCodeAsync(now, cancellationToken),
+            Status = RoutePlanStatus.DRAFT,
+            PrimaryRoutePlanId = routeType == RouteType.PRIMARY ? null : primary?.RoutePlanId,
+            TotalDistanceKm = materializedSegments.Sum(item => item.Route.DistanceKm ?? 0),
+            EstimatedDurationMinutes = CalculateDurationMinutes(materializedSegments),
+            RouteNote = string.IsNullOrWhiteSpace(request.RouteNote) ? null : request.RouteNote.Trim(),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        db.RoutePlans.Add(routePlan);
+        foreach (var item in materializedSegments)
+        {
+            var route = item.Route;
+            var routePlanRoute = new RoutePlanRoute
+            {
+                RoutePlanRouteId = Guid.NewGuid(),
+                RoutePlanId = routePlan.RoutePlanId,
+                RouteId = route.RouteId,
+                SequenceNo = item.Request.SequenceNo,
+                RouteType = routeType,
+                PlannedDepartureAt = Truncate(item.Request.PlannedDepartureAt.UtcDateTime),
+                PlannedArrivalAt = Truncate(item.Request.PlannedArrivalAt.UtcDateTime),
+                TransportProviderId = item.Request.Outsourcing?.TransportProviderId,
+                Note = string.IsNullOrWhiteSpace(item.Request.Note) ? null : item.Request.Note.Trim(),
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.RoutePlanRoutes.Add(routePlanRoute);
+            foreach (var vehicleId in item.Request.VehicleIds.Distinct())
+                db.RoutePlanRouteVehicles.Add(new RoutePlanRouteVehicle
+                {
+                    RoutePlanRouteId = routePlanRoute.RoutePlanRouteId,
+                    VehicleId = vehicleId,
+                    AssignedAt = now,
+                    Note = "Assigned by Route Plan seed/request."
+                });
+        }
+
+        if (routeType == RouteType.BACKUP && plan.Transport.ComplianceDossier is not null)
+        {
+            plan.Transport.ComplianceDossier.Status = ComplianceDossierStatus.DRAFT;
+            plan.Transport.ComplianceDossier.UpdatedAt = now;
+        }
+
+        QueueCreateNotifications(plan, routeType, request.Action, routePlan, now);
+        await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
+        await notificationService.FlushAsync(cancellationToken);
+        return await GetByIdAsync(accountId, routePlan.RoutePlanId, cancellationToken);
+    }
+
+    public async Task<Response.ListResponse> GetListAsync(Guid accountId, Guid transportPlanId, Request.ListRequest request, CancellationToken cancellationToken = default)
+    {
+        var employee = await RequireEmployeeAsync(accountId, cancellationToken);
+        var plan = await LoadPlanAsync(transportPlanId, cancellationToken);
+        EnsureReadRole(employee.Role, plan, employee.EmployeeId);
+        RouteType? routeType = null;
+        if (!string.IsNullOrWhiteSpace(request.RouteType))
+            routeType = ParseRouteType(request.RouteType);
+        RoutePlanStatus? status = null;
+        if (!string.IsNullOrWhiteSpace(request.Status))
+        {
+            if (!Enum.TryParse<RoutePlanStatus>(request.Status, true, out var parsedStatus))
+                throw new BadRequestException("status is invalid", "INVALID_ROUTE_PLAN_STATUS");
+            status = parsedStatus;
+        }
+        var items = plan.RoutePlans.AsEnumerable();
+        if (!request.IncludeCancelled)
+            items = items.Where(item => item.Status != RoutePlanStatus.CANCELLED);
+        if (routeType.HasValue)
+            items = items.Where(item => GetRouteType(item) == routeType.Value);
+        if (status.HasValue)
+            items = items.Where(item => item.Status == status.Value);
+        return new Response.ListResponse
+        {
+            Items = items.OrderBy(item => item.CreatedAt).Select(ToSummary).ToList()
+        };
+    }
+
+    public async Task<Response.DetailResponse> GetByIdAsync(Guid accountId, Guid routePlanId, CancellationToken cancellationToken = default)
+    {
+        var employee = await RequireEmployeeAsync(accountId, cancellationToken);
+        var routePlan = await LoadRoutePlanAsync(routePlanId, cancellationToken);
+        if (routePlan is null)
+            throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
+        EnsureReadRole(employee.Role, routePlan.TransportPlan, employee.EmployeeId);
+        return ToDetail(routePlan, await GetLatestLegalReviewAsync(routePlan.RoutePlanId, cancellationToken));
+    }
+
+    public async Task<Response.UpdateResponse> UpdateAsync(Guid accountId, Guid routePlanId, Request.UpdateRequest request, CancellationToken cancellationToken = default)
+    {
+        var employee = await RequireEmployeeAsync(accountId, cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableOrNoneAsync(cancellationToken);
+        var routePlan = await LoadRoutePlanAsync(routePlanId, cancellationToken);
+        if (routePlan is null)
+            throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
+        var routeType = GetRouteType(routePlan);
+        EnsureWriteRole(employee.Role, routeType);
+        if (routeType == RouteType.RETURN && !routePlan.TransportPlan.EmployeeTransportPlans.Any(x => x.EmployeeId == employee.EmployeeId &&
+                x.Responsibility == "FLEET_ROUTE_COORDINATOR"))
+            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan may edit RETURN.");
+        if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.Status != TransportStatus.IN_TRANSIT)
+            throw new ConflictException("The transport is not in transit", "TRANSPORT_NOT_IN_TRANSIT");
+        if (routePlan.TransportPlan.Transport.Status == TransportStatus.IN_TRANSIT && routeType != RouteType.RETURN)
+            throw new ConflictException("Transport is currently in transit. Please use Emergency Route Change (UC-48) for in-transit modifications.", "ROUTE_LOCKED");
+        if (routePlan.Status != RoutePlanStatus.DRAFT)
+            throw new ConflictException("Transport is currently in transit. Please use Emergency Route Change (UC-48) for in-transit modifications.", "ROUTE_LOCKED");
+        if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.ComplianceDossier?.Status != ComplianceDossierStatus.DRAFT)
+            throw new ConflictException("RETURN must be approved by the Logistics Manager before editing.", "RETURN_NOT_APPROVED");
+        EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
+        if (string.IsNullOrWhiteSpace(request.UpdateReason))
+            throw new BadRequestException("updateReason is required");
+        ValidateSaveRequest(new Request.SaveRequest
+        {
+            RouteType = routeType.ToString(),
+            Segments = request.Segments,
+            RouteNote = request.RouteNote,
+            Action = request.Action
+        }, routeType, true);
+
+        var primary = routePlan.TransportPlan.RoutePlans.FirstOrDefault(item => item.Status != RoutePlanStatus.CANCELLED && GetRouteType(item) == RouteType.PRIMARY);
+        var materializedSegments = await MaterializeSegmentsAsync(request.Segments, routeType, routePlan.TransportPlan, routePlan.RoutePlanId, cancellationToken);
+        ValidateRouteRules(materializedSegments, routePlan.TransportPlan, routeType, primary, routePlan.RoutePlanId);
+        db.RoutePlanRouteVehicles.RemoveRange(routePlan.RoutePlanRoutes.SelectMany(item => item.RoutePlanRouteVehicles));
+        db.RoutePlanRoutes.RemoveRange(routePlan.RoutePlanRoutes);
+        var now = new DateTime(Math.Max(UtcNowTruncated().Ticks, routePlan.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
+        foreach (var item in materializedSegments)
+        {
+            var segment = new RoutePlanRoute
+            {
+                RoutePlanRouteId = Guid.NewGuid(),
+                RoutePlanId = routePlan.RoutePlanId,
+                RouteId = item.Route.RouteId,
+                SequenceNo = item.Request.SequenceNo,
+                RouteType = routeType,
+                PlannedDepartureAt = Truncate(item.Request.PlannedDepartureAt.UtcDateTime),
+                PlannedArrivalAt = Truncate(item.Request.PlannedArrivalAt.UtcDateTime),
+                TransportProviderId = item.Request.Outsourcing?.TransportProviderId,
+                Note = string.IsNullOrWhiteSpace(item.Request.Note) ? null : item.Request.Note.Trim(),
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.RoutePlanRoutes.Add(segment);
+            foreach (var vehicleId in item.Request.VehicleIds.Distinct())
+                db.RoutePlanRouteVehicles.Add(new RoutePlanRouteVehicle { RoutePlanRouteId = segment.RoutePlanRouteId, VehicleId = vehicleId, AssignedAt = now });
+        }
+        routePlan.TotalDistanceKm = materializedSegments.Sum(item => item.Route.DistanceKm ?? 0);
+        routePlan.EstimatedDurationMinutes = CalculateDurationMinutes(materializedSegments);
+        routePlan.RouteNote = string.IsNullOrWhiteSpace(request.RouteNote) ? null : request.RouteNote.Trim();
+        routePlan.UpdatedAt = now;
+        if (request.Action == "SUBMIT_FOR_LEGAL_REVIEW")
+            QueueUpdateNotifications(routePlan, request.UpdateReason.Trim(), now);
+        await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
+        await notificationService.FlushAsync(cancellationToken);
+        var segments = routePlan.RoutePlanRoutes.ToList();
+        return new Response.UpdateResponse
+        {
+            RoutePlanId = routePlan.RoutePlanId,
+            Status = routePlan.Status.ToString(),
+            TotalDistanceKm = routePlan.TotalDistanceKm ?? 0,
+            EstimatedDurationMinutes = routePlan.EstimatedDurationMinutes ?? 0,
+            SegmentCount = segments.Count,
+            IsPersonnelComplete = segments.Where(item => !item.TransportProviderId.HasValue).All(item => item.DriverEmployeeId.HasValue && item.EscortEmployeeId.HasValue),
+            UpdatedAt = AsUtc(routePlan.UpdatedAt)
+        };
+    }
+
+    public async Task<Response.CancelResponse> CancelAsync(Guid accountId, Guid routePlanId, Request.CancelRequest request, CancellationToken cancellationToken = default)
+    {
+        var employee = await RequireEmployeeAsync(accountId, cancellationToken);
+        var routePlan = await LoadRoutePlanAsync(routePlanId, cancellationToken);
+        if (routePlan is null)
+            throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
+        var routeType = GetRouteType(routePlan);
+        EnsureWriteRole(employee.Role, routeType);
+        if (request.LastUpdatedAt == default)
+            throw new BadRequestException("lastUpdatedAt is required");
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw new BadRequestException("reason is required");
+        if (routePlan.Status != RoutePlanStatus.DRAFT)
+            throw new ConflictException("Cannot cancel a Confirmed Route Plan. Please contact Logistics Manager if a route change is required.", "INVALID_ROUTE_PLAN_STATUS");
+        EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
+        var cancelledAt = UtcNowTruncated();
+        routePlan.Status = RoutePlanStatus.CANCELLED;
+        routePlan.RouteNote = string.IsNullOrWhiteSpace(routePlan.RouteNote)
+            ? $"Cancelled: {request.Reason.Trim()}"
+            : $"{routePlan.RouteNote} | Cancelled: {request.Reason.Trim()}";
+        routePlan.UpdatedAt = cancelledAt;
+        await db.SaveChangesAsync(cancellationToken);
+        return new Response.CancelResponse
+        {
+            RoutePlanId = routePlan.RoutePlanId,
+            Status = routePlan.Status.ToString(),
+            CancelledAt = AsUtc(cancelledAt),
+            BookingStatus = routePlan.TransportPlan.Transport.Booking.Status.ToString()
+        };
+    }
+
+    private void QueueCreateNotifications(TransportPlan plan, RouteType routeType, string action, RoutePlan routePlan, DateTime now)
+    {
+        if ((routeType is RouteType.PRIMARY or RouteType.BACKUP) && action == "SUBMIT_FOR_LEGAL_REVIEW")
+            foreach (var accountId in plan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST).Select(item => item.Employee.AccountId).Distinct())
+                notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.COMPLIANCE, Priority = NotificationPriority.NORMAL, Title = "Backup route requires legal review", Message = $"Route Plan {routePlan.RoutePlanCode} requires compliance review.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}", CreatedAt = now });
+        if (routeType == RouteType.RETURN)
+            foreach (var accountId in db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted).Select(item => item.AccountId))
+                notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE, Priority = NotificationPriority.URGENT, Title = "Return route plan created", Message = $"Return Route Plan {routePlan.RoutePlanCode} requires your approval.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}", CreatedAt = now });
+    }
+
+    private void QueueUpdateNotifications(RoutePlan routePlan, string reason, DateTime now)
+    {
+        foreach (var accountId in routePlan.TransportPlan.EmployeeTransportPlans
+                     .Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST)
+                     .Select(item => item.Employee.AccountId)
+                     .Distinct())
+            notificationService.Queue(new NotificationService.NotificationCreateRequest
+            {
+                AccountId = accountId,
+                TransportId = routePlan.TransportPlan.TransportId,
+                Type = NotificationType.COMPLIANCE,
+                Priority = NotificationPriority.NORMAL,
+                Title = "Route Plan requires legal re-review",
+                Message = $"Route Plan {routePlan.RoutePlanCode} was updated. Reason: {reason}",
+                ReferenceType = "RoutePlan",
+                ReferenceId = routePlan.RoutePlanId,
+                ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}",
+                CreatedAt = now
+            });
+    }
+
+    private async Task<string> GenerateCodeAsync(DateTime now, CancellationToken cancellationToken)
+    {
+        for (var i = 1; i <= 9999; i++)
+        {
+            var code = $"RP-{now:yyyyMMdd}-{i:0000}";
+            if (!await db.RoutePlans.AnyAsync(item => item.RoutePlanCode == code, cancellationToken))
+                return code;
+        }
+        throw new ConflictException("Unable to generate a unique Route Plan code", "ROUTE_PLAN_CODE_GENERATION_FAILED");
+    }
+}

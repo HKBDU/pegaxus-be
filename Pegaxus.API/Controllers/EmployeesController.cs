@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
 using Pegaxus.Service.Exceptions;
 
 using EmployeeService = Pegaxus.Service.EmployeeService;
@@ -11,7 +11,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
 [Route("api/v1/employees")]
-public sealed class EmployeesController : ControllerBase
+public sealed class EmployeesController : ApiControllerBase
 {
     private readonly EmployeeService.IService _service;
 
@@ -34,7 +34,7 @@ public sealed class EmployeesController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.GetListAsync(request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Employee accounts retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Employee accounts retrieved successfully");
     }
 
     /// <summary>
@@ -69,7 +69,7 @@ public sealed class EmployeesController : ControllerBase
     public async Task<IActionResult> Get(Guid employeeId, CancellationToken cancellationToken)
     {
         var response = await _service.GetAsync(employeeId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Employee account retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Employee account retrieved successfully");
     }
 
     /// <summary>
@@ -85,7 +85,7 @@ public sealed class EmployeesController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create(EmployeeService.Request.CreateEmployeeRequest request, CancellationToken cancellationToken)
     {
-        var response = await _service.CreateAsync(request, GetAccountId(), cancellationToken);
+        var response = await _service.CreateAsync(request, AccountId, cancellationToken);
         return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
             response, "Employee account created successfully", code: StatusCodes.Status201Created, traceId: HttpContext.TraceIdentifier));
     }
@@ -105,8 +105,8 @@ public sealed class EmployeesController : ControllerBase
     [HttpPatch("{employeeId:guid}")]
     public async Task<IActionResult> Update(Guid employeeId, EmployeeService.Request.UpdateEmployeeRequest request, CancellationToken cancellationToken)
     {
-        var response = await _service.UpdateAsync(employeeId, request, GetAccountId(), cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Employment information updated successfully", traceId: HttpContext.TraceIdentifier));
+        var response = await _service.UpdateAsync(employeeId, request, AccountId, cancellationToken);
+        return Success(response, "Employment information updated successfully");
     }
 
     /// <summary>
@@ -124,18 +124,9 @@ public sealed class EmployeesController : ControllerBase
     [HttpPatch("{employeeId:guid}/status")]
     public async Task<IActionResult> UpdateStatus(Guid employeeId, EmployeeService.Request.UpdateEmployeeStatusRequest request, CancellationToken cancellationToken)
     {
-        var response = await _service.UpdateStatusAsync(employeeId, request, GetAccountId(), cancellationToken);
+        var response = await _service.UpdateStatusAsync(employeeId, request, AccountId, cancellationToken);
         var message = response.IsDeleted ? "Employee account deleted successfully" : "Account status updated successfully";
-        return Ok(ResponseBuilder.SuccessResponse(response, message, traceId: HttpContext.TraceIdentifier));
+        return Success(response, message);
     }
 
-    private Guid GetAccountId()
-    {
-        var value = User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
-            ?? User.FindFirst("sub")?.Value
-            ?? User.FindFirst("accountId")?.Value;
-        if (!Guid.TryParse(value, out var accountId))
-            throw new UnauthorizedAccessException("The authenticated account identifier is invalid");
-        return accountId;
-    }
 }

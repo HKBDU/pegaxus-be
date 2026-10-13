@@ -1,9 +1,8 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
+using Pegaxus.API.Models;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
 
 using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
 
@@ -12,7 +11,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/compliance-dossiers")]
-public sealed class ComplianceDossiersController : ControllerBase
+public sealed class ComplianceDossiersController : ApiControllerBase
 {
     private readonly ComplianceDossierService.IService _service;
 
@@ -39,10 +38,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> ApproveDocument(Guid dossierId, Guid requirementId, Guid versionId,
         [FromBody] ComplianceDossierService.Request.ApproveDocumentRequest request, CancellationToken cancellationToken) =>
-        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            await _service.ApproveDocumentAsync(GetAccountId(), dossierId, requirementId, versionId, request, cancellationToken),
-            "DocumentReview recorded: APPROVED. DossierRequirement status updated to SATISFIED by TS.",
-            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+        SuccessCreated(await _service.ApproveDocumentAsync(AccountId, dossierId, requirementId, versionId, request, cancellationToken), "DocumentReview recorded: APPROVED. DossierRequirement status updated to SATISFIED by TS.");
 
     /// <summary>
     /// Revoke a document approval.
@@ -63,10 +59,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> RevokeDocumentReview(Guid dossierId, Guid requirementId, Guid versionId, Guid reviewId,
         [FromBody] ComplianceDossierService.Request.RevokeDocumentReviewRequest request, CancellationToken cancellationToken) =>
-        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            await _service.RevokeDocumentReviewAsync(GetAccountId(), dossierId, requirementId, versionId, reviewId, request, cancellationToken),
-            "DocumentReview revoked successfully. DossierRequirement status updated by TS.",
-            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+        SuccessCreated(await _service.RevokeDocumentReviewAsync(AccountId, dossierId, requirementId, versionId, reviewId, request, cancellationToken), "DocumentReview revoked successfully. DossierRequirement status updated by TS.");
 
     /// <summary>
     /// Mark a dossier as ready for submission.
@@ -81,9 +74,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [HttpPost("{dossierId:guid}/ready-for-submission")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> MarkReadyForSubmission(Guid dossierId, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(
-            await _service.MarkReadyForSubmissionAsync(GetAccountId(), dossierId, cancellationToken),
-            "ComplianceDossier marked READY_FOR_SUBMISSION by TS. No authority submission was created.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.MarkReadyForSubmissionAsync(AccountId, dossierId, cancellationToken), "ComplianceDossier marked READY_FOR_SUBMISSION by TS. No authority submission was created.");
     /// <summary>
     /// Upload documents for a dossier requirement.
     /// </summary>
@@ -104,10 +95,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> UploadDocument(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken) =>
-        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            await _service.UploadDocumentAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
-            "ComplianceDocument uploaded successfully (Version v1). Pending DocumentReview by Transport Specialist.",
-            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+        SuccessCreated(await _service.UploadDocumentAsync(AccountId, dossierId, requirementId, request, cancellationToken), "ComplianceDocument uploaded successfully (Version v1). Pending DocumentReview by Transport Specialist.");
 
 
     /// <summary>
@@ -131,7 +119,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     public async Task<IActionResult> SubmitDocumentVersion(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken)
     {
-        var response = await _service.SubmitDocumentVersionAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken);
+        var response = await _service.SubmitDocumentVersionAsync(AccountId, dossierId, requirementId, request, cancellationToken);
         var status = response.IsNewVersion ? StatusCodes.Status201Created : StatusCodes.Status200OK;
         var message = response.IsNewVersion
             ? $"New DocumentVersion (v{response.VersionNo}) submitted successfully. Pending DocumentReview."
@@ -156,9 +144,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> UpdateDocumentMetadata(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.DocumentMetadataRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(
-            await _service.UpdateDocumentMetadataAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
-            "ComplianceDocument metadata updated successfully.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.UpdateDocumentMetadataAsync(AccountId, dossierId, requirementId, request, cancellationToken), "ComplianceDocument metadata updated successfully.");
 
     /// <summary>
     /// Get document version history.
@@ -175,9 +161,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> GetDocumentVersions(Guid dossierId, Guid requirementId, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(
-            await _service.GetDocumentVersionsAsync(GetAccountId(), dossierId, requirementId, cancellationToken),
-            "DocumentVersion history retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.GetDocumentVersionsAsync(AccountId, dossierId, requirementId, cancellationToken), "DocumentVersion history retrieved successfully.");
 
     /// <summary>
     /// Reject a document version.
@@ -197,10 +181,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> RejectDocument(Guid dossierId, Guid requirementId, Guid versionId,
         [FromBody] ComplianceDossierService.Request.RejectDocumentRequest request, CancellationToken cancellationToken) =>
-        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            await _service.RejectDocumentAsync(GetAccountId(), dossierId, requirementId, versionId, request, cancellationToken),
-            "DocumentReview (REJECTED) recorded. Status updated by TS. DocumentRequest sent to customer.",
-            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+        SuccessCreated(await _service.RejectDocumentAsync(AccountId, dossierId, requirementId, versionId, request, cancellationToken), "DocumentReview (REJECTED) recorded. Status updated by TS. DocumentRequest sent to customer.");
 
     /// <summary>
     /// Add a document request comment.
@@ -220,9 +201,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.CustomerOrTransportSpecialistPolicy)]
     public async Task<IActionResult> AddDocumentRequestComment(Guid dossierId, Guid requirementId, Guid requestId,
         [FromBody] ComplianceDossierService.Request.DocumentRequestCommentRequest request, CancellationToken cancellationToken) =>
-        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            await _service.AddDocumentRequestCommentAsync(GetAccountId(), dossierId, requirementId, requestId, request, cancellationToken),
-            "DocumentRequest comment added successfully.", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+        SuccessCreated(await _service.AddDocumentRequestCommentAsync(AccountId, dossierId, requirementId, requestId, request, cancellationToken), "DocumentRequest comment added successfully.");
 
     /// <summary>
     /// Get document request comments.
@@ -238,8 +217,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [HttpGet("{dossierId:guid}/requirements/{requirementId:guid}/document-requests/{requestId:guid}/comments")]
     [Authorize(Policy = JwtExtensions.CustomerOrTransportSpecialistPolicy)]
     public async Task<IActionResult> GetDocumentRequestComments(Guid dossierId, Guid requirementId, Guid requestId, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await _service.GetDocumentRequestCommentsAsync(GetAccountId(), dossierId, requirementId, requestId, cancellationToken),
-            "DocumentRequest comments retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.GetDocumentRequestCommentsAsync(AccountId, dossierId, requirementId, requestId, cancellationToken), "DocumentRequest comments retrieved successfully.");
 
     /// <summary>
     /// List missing dossier requirements.
@@ -254,8 +232,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [HttpGet("{dossierId:guid}/missing-requirements")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> GetMissingRequirements(Guid dossierId, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await _service.GetMissingRequirementsAsync(GetAccountId(), dossierId, cancellationToken),
-            "Danh sách giấy tờ còn thiếu.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.GetMissingRequirementsAsync(AccountId, dossierId, cancellationToken), "Danh sách giấy tờ còn thiếu.");
 
     /// <summary>
     /// Send a missing-document reminder.
@@ -274,10 +251,9 @@ public sealed class ComplianceDossiersController : ControllerBase
     public async Task<IActionResult> RequestMissingDocuments(Guid dossierId,
         [FromBody] ComplianceDossierService.Request.MissingDocumentsRequest request, CancellationToken cancellationToken)
     {
-        var result = await _service.RequestMissingDocumentsAsync(GetAccountId(), dossierId, request, cancellationToken);
-        return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(result,
-            result.EmailSent ? "Đã gửi thông báo nhắc nộp bổ sung giấy tờ thành công cho khách hàng." :
-                "Đã lưu thông báo Web; email nhắc nộp giấy tờ đang chờ gửi lại.", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+        var result = await _service.RequestMissingDocumentsAsync(AccountId, dossierId, request, cancellationToken);
+        return SuccessCreated(result, result.EmailSent ? "Đã gửi thông báo nhắc nộp bổ sung giấy tờ thành công cho khách hàng." :
+                "Đã lưu thông báo Web; email nhắc nộp giấy tờ đang chờ gửi lại.");
     }
 
     /// <summary>
@@ -295,8 +271,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetByBooking(Guid bookingId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,
         CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await _service.GetByBookingAsync(GetAccountId(), bookingId, request, cancellationToken),
-            "ComplianceDossier retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.GetByBookingAsync(AccountId, bookingId, request, cancellationToken), "ComplianceDossier retrieved successfully.");
 
     /// <summary>
     /// Get compliance dossier details.
@@ -313,8 +288,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetDossier(Guid dossierId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,
         CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await _service.GetDossierAsync(GetAccountId(), dossierId, request, cancellationToken),
-            "ComplianceDossier retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.GetDossierAsync(AccountId, dossierId, request, cancellationToken), "ComplianceDossier retrieved successfully.");
 
     /// <summary>
     /// Get dossier requirement details.
@@ -329,8 +303,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [HttpGet("{dossierId:guid}/requirements/{requirementId:guid}")]
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetRequirement(Guid dossierId, Guid requirementId, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await _service.GetRequirementAsync(GetAccountId(), dossierId, requirementId, cancellationToken),
-            "DossierRequirement retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.GetRequirementAsync(AccountId, dossierId, requirementId, cancellationToken), "DossierRequirement retrieved successfully.");
 
     /// <summary>
     /// Preview a document file.
@@ -353,7 +326,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     public async Task<IActionResult> GetDocumentPreview(Guid dossierId, Guid requirementId, Guid versionId,
         Guid? attachmentId, CancellationToken cancellationToken)
     {
-        var file = await _service.GetDocumentPreviewAsync(GetAccountId(), dossierId, requirementId, versionId, attachmentId, cancellationToken);
+        var file = await _service.GetDocumentPreviewAsync(AccountId, dossierId, requirementId, versionId, attachmentId, cancellationToken);
         Response.Headers["X-Content-Type-Options"] = "nosniff";
         Response.Headers["Content-Security-Policy"] = "sandbox";
         Response.Headers["Content-Disposition"] = "inline";
@@ -372,8 +345,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [HttpGet("/api/v1/bookings/{bookingId:guid}/dossier-templates")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> GetTemplateOptions(Guid bookingId, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await _service.GetTemplateOptionsAsync(GetAccountId(), bookingId, cancellationToken),
-            "Available DossierTemplates retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.GetTemplateOptionsAsync(AccountId, bookingId, cancellationToken), "Available DossierTemplates retrieved successfully.");
 
     /// <summary>
     /// Preview a compliance dossier.
@@ -391,8 +363,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> Preview(Guid transportId, [FromBody] ComplianceDossierService.Request.InitializeRequest request,
         CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await _service.PreviewAsync(GetAccountId(), transportId, request, cancellationToken),
-            "ComplianceDossier preview generated successfully.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.PreviewAsync(AccountId, transportId, request, cancellationToken), "ComplianceDossier preview generated successfully.");
 
     /// <summary>
     /// Initialize a compliance dossier.
@@ -410,10 +381,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> Initialize(Guid bookingId, [FromBody] ComplianceDossierService.Request.InitializeRequest request,
         CancellationToken cancellationToken) =>
-        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            await _service.InitializeAsync(GetAccountId(), bookingId, request, cancellationToken),
-            "ComplianceDossier initialized successfully. DossierRequirements generated for customer.",
-            StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+        SuccessCreated(await _service.InitializeAsync(AccountId, bookingId, request, cancellationToken), "ComplianceDossier initialized successfully. DossierRequirements generated for customer.");
 
     /// <summary>
     /// Add a dossier requirement manually.
@@ -431,9 +399,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> AddRequirement(Guid dossierId, [FromBody] ComplianceDossierService.Request.RequirementRequest request,
         CancellationToken cancellationToken) =>
-        StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            await _service.AddRequirementAsync(GetAccountId(), dossierId, request, cancellationToken),
-            "DossierRequirement added successfully", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+        SuccessCreated(await _service.AddRequirementAsync(AccountId, dossierId, request, cancellationToken), "DossierRequirement added successfully");
 
     /// <summary>
     /// Waive a dossier requirement.
@@ -452,9 +418,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> WaiveRequirement(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.WaiveRequirementRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(
-            await _service.WaiveRequirementAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
-            "DossierRequirement waived successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.WaiveRequirementAsync(AccountId, dossierId, requirementId, request, cancellationToken), "DossierRequirement waived successfully");
 
     /// <summary>
     /// Update a dossier requirement.
@@ -473,9 +437,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> UpdateRequirement(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.UpdateRequirementRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(
-            await _service.UpdateRequirementAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
-            "DossierRequirement updated successfully.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.UpdateRequirementAsync(AccountId, dossierId, requirementId, request, cancellationToken), "DossierRequirement updated successfully.");
 
     /// <summary>
     /// Remove a dossier requirement.
@@ -494,9 +456,7 @@ public sealed class ComplianceDossiersController : ControllerBase
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> RemoveRequirement(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.RemoveRequirementRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(
-            await _service.RemoveRequirementAsync(GetAccountId(), dossierId, requirementId, request, cancellationToken),
-            "DossierRequirement removed successfully.", traceId: HttpContext.TraceIdentifier));
+        Success(await _service.RemoveRequirementAsync(AccountId, dossierId, requirementId, request, cancellationToken), "DossierRequirement removed successfully.");
 
     /// <summary>
     /// Get the compliance dossier dashboard.
@@ -514,12 +474,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.GetDashboardAsync(
-            GetAccountId(), request, cancellationToken);
+            AccountId, request, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Dashboard retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Dashboard retrieved successfully");
     }
 
     /// <summary>
@@ -538,7 +495,7 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.ExportDashboardAsync(
-            GetAccountId(), request, cancellationToken);
+            AccountId, request, cancellationToken);
 
         return File(response.Content, response.ContentType, response.FileName);
     }
@@ -562,12 +519,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.GetAuditHistoryAsync(
-            GetAccountId(), dossierId, request, cancellationToken);
+            AccountId, dossierId, request, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Audit history retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Audit history retrieved successfully");
     }
 
     /// <summary>
@@ -586,12 +540,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.GetAuthoritySubmissionsAsync(
-            GetAccountId(), dossierId, cancellationToken);
+            AccountId, dossierId, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Authority submissions retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Authority submissions retrieved successfully");
     }
 
     /// <summary>
@@ -616,13 +567,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.RecordAuthoritySubmissionAsync(
-            GetAccountId(), dossierId, request, cancellationToken);
+            AccountId, dossierId, request, cancellationToken);
 
-        return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            response,
-            "Authority submission recorded successfully",
-            StatusCodes.Status201Created,
-            HttpContext.TraceIdentifier));
+        return SuccessCreated(response, "Authority submission recorded successfully");
     }
 
     /// <summary>
@@ -646,12 +593,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.RecordAuthorityDecisionAsync(
-            GetAccountId(), submissionId, request, cancellationToken);
+            AccountId, submissionId, request, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Authority decision recorded successfully for ComplianceDossier",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Authority decision recorded successfully for ComplianceDossier");
     }
 
     /// <summary>
@@ -676,13 +620,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var proofId = await _service.SubmitQuarantineProofAsync(
-            GetAccountId(), dossierId, request, cancellationToken);
+            AccountId, dossierId, request, cancellationToken);
 
-        return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            new { QuarantineProofId = proofId },
-            "Quarantine proof submitted successfully. Awaiting TS Verification.",
-            StatusCodes.Status201Created,
-            HttpContext.TraceIdentifier));
+        return SuccessCreated(new { QuarantineProofId = proofId }, "Quarantine proof submitted successfully. Awaiting TS Verification.");
     }
 
     /// <summary>
@@ -701,12 +641,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.GetQuarantineProofAsync(
-            GetAccountId(), proofId, cancellationToken);
+            AccountId, proofId, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "QuarantineProof retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "QuarantineProof retrieved successfully");
     }
 
     /// <summary>
@@ -731,12 +668,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.FinalizeQuarantineProofAsync(
-            GetAccountId(), proofId, request, cancellationToken);
+            AccountId, proofId, request, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Quarantine proof finalized successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Quarantine proof finalized successfully");
     }
 
     /// <summary>
@@ -761,13 +695,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var proofId = await _service.SubmitCustomsClearanceProofAsync(
-            GetAccountId(), dossierId, request, cancellationToken);
+            AccountId, dossierId, request, cancellationToken);
 
-        return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(
-            new { CustomsClearanceProofId = proofId },
-            "Customs proof submitted successfully. Awaiting TS Verification.",
-            StatusCodes.Status201Created,
-            HttpContext.TraceIdentifier));
+        return SuccessCreated(new { CustomsClearanceProofId = proofId }, "Customs proof submitted successfully. Awaiting TS Verification.");
     }
 
     /// <summary>
@@ -786,12 +716,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.GetCustomsClearanceProofAsync(
-            GetAccountId(), proofId, cancellationToken);
+            AccountId, proofId, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "CustomsClearanceProof retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "CustomsClearanceProof retrieved successfully");
     }
 
     /// <summary>
@@ -816,23 +743,9 @@ public sealed class ComplianceDossiersController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.FinalizeCustomsClearanceProofAsync(
-            GetAccountId(), proofId, request, cancellationToken);
+            AccountId, proofId, request, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Customs proof finalized successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Customs proof finalized successfully");
     }
 
-    private Guid GetAccountId()
-    {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-
-        if (Guid.TryParse(value, out var accountId))
-            return accountId;
-
-        throw new UnauthorizedException("The authentication session is invalid or has expired");
-    }
 }

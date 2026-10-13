@@ -1,14 +1,15 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
+
 using RoutePlanService = Pegaxus.Service.RoutePlanService;
 
 namespace Pegaxus.API.Controllers;
 
 [ApiController]
 [Authorize]
-public sealed class RoutePlansController(RoutePlanService.IService service) : ControllerBase
+public sealed class RoutePlansController(RoutePlanService.IService service) : ApiControllerBase
 {
     /// <summary>Create a route plan.</summary>
     /// <param name="transportPlanId">The transport plan identifier.</param>
@@ -19,7 +20,7 @@ public sealed class RoutePlansController(RoutePlanService.IService service) : Co
     [Authorize(Policy = JwtExtensions.EmployeePolicy)]
     public async Task<IActionResult> Create(Guid transportPlanId, [FromBody] RoutePlanService.Request.SaveRequest request, CancellationToken cancellationToken)
     {
-        var response = await service.CreateAsync(GetAccountId(), transportPlanId, request, cancellationToken);
+        var response = await service.CreateAsync(AccountId, transportPlanId, request, cancellationToken);
         return CreatedAtAction(nameof(GetById), new { routePlanId = response.RoutePlanId }, ResponseBuilder.SuccessResponse(response, "Route plan created successfully", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
     }
 
@@ -32,8 +33,8 @@ public sealed class RoutePlansController(RoutePlanService.IService service) : Co
     [Authorize(Policy = JwtExtensions.LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> GetList(Guid transportPlanId, [FromQuery] RoutePlanService.Request.ListRequest request, CancellationToken cancellationToken)
     {
-        var response = await service.GetListAsync(GetAccountId(), transportPlanId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Route plans retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        var response = await service.GetListAsync(AccountId, transportPlanId, request, cancellationToken);
+        return Success(response, "Route plans retrieved successfully");
     }
 
     /// <summary>Get a route plan.</summary>
@@ -44,8 +45,8 @@ public sealed class RoutePlansController(RoutePlanService.IService service) : Co
     [Authorize(Policy = JwtExtensions.LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> GetById(Guid routePlanId, CancellationToken cancellationToken)
     {
-        var response = await service.GetByIdAsync(GetAccountId(), routePlanId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Route plan retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        var response = await service.GetByIdAsync(AccountId, routePlanId, cancellationToken);
+        return Success(response, "Route plan retrieved successfully");
     }
 
     /// <summary>Update a draft route plan.</summary>
@@ -57,8 +58,8 @@ public sealed class RoutePlansController(RoutePlanService.IService service) : Co
     [Authorize(Policy = JwtExtensions.EmployeePolicy)]
     public async Task<IActionResult> Update(Guid routePlanId, [FromBody] RoutePlanService.Request.UpdateRequest request, CancellationToken cancellationToken)
     {
-        var response = await service.UpdateAsync(GetAccountId(), routePlanId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Route plan updated successfully", traceId: HttpContext.TraceIdentifier));
+        var response = await service.UpdateAsync(AccountId, routePlanId, request, cancellationToken);
+        return Success(response, "Route plan updated successfully");
     }
 
     /// <summary>Cancel a draft route plan.</summary>
@@ -70,8 +71,8 @@ public sealed class RoutePlansController(RoutePlanService.IService service) : Co
     [Authorize(Policy = JwtExtensions.EmployeePolicy)]
     public async Task<IActionResult> Cancel(Guid routePlanId, [FromBody] RoutePlanService.Request.CancelRequest request, CancellationToken cancellationToken)
     {
-        var response = await service.CancelAsync(GetAccountId(), routePlanId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Route plan cancelled successfully", traceId: HttpContext.TraceIdentifier));
+        var response = await service.CancelAsync(AccountId, routePlanId, request, cancellationToken);
+        return Success(response, "Route plan cancelled successfully");
     }
 
     /// <summary>Export a route plan as PDF.</summary>
@@ -82,7 +83,7 @@ public sealed class RoutePlansController(RoutePlanService.IService service) : Co
     [Authorize(Policy = JwtExtensions.LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> Export(Guid routePlanId, CancellationToken cancellationToken)
     {
-        var response = await service.ExportAsync(GetAccountId(), routePlanId, Request.Query["format"].FirstOrDefault(), cancellationToken);
+        var response = await service.ExportAsync(AccountId, routePlanId, Request.Query["format"].FirstOrDefault(), cancellationToken);
         return File(response.Content, response.ContentType, response.FileName);
     }
 
@@ -95,15 +96,8 @@ public sealed class RoutePlansController(RoutePlanService.IService service) : Co
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> ReviewLegal(Guid routePlanId, [FromBody] RoutePlanService.Request.LegalReviewRequest request, CancellationToken cancellationToken)
     {
-        var response = await service.ReviewLegalAsync(GetAccountId(), routePlanId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, response.LegalReview.IsFeasible ? "Route plan confirmed successfully" : "Route plan requires revision", traceId: HttpContext.TraceIdentifier));
+        var response = await service.ReviewLegalAsync(AccountId, routePlanId, request, cancellationToken);
+        return Success(response, response.LegalReview.IsFeasible ? "Route plan confirmed successfully" : "Route plan requires revision");
     }
 
-    private Guid GetAccountId()
-    {
-        var value = User.FindFirst("accountId")?.Value ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(value, out var accountId)
-            ? accountId
-            : throw new InvalidOperationException("The authenticated account id is invalid.");
-    }
 }

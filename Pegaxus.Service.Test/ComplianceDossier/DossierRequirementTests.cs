@@ -1,15 +1,15 @@
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Pegaxus.API.Controllers;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+
 using DossierRequest = Pegaxus.Service.ComplianceDossierService.Request;
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
-using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.Test;
 
@@ -296,7 +296,7 @@ public class DossierRequirementTests
         };
         var response = Assert.IsType<OkObjectResult>(await controller.WaiveRequirement(dossier.ComplianceDossierId,
             added.DossierRequirementId, new DossierRequest.WaiveRequirementRequest { WaivedReason = " Veterinary exemption " }, CancellationToken.None));
-        var envelope = Assert.IsType<Pegaxus.Service.Models.ApiResponse>(response.Value);
+        var envelope = Assert.IsType<Pegaxus.API.Models.ApiResponse>(response.Value);
         Assert.Equal("DossierRequirement waived successfully", envelope.Message);
         Assert.Equal(200, envelope.Code);
         var waived = Assert.IsType<Pegaxus.Service.ComplianceDossierService.Response.RequirementResponse>(envelope.Value);

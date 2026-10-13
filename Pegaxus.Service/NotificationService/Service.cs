@@ -1,9 +1,14 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.OutboxService;
+
+using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.NotificationService;
 
@@ -11,12 +16,14 @@ public sealed class Service : IService
 {
     private readonly AppDbContext _db;
     private readonly INotificationRealtimeService _realtimeService;
+    private readonly ILogger<Service> _logger;
     private readonly List<(Guid AccountId, NotificationRealtimeDto Notification)> _pendingPushes = [];
 
-    public Service(AppDbContext db, INotificationRealtimeService realtimeService)
+    public Service(AppDbContext db, INotificationRealtimeService realtimeService, ILogger<Service>? logger = null)
     {
         _db = db;
         _realtimeService = realtimeService;
+        _logger = logger ?? NullLogger<Service>.Instance;
     }
 
     public void Queue(NotificationCreateRequest request)
@@ -53,7 +60,7 @@ public sealed class Service : IService
             Message = request.Message,
             Priority = request.Priority.ToString(),
             Status = RecipientStatus.PENDING.ToString(),
-            CreatedAt = ToDateTimeOffset(request.CreatedAt),
+            CreatedAt = AsUtc(request.CreatedAt),
             ReferenceType = request.ReferenceType,
             ReferenceId = request.ReferenceId
         };
@@ -90,7 +97,7 @@ public sealed class Service : IService
             {
                 // Realtime delivery failure must not roll back a committed notification.
                 // An offline client remains PENDING until it acknowledges delivery.
-                Console.Error.WriteLine($"SignalR notification push failed: {exception.Message}");
+                _logger.LogWarning("SignalR notification push failed: {Message}", exception.Message);
             }
         }
     }
@@ -112,7 +119,7 @@ public sealed class Service : IService
             query = query.Where(item => item.Status != RecipientStatus.READ);
 
         var totalItems = await query.CountAsync(cancellationToken);
-        var totalPages = totalItems == 0 ? 0 : (int)Math.Ceiling(totalItems / (double)request.PageSize);
+        var totalPages = totalItems == 0 ? 0 : Paging.TotalPages(totalItems, request.PageSize);
         var items = await query
             .OrderByDescending(item => item.CreatedAt)
             .Skip((request.PageIndex - 1) * request.PageSize)
@@ -125,9 +132,9 @@ public sealed class Service : IService
                 Message = item.Notification.Message,
                 Priority = item.Notification.Priority.ToString(),
                 Status = item.Status.ToString(),
-                CreatedAt = ToDateTimeOffset(item.Notification.CreatedAt),
-                DeliveredAt = ToNullableDateTimeOffset(item.DeliveredAt),
-                ReadAt = ToNullableDateTimeOffset(item.ReadAt),
+                CreatedAt = AsUtc(item.Notification.CreatedAt),
+                DeliveredAt = AsUtc(item.DeliveredAt),
+                ReadAt = AsUtc(item.ReadAt),
                 ReferenceType = item.Notification.ReferenceType,
                 ReferenceId = item.Notification.ReferenceId,
                 ActionUrl = item.Notification.ActionUrl
@@ -215,9 +222,5 @@ public sealed class Service : IService
             throw new BadRequestException("PageIndex must be at least 1 and PageSize must be between 1 and 100");
     }
 
-    private static DateTimeOffset ToDateTimeOffset(DateTime value) =>
-        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
-    private static DateTimeOffset? ToNullableDateTimeOffset(DateTime? value) =>
-        value is null ? null : ToDateTimeOffset(value.Value);
 }

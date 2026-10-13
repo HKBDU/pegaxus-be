@@ -16,13 +16,14 @@ using Microsoft.Extensions.Logging;
 using Pegaxus.API.Controllers;
 using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
+using Pegaxus.API.Models;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.JwtService;
-using Pegaxus.Service.Models;
 using Pegaxus.Service.NotificationService;
 using Pegaxus.Service.PersonnelAssignmentService.Validator;
+
 using Request = Pegaxus.Service.PersonnelAssignmentService.Request;
 using Claim = System.Security.Claims.Claim;
 

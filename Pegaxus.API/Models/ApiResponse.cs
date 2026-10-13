@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace Pegaxus.Service.Models;
+namespace Pegaxus.API.Models;
 
 public class ApiResponse
 {

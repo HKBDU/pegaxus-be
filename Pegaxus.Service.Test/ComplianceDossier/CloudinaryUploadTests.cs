@@ -4,6 +4,7 @@ using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Pegaxus.Service.Exceptions;
+
 using CloudinaryUploadService = Pegaxus.Service.CloudinaryService.Service;
 
 namespace Pegaxus.Service.Test;

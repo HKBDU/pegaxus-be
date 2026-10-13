@@ -2,10 +2,11 @@ using System.Data;
 using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Logging;
 using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.OutboxService;
 
@@ -21,14 +22,12 @@ public sealed partial class Service
         var mailService = _mailService ?? throw new InvalidOperationException("MailService must be configured for DocumentRequests.");
         Response.DocumentRejectionResponse response;
         string customerEmail;
-        await using (var transaction = await BeginDocumentRequestTransactionAsync(cancellationToken))
+        await using (var transaction = await _db.Database.BeginSerializableAsync(cancellationToken))
         {
             try
             {
                 // Updating the key to itself holds a row lock until the transaction ends.
-                if (_db.Database.IsRelational())
-                    await _db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId)
-                        .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDossierId, item => item.ComplianceDossierId), cancellationToken);
+                await _db.LockRowsAsync(_db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId), item => item.ComplianceDossierId, cancellationToken);
                 var dossiers = _db.ComplianceDossiers.AsQueryable();
                 var dossier = await dossiers.AsTracking().Include(item => item.Transport).ThenInclude(item => item.Booking)
                     .ThenInclude(item => item.Customer).ThenInclude(item => item.Account)
@@ -37,9 +36,7 @@ public sealed partial class Service
                 await _db.Entry(dossier).ReloadAsync(cancellationToken);
                 if (dossier.Status is not (ComplianceDossierStatus.IN_PREPARATION or ComplianceDossierStatus.READY_FOR_SUBMISSION or ComplianceDossierStatus.REJECTED))
                     throw new ConflictException("Cannot create DocumentRequests after dossier submission to official authorities.");
-                if (_db.Database.IsRelational())
-                    await _db.DossierRequirements.Where(item => item.DossierRequirementId == requirementId)
-                        .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DossierRequirementId, item => item.DossierRequirementId), cancellationToken);
+                await _db.LockRowsAsync(_db.DossierRequirements.Where(item => item.DossierRequirementId == requirementId), item => item.DossierRequirementId, cancellationToken);
                 var requirements = _db.DossierRequirements.AsQueryable();
                 var requirement = await requirements.AsTracking().SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId &&
                     item.ComplianceDossierId == dossierId && !item.IsDeleted, cancellationToken)
@@ -47,16 +44,12 @@ public sealed partial class Service
                 await _db.Entry(requirement).ReloadAsync(cancellationToken);
                 if (requirement.IsDeleted)
                     throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
-                if (_db.Database.IsRelational())
-                    await _db.ComplianceDocuments.Where(item => item.DossierRequirementId == requirementId)
-                        .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDocumentId, item => item.ComplianceDocumentId), cancellationToken);
+                await _db.LockRowsAsync(_db.ComplianceDocuments.Where(item => item.DossierRequirementId == requirementId), item => item.ComplianceDocumentId, cancellationToken);
                 var documents = _db.ComplianceDocuments.AsQueryable();
                 var document = await documents.AsTracking().SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId, cancellationToken)
                     ?? throw new NotFoundException("ComplianceDocument not found.", "DOCUMENT_NOT_FOUND");
                 await _db.Entry(document).ReloadAsync(cancellationToken);
-                if (_db.Database.IsRelational())
-                    await _db.DocumentVersions.Where(item => item.DocumentVersionId == versionId)
-                        .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DocumentVersionId, item => item.DocumentVersionId), cancellationToken);
+                await _db.LockRowsAsync(_db.DocumentVersions.Where(item => item.DocumentVersionId == versionId), item => item.DocumentVersionId, cancellationToken);
                 var versions = _db.DocumentVersions.AsQueryable();
                 var version = await versions.AsTracking().SingleOrDefaultAsync(item => item.DocumentVersionId == versionId &&
                     item.ComplianceDocumentId == document.ComplianceDocumentId, cancellationToken)
@@ -134,7 +127,7 @@ public sealed partial class Service
                     DocumentStatus = document.Status.ToString(), DossierStatus = dossier.Status.ToString()
                 };
             }
-            catch (Exception error) when (DocumentRequestWriteConflict(error))
+            catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
             {
                 throw new ConflictException("The document changed. Reload before creating a DocumentRequest.", "DOCUMENT_REVIEW_CONFLICT");
             }
@@ -158,7 +151,8 @@ public sealed partial class Service
         catch (Exception error)
         {
             response.DeliveryWarning = "Email delivery could not be confirmed. The DocumentRequest and web notification were saved.";
-            Console.Error.WriteLine($"DocumentRequest {response.DocumentRequest.DocumentRequestId}: email delivery failed ({error.GetType().Name}).");
+            _logger.LogWarning("DocumentRequest {DocumentRequestId}: email delivery failed ({ErrorType}).",
+                response.DocumentRequest.DocumentRequestId, error.GetType().Name);
         }
         return response;
     }
@@ -171,7 +165,7 @@ public sealed partial class Service
             throw new ForbiddenException("Only the owning Customer and Transport Specialists can discuss DocumentRequests.");
         if (string.IsNullOrWhiteSpace(request.Message) || request.Message.Trim().Length > 2000)
             throw new BadRequestException("Comment must contain 1 to 2000 characters.");
-        await using var transaction = await BeginDocumentRequestTransactionAsync(cancellationToken);
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
         try
         {
             var revision = await FindDocumentRequestAsync(dossierId, requirementId, requestId, true, cancellationToken);
@@ -197,7 +191,7 @@ public sealed partial class Service
             await _notificationService.FlushAsync(CancellationToken.None);
             return MapDocumentRequestComment(comment);
         }
-        catch (Exception error) when (DocumentRequestWriteConflict(error))
+        catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
         {
             throw new ConflictException("The DocumentRequest changed. Reload before commenting.", "DOCUMENT_REQUEST_CONFLICT");
         }
@@ -219,8 +213,7 @@ public sealed partial class Service
         bool forUpdate, CancellationToken cancellationToken)
     {
         if (forUpdate && _db.Database.IsRelational())
-            await _db.DocumentRequests.Where(item => item.DocumentRequestId == requestId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DocumentRequestId, item => item.DocumentRequestId), cancellationToken);
+            await _db.LockRowsAsync(_db.DocumentRequests.Where(item => item.DocumentRequestId == requestId), item => item.DocumentRequestId, cancellationToken);
         var requests = _db.DocumentRequests.AsQueryable();
         return await requests.SingleOrDefaultAsync(item => item.DocumentRequestId == requestId && item.DossierRequirementId == requirementId &&
             item.DossierRequirement.ComplianceDossierId == dossierId && !item.DossierRequirement.IsDeleted, cancellationToken)
@@ -266,14 +259,7 @@ public sealed partial class Service
         Message = comment.Message, CreatedAt = RevisionTimestamp(comment.CreatedAt)
     };
 
-    private Task<IDbContextTransaction> BeginDocumentRequestTransactionAsync(CancellationToken cancellationToken) => _db.Database.IsRelational()
-        ? _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-        : _db.Database.BeginTransactionAsync(cancellationToken);
-
     private static DateTime RevisionTimestamp(DateTime timestamp) => timestamp.Kind == DateTimeKind.Local
         ? timestamp.ToUniversalTime() : DateTime.SpecifyKind(timestamp, DateTimeKind.Utc);
 
-    private static bool DocumentRequestWriteConflict(Exception error) => error is DbUpdateConcurrencyException ||
-        error is DbUpdateException { InnerException: PostgresException { SqlState: "23505" or "40001" or "40P01" } } ||
-        error is PostgresException { SqlState: "23505" or "40001" or "40P01" };
 }

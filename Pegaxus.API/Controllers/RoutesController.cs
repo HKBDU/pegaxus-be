@@ -1,9 +1,8 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
+
 using Routes = Pegaxus.Service.RouteService;
 
 namespace Pegaxus.API.Controllers;
@@ -11,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Route("api/v1/routes")]
 [Authorize(Policy = JwtExtensions.LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy)]
-public sealed class RoutesController(Routes.IService service) : ControllerBase
+public sealed class RoutesController(Routes.IService service) : ApiControllerBase
 {
     /// <summary>List active master routes.</summary>
     /// <param name="request">Location, mode, search, and pagination filters.</param>
@@ -19,7 +18,7 @@ public sealed class RoutesController(Routes.IService service) : ControllerBase
     /// <returns>A paginated route list.</returns>
     [HttpGet]
     public async Task<IActionResult> List([FromQuery] Routes.Request.ListRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.GetListAsync(request, cancellationToken), "Routes retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.GetListAsync(request, cancellationToken), "Routes retrieved successfully");
 
     /// <summary>Get an active master route.</summary>
     /// <param name="routeId">The route identifier.</param>
@@ -27,7 +26,7 @@ public sealed class RoutesController(Routes.IService service) : ControllerBase
     /// <returns>The route details.</returns>
     [HttpGet("{routeId:guid}")]
     public async Task<IActionResult> Get(Guid routeId, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.GetAsync(routeId, cancellationToken), "Route retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.GetAsync(routeId, cancellationToken), "Route retrieved successfully");
 
     /// <summary>Create a master route.</summary>
     /// <param name="request">The route endpoints, mode, and note.</param>
@@ -37,7 +36,7 @@ public sealed class RoutesController(Routes.IService service) : ControllerBase
     [Authorize(Policy = JwtExtensions.FleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> Create([FromBody] Routes.Request.CreateRequest request, CancellationToken cancellationToken)
     {
-        var result = await service.CreateAsync(AccountId(), request, cancellationToken);
+        var result = await service.CreateAsync(AccountId, request, cancellationToken);
         return CreatedAtAction(nameof(Get), new { routeId = result.RouteId }, ResponseBuilder.SuccessResponse(result, "Route created successfully", 201, HttpContext.TraceIdentifier));
     }
 
@@ -49,7 +48,7 @@ public sealed class RoutesController(Routes.IService service) : ControllerBase
     [HttpPut("{routeId:guid}")]
     [Authorize(Policy = JwtExtensions.FleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> Update(Guid routeId, [FromBody] Routes.Request.UpdateRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.UpdateAsync(AccountId(), routeId, request, cancellationToken), "Route updated successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.UpdateAsync(AccountId, routeId, request, cancellationToken), "Route updated successfully");
 
     /// <summary>Soft-delete a master route.</summary>
     /// <param name="routeId">The route identifier.</param>
@@ -58,11 +57,6 @@ public sealed class RoutesController(Routes.IService service) : ControllerBase
     [HttpDelete("{routeId:guid}")]
     [Authorize(Policy = JwtExtensions.FleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> Delete(Guid routeId, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.DeleteAsync(AccountId(), routeId, cancellationToken), "Route deleted successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.DeleteAsync(AccountId, routeId, cancellationToken), "Route deleted successfully");
 
-    private Guid AccountId()
-    {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
-        return Guid.TryParse(value, out var id) ? id : throw new UnauthorizedException("The authenticated account identifier is invalid");
-    }
 }

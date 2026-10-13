@@ -1,9 +1,8 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
+
 using Vehicles = Pegaxus.Service.VehicleService;
 
 namespace Pegaxus.API.Controllers;
@@ -11,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Route("api/v1/vehicles")]
 [Authorize(Policy = JwtExtensions.VehicleManagerPolicy)]
-public sealed class VehiclesController(Vehicles.IService service) : ControllerBase
+public sealed class VehiclesController(Vehicles.IService service) : ApiControllerBase
 {
     /// <summary>List specialized vehicles.</summary>
     /// <remarks>Lists undeleted ROAD, SEA and AIR vehicles. Optional date filters return vehicles without unfinished schedule conflicts.</remarks>
@@ -20,8 +19,7 @@ public sealed class VehiclesController(Vehicles.IService service) : ControllerBa
     /// <returns>200 OK with a paginated vehicle catalog and expiry warnings.</returns>
     [HttpGet]
     public async Task<IActionResult> GetList([FromQuery] Vehicles.Request.ListRequest request, CancellationToken cancellationToken)
-        => Ok(ResponseBuilder.SuccessResponse(await service.GetListAsync(request, AccountId(), cancellationToken),
-            "Vehicles retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        => Success(await service.GetListAsync(request, AccountId, cancellationToken), "Vehicles retrieved successfully");
 
     /// <summary>Get a specialized vehicle.</summary>
     /// <remarks>Includes expiry warnings and upcoming or ongoing unfinished route assignments.</remarks>
@@ -30,8 +28,7 @@ public sealed class VehiclesController(Vehicles.IService service) : ControllerBa
     /// <returns>200 OK with vehicle details, or 404 VEHICLE_NOT_FOUND.</returns>
     [HttpGet("{vehicleId:guid}")]
     public async Task<IActionResult> Get(Guid vehicleId, CancellationToken cancellationToken)
-        => Ok(ResponseBuilder.SuccessResponse(await service.GetAsync(vehicleId, AccountId(), cancellationToken),
-            "Vehicle retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        => Success(await service.GetAsync(vehicleId, AccountId, cancellationToken), "Vehicle retrieved successfully");
 
     /// <summary>Create a specialized vehicle.</summary>
     /// <remarks>Creates an AVAILABLE vehicle with unique code and license plate and capacity between 2 and 9.</remarks>
@@ -41,7 +38,7 @@ public sealed class VehiclesController(Vehicles.IService service) : ControllerBa
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] Vehicles.Request.CreateRequest request, CancellationToken cancellationToken)
     {
-        var result = await service.CreateAsync(request, AccountId(), cancellationToken);
+        var result = await service.CreateAsync(request, AccountId, cancellationToken);
         return CreatedAtAction(nameof(Get), new { vehicleId = result.VehicleId }, ResponseBuilder.SuccessResponse(result,
             $"Vehicle {result.VehicleCode} ({result.LicensePlate}) created successfully", 201, HttpContext.TraceIdentifier));
     }
@@ -54,8 +51,7 @@ public sealed class VehiclesController(Vehicles.IService service) : ControllerBa
     /// <returns>200 OK with the new version and document warnings.</returns>
     [HttpPut("{vehicleId:guid}")]
     public async Task<IActionResult> Update(Guid vehicleId, [FromBody] Vehicles.Request.UpdateRequest request, CancellationToken cancellationToken)
-        => Ok(ResponseBuilder.SuccessResponse(await service.UpdateAsync(vehicleId, request, AccountId(), cancellationToken),
-            "Vehicle updated successfully", traceId: HttpContext.TraceIdentifier));
+        => Success(await service.UpdateAsync(vehicleId, request, AccountId, cancellationToken), "Vehicle updated successfully");
 
     /// <summary>Update a specialized vehicle status.</summary>
     /// <remarks>Allows AVAILABLE, MAINTENANCE or INACTIVE with a reason. Assigned vehicles are locked. The change, audit, and notifications commit together.</remarks>
@@ -65,12 +61,6 @@ public sealed class VehiclesController(Vehicles.IService service) : ControllerBa
     /// <returns>200 OK with previous status and new version, or 409 for locked or modified vehicles.</returns>
     [HttpPatch("{vehicleId:guid}/status")]
     public async Task<IActionResult> ChangeStatus(Guid vehicleId, [FromBody] Vehicles.Request.StatusRequest request, CancellationToken cancellationToken)
-        => Ok(ResponseBuilder.SuccessResponse(await service.ChangeStatusAsync(vehicleId, request, AccountId(), cancellationToken),
-            "Vehicle status updated successfully", traceId: HttpContext.TraceIdentifier));
+        => Success(await service.ChangeStatusAsync(vehicleId, request, AccountId, cancellationToken), "Vehicle status updated successfully");
 
-    private Guid AccountId()
-    {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
-        return Guid.TryParse(value, out var id) ? id : throw new UnauthorizedException("The authenticated account identifier is invalid");
-    }
 }

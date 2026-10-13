@@ -6,6 +6,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.ComplianceDossierService;
 using Pegaxus.Service.Exceptions;
+
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
 using Mail = Pegaxus.Service.MailService;
 

@@ -5,9 +5,11 @@ using Microsoft.Extensions.Logging;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
-using Pegaxus.Service.Common;
+
+using static Pegaxus.Service.Common.Text;
 
 namespace Pegaxus.Service.RouteOutsourcingService;
 
@@ -15,9 +17,7 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
 {
     public async Task<Response> SetAsync(Guid accountId, Guid routePlanId, Guid segmentId, Request request, CancellationToken cancellationToken = default)
     {
-        if (!await db.Employees.AnyAsync(employee => employee.AccountId == accountId && employee.IsActive && !employee.IsDeleted &&
-            employee.Role == EmployeeRole.LOGISTICS_MANAGER && !employee.Account.IsDeleted &&
-            employee.Account.Status == AccountStatus.ACTIVE && employee.Account.AccountType == AccountType.EMPLOYEE, cancellationToken))
+        if (!await db.Employees.Active().AnyAsync(employee => employee.AccountId == accountId && employee.Role == EmployeeRole.LOGISTICS_MANAGER && employee.Account.AccountType == AccountType.EMPLOYEE, cancellationToken))
             throw new ForbiddenException("Only Logistics Managers may change outsourcing.");
         var validation = validator.Validate(request);
         if (!validation.IsValid)
@@ -30,14 +30,10 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
             ?? throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
         // Serialize provider-link changes across every route in the same transport plan.
         // Updating the key to itself holds a row lock until the transaction ends.
-        if (db.Database.IsNpgsql())
-            await db.TransportPlans.Where(plan => plan.TransportPlanId == planId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(plan => plan.TransportPlanId, plan => plan.TransportPlanId), cancellationToken);
+        await db.LockRowsAsync(db.TransportPlans.Where(plan => plan.TransportPlanId == planId), plan => plan.TransportPlanId, cancellationToken);
         var plan = await db.TransportPlans.SingleAsync(plan => plan.TransportPlanId == planId, cancellationToken);
         await db.Entry(plan).ReloadAsync(cancellationToken);
-        if (db.Database.IsNpgsql())
-            await db.RoutePlans.Where(route => route.RoutePlanId == routePlanId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(route => route.RoutePlanId, route => route.RoutePlanId), cancellationToken);
+        await db.LockRowsAsync(db.RoutePlans.Where(route => route.RoutePlanId == routePlanId), route => route.RoutePlanId, cancellationToken);
         var route = await db.RoutePlans.SingleOrDefaultAsync(route => route.RoutePlanId == routePlanId && route.TransportPlanId == planId, cancellationToken)
             ?? throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
         await db.Entry(route).ReloadAsync(cancellationToken);
@@ -46,9 +42,7 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
         if (DateTime.SpecifyKind(route.UpdatedAt, DateTimeKind.Utc) != request.LastUpdatedAt.UtcDateTime)
             throw Modified();
 
-        if (db.Database.IsNpgsql())
-            await db.RoutePlanRoutes.Where(segment => segment.RoutePlanRouteId == segmentId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(segment => segment.RoutePlanRouteId, segment => segment.RoutePlanRouteId), cancellationToken);
+        await db.LockRowsAsync(db.RoutePlanRoutes.Where(segment => segment.RoutePlanRouteId == segmentId), segment => segment.RoutePlanRouteId, cancellationToken);
         var segment = await db.RoutePlanRoutes.SingleOrDefaultAsync(segment => segment.RoutePlanRouteId == segmentId && segment.RoutePlanId == routePlanId, cancellationToken)
             ?? throw new NotFoundException("Segment not found", "SEGMENT_NOT_FOUND");
         await db.Entry(segment).ReloadAsync(cancellationToken);
@@ -61,9 +55,7 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
         if (request.Outsourced == true)
         {
             // Coordinate with provider status changes and soft deletion (UC-41).
-            if (db.Database.IsNpgsql())
-                await db.TransportProviders.Where(item => item.TransportProviderId == request.TransportProviderId)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.TransportProviderId, item => item.TransportProviderId), cancellationToken);
+            await db.LockRowsAsync(db.TransportProviders.Where(item => item.TransportProviderId == request.TransportProviderId), item => item.TransportProviderId, cancellationToken);
             provider = await db.TransportProviders.SingleOrDefaultAsync(item => item.TransportProviderId == request.TransportProviderId, cancellationToken);
             if (provider is not null) await db.Entry(provider).ReloadAsync(cancellationToken);
             if (provider is null || provider.IsDeleted)
@@ -75,7 +67,7 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
                 throw new UnprocessableEntityException("The provider does not support the transport mode of this segment", "PROVIDER_MODE_MISMATCH");
         }
 
-        var note = Trim(request.Note);
+        var note = EmptyToNull(request.Note);
         var clearedPersonnel = provider is not null && (segment.DriverEmployeeId.HasValue || segment.EscortEmployeeId.HasValue);
         var clearedVehicles = provider is not null && vehicles.Count > 0;
         var link = provider is null ? null : await db.TransportPlanProviders.SingleOrDefaultAsync(item =>
@@ -124,9 +116,7 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
             ActionType = provider is null ? "OUTSOURCING_REMOVED" : "OUTSOURCING_ASSIGNED", ActorAccountId = accountId,
             BeforeData = before, AfterData = Snapshot(route, segment, vehicles), CreatedAt = now
         });
-        var recipients = await db.Employees.Where(employee => employee.IsActive && !employee.IsDeleted &&
-            employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && employee.Account.Status == AccountStatus.ACTIVE && !employee.Account.IsDeleted &&
-            db.EmployeeTransportPlans.Any(assignment => assignment.TransportPlanId == planId && assignment.EmployeeId == employee.EmployeeId))
+        var recipients = await db.Employees.Active().Where(employee => employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && db.EmployeeTransportPlans.Any(assignment => assignment.TransportPlanId == planId && assignment.EmployeeId == employee.EmployeeId))
             .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
         foreach (var recipient in recipients)
             notifications.Queue(new NotificationCreateRequest
@@ -182,6 +172,5 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
             segment.OutsourcingCostAmount, segment.OutsourcingCurrency,
             VehicleIds = vehicles.Select(item => item.VehicleId).ToArray()
         });
-    private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static ConflictException Modified() => new("The route plan was just modified. Please reload the page", "ROUTE_PLAN_MODIFIED");
 }

@@ -1,9 +1,9 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
+using Pegaxus.API.Models;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
+
 using Catalog = Pegaxus.Service.ComplianceRequirementService;
 
 namespace Pegaxus.API.Controllers;
@@ -11,7 +11,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/compliance-requirements")]
-public sealed class ComplianceRequirementsController(Catalog.IService service) : Controller
+public sealed class ComplianceRequirementsController(Catalog.IService service) : ApiControllerBase
 {
     /// <summary>
     /// List compliance requirements.
@@ -26,7 +26,7 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     public async Task<IActionResult> GetList([FromQuery] Catalog.Request.ListRequest request, CancellationToken cancellationToken)
     {
         var result = await service.GetListAsync(request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(result, "ComplianceRequirements retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+        return Success(result, "ComplianceRequirements retrieved successfully.");
     }
 
     /// <summary>
@@ -42,7 +42,7 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
         var result = await service.GetAsync(id, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(result, "ComplianceRequirement retrieved successfully.", traceId: HttpContext.TraceIdentifier));
+        return Success(result, "ComplianceRequirement retrieved successfully.");
     }
 
     /// <summary>
@@ -59,7 +59,7 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> Create([FromBody] Catalog.Request.SaveRequest request, CancellationToken cancellationToken)
     {
-        var result = await service.CreateAsync(request, GetAccountId(), cancellationToken);
+        var result = await service.CreateAsync(request, AccountId, cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = result.ComplianceRequirementId }, ResponseBuilder.SuccessResponse(
             result, "ComplianceRequirement entry saved successfully.", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
     }
@@ -82,8 +82,8 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     {
         try
         {
-            var result = await service.UpdateAsync(id, request, GetAccountId(), cancellationToken);
-            return Ok(ResponseBuilder.SuccessResponse(result, "ComplianceRequirement updated successfully.", traceId: HttpContext.TraceIdentifier));
+            var result = await service.UpdateAsync(id, request, AccountId, cancellationToken);
+            return Success(result, "ComplianceRequirement updated successfully.");
         }
         catch (Catalog.Service.ReferenceImpactException exception)
         {
@@ -109,10 +109,10 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> UpdateStatus(Guid id, [FromBody] Catalog.Request.StatusRequest request, CancellationToken cancellationToken)
     {
-        await service.UpdateStatusAsync(id, request, GetAccountId(), cancellationToken);
+        await service.UpdateStatusAsync(id, request, AccountId, cancellationToken);
         var message = request.Status.Trim().Equals("INACTIVE", StringComparison.OrdinalIgnoreCase)
             ? "ComplianceRequirement deactivated successfully." : "ComplianceRequirement activated successfully.";
-        return Ok(ResponseBuilder.SuccessResponse(null, message, traceId: HttpContext.TraceIdentifier));
+        return Success(null, message);
     }
 
     /// <summary>
@@ -129,13 +129,8 @@ public sealed class ComplianceRequirementsController(Catalog.IService service) :
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
-        await service.DeleteAsync(id, GetAccountId(), cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(null, "ComplianceRequirement deleted successfully.", traceId: HttpContext.TraceIdentifier));
+        await service.DeleteAsync(id, AccountId, cancellationToken);
+        return Success(null, "ComplianceRequirement deleted successfully.");
     }
 
-    private Guid GetAccountId()
-    {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
-        return Guid.TryParse(value, out var id) ? id : throw new UnauthorizedException("The authenticated account identifier is invalid");
-    }
 }

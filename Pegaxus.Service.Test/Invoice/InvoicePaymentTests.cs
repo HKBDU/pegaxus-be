@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -6,6 +5,7 @@ using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.InvoiceService.Validator;
 using Pegaxus.Service.NotificationService;
 using Pegaxus.Service.OutboxService;
+
 using InvoicePaymentService = Pegaxus.Service.InvoiceService.Service;
 using Request = Pegaxus.Service.InvoiceService.Request;
 

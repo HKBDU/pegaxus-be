@@ -1,7 +1,10 @@
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
+
+using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.RouteChangeService;
 
@@ -17,17 +20,13 @@ public sealed partial class Service
         {
             // Updating each key to itself holds row locks in a stable order until the transaction ends.
             foreach (var id in proposed.Select(x => x.Route.RouteId).Distinct().Order())
-                await db.Routes.Where(x => x.RouteId == id)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RouteId, x => x.RouteId), token);
+                await db.LockRowsAsync(db.Routes.Where(x => x.RouteId == id), x => x.RouteId, token);
             foreach (var id in providerIds)
-                await db.TransportProviders.Where(x => x.TransportProviderId == id)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportProviderId, x => x.TransportProviderId), token);
+                await db.LockRowsAsync(db.TransportProviders.Where(x => x.TransportProviderId == id), x => x.TransportProviderId, token);
             foreach (var id in vehicleIds)
-                await db.Vehicles.Where(x => x.VehicleId == id)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.VehicleId, x => x.VehicleId), token);
+                await db.LockRowsAsync(db.Vehicles.Where(x => x.VehicleId == id), x => x.VehicleId, token);
             foreach (var id in employeeIds)
-                await db.Employees.Where(x => x.EmployeeId == id)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.EmployeeId, x => x.EmployeeId), token);
+                await db.LockRowsAsync(db.Employees.Where(x => x.EmployeeId == id), x => x.EmployeeId, token);
         }
         var vehicles = await db.Vehicles.AsNoTracking().Where(x => vehicleIds.Contains(x.VehicleId)).ToDictionaryAsync(x => x.VehicleId, token);
         var employees = await db.Employees.AsNoTracking().Include(x => x.Account).Where(x => employeeIds.Contains(x.EmployeeId)).ToDictionaryAsync(x => x.EmployeeId, token);
@@ -76,8 +75,8 @@ public sealed partial class Service
                     current.Role != role || current.Account.IsDeleted || current.Account.Status != AccountStatus.ACTIVE))
                     throw new ConflictException("Assigned personnel are inactive or have an invalid role.", "PERSONNEL_UNAVAILABLE");
 
-            var from = DbTime(segment.PlannedDepartureAt);
-            var to = DbTime(segment.PlannedArrivalAt);
+            var from = Truncate(segment.PlannedDepartureAt);
+            var to = Truncate(segment.PlannedArrivalAt);
             var ids = segment.Vehicles.Select(x => x.VehicleId).ToArray();
             var people = new[] { segment.Driver?.EmployeeId, segment.Escort?.EmployeeId }.OfType<Guid>().ToArray();
             if (proposed.Any(x => x.RoutePlanRouteId != segment.RoutePlanRouteId && x.ExecutionType == "INTERNAL" &&

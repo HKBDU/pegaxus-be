@@ -5,29 +5,24 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.NotificationService;
 using Pegaxus.Service.RouteChangeService.Validator;
+
+using static Pegaxus.Service.Common.DbTime;
+using static Pegaxus.Service.Common.Validation;
 
 namespace Pegaxus.Service.RouteChangeService;
 
-public sealed partial class Service(AppDbContext db, NotificationService.IService notifications, TimeProvider clock) : IService
+public sealed partial class Service(AppDbContext db, NotificationService.IService notifications, TimeProvider clock,
+    RoutePlanService.IService routePlans) : IService
 {
     private DateTime Now => new(clock.GetUtcNow().Ticks / 10 * 10, DateTimeKind.Unspecified);
-    private static DateTime DbTime(DateTimeOffset value) => new(value.UtcTicks / 10 * 10, DateTimeKind.Unspecified);
-    private static DateTimeOffset Utc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
-    private static DateTimeOffset? Utc(DateTime? value) => value.HasValue ? Utc(value.Value) : null;
-    private static void Validate<T>(T request, IValidator<T> validator)
-    {
-        var result = validator.Validate(request);
-        if (!result.IsValid) throw new BadRequestException(string.Join(" ", result.Errors.Select(x => x.ErrorMessage)));
-    }
-
     public async Task<Response.Created> CreateAsync(Guid routePlanId, Guid accountId, Request.CreateRequest request, CancellationToken cancellationToken = default)
     {
         Validate(request, new CreateRequestValidator());
         var actor = await ActorAsync(accountId, [EmployeeRole.FLEET_ROUTE_COORDINATOR], cancellationToken);
-        await using var transaction = await BeginAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var plan = await LockPlanAsync(routePlanId, cancellationToken);
         EnsureInTransit(plan);
         await EnsureCoordinatorAsync(plan, actor, cancellationToken);
@@ -42,8 +37,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
             DelayMinutes = (decimal)(request.NewEstimatedArrivalAt - active[^1].PlannedArrivalAt).TotalMinutes };
         if (ApprovalReasons(comparison).Length == 0)
             throw new UnprocessableEntityException("The change is below the approval threshold (BR-036)", "APPROVAL_NOT_REQUIRED");
-        var managers = await db.Employees.AsNoTracking().Where(x => x.Role == EmployeeRole.LOGISTICS_MANAGER &&
-            x.IsActive && !x.IsDeleted && x.Account.Status == AccountStatus.ACTIVE && !x.Account.IsDeleted)
+        var managers = await db.Employees.AsNoTracking().Active().Where(x => x.Role == EmployeeRole.LOGISTICS_MANAGER)
             .Select(x => x.AccountId).ToArrayAsync(cancellationToken);
         if (managers.Length == 0) throw new ConflictException("No active Logistics Manager can review this request.", "REVIEWER_UNAVAILABLE");
         var now = Now;
@@ -53,14 +47,14 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
-        return new(routePlanId, "BACKUP", plan.Status.ToString(), Utc(now));
+        return new(routePlanId, "BACKUP", plan.Status.ToString(), AsUtc(now));
     }
 
     public async Task<Response.DecisionResult> DecideAsync(Guid routePlanId, Guid accountId, Request.DecisionRequest request, CancellationToken cancellationToken = default)
     {
         Validate(request, new DecisionRequestValidator());
         await ActorAsync(accountId, [EmployeeRole.LOGISTICS_MANAGER], cancellationToken);
-        await using var transaction = await BeginAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var plan = await LockPlanAsync(routePlanId, cancellationToken);
         EnsureInTransit(plan);
         CheckVersion(plan, request.LastUpdatedAt);
@@ -123,14 +117,14 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
         return new(routePlanId, type, request.Decision, plan.Status.ToString(),
-            type == "RETURN" ? new(dossier!.ComplianceDossierId, dossier.Status.ToString()) : null, Utc(now));
+            type == "RETURN" ? new(dossier!.ComplianceDossierId, dossier.Status.ToString()) : null, AsUtc(now));
     }
 
     public async Task<Response.ActivationResult> ActivateReturnAsync(Guid routePlanId, Guid accountId, Request.ActivationRequest request, CancellationToken cancellationToken = default)
     {
         Validate(request, new ActivationRequestValidator());
         await ActorAsync(accountId, [EmployeeRole.LOGISTICS_MANAGER], cancellationToken);
-        await using var transaction = await BeginAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var plan = await LockPlanAsync(routePlanId, cancellationToken);
         EnsureInTransit(plan);
         CheckVersion(plan, request.LastUpdatedAt);
@@ -206,17 +200,17 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Return route activated", request.Note, NotificationPriority.URGENT, now);
         await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR, "Return route activated", request.Note, NotificationPriority.HIGH, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-        var detail = await new RoutePlanService.Service(db).GetByIdAsync(accountId, routePlanId, cancellationToken);
+        var detail = await routePlans.GetByIdAsync(accountId, routePlanId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
-        return new(routePlanId, "RETURN", "ACTIVE", detail.Segments, Utc(now));
+        return new(routePlanId, "RETURN", "ACTIVE", detail.Segments, AsUtc(now));
     }
 
     public async Task<Response.DriverNoticeResult> NotifyDriversAsync(Guid routePlanId, Guid accountId, Request.DriverNoticeRequest request, CancellationToken cancellationToken = default)
     {
         if (request.Message?.Length > 4000) throw new BadRequestException("Message must not exceed 4000 characters.");
         var actor = await ActorAsync(accountId, [EmployeeRole.FLEET_ROUTE_COORDINATOR], cancellationToken);
-        await using var transaction = await BeginAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var plan = await LockPlanAsync(routePlanId, cancellationToken);
         await EnsureCoordinatorAsync(plan, actor, cancellationToken);
         var segments = await SegmentsAsync(routePlanId, cancellationToken);
@@ -228,11 +222,8 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
-        return new(routePlanId, drivers.Select(x => Employee(x)!).ToArray(), Utc(now));
+        return new(routePlanId, drivers.Select(x => Employee(x)!).ToArray(), AsUtc(now));
     }
-
-    private Task<Microsoft.EntityFrameworkCore.Storage.IDbContextTransaction> BeginAsync(CancellationToken token) =>
-        db.Database.IsRelational() ? db.Database.BeginTransactionAsync(IsolationLevel.Serializable, token) : db.Database.BeginTransactionAsync(token);
 
     private async Task EnsureCoordinatorAsync(RoutePlan plan, Employee actor, CancellationToken token)
     {
@@ -308,8 +299,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
     private async Task<List<Employee>> NotifyPrimaryDriversAsync(RoutePlan plan, Guid primaryId, string title, string? message, DateTime now, CancellationToken token)
     {
         var driverIds = db.RoutePlanRoutes.Where(x => x.RoutePlanId == primaryId && x.DriverEmployeeId.HasValue).Select(x => x.DriverEmployeeId!.Value);
-        var drivers = await db.Employees.AsNoTracking().Where(x => driverIds.Contains(x.EmployeeId) && x.IsActive && !x.IsDeleted &&
-            x.Role == EmployeeRole.DRIVER && !x.Account.IsDeleted && x.Account.Status == AccountStatus.ACTIVE).OrderBy(x => x.EmployeeCode).ToListAsync(token);
+        var drivers = await db.Employees.AsNoTracking().Active().Where(x => driverIds.Contains(x.EmployeeId) && x.Role == EmployeeRole.DRIVER).OrderBy(x => x.EmployeeCode).ToListAsync(token);
         foreach (var driver in drivers) Notify(driver.AccountId, plan, title, message, NotificationPriority.URGENT, now);
         return drivers;
     }
@@ -339,7 +329,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         new($"This action cannot be performed while the route plan is in {plan.Status} status", "INVALID_ROUTE_PLAN_STATUS");
     private static void CheckVersion(RoutePlan plan, DateTimeOffset version)
     {
-        if (plan.UpdatedAt != DbTime(version)) throw new ConflictException("The route plan was just modified. Please reload the page", "ROUTE_PLAN_MODIFIED");
+        if (plan.UpdatedAt != Truncate(version)) throw new ConflictException("The route plan was just modified. Please reload the page", "ROUTE_PLAN_MODIFIED");
     }
     private DateTime NextVersion(RoutePlan plan) => new(Math.Max(Now.Ticks, plan.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
 
@@ -360,12 +350,9 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         if (db.Database.IsRelational())
         {
             // Updating the key to itself holds a row lock until the transaction ends.
-            await db.Transports.Where(x => x.TransportId == header.TransportId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportId, x => x.TransportId), token);
-            await db.TransportPlans.Where(x => x.TransportPlanId == header.TransportPlanId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportPlanId, x => x.TransportPlanId), token);
-            await db.RoutePlans.Where(x => x.RoutePlanId == routePlanId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanId, x => x.RoutePlanId), token);
+            await db.LockRowsAsync(db.Transports.Where(x => x.TransportId == header.TransportId), x => x.TransportId, token);
+            await db.LockRowsAsync(db.TransportPlans.Where(x => x.TransportPlanId == header.TransportPlanId), x => x.TransportPlanId, token);
+            await db.LockRowsAsync(db.RoutePlans.Where(x => x.RoutePlanId == routePlanId), x => x.RoutePlanId, token);
             await LockSegmentsAsync(routePlanId, token);
         }
         var plan = await db.RoutePlans.Include(x => x.TransportPlan).ThenInclude(x => x.Transport).ThenInclude(x => x.Booking).ThenInclude(x => x.Customer).ThenInclude(x => x.Account)
@@ -377,8 +364,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         var dossier = plan.TransportPlan.Transport.ComplianceDossier;
         if (dossier is not null && db.Database.IsRelational())
         {
-            await db.ComplianceDossiers.Where(x => x.ComplianceDossierId == dossier.ComplianceDossierId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.ComplianceDossierId, x => x.ComplianceDossierId), token);
+            await db.LockRowsAsync(db.ComplianceDossiers.Where(x => x.ComplianceDossierId == dossier.ComplianceDossierId), x => x.ComplianceDossierId, token);
             await db.Entry(dossier).ReloadAsync(token);
         }
         return plan;
@@ -390,8 +376,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         var ids = await db.RoutePlanRoutes.Where(x => x.RoutePlanId == routePlanId)
             .OrderBy(x => x.RoutePlanRouteId).Select(x => x.RoutePlanRouteId).ToArrayAsync(token);
         foreach (var id in ids)
-            await db.RoutePlanRoutes.Where(x => x.RoutePlanRouteId == id)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanRouteId, x => x.RoutePlanRouteId), token);
+            await db.LockRowsAsync(db.RoutePlanRoutes.Where(x => x.RoutePlanRouteId == id), x => x.RoutePlanRouteId, token);
     }
 
     private IQueryable<RoutePlanRoute> SegmentQuery() => db.RoutePlanRoutes.AsNoTracking()
@@ -415,8 +400,8 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
             throw new ConflictException("A valid segment schedule and nonnegative route distance are required.", "ROUTE_DATA_INCOMPLETE");
         return new(x.RoutePlanRouteId, x.SequenceNo, x.RouteType.ToString(),
             new(x.RouteId, x.Route.RouteCode, x.Route.RouteName, x.Route.TransportMode.ToString(), x.Route.DistanceKm, x.Route.EstimatedDurationMinutes),
-            Location(x.Route.FromLocation), Location(x.Route.ToLocation), Utc(x.PlannedDepartureAt.Value), Utc(x.PlannedArrivalAt.Value),
-            Utc(x.ActualDepartureAt), Utc(x.ActualArrivalAt), x.ActualArrivalAt.HasValue ? "COMPLETED" : x.ActualDepartureAt.HasValue ? "IN_PROGRESS" : "PLANNED",
+            Location(x.Route.FromLocation), Location(x.Route.ToLocation), AsUtc(x.PlannedDepartureAt.Value), AsUtc(x.PlannedArrivalAt.Value),
+            AsUtc(x.ActualDepartureAt), AsUtc(x.ActualArrivalAt), x.ActualArrivalAt.HasValue ? "COMPLETED" : x.ActualDepartureAt.HasValue ? "IN_PROGRESS" : "PLANNED",
             nextDeparture.HasValue ? (decimal)(nextDeparture.Value - x.PlannedArrivalAt.Value).TotalMinutes : null,
             x.TransportProviderId.HasValue ? "OUTSOURCED" : "INTERNAL", x.RoutePlanRouteVehicles.OrderBy(v => v.VehicleId).Select(v => Vehicle(v.Vehicle)).ToList(),
             x.TransportProvider is { } p ? new(new(p.TransportProviderId, p.ProviderCode, p.ProviderName, p.Status.ToString(), Modes(p.SupportedModes)), x.ServiceType, x.ProviderReference) : null,

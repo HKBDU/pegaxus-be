@@ -23,7 +23,7 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.InvoiceService.Validator;
 using Pegaxus.Service.JwtService;
-using InvoiceService = Pegaxus.Service.InvoiceService;
+
 using Claim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Test;
@@ -288,7 +288,7 @@ public class InvoiceSuggestionTests
         builder.Services.AddControllers().AddApplicationPart(typeof(BookingController).Assembly);
         builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddScoped<GlobalExceptionHandlerMiddleware>();
-        builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ => new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService()));
+        builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ => new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService(), TestSupport.CreateNotifications(db)));
         builder.Services.AddScoped<InvoiceService.IService, InvoiceService.Service>();
         builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IService, InvoiceOnlinePaymentTests.Gateway>();
         builder.Services.AddScoped<IValidator<InvoiceService.Request.SuggestionRequest>, SuggestionRequestValidator>();

@@ -12,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Pegaxus.API.Controllers;
 using Pegaxus.API.Middleware;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
 using Pegaxus.Service.PaymentService;
 
 namespace Pegaxus.Service.Test;

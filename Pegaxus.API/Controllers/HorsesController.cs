@@ -1,7 +1,6 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
 using Pegaxus.Service.Exceptions;
 
 using HorseService = Pegaxus.Service.HorseService;
@@ -11,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/horses")]
-public sealed class HorsesController : ControllerBase
+public sealed class HorsesController : ApiControllerBase
 {
     private readonly HorseService.IService _service;
 
@@ -34,24 +33,11 @@ public sealed class HorsesController : ControllerBase
         [FromQuery] HorseService.Request.HorseListRequest request,
         CancellationToken cancellationToken)
     {
-        var accountIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-
-        if (!Guid.TryParse(accountIdValue, out var accountId))
-            return Unauthorized(ResponseBuilder.ErrorResponse(
-                null,
-                "The authenticated account identifier is invalid",
-                errorCode: "UNAUTHORIZED",
-                code: StatusCodes.Status401Unauthorized,
-                traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
 
         var response = await _service.GetCustomerHorsesAsync(accountId, request, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Horse list retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Horse list retrieved successfully");
     }
 
     /// <summary>
@@ -67,25 +53,12 @@ public sealed class HorsesController : ControllerBase
         Guid horseId,
         CancellationToken cancellationToken)
     {
-        var accountIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-
-        if (!Guid.TryParse(accountIdValue, out var accountId))
-            return Unauthorized(ResponseBuilder.ErrorResponse(
-                null,
-                "The authenticated account identifier is invalid",
-                errorCode: "UNAUTHORIZED",
-                code: StatusCodes.Status401Unauthorized,
-                traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
 
         var canViewAll = User.IsInRole("LogisticsManager") || User.IsInRole("LOGISTICS_MANAGER");
         var response = await _service.GetHorseAsync(accountId, horseId, canViewAll, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Horse information retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Horse information retrieved successfully");
     }
 
     /// <summary>
@@ -103,17 +76,7 @@ public sealed class HorsesController : ControllerBase
         HorseService.Request.CreateHorseRequest request,
         CancellationToken cancellationToken)
     {
-        var accountIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-
-        if (!Guid.TryParse(accountIdValue, out var accountId))
-            return Unauthorized(ResponseBuilder.ErrorResponse(
-                null,
-                "The authenticated account identifier is invalid",
-                errorCode: "UNAUTHORIZED",
-                code: StatusCodes.Status401Unauthorized,
-                traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
 
         var response = await _service.CreateHorseAsync(accountId, request, cancellationToken);
 
@@ -141,24 +104,11 @@ public sealed class HorsesController : ControllerBase
         HorseService.Request.CreateHorseRequest request,
         CancellationToken cancellationToken)
     {
-        var accountIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-
-        if (!Guid.TryParse(accountIdValue, out var accountId))
-            return Unauthorized(ResponseBuilder.ErrorResponse(
-                null,
-                "The authenticated account identifier is invalid",
-                errorCode: "UNAUTHORIZED",
-                code: StatusCodes.Status401Unauthorized,
-                traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
 
         await _service.UpdateHorseAsync(accountId, horseId, request, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            null,
-            "Horse information updated successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(null, "Horse information updated successfully");
     }
 
     /// <summary>
@@ -175,23 +125,10 @@ public sealed class HorsesController : ControllerBase
         Guid horseId,
         CancellationToken cancellationToken)
     {
-        var accountIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-
-        if (!Guid.TryParse(accountIdValue, out var accountId))
-            return Unauthorized(ResponseBuilder.ErrorResponse(
-                null,
-                "The authenticated account identifier is invalid",
-                errorCode: "UNAUTHORIZED",
-                code: StatusCodes.Status401Unauthorized,
-                traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
 
         await _service.DeleteHorseAsync(accountId, horseId, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            null,
-            "Horse removed successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(null, "Horse removed successfully");
     }
 }

@@ -1,5 +1,5 @@
-using System.Net;
 using System.Data;
+using System.Net;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -7,9 +7,13 @@ using Microsoft.Extensions.Logging;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.NotificationService;
 using Pegaxus.Service.OutboxService;
+
+using static Pegaxus.Service.Common.DbTime;
+using static Pegaxus.Service.Common.Validation;
 
 namespace Pegaxus.Service.PersonnelAssignmentService;
 
@@ -47,7 +51,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             Brief(specialist?.Employee, specialist?.AssignedAt),
             Brief(coordinator?.Employee, coordinator?.AssignedAt)),
             new(route is not null, route?.RoutePlanId, PersonnelComplete(segments), segments.Select(Map).ToArray()),
-            route is null ? null : Offset(route.UpdatedAt),
+            route is null ? null : AsUtc(route.UpdatedAt),
             dossier is null ? null : new(dossier.ComplianceDossierId, dossier.DossierCode, dossier.Status.ToString()));
     }
 
@@ -71,9 +75,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     private async Task<Response.AssignResponse> WriteAsync(Guid routePlanId, IReadOnlyList<Request.SegmentRequest> changes,
         DateTimeOffset version, string? reason, Guid actor, CancellationToken cancellationToken)
     {
-        await using var transaction = db.Database.IsRelational()
-            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : await db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var planId = await db.RoutePlans.AsNoTracking().Where(x => x.RoutePlanId == routePlanId)
             .Select(x => (Guid?)x.TransportPlanId).SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Route plan not found", "ROUTE_PLAN_NOT_FOUND");
@@ -81,14 +83,10 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         {
             var transportId = await db.TransportPlans.AsNoTracking().Where(x => x.TransportPlanId == planId).Select(x => x.TransportId).SingleAsync(cancellationToken);
             // Updating the key to itself holds a row lock until the transaction ends.
-            await db.Transports.Where(x => x.TransportId == transportId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportId, x => x.TransportId), cancellationToken);
-            await db.TransportPlans.Where(x => x.TransportPlanId == planId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.TransportPlanId, x => x.TransportPlanId), cancellationToken);
+            await db.LockRowsAsync(db.Transports.Where(x => x.TransportId == transportId), x => x.TransportId, cancellationToken);
+            await db.LockRowsAsync(db.TransportPlans.Where(x => x.TransportPlanId == planId), x => x.TransportPlanId, cancellationToken);
         }
-        if (db.Database.IsNpgsql())
-            await db.RoutePlans.Where(x => x.RoutePlanId == routePlanId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanId, x => x.RoutePlanId), cancellationToken);
+        await db.LockRowsAsync(db.RoutePlans.Where(x => x.RoutePlanId == routePlanId), x => x.RoutePlanId, cancellationToken);
         var route = await db.RoutePlans.SingleAsync(x => x.RoutePlanId == routePlanId, cancellationToken);
         if (db.Database.IsRelational()) await db.Entry(route).ReloadAsync(cancellationToken);
         if (route.UpdatedAt.Ticks != version.UtcDateTime.Ticks)
@@ -144,9 +142,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         // Employee row locks serialize schedule checks even when two different plans select the same person.
         foreach (var id in employeeIds)
         {
-            if (db.Database.IsNpgsql())
-                await db.Employees.Where(x => x.EmployeeId == id)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.EmployeeId, x => x.EmployeeId), cancellationToken);
+            await db.LockRowsAsync(db.Employees.Where(x => x.EmployeeId == id), x => x.EmployeeId, cancellationToken);
             var employee = await db.Employees.Include(x => x.Account).SingleOrDefaultAsync(x => x.EmployeeId == id, cancellationToken);
             if (employee is null) throw new NotFoundException("Employee not found", "EMPLOYEE_NOT_FOUND");
             if (db.Database.IsRelational()) await db.Entry(employee).ReloadAsync(cancellationToken);
@@ -187,8 +183,8 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                             employees[employeeId].Role.ToString(), segment.RoutePlanRouteId, external?.PlanCode ?? plan.PlanCode,
                             external?.FromLocationName ?? conflict!.Route.FromLocation.LocationName,
                             external?.ToLocationName ?? conflict!.Route.ToLocation.LocationName,
-                            Offset(external is not null ? external.PlannedDepartureAt : conflict!.PlannedDepartureAt),
-                            Offset(external is not null ? external.PlannedArrivalAt : conflict!.PlannedArrivalAt)));
+                            AsUtc(external is not null ? external.PlannedDepartureAt : conflict!.PlannedDepartureAt),
+                            AsUtc(external is not null ? external.PlannedArrivalAt : conflict!.PlannedArrivalAt)));
             }
         }
         foreach (var segment in segments.Where(x => x.TransportProviderId.HasValue))
@@ -202,7 +198,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var firstAssignment = !await db.CatalogAuditLogs.AnyAsync(x => x.EntityId == routePlanId && x.EntityType == nameof(RoutePlan) &&
             x.ActionType == "PERSONNEL_ASSIGNED", cancellationToken);
         if (updated.Count == 0 && (reason is not null || !firstAssignment))
-            return new(routePlanId, PersonnelComplete(segments), segments.Select(Map).ToArray(), Offset(route.UpdatedAt));
+            return new(routePlanId, PersonnelComplete(segments), segments.Select(Map).ToArray(), AsUtc(route.UpdatedAt));
         var now = new DateTime(Math.Max(Now().Ticks, route.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
         route.UpdatedAt = now;
         foreach (var segment in updated)
@@ -260,7 +256,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         await transaction.CommitAsync(cancellationToken);
         logger.LogInformation("Personnel on route {RoutePlanId} assigned by account {AccountId}; changed segments {Count}", routePlanId, actor, updated.Count);
         await notifications.FlushAsync(CancellationToken.None);
-        return new(routePlanId, PersonnelComplete(segments), segments.Select(Map).ToArray(), Offset(now));
+        return new(routePlanId, PersonnelComplete(segments), segments.Select(Map).ToArray(), AsUtc(now));
     }
 
     public async Task<Response.AssignableResponse> GetAssignableAsync(Request.AssignableRequest request, Guid accountId, CancellationToken cancellationToken = default)
@@ -276,8 +272,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 request.AvailableFrom >= request.AvailableTo))
             throw new BadRequestException("Driver/Escort require a valid availableFrom and availableTo.", "INVALID_DATE_RANGE");
         var role = Enum.Parse<EmployeeRole>(roleName!);
-        var query = db.Employees.AsNoTracking().Where(x => x.Role == role && x.IsActive && !x.IsDeleted &&
-            !x.Account.IsDeleted && x.Account.Status == AccountStatus.ACTIVE && x.Account.AccountType == AccountType.EMPLOYEE);
+        var query = db.Employees.AsNoTracking().Active().Where(x => x.Role == role && x.Account.AccountType == AccountType.EMPLOYEE);
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToUpperInvariant();
@@ -307,7 +302,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             .Select(x => new Response.EmployeeBrief(x.EmployeeId, x.EmployeeCode, x.FullName, x.Role.ToString(),
                 x.Account.Email, x.Account.AvatarUrl, null))
             .ToArrayAsync(cancellationToken);
-        return new(items, request.PageIndex, request.PageSize, count, (int)Math.Ceiling(count / (double)request.PageSize));
+        return new(items, request.PageIndex, request.PageSize, count, Paging.TotalPages(count, request.PageSize));
     }
 
     private async Task SyncPlanLinksAsync(Guid planId, DateTime now, CancellationToken cancellationToken)
@@ -335,8 +330,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             var segmentIds = await db.RoutePlanRoutes.Where(x => x.RoutePlanId == id)
                 .OrderBy(x => x.RoutePlanRouteId).Select(x => x.RoutePlanRouteId).ToArrayAsync(cancellationToken);
             foreach (var segmentId in segmentIds)
-                await db.RoutePlanRoutes.Where(x => x.RoutePlanRouteId == segmentId)
-                    .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.RoutePlanRouteId, x => x.RoutePlanRouteId), cancellationToken);
+                await db.LockRowsAsync(db.RoutePlanRoutes.Where(x => x.RoutePlanRouteId == segmentId), x => x.RoutePlanRouteId, cancellationToken);
         }
         var query = db.RoutePlanRoutes.Include(x => x.DriverEmployee).ThenInclude(x => x!.Account)
             .Include(x => x.EscortEmployee).ThenInclude(x => x!.Account).Include(x => x.TransportProvider)
@@ -350,9 +344,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
 
     private async Task AuthorizeAsync(Guid id, bool write, CancellationToken cancellationToken)
     {
-        if (!await db.Employees.AsNoTracking().AnyAsync(x => x.AccountId == id && !x.IsDeleted && x.IsActive && !x.Account.IsDeleted &&
-            x.Account.Status == AccountStatus.ACTIVE && x.Account.AccountType == AccountType.EMPLOYEE &&
-            (x.Role == EmployeeRole.LOGISTICS_MANAGER || !write && (x.Role == EmployeeRole.TRANSPORT_SPECIALIST || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR || x.Role == EmployeeRole.DRIVER || x.Role == EmployeeRole.ESCORT)), cancellationToken))
+        if (!await db.Employees.AsNoTracking().Active().AnyAsync(x => x.AccountId == id && x.Account.AccountType == AccountType.EMPLOYEE && (x.Role == EmployeeRole.LOGISTICS_MANAGER || !write && (x.Role == EmployeeRole.TRANSPORT_SPECIALIST || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR || x.Role == EmployeeRole.DRIVER || x.Role == EmployeeRole.ESCORT)), cancellationToken))
             throw new ForbiddenException("The account cannot access personnel assignments.");
     }
     private void QueueEmail(string? to, string subject, string message, DateTime now)
@@ -364,19 +356,12 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         b.PlannedArrivalAt <= b.PlannedDepartureAt || a.PlannedDepartureAt <= b.PlannedArrivalAt && a.PlannedArrivalAt >= b.PlannedDepartureAt;
     private static Response.EmployeeBrief? Brief(Employee? employee, DateTime? assignedAt = null) => employee is null ? null :
         new(employee.EmployeeId, employee.EmployeeCode, employee.FullName, employee.Role.ToString(),
-            employee.Account.Email, employee.Account.AvatarUrl, Offset(assignedAt));
+            employee.Account.Email, employee.Account.AvatarUrl, AsUtc(assignedAt));
     private static Response.SegmentResponse Map(RoutePlanRoute x) => new(x.RoutePlanRouteId, x.SequenceNo, x.TransportProviderId.HasValue,
-        Offset(x.PlannedDepartureAt), Offset(x.PlannedArrivalAt), Brief(x.DriverEmployee), Brief(x.EscortEmployee),
+        AsUtc(x.PlannedDepartureAt), AsUtc(x.PlannedArrivalAt), Brief(x.DriverEmployee), Brief(x.EscortEmployee),
         x.TransportProvider is null ? null : new(x.TransportProvider.TransportProviderId, x.TransportProvider.ProviderCode, x.TransportProvider.ProviderName),
         x.TransportProviderId.HasValue ? !x.DriverEmployeeId.HasValue && !x.EscortEmployeeId.HasValue : x.DriverEmployeeId.HasValue && x.EscortEmployeeId.HasValue);
     private static bool PersonnelComplete(IReadOnlyList<RoutePlanRoute> segments) => segments.Count > 0 && segments.All(x => Map(x).IsComplete);
     private static JsonDocument Snapshot(IReadOnlyList<RoutePlanRoute> segments) => JsonSerializer.SerializeToDocument(segments.Select(Map), new JsonSerializerOptions(JsonSerializerDefaults.Web));
-    private static void Validate<T>(T request, IValidator<T> validator)
-    {
-        var result = validator.Validate(request);
-        if (!result.IsValid) throw new BadRequestException(string.Join(" ", result.Errors.Select(x => x.ErrorMessage)));
-    }
     private DateTime Now() => new(clock.GetUtcNow().Ticks / 10 * 10, DateTimeKind.Unspecified);
-    private static DateTimeOffset Offset(DateTime time) => new(DateTime.SpecifyKind(time, DateTimeKind.Utc));
-    private static DateTimeOffset? Offset(DateTime? time) => time.HasValue ? Offset(time.Value) : null;
 }

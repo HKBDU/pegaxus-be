@@ -1,7 +1,7 @@
-using Pegaxus.Service.Models;
-using Pegaxus.Service.Exceptions;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Pegaxus.API.Models;
+using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.API.Middleware;
 

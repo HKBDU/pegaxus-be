@@ -1,9 +1,8 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
+
 using Outsourcing = Pegaxus.Service.RouteOutsourcingService;
 
 namespace Pegaxus.API.Controllers;
@@ -11,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
 [Route("api/v1/route-plans/{routePlanId:guid}/segments/{routePlanRouteId:guid}/outsourcing")]
-public sealed class RouteOutsourcingController(Outsourcing.IService service) : ControllerBase
+public sealed class RouteOutsourcingController(Outsourcing.IService service) : ApiControllerBase
 {
     /// <summary>
     /// Assign or remove outsourced transport for a segment.
@@ -25,9 +24,7 @@ public sealed class RouteOutsourcingController(Outsourcing.IService service) : C
     [HttpPut]
     public async Task<IActionResult> Set(Guid routePlanId, Guid routePlanRouteId, [FromBody] Outsourcing.Request request, CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var accountId))
-            throw new UnauthorizedException("The authenticated account identifier is invalid.");
-        return Ok(ResponseBuilder.SuccessResponse(await service.SetAsync(accountId, routePlanId, routePlanRouteId, request, cancellationToken),
-            request.Outsourced == true ? "Outsourcing assigned successfully" : "Outsourcing removed successfully", traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
+        return Success(await service.SetAsync(accountId, routePlanId, routePlanRouteId, request, cancellationToken), request.Outsourced == true ? "Outsourcing assigned successfully" : "Outsourcing removed successfully");
     }
 }

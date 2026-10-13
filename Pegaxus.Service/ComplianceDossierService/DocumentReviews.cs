@@ -1,10 +1,10 @@
 using System.Data;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -14,7 +14,7 @@ public sealed partial class Service
     public async Task<Response.DocumentReviewResultResponse> ApproveDocumentAsync(Guid accountId, Guid dossierId, Guid requirementId, Guid versionId,
         Request.ApproveDocumentRequest request, CancellationToken cancellationToken = default)
     {
-        await using var transaction = await BeginReviewTransactionAsync(cancellationToken);
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
         try
         {
             await RequireSpecialistAsync(accountId, cancellationToken, "Only Transport Specialists can perform DocumentReview.");
@@ -43,7 +43,7 @@ public sealed partial class Service
             await transaction.CommitAsync(cancellationToken);
             return response;
         }
-        catch (Exception error) when (ReviewWriteConflict(error))
+        catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
         {
             throw new ConflictException("The document changed. Reload before recording a DocumentReview.", "DOCUMENT_REVIEW_CONFLICT");
         }
@@ -52,7 +52,7 @@ public sealed partial class Service
     public async Task<Response.DocumentReviewResultResponse> RevokeDocumentReviewAsync(Guid accountId, Guid dossierId, Guid requirementId,
         Guid versionId, Guid reviewId, Request.RevokeDocumentReviewRequest request, CancellationToken cancellationToken = default)
     {
-        await using var transaction = await BeginReviewTransactionAsync(cancellationToken);
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
         try
         {
             await RequireSpecialistAsync(accountId, cancellationToken, "Only Transport Specialists can perform DocumentReview.");
@@ -70,7 +70,7 @@ public sealed partial class Service
             await transaction.CommitAsync(cancellationToken);
             return response;
         }
-        catch (Exception error) when (ReviewWriteConflict(error))
+        catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
         {
             throw new ConflictException("The document changed. Reload before revoking approval.", "DOCUMENT_REVIEW_CONFLICT");
         }
@@ -79,7 +79,7 @@ public sealed partial class Service
     public async Task<Response.DossierReadinessResponse> MarkReadyForSubmissionAsync(Guid accountId, Guid dossierId,
         CancellationToken cancellationToken = default)
     {
-        await using var transaction = await BeginReviewTransactionAsync(cancellationToken);
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
         try
         {
             await RequireSpecialistAsync(accountId, cancellationToken);
@@ -106,7 +106,7 @@ public sealed partial class Service
                 ComplianceDossierId = dossierId, Status = dossier.Status.ToString(), ReadyForSubmissionAt = DateTime.SpecifyKind(now, DateTimeKind.Utc)
             };
         }
-        catch (Exception error) when (ReviewWriteConflict(error))
+        catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
         {
             throw new ConflictException("The dossier changed. Reload before updating its status.", "DOSSIER_STATUS_CONFLICT");
         }
@@ -115,9 +115,7 @@ public sealed partial class Service
     private async Task<ComplianceDossier> ReviewDossierAsync(Guid dossierId, CancellationToken cancellationToken)
     {
         // Updating the key to itself holds a row lock until the transaction ends.
-        if (_db.Database.IsRelational())
-            await _db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDossierId, item => item.ComplianceDossierId), cancellationToken);
+        await _db.LockRowsAsync(_db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId), item => item.ComplianceDossierId, cancellationToken);
         var dossiers = _db.ComplianceDossiers.AsQueryable();
         var dossier = await dossiers.AsTracking().Include(item => item.Transport).ThenInclude(item => item.Booking)
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)
@@ -134,9 +132,7 @@ public sealed partial class Service
     private async Task<(DossierRequirement Requirement, ComplianceDocument Document, DocumentVersion Version)> ReviewContextAsync(
         Guid dossierId, Guid requirementId, Guid versionId, CancellationToken cancellationToken)
     {
-        if (_db.Database.IsRelational())
-            await _db.DossierRequirements.Where(item => item.DossierRequirementId == requirementId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DossierRequirementId, item => item.DossierRequirementId), cancellationToken);
+        await _db.LockRowsAsync(_db.DossierRequirements.Where(item => item.DossierRequirementId == requirementId), item => item.DossierRequirementId, cancellationToken);
         var requirements = _db.DossierRequirements.AsQueryable();
         var requirement = await requirements.AsTracking().SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId &&
             item.ComplianceDossierId == dossierId && !item.IsDeleted, cancellationToken)
@@ -144,16 +140,12 @@ public sealed partial class Service
         await _db.Entry(requirement).ReloadAsync(cancellationToken);
         if (requirement.IsDeleted || _db.Entry(requirement).State == EntityState.Detached)
             throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
-        if (_db.Database.IsRelational())
-            await _db.ComplianceDocuments.Where(item => item.DossierRequirementId == requirementId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDocumentId, item => item.ComplianceDocumentId), cancellationToken);
+        await _db.LockRowsAsync(_db.ComplianceDocuments.Where(item => item.DossierRequirementId == requirementId), item => item.ComplianceDocumentId, cancellationToken);
         var documents = _db.ComplianceDocuments.AsQueryable();
         var document = await documents.AsTracking().SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId, cancellationToken)
             ?? throw new NotFoundException("ComplianceDocument not found.", "DOCUMENT_NOT_FOUND");
         await _db.Entry(document).ReloadAsync(cancellationToken);
-        if (_db.Database.IsRelational())
-            await _db.DocumentVersions.Where(item => item.DocumentVersionId == versionId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DocumentVersionId, item => item.DocumentVersionId), cancellationToken);
+        await _db.LockRowsAsync(_db.DocumentVersions.Where(item => item.DocumentVersionId == versionId), item => item.DocumentVersionId, cancellationToken);
         var versions = _db.DocumentVersions.AsQueryable();
         var version = await versions.AsTracking().SingleOrDefaultAsync(item => item.DocumentVersionId == versionId &&
             item.ComplianceDocumentId == document.ComplianceDocumentId, cancellationToken)
@@ -226,14 +218,7 @@ public sealed partial class Service
             .OrderByDescending(item => item.ReviewedAt).ThenByDescending(item => item.CreatedAt).ThenByDescending(item => item.DocumentReviewId)
             .FirstOrDefaultAsync(cancellationToken);
 
-    private Task<IDbContextTransaction> BeginReviewTransactionAsync(CancellationToken cancellationToken) => _db.Database.IsRelational()
-        ? _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-        : _db.Database.BeginTransactionAsync(cancellationToken);
-
     private static DateTime ReviewTimestamp(DateTime timestamp) => timestamp.Kind == DateTimeKind.Local
         ? timestamp.ToUniversalTime() : DateTime.SpecifyKind(timestamp, DateTimeKind.Utc);
 
-    private static bool ReviewWriteConflict(Exception error) => error is DbUpdateConcurrencyException ||
-        error is DbUpdateException { InnerException: PostgresException { SqlState: "23505" or "40001" or "40P01" } } ||
-        error is PostgresException { SqlState: "23505" or "40001" or "40P01" };
 }

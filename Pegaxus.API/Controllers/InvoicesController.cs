@@ -1,9 +1,8 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
+
 using InvoiceService = Pegaxus.Service.InvoiceService;
 
 namespace Pegaxus.API.Controllers;
@@ -11,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize(Policy = JwtExtensions.CustomerOrLogisticsManagerPolicy)]
 [Route("api/v1/invoices")]
-public sealed class InvoicesController(InvoiceService.IService service) : ControllerBase
+public sealed class InvoicesController(InvoiceService.IService service) : ApiControllerBase
 {
     /// <summary>Initiate a full online payment for an invoice.</summary>
     /// <remarks>Customers can pay only their own issued DEPOSIT, FINAL or SUPPLEMENTARY invoices in ISSUED or OVERDUE status. Creates a PENDING receipt and replaces older pending receipts. SePay supports whole VND amounts: submit checkoutFields in their returned order as a browser POST to paymentUrl; a GET redirect alone cannot start checkout. Configuration and signing failures roll back receipt changes. Payment confirmation belongs to the webhook.</remarks>
@@ -22,11 +21,9 @@ public sealed class InvoicesController(InvoiceService.IService service) : Contro
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> InitiateOnlinePayment(Guid invoiceId, CancellationToken cancellationToken)
     {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
-        if (!Guid.TryParse(value, out var accountId)) throw new UnauthorizedException("The authenticated account identifier is invalid");
+        var accountId = AccountId;
         var response = await service.InitiateOnlinePaymentAsync(invoiceId, accountId, cancellationToken);
-        return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(response,
-            "Online payment initiated successfully", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+        return SuccessCreated(response, "Online payment initiated successfully");
     }
 
     /// <summary>Get an invoice's status history.</summary>
@@ -37,10 +34,8 @@ public sealed class InvoicesController(InvoiceService.IService service) : Contro
     [HttpGet("{invoiceId:guid}/status-history")]
     public async Task<IActionResult> GetStatusHistory(Guid invoiceId, CancellationToken cancellationToken)
     {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
-        if (!Guid.TryParse(value, out var accountId)) throw new UnauthorizedException("The authenticated account identifier is invalid");
-        return Ok(ResponseBuilder.SuccessResponse(await service.GetStatusHistoryAsync(invoiceId, accountId, cancellationToken),
-            "Invoice status history retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
+        return Success(await service.GetStatusHistoryAsync(invoiceId, accountId, cancellationToken), "Invoice status history retrieved successfully");
     }
 
     /// <summary>Cancel an unpaid invoice with a reason.</summary>
@@ -53,10 +48,8 @@ public sealed class InvoicesController(InvoiceService.IService service) : Contro
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Cancel(Guid invoiceId, [FromBody] InvoiceService.Request.CancelRequest request, CancellationToken cancellationToken)
     {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
-        if (!Guid.TryParse(value, out var accountId)) throw new UnauthorizedException("The authenticated account identifier is invalid");
-        return Ok(ResponseBuilder.SuccessResponse(await service.CancelAsync(invoiceId, request, accountId, cancellationToken),
-            "Invoice cancelled successfully", traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
+        return Success(await service.CancelAsync(invoiceId, request, accountId, cancellationToken), "Invoice cancelled successfully");
     }
 
     /// <summary>Record full manual payment or a credit note payout.</summary>
@@ -69,10 +62,8 @@ public sealed class InvoicesController(InvoiceService.IService service) : Contro
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> RecordPayment(Guid invoiceId, [FromBody] InvoiceService.Request.RecordPaymentRequest request, CancellationToken cancellationToken)
     {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
-        if (!Guid.TryParse(value, out var accountId)) throw new UnauthorizedException("The authenticated account identifier is invalid");
-        return StatusCode(201, ResponseBuilder.SuccessResponse(await service.RecordPaymentAsync(invoiceId, request, accountId, cancellationToken),
-            "Payment recorded successfully", 201, HttpContext.TraceIdentifier));
+        var accountId = AccountId;
+        return SuccessCreated(await service.RecordPaymentAsync(invoiceId, request, accountId, cancellationToken), "Payment recorded successfully");
     }
 
     /// <summary>Issue a draft invoice to its booking customer.</summary>
@@ -85,10 +76,8 @@ public sealed class InvoicesController(InvoiceService.IService service) : Contro
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Issue(Guid invoiceId, [FromBody] InvoiceService.Request.IssueRequest request, CancellationToken cancellationToken)
     {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
-        if (!Guid.TryParse(value, out var accountId)) throw new UnauthorizedException("The authenticated account identifier is invalid");
-        return Ok(ResponseBuilder.SuccessResponse(await service.IssueAsync(invoiceId, request, accountId, cancellationToken),
-            "Invoice issued successfully", traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
+        return Success(await service.IssueAsync(invoiceId, request, accountId, cancellationToken), "Invoice issued successfully");
     }
 
     /// <summary>Get invoice details.</summary>
@@ -102,10 +91,8 @@ public sealed class InvoicesController(InvoiceService.IService service) : Contro
     [HttpGet("{invoiceId}")]
     public async Task<IActionResult> Get(Guid invoiceId, CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var accountId))
-            throw new UnauthorizedException("The authenticated account identifier is invalid.");
-        return Ok(ResponseBuilder.SuccessResponse(await service.GetAsync(accountId, invoiceId, cancellationToken),
-            "Invoice retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
+        return Success(await service.GetAsync(accountId, invoiceId, cancellationToken), "Invoice retrieved successfully");
     }
 
 
@@ -122,10 +109,9 @@ public sealed class InvoicesController(InvoiceService.IService service) : Contro
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> GetList([FromQuery] InvoiceService.Request.ListRequest request, CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var accountId))
-            throw new UnauthorizedException("The authenticated account identifier is invalid.");
+        var accountId = AccountId;
         var response = await service.GetListAsync(accountId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Invoices retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Invoices retrieved successfully");
     }
 
     /// <summary>
@@ -146,9 +132,8 @@ public sealed class InvoicesController(InvoiceService.IService service) : Contro
     public async Task<IActionResult> Update(Guid invoiceId, [FromBody] InvoiceService.Request.UpdateRequest request,
         CancellationToken cancellationToken)
     {
-        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var accountId))
-            throw new UnauthorizedException("The authenticated account identifier is invalid.");
+        var accountId = AccountId;
         var response = await service.UpdateAsync(accountId, invoiceId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Invoice updated successfully", traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Invoice updated successfully");
     }
 }

@@ -1,10 +1,8 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Pegaxus.API.Extensions;
-using Pegaxus.Service.MediaService;
-using Pegaxus.Service.Models;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.MediaService;
+
 using UploadService = Pegaxus.Service.UploadService;
 
 namespace Pegaxus.API.Controllers;
@@ -12,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/uploads")]
-public sealed class UploadsController : ControllerBase
+public sealed class UploadsController : ApiControllerBase
 {
     private readonly IService _mediaService;
 
@@ -37,10 +35,9 @@ public sealed class UploadsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _mediaService.CreateSignedUploadAsync(
-            GetAccountId(), request.Entity, request.ContentType, request.SizeBytes);
+            AccountId, request.Entity, request.ContentType, request.SizeBytes);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            new UploadService.Response.CreateUploadSignatureResponse
+        return Success(new UploadService.Response.CreateUploadSignatureResponse
             {
                 PublicId = result.PublicId,
                 Upload = new UploadService.Response.UploadSignatureResponse
@@ -48,9 +45,7 @@ public sealed class UploadsController : ControllerBase
                     Url = result.UploadUrl,
                     Params = result.Parameters
                 }
-            },
-            "Upload signature created successfully",
-            traceId: HttpContext.TraceIdentifier));
+            }, "Upload signature created successfully");
     }
 
     /// <summary>
@@ -71,11 +66,10 @@ public sealed class UploadsController : ControllerBase
         CancellationToken cancellationToken)
     {
         var result = await _mediaService.ConfirmUploadAsync(
-            GetAccountId(), request.PublicId, cancellationToken);
+            AccountId, request.PublicId, cancellationToken);
         var signed = await _mediaService.CreateReadUrlAsync(result.FileUrl, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            new UploadService.Response.ConfirmUploadResponse
+        return Success(new UploadService.Response.ConfirmUploadResponse
             {
                 PublicId = result.PublicId,
                 FileUrl = signed.Url,
@@ -83,21 +77,7 @@ public sealed class UploadsController : ControllerBase
                 FileName = result.FileName,
                 MimeType = result.MimeType,
                 SizeBytes = result.SizeBytes
-            },
-            "Upload confirmed successfully",
-            traceId: HttpContext.TraceIdentifier));
-    }
-
-    private Guid GetAccountId()
-    {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-
-        if (Guid.TryParse(value, out var accountId))
-            return accountId;
-
-        throw new UnauthorizedAccessException("The authenticated account identifier is invalid");
+            }, "Upload confirmed successfully");
     }
 
 }

@@ -1,17 +1,18 @@
-using Pegaxus.API.Middleware;
-using Pegaxus.API.Services;
-using Pegaxus.Repository.Entities;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Npgsql.NameTranslation;
+using Pegaxus.API.Middleware;
+using Pegaxus.API.Services;
 using Pegaxus.Repository;
+using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
+
 using RouteChange = Pegaxus.Service.RouteChangeService;
 
 namespace Pegaxus.Service.Test;
@@ -233,16 +234,9 @@ public class RouteChangePostgresTests
     }
 
     private static RouteChange.Service Service(AppDbContext db) => new(db,
-        new Pegaxus.Service.NotificationService.Service(db, new NoopNotificationRealtimeService()), new RouteChangeTests.Fixture.FixedClock());
+        new Pegaxus.Service.NotificationService.Service(db, new NoopNotificationRealtimeService()), new RouteChangeTests.Fixture.FixedClock(),
+        new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db)));
 
-    internal sealed class PostgresFactAttribute : FactAttribute
-    {
-        public PostgresFactAttribute()
-        {
-            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PEGAXUS_TEST_CONNECTION_STRING")))
-                Skip = "Set PEGAXUS_TEST_CONNECTION_STRING to a disposable PostgreSQL server; tests create and drop their own databases.";
-        }
-    }
 
     private sealed class EnumNames : INpgsqlNameTranslator
     {

@@ -1,11 +1,11 @@
+using System.Security.Claims;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
 using Pegaxus.Service.Exceptions;
-using System.Security.Claims;
 
 using AuthService = Pegaxus.Service.Auth;
 
@@ -13,7 +13,7 @@ namespace Pegaxus.API.Controllers;
 
 [ApiController]
 [Route("api/v1/auth")]
-public sealed class AuthController : ControllerBase
+public sealed class AuthController : ApiControllerBase
 {
     private readonly AuthService.IService _service;
     private readonly IConfiguration _configuration;
@@ -109,8 +109,7 @@ public sealed class AuthController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.ExchangeGoogleLoginCodeAsync(request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response, "Google login successful. Welcome back!", traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Google login successful. Welcome back!");
     }
 
     private string GetFrontendCallbackUrl()
@@ -144,7 +143,7 @@ public sealed class AuthController : ControllerBase
             return validationError;
 
         var response = await _service.LoginAsync(request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Login successful. Welcome back!", traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Login successful. Welcome back!");
     }
 
     /// <summary>

@@ -4,8 +4,8 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
-using Pegaxus.Service.VehicleService;
 using Pegaxus.Service.VehicleService.Validator;
+
 using FleetService = Pegaxus.Service.VehicleService.Service;
 using Request = Pegaxus.Service.VehicleService.Request;
 using Response = Pegaxus.Service.VehicleService.Response;

@@ -22,10 +22,11 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Migrations;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.JwtService;
 using Pegaxus.Service.NotificationService;
-using Pegaxus.Service.Common;
+
 using Outsourcing = Pegaxus.Service.RouteOutsourcingService;
 using Claim = System.Security.Claims.Claim;
 using ClaimTypes = System.Security.Claims.ClaimTypes;

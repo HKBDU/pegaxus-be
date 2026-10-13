@@ -2,7 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+
+using static Pegaxus.Service.Common.DbTime;
+using static Pegaxus.Service.Common.Text;
 
 namespace Pegaxus.Service.LocationService;
 
@@ -38,7 +43,7 @@ public sealed class Service(AppDbContext db) : IService
             PageIndex = request.PageIndex,
             PageSize = request.PageSize,
             TotalItems = totalItems,
-            TotalPages = (int)Math.Ceiling(totalItems / (double)request.PageSize)
+            TotalPages = Paging.TotalPages(totalItems, request.PageSize)
         };
     }
 
@@ -108,9 +113,7 @@ public sealed class Service(AppDbContext db) : IService
     }
 
     private async Task<Employee> RequireCoordinatorAsync(Guid accountId, CancellationToken cancellationToken) =>
-        await db.Employees.Include(item => item.Account).SingleOrDefaultAsync(item => item.AccountId == accountId &&
-            item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && item.IsActive && !item.IsDeleted &&
-            !item.Account.IsDeleted && item.Account.Status == AccountStatus.ACTIVE, cancellationToken)
+        await db.Employees.Include(item => item.Account).Active().SingleOrDefaultAsync(item => item.AccountId == accountId && item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR, cancellationToken)
         ?? throw new ForbiddenException("Only Fleet Route Coordinators can manage Locations");
 
     private Task<bool> IsDuplicateAsync(string name, string? city, string country, Guid? exceptId, CancellationToken token) =>
@@ -142,12 +145,9 @@ public sealed class Service(AppDbContext db) : IService
     {
         if (pageIndex < 1 || pageSize is < 1 or > 100) throw new BadRequestException("Invalid pagination", "VALIDATION_ERROR");
     }
-    private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     // The database stores timestamps as `timestamp without time zone`.
     // Keep the UTC instant while writing an unspecified DateTime so Npgsql
     // does not reject the value because of its Kind metadata.
-    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
-    private static DateTimeOffset AsUtc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
     private static void EnsureConcurrency(DateTime actual, DateTimeOffset expected)
     {
         if (actual != expected.UtcDateTime) throw new ConflictException("Location was modified. Please reload the latest data.", "LOCATION_MODIFIED");

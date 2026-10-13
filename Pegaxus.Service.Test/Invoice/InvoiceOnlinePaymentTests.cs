@@ -4,6 +4,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+
 using Invoices = Pegaxus.Service.InvoiceService;
 using AppException = Pegaxus.Service.Exceptions.Exceptions;
 

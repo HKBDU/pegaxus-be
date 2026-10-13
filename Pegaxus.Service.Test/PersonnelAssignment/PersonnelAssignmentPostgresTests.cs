@@ -1,13 +1,13 @@
 using System.Text.Json;
-using Pegaxus.API.Middleware;
-using Pegaxus.API.Services;
-using Pegaxus.Repository.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Npgsql.NameTranslation;
+using Pegaxus.API.Middleware;
+using Pegaxus.API.Services;
 using Pegaxus.Repository;
+using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.PersonnelAssignmentService;
@@ -16,14 +16,6 @@ namespace Pegaxus.Service.Test;
 
 public class PersonnelAssignmentPostgresTests
 {
-    private sealed class PostgresFactAttribute : FactAttribute
-    {
-        public PostgresFactAttribute()
-        {
-            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PEGAXUS_TEST_CONNECTION_STRING")))
-                Skip = "Set PEGAXUS_TEST_CONNECTION_STRING to an isolated PostgreSQL test database.";
-        }
-    }
     private sealed class EnumTranslator : INpgsqlNameTranslator
     {
         public string TranslateTypeName(string name) => new NpgsqlSnakeCaseNameTranslator().TranslateTypeName(name);

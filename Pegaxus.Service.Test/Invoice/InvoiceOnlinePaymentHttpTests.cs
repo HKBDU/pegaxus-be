@@ -18,6 +18,7 @@ using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.JwtService;
+
 using Invoices = Pegaxus.Service.InvoiceService;
 
 namespace Pegaxus.Service.Test;

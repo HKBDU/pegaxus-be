@@ -27,6 +27,7 @@ using Pegaxus.Repository.Migrations;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.JwtService;
 using Pegaxus.Service.TransportProviderService.Validator;
+
 using Providers = Pegaxus.Service.TransportProviderService;
 using Claim = System.Security.Claims.Claim;
 

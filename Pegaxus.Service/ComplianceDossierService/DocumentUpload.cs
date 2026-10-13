@@ -2,9 +2,9 @@ using System.Data;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.DocumentStorageService;
 using Pegaxus.Service.Exceptions;
 
@@ -57,9 +57,7 @@ public sealed partial class Service
                 readUrls.Add(await _mediaService.CreateReadUrlAsync(file.StorageUrl, cancellationToken));
             DocumentVersion version;
             bool newVersion;
-            await using (var transaction = _db.Database.IsRelational()
-                ? await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-                : await _db.Database.BeginTransactionAsync(cancellationToken))
+            await using (var transaction = await _db.Database.BeginSerializableAsync(cancellationToken))
             {
                 try
                 {
@@ -162,9 +160,7 @@ public sealed partial class Service
         {
             if (!committed && commitAttempted)
                 _logger.LogError(error, "Document commit outcome is unknown for {StorageId}; files retained to prevent data loss", storageId);
-            if (error is DbUpdateConcurrencyException ||
-                error is DbUpdateException { InnerException: PostgresException { SqlState: "23505" or "40001" or "40P01" } } ||
-                error is PostgresException { SqlState: "23505" or "40001" or "40P01" })
+            if (PostgresErrors.IsWriteConflict(error))
                 throw new ConflictException("ComplianceDocument already exists or the dossier changed. Reload before uploading.", "DOCUMENT_UPLOAD_CONFLICT");
             throw;
         }
@@ -192,10 +188,7 @@ public sealed partial class Service
         var customerId = await _db.Customers.AsNoTracking().Where(item => item.AccountId == accountId && !item.IsDeleted &&
             item.Account.AccountType == AccountType.CUSTOMER && !item.Account.IsDeleted && item.Account.Status == AccountStatus.ACTIVE)
             .Select(item => (Guid?)item.CustomerId).SingleOrDefaultAsync(cancellationToken);
-        var specialist = readOnly && await _db.Employees.AsNoTracking().AnyAsync(item => item.AccountId == accountId &&
-            !item.IsDeleted && item.IsActive && !item.Account.IsDeleted && item.Account.Status == AccountStatus.ACTIVE &&
-            item.Account.AccountType == AccountType.EMPLOYEE &&
-            (item.Role == EmployeeRole.TRANSPORT_SPECIALIST || item.Role == EmployeeRole.LOGISTICS_MANAGER), cancellationToken);
+        var specialist = readOnly && await _db.Employees.AsNoTracking().Active().AnyAsync(item => item.AccountId == accountId && item.Account.AccountType == AccountType.EMPLOYEE && (item.Role == EmployeeRole.TRANSPORT_SPECIALIST || item.Role == EmployeeRole.LOGISTICS_MANAGER), cancellationToken);
         if (!customerId.HasValue && !specialist)
             throw new ForbiddenException("Only an active Customer can upload ComplianceDocuments.");
         var dossiers = _db.ComplianceDossiers.Include(item => item.Transport).ThenInclude(item => item.Booking);

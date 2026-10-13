@@ -1,5 +1,5 @@
-using System.Text.Json;
 using System.Data;
+using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -7,8 +7,13 @@ using Npgsql;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
+
+using static Pegaxus.Service.Common.DbTime;
+using static Pegaxus.Service.Common.Text;
 
 namespace Pegaxus.Service.VehicleService;
 
@@ -76,7 +81,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var items = await ordered.ThenBy(x => x.VehicleId).Skip((request.PageIndex - 1) * request.PageSize)
             .Take(request.PageSize).ToListAsync(cancellationToken);
         return new(items.Select(x => Map(x, request.AvailableFrom.HasValue ? true : null)).ToArray(),
-            request.PageIndex, request.PageSize, count, (int)Math.Ceiling(count / (double)request.PageSize));
+            request.PageIndex, request.PageSize, count, Paging.TotalPages(count, request.PageSize));
     }
 
     public async Task<Response.VehicleResponse> GetAsync(Guid vehicleId, Guid accountId, CancellationToken cancellationToken = default)
@@ -100,7 +105,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var result = Map(vehicle);
         result.UpcomingAssignments = segments.Select(x => new Response.AssignmentResponse(x.RoutePlanRouteId,
             x.RoutePlanId, x.RoutePlanCode, x.TransportPlanId, x.PlanCode, x.SequenceNo, x.From, x.To,
-            Offset(x.PlannedDepartureAt), Offset(x.PlannedArrivalAt))).ToArray();
+            AsUtc(x.PlannedDepartureAt), AsUtc(x.PlannedArrivalAt))).ToArray();
         return result;
     }
 
@@ -131,9 +136,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         await AuthorizeAsync(accountId, cancellationToken);
         Normalize(request);
         Validate(request, updateValidator);
-        await using var transaction = db.Database.IsRelational()
-            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : await db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var vehicle = await LockAsync(vehicleId, cancellationToken);
         CheckVersion(vehicle, request.LastUpdatedAt);
         if (request.VehicleId.HasValue && request.VehicleId != vehicleId)
@@ -162,9 +165,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         await AuthorizeAsync(accountId, cancellationToken);
         Validate(request, statusValidator);
         // shortcut: future assignment writers must validate the vehicle within a Serializable transaction.
-        await using var transaction = db.Database.IsRelational()
-            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : await db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var vehicle = await LockAsync(vehicleId, cancellationToken);
         CheckVersion(vehicle, request.LastUpdatedAt);
         if (vehicle.Status is VehicleStatus.ASSIGNED or VehicleStatus.IN_USE ||
@@ -178,7 +179,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         await transaction.CommitAsync(cancellationToken);
         logger.LogInformation("Vehicle {VehicleId} status changed from {PreviousStatus} to {Status} by account {AccountId}", vehicleId, previous, vehicle.Status, accountId);
         await notifications.FlushAsync(cancellationToken);
-        return new(vehicleId, previous, vehicle.Status.ToString(), Offset(vehicle.UpdatedAt));
+        return new(vehicleId, previous, vehicle.Status.ToString(), AsUtc(vehicle.UpdatedAt));
     }
 
     private IQueryable<Vehicle> Vehicles() => db.Vehicles.AsNoTracking().Where(x => !x.IsDeleted);
@@ -197,7 +198,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         // Updating the key to itself holds a row lock until the transaction ends.
         if (db.Database.IsNpgsql())
         {
-            try { await query.ExecuteUpdateAsync(setters => setters.SetProperty(x => x.VehicleId, x => x.VehicleId), cancellationToken); }
+            try { await db.LockRowsAsync(query, x => x.VehicleId, cancellationToken); }
             catch (Exception error) when (error.GetBaseException() is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected })
             { throw Modified(); }
         }
@@ -210,9 +211,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
 
     private async Task AuthorizeAsync(Guid accountId, CancellationToken cancellationToken)
     {
-        var allowed = await db.Employees.AsNoTracking().AnyAsync(x => x.AccountId == accountId && !x.IsDeleted && x.IsActive &&
-            !x.Account.IsDeleted && x.Account.Status == AccountStatus.ACTIVE && x.Account.AccountType == AccountType.EMPLOYEE &&
-            (x.Role == EmployeeRole.LOGISTICS_MANAGER || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR), cancellationToken);
+        var allowed = await db.Employees.AsNoTracking().Active().AnyAsync(x => x.AccountId == accountId && x.Account.AccountType == AccountType.EMPLOYEE && (x.Role == EmployeeRole.LOGISTICS_MANAGER || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR), cancellationToken);
         if (!allowed) throw new ForbiddenException("Only active Fleet Route Coordinators and Logistics Managers can manage vehicles.");
     }
 
@@ -227,9 +226,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         db.CatalogAuditLogs.Add(new CatalogAuditLog { CatalogAuditLogId = Guid.NewGuid(), EntityType = nameof(Vehicle),
             EntityId = vehicle.VehicleId, ActionType = action, ActorAccountId = accountId, Summary = reason,
             BeforeData = before, AfterData = Snapshot(vehicle), CreatedAt = vehicle.UpdatedAt });
-        var recipients = await db.Employees.AsNoTracking().Where(x => !x.IsDeleted && x.IsActive && !x.Account.IsDeleted &&
-            x.Account.Status == AccountStatus.ACTIVE && x.Account.AccountType == AccountType.EMPLOYEE &&
-            (x.Role == EmployeeRole.LOGISTICS_MANAGER || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
+        var recipients = await db.Employees.AsNoTracking().Active().Where(x => x.Account.AccountType == AccountType.EMPLOYEE && (x.Role == EmployeeRole.LOGISTICS_MANAGER || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
             .Select(x => x.AccountId).Distinct().ToListAsync(cancellationToken);
         foreach (var recipient in recipients)
             notifications.Queue(new NotificationCreateRequest { AccountId = recipient, Type = NotificationType.SYSTEM,
@@ -258,7 +255,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             RegistrationNumber = x.RegistrationNumber, RegistrationExpiryDate = x.RegistrationExpiryDate,
             RegistrationStatus = registration, InsuranceNumber = x.InsuranceNumber, InsuranceExpiryDate = x.InsuranceExpiryDate,
             InsuranceStatus = insurance, SpecialEquipment = x.SpecialEquipment, Warnings = warnings,
-            IsAvailable = available, CreatedAt = Offset(x.CreatedAt), UpdatedAt = Offset(x.UpdatedAt) };
+            IsAvailable = available, CreatedAt = AsUtc(x.CreatedAt), UpdatedAt = AsUtc(x.UpdatedAt) };
     }
 
     private string ExpiryStatus(DateOnly? date)
@@ -269,16 +266,16 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     }
 
     private JsonDocument Snapshot(Vehicle vehicle) => JsonSerializer.SerializeToDocument(Map(vehicle), new JsonSerializerOptions(JsonSerializerDefaults.Web));
-    private static void Normalize(Request.VehicleFields request) => request.LicensePlate = Trim(request.LicensePlate)?.ToUpperInvariant();
+    private static void Normalize(Request.VehicleFields request) => request.LicensePlate = EmptyToNull(request.LicensePlate)?.ToUpperInvariant();
     private static void Apply(Vehicle vehicle, Request.VehicleFields request)
     {
         vehicle.TransportMode = Enum.Parse<TransportMode>(request.TransportMode.Trim(), true);
-        vehicle.VehicleName = Trim(request.VehicleName); vehicle.LicensePlate = request.LicensePlate;
-        vehicle.VehicleType = Trim(request.VehicleType); vehicle.Manufacturer = Trim(request.Manufacturer);
-        vehicle.Model = Trim(request.Model); vehicle.CapacityHorses = request.CapacityHorses;
-        vehicle.RegistrationNumber = Trim(request.RegistrationNumber); vehicle.RegistrationExpiryDate = request.RegistrationExpiryDate;
-        vehicle.InsuranceNumber = Trim(request.InsuranceNumber); vehicle.InsuranceExpiryDate = request.InsuranceExpiryDate;
-        vehicle.SpecialEquipment = Trim(request.SpecialEquipment);
+        vehicle.VehicleName = EmptyToNull(request.VehicleName); vehicle.LicensePlate = request.LicensePlate;
+        vehicle.VehicleType = EmptyToNull(request.VehicleType); vehicle.Manufacturer = EmptyToNull(request.Manufacturer);
+        vehicle.Model = EmptyToNull(request.Model); vehicle.CapacityHorses = request.CapacityHorses;
+        vehicle.RegistrationNumber = EmptyToNull(request.RegistrationNumber); vehicle.RegistrationExpiryDate = request.RegistrationExpiryDate;
+        vehicle.InsuranceNumber = EmptyToNull(request.InsuranceNumber); vehicle.InsuranceExpiryDate = request.InsuranceExpiryDate;
+        vehicle.SpecialEquipment = EmptyToNull(request.SpecialEquipment);
     }
     private static void Validate<T>(T request, IValidator<T> validator)
     {
@@ -293,9 +290,6 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     { if (vehicle.UpdatedAt.Ticks != lastUpdatedAt.UtcDateTime.Ticks) throw Modified(); }
     private DateTime Now() => new(clock.GetUtcNow().Ticks / 10 * 10, DateTimeKind.Unspecified);
     private DateTime NextVersion(DateTime previous) => new(Math.Max(Now().Ticks, previous.Ticks + 10), DateTimeKind.Unspecified);
-    private static string? Trim(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    private static DateTimeOffset Offset(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
-    private static DateTimeOffset? Offset(DateTime? value) => value.HasValue ? Offset(value.Value) : null;
     private static NotFoundException NotFound() => new("Vehicle not found", "VEHICLE_NOT_FOUND");
     private static ConflictException Modified() => new("The vehicle was just modified. Please reload the page", "VEHICLE_MODIFIED");
     private static ConflictException DuplicateCode() => new("Vehicle Code or License Plate already exists in the system.", "VEHICLE_CODE_DUPLICATED");

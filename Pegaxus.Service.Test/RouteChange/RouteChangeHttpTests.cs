@@ -9,16 +9,16 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
 using Pegaxus.API.Controllers;
-using Microsoft.EntityFrameworkCore;
 using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.JwtService;
-using Pegaxus.Service.NotificationService;
+
 using RouteChange = Pegaxus.Service.RouteChangeService;
 
 namespace Pegaxus.Service.Test;

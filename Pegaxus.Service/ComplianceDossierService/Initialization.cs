@@ -1,8 +1,9 @@
-using Microsoft.EntityFrameworkCore;
 using System.Data;
+using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -47,14 +48,10 @@ public sealed partial class Service
         Guid accountId, Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken = default)
     {
         await RequireSpecialistAsync(accountId, cancellationToken);
-        await using var transaction = _db.Database.IsRelational()
-            ? await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : await _db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
         // The negotiated status change takes the same lock before changing the booking or its dossier.
-        if (_db.Database.IsRelational())
             // Updating the key to itself holds a row lock until the transaction ends.
-            await _db.Bookings.Where(item => item.BookingId == bookingId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.BookingId, item => item.BookingId), cancellationToken);
+        await _db.LockRowsAsync(_db.Bookings.Where(item => item.BookingId == bookingId), item => item.BookingId, cancellationToken);
 
         var (booking, requirements) = await PrepareInitializationAsync(bookingId, request, cancellationToken);
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -216,9 +213,7 @@ public sealed partial class Service
 
     private async Task RequireSpecialistAsync(Guid accountId, CancellationToken cancellationToken, string? errorMessage = null)
     {
-        if (!await _db.Employees.AnyAsync(employee => employee.AccountId == accountId &&
-            employee.Role == EmployeeRole.TRANSPORT_SPECIALIST && employee.IsActive && !employee.IsDeleted &&
-            !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE && employee.Account.AccountType == AccountType.EMPLOYEE, cancellationToken))
+        if (!await _db.Employees.Active().AnyAsync(employee => employee.AccountId == accountId && employee.Role == EmployeeRole.TRANSPORT_SPECIALIST && employee.Account.AccountType == AccountType.EMPLOYEE, cancellationToken))
             throw new ForbiddenException(errorMessage ?? "Only an active Transport Specialist can manage ComplianceDossiers.");
     }
 

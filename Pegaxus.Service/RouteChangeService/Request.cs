@@ -1,4 +1,3 @@
-using System.Text.Json.Serialization;
 using Pegaxus.Repository.Entities;
 
 namespace Pegaxus.Service.RouteChangeService;

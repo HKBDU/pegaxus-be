@@ -1,7 +1,5 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Pegaxus.Service.Models;
 using Pegaxus.Service.Exceptions;
 
 using AccountService = Pegaxus.Service.AccountService;
@@ -11,7 +9,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/accounts")]
-public sealed class AccountsController : ControllerBase
+public sealed class AccountsController : ApiControllerBase
 {
     private readonly AccountService.IService _service;
 
@@ -30,24 +28,11 @@ public sealed class AccountsController : ControllerBase
     [HttpGet("me")]
     public async Task<IActionResult> GetCurrentProfile(CancellationToken cancellationToken)
     {
-        var accountIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-
-        if (!Guid.TryParse(accountIdValue, out var accountId))
-            return Unauthorized(ResponseBuilder.ErrorResponse(
-                null,
-                "The authenticated account identifier is invalid",
-                errorCode: "UNAUTHORIZED",
-                code: StatusCodes.Status401Unauthorized,
-                traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
 
         var response = await _service.GetCurrentProfileAsync(accountId, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Profile retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Profile retrieved successfully");
     }
 
     /// <summary>
@@ -62,24 +47,11 @@ public sealed class AccountsController : ControllerBase
     [HttpPatch("me")]
     public async Task<IActionResult> UpdateCurrentProfile([FromForm] AccountService.Request.UpdateProfileRequest request, CancellationToken cancellationToken)
     {
-        var accountIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-
-        if (!Guid.TryParse(accountIdValue, out var accountId))
-            return Unauthorized(ResponseBuilder.ErrorResponse(
-                null,
-                "The authenticated account identifier is invalid",
-                errorCode: "UNAUTHORIZED",
-                code: StatusCodes.Status401Unauthorized,
-                traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
 
         var response = await _service.UpdateProfileAsync(accountId, request, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Profile updated successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Profile updated successfully");
     }
 
     /// <summary>
@@ -94,23 +66,10 @@ public sealed class AccountsController : ControllerBase
     [HttpPut("me/password")]
     public async Task<IActionResult> ChangePassword(AccountService.Request.ChangePasswordRequest request, CancellationToken cancellationToken)
     {
-        var accountIdValue = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-
-        if (!Guid.TryParse(accountIdValue, out var accountId))
-            return Unauthorized(ResponseBuilder.ErrorResponse(
-                null,
-                "The authenticated account identifier is invalid",
-                errorCode: "UNAUTHORIZED",
-                code: StatusCodes.Status401Unauthorized,
-                traceId: HttpContext.TraceIdentifier));
+        var accountId = AccountId;
 
         await _service.ChangePasswordAsync(accountId, request, cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            null,
-            "Change password successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(null, "Change password successfully");
     }
 }

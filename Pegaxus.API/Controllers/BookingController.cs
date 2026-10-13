@@ -1,12 +1,11 @@
-using System.Security.Claims;
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
-using Pegaxus.API.Hubs;
 using Pegaxus.API.Extensions;
+using Pegaxus.API.Hubs;
+using Pegaxus.API.Models;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
 
 using BookingService = Pegaxus.Service.BookingService;
 using InvoiceService = Pegaxus.Service.InvoiceService;
@@ -16,7 +15,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/bookings")]
-public class BookingController : ControllerBase
+public class BookingController : ApiControllerBase
 {
     private readonly BookingService.IService _service;
 
@@ -45,9 +44,8 @@ public class BookingController : ControllerBase
         [FromQuery] InvoiceService.Request.SuggestionRequest request,
         [FromServices] InvoiceService.IService invoiceService, CancellationToken cancellationToken)
     {
-        var response = await invoiceService.GetSuggestionAsync(GetAccountId(), bookingId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Invoice precheck retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        var response = await invoiceService.GetSuggestionAsync(AccountId, bookingId, request, cancellationToken);
+        return Success(response, "Invoice precheck retrieved successfully");
     }
 
     /// <summary>
@@ -69,9 +67,8 @@ public class BookingController : ControllerBase
     public async Task<IActionResult> CreateInvoice(Guid bookingId, [FromBody] InvoiceService.Request.CreateRequest request,
         [FromServices] InvoiceService.IService invoiceService, CancellationToken cancellationToken)
     {
-        var response = await invoiceService.CreateAsync(GetAccountId(), bookingId, request, cancellationToken);
-        return StatusCode(StatusCodes.Status201Created, ResponseBuilder.SuccessResponse(response,
-            "Invoice created successfully", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+        var response = await invoiceService.CreateAsync(AccountId, bookingId, request, cancellationToken);
+        return SuccessCreated(response, "Invoice created successfully");
     }
 
     /// <summary>
@@ -98,7 +95,7 @@ public class BookingController : ControllerBase
     {
         var error = await ValidateRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
-        var response = await _service.NegotiateAsync(GetAccountId(), bookingId, request, cancellationToken);
+        var response = await _service.NegotiateAsync(AccountId, bookingId, request, cancellationToken);
         try
         {
             await hub.Clients.All.SendAsync("BookingStatusChanged", response, CancellationToken.None);
@@ -108,8 +105,7 @@ public class BookingController : ControllerBase
             // The status change and durable notifications are already committed.
             logger.LogWarning(exception, "Unable to broadcast negotiated status for booking {BookingId}", bookingId);
         }
-        return Ok(ResponseBuilder.SuccessResponse(response, "Booking status changed; dossier operations suspended.",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Booking status changed; dossier operations suspended.");
     }
 
     /// <summary>
@@ -127,11 +123,8 @@ public class BookingController : ControllerBase
         [FromQuery] BookingService.Request.BookingListRequest request,
         CancellationToken cancellationToken)
     {
-        var response = await _service.GetListAsync(GetAccountId(), request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Bookings retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        var response = await _service.GetListAsync(AccountId, request, cancellationToken);
+        return Success(response, "Bookings retrieved successfully");
     }
 
     /// <summary>
@@ -149,11 +142,8 @@ public class BookingController : ControllerBase
         [FromQuery] BookingService.Request.ApprovedBookingListRequest request,
         CancellationToken cancellationToken)
     {
-        var response = await _service.GetApprovedListAsync(GetAccountId(), request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Approved bookings retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        var response = await _service.GetApprovedListAsync(AccountId, request, cancellationToken);
+        return Success(response, "Approved bookings retrieved successfully");
     }
 
     /// <summary>
@@ -166,11 +156,8 @@ public class BookingController : ControllerBase
     [Authorize(Policy = JwtExtensions.LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> GetApproved(Guid bookingId, CancellationToken cancellationToken)
     {
-        var response = await _service.GetApprovedAsync(GetAccountId(), bookingId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Approved booking retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        var response = await _service.GetApprovedAsync(AccountId, bookingId, cancellationToken);
+        return Success(response, "Approved booking retrieved successfully");
     }
 
     /// <summary>
@@ -183,8 +170,8 @@ public class BookingController : ControllerBase
     [Authorize(Policy = JwtExtensions.BookingAssignmentViewerPolicy)]
     public async Task<IActionResult> GetAssignments(Guid bookingId, CancellationToken cancellationToken)
     {
-        var response = await _service.GetAssignmentsAsync(GetAccountId(), bookingId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Booking assignments retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        var response = await _service.GetAssignmentsAsync(AccountId, bookingId, cancellationToken);
+        return Success(response, "Booking assignments retrieved successfully");
     }
 
     /// <summary>
@@ -199,8 +186,8 @@ public class BookingController : ControllerBase
     public async Task<IActionResult> AssignEmployee(Guid bookingId, [FromBody] BookingService.Request.AssignBookingEmployeeRequest request,
         CancellationToken cancellationToken)
     {
-        var response = await _service.AssignEmployeeAsync(GetAccountId(), bookingId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Booking employee assigned successfully", traceId: HttpContext.TraceIdentifier));
+        var response = await _service.AssignEmployeeAsync(AccountId, bookingId, request, cancellationToken);
+        return Success(response, "Booking employee assigned successfully");
     }
 
     /// <summary>
@@ -214,8 +201,8 @@ public class BookingController : ControllerBase
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> RevokeAssignment(Guid bookingId, Guid employeeId, CancellationToken cancellationToken)
     {
-        var response = await _service.RevokeAssignmentAsync(GetAccountId(), bookingId, employeeId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Booking employee assignment revoked successfully", traceId: HttpContext.TraceIdentifier));
+        var response = await _service.RevokeAssignmentAsync(AccountId, bookingId, employeeId, cancellationToken);
+        return Success(response, "Booking employee assignment revoked successfully");
     }
 
     /// <summary>
@@ -230,11 +217,8 @@ public class BookingController : ControllerBase
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
     public async Task<IActionResult> Get(Guid bookingId, CancellationToken cancellationToken)
     {
-        var response = await _service.GetAsync(GetAccountId(), bookingId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Booking retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        var response = await _service.GetAsync(AccountId, bookingId, cancellationToken);
+        return Success(response, "Booking retrieved successfully");
     }
 
     /// <summary>
@@ -249,11 +233,8 @@ public class BookingController : ControllerBase
     [Authorize(Policy = JwtExtensions.CustomerOrEmployeePolicy)]
     public async Task<IActionResult> GetHistories(Guid bookingId, CancellationToken cancellationToken)
     {
-        var response = await _service.GetHistoriesAsync(GetAccountId(), bookingId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Booking history retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        var response = await _service.GetHistoriesAsync(AccountId, bookingId, cancellationToken);
+        return Success(response, "Booking history retrieved successfully");
     }
 
     /// <summary>
@@ -274,12 +255,8 @@ public class BookingController : ControllerBase
         BookingService.Request.AddHorseRequest request,
         CancellationToken cancellationToken)
     {
-        await _service.AddHorseIntoBookingAsync(GetAccountId(), bookingId, request, cancellationToken);
-        return StatusCode(201, ResponseBuilder.SuccessResponse(
-            null,
-            "Horse added to booking successfully",
-            201,
-            HttpContext.TraceIdentifier));
+        await _service.AddHorseIntoBookingAsync(AccountId, bookingId, request, cancellationToken);
+        return SuccessCreated(null, "Horse added to booking successfully");
     }
 
     /// <summary>
@@ -304,16 +281,13 @@ public class BookingController : ControllerBase
         CancellationToken cancellationToken)
     {
         await _service.UpdateHorseNotesAsync(
-            GetAccountId(),
+            AccountId,
             bookingId,
             horseId,
             request,
             cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            null,
-            "Horse handling notes updated successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(null, "Horse handling notes updated successfully");
     }
 
     /// <summary>
@@ -335,15 +309,12 @@ public class BookingController : ControllerBase
         CancellationToken cancellationToken)
     {
         await _service.RemoveHorseAsync(
-            GetAccountId(),
+            AccountId,
             bookingId,
             horseId,
             cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            null,
-            "Horse removed from booking successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(null, "Horse removed from booking successfully");
     }
 
     /// <summary>
@@ -367,15 +338,12 @@ public class BookingController : ControllerBase
         CancellationToken cancellationToken)
     {
         await _service.ChangeStatusAsync(
-            GetAccountId(),
+            AccountId,
             bookingId,
             request,
             cancellationToken);
 
-        return Ok(ResponseBuilder.SuccessResponse(
-            null,
-            "Booking status updated successfully",
-            traceId: HttpContext.TraceIdentifier));
+        return Success(null, "Booking status updated successfully");
     }
 
     /// <summary>
@@ -398,7 +366,7 @@ public class BookingController : ControllerBase
     {
         var error = await ValidateRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
-        var response = await _service.CreateAsync(GetAccountId(), request, cancellationToken);
+        var response = await _service.CreateAsync(AccountId, request, cancellationToken);
         return StatusCode(201, ResponseBuilder.SuccessResponse(response, "Booking created successfully", 201));
     }
 
@@ -425,7 +393,7 @@ public class BookingController : ControllerBase
     {
         var error = await ValidateRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
-        var response = await _service.UpdateAsync(GetAccountId(), bookingId, request, cancellationToken);
+        var response = await _service.UpdateAsync(AccountId, bookingId, request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(response, "Booking updated successfully"));
     }
 
@@ -451,7 +419,7 @@ public class BookingController : ControllerBase
     {
         var error = await ValidateRequestAsync(request, validator, cancellationToken, "REASON_REQUIRED", "Reason is required");
         if (error is not null) return error;
-        await _service.CancelAsync(GetAccountId(), bookingId, request, cancellationToken);
+        await _service.CancelAsync(AccountId, bookingId, request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(null, "Booking cancelled successfully"));
     }
 
@@ -470,7 +438,7 @@ public class BookingController : ControllerBase
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Approve(Guid bookingId, CancellationToken cancellationToken)
     {
-        var response = await _service.ApproveAsync(GetAccountId(), bookingId, cancellationToken);
+        var response = await _service.ApproveAsync(AccountId, bookingId, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(response, "Booking approved successfully"));
     }
 
@@ -496,15 +464,8 @@ public class BookingController : ControllerBase
     {
         var error = await ValidateRequestAsync(request, validator, cancellationToken, "REASON_REQUIRED", "Reason is required");
         if (error is not null) return error;
-        await _service.RejectAsync(GetAccountId(), bookingId, request, cancellationToken);
+        await _service.RejectAsync(AccountId, bookingId, request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(null, "Booking rejected successfully"));
-    }
-
-    private Guid GetAccountId()
-    {
-        if (Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var accountId))
-            return accountId;
-        throw new UnauthorizedException("The authentication session is invalid or has expired");
     }
 
     private async Task<BadRequestObjectResult?> ValidateRequestAsync<T>(

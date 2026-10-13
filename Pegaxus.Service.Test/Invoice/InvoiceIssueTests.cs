@@ -6,6 +6,7 @@ using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.InvoiceService.Validator;
 using Pegaxus.Service.NotificationService;
 using Pegaxus.Service.OutboxService;
+
 using IssuanceService = Pegaxus.Service.InvoiceService.Service;
 using Request = Pegaxus.Service.InvoiceService.Request;
 

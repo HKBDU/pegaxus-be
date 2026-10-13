@@ -1,9 +1,8 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
+
 using Personnel = Pegaxus.Service.PersonnelAssignmentService;
 
 namespace Pegaxus.API.Controllers;
@@ -11,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1")]
-public sealed class PersonnelAssignmentsController(Personnel.IService service) : ControllerBase
+public sealed class PersonnelAssignmentsController(Personnel.IService service) : ApiControllerBase
 {
     /// <summary>Get transport plan personnel assignments.</summary>
     /// <remarks>Logistics Managers and assigned personnel can view phase 1 and phase 2. Phase 2 opens for a confirmed or active PRIMARY route.</remarks>
@@ -21,8 +20,7 @@ public sealed class PersonnelAssignmentsController(Personnel.IService service) :
     [HttpGet("transport-plans/{transportPlanId:guid}/assignments")]
     [Authorize(Policy = JwtExtensions.PersonnelAssignmentViewerPolicy)]
     public async Task<IActionResult> Get(Guid transportPlanId, CancellationToken cancellationToken)
-        => Ok(ResponseBuilder.SuccessResponse(await service.GetAsync(transportPlanId, AccountId(), cancellationToken),
-            "Assignments retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        => Success(await service.GetAsync(transportPlanId, AccountId, cancellationToken), "Assignments retrieved successfully");
 
     /// <summary>Assign phase 2 route personnel.</summary>
     /// <remarks>Only Logistics Managers assign Driver and Escort to internal segments of a confirmed PRIMARY route. Provider segments use existing outsourcing. Schedule conflicts fail atomically.</remarks>
@@ -33,7 +31,7 @@ public sealed class PersonnelAssignmentsController(Personnel.IService service) :
     [HttpPost("route-plans/{routePlanId:guid}/personnel")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Assign(Guid routePlanId, [FromBody] Personnel.Request.AssignRequest request, CancellationToken cancellationToken)
-        => StatusCode(201, ResponseBuilder.SuccessResponse(await service.AssignAsync(routePlanId, request, AccountId(), cancellationToken),
+        => StatusCode(201, ResponseBuilder.SuccessResponse(await service.AssignAsync(routePlanId, request, AccountId, cancellationToken),
             "Phase 2 personnel assigned successfully", code: 201, traceId: HttpContext.TraceIdentifier));
 
     /// <summary>Replace a segment Driver or Escort.</summary>
@@ -46,8 +44,7 @@ public sealed class PersonnelAssignmentsController(Personnel.IService service) :
     [HttpPut("route-plans/{routePlanId:guid}/segments/{routePlanRouteId:guid}/personnel")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Replace(Guid routePlanId, Guid routePlanRouteId, [FromBody] Personnel.Request.ReplaceRequest request, CancellationToken cancellationToken)
-        => Ok(ResponseBuilder.SuccessResponse(await service.ReplaceAsync(routePlanId, routePlanRouteId, request, AccountId(), cancellationToken),
-            "Segment personnel updated successfully", traceId: HttpContext.TraceIdentifier));
+        => Success(await service.ReplaceAsync(routePlanId, routePlanRouteId, request, AccountId, cancellationToken), "Segment personnel updated successfully");
 
     /// <summary>List active employees available for assignment.</summary>
     /// <param name="request">Role, schedule, search and pagination.</param>
@@ -56,12 +53,6 @@ public sealed class PersonnelAssignmentsController(Personnel.IService service) :
     [HttpGet("employees/assignable")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> GetAssignable([FromQuery] Personnel.Request.AssignableRequest request, CancellationToken cancellationToken)
-        => Ok(ResponseBuilder.SuccessResponse(await service.GetAssignableAsync(request, AccountId(), cancellationToken),
-            "Assignable employees retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        => Success(await service.GetAssignableAsync(request, AccountId, cancellationToken), "Assignable employees retrieved successfully");
 
-    private Guid AccountId()
-    {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub") ?? User.FindFirstValue("accountId");
-        return Guid.TryParse(value, out var id) ? id : throw new UnauthorizedException("The authenticated account identifier is invalid");
-    }
 }

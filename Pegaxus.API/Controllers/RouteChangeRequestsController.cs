@@ -1,9 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
 using Pegaxus.Service.RouteChangeService;
 
 namespace Pegaxus.API.Controllers;
@@ -11,7 +9,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Route("api/v1/route-change-requests")]
 [Authorize(Policy = JwtExtensions.LogisticsManagerOrFleetRouteCoordinatorPolicy)]
-public sealed class RouteChangeRequestsController(IService service) : ControllerBase
+public sealed class RouteChangeRequestsController(IService service) : ApiControllerBase
 {
     /// <summary>Request activation of a confirmed BACKUP route.</summary>
     /// <param name="routePlanId">The BACKUP route plan UUID.</param>
@@ -21,8 +19,7 @@ public sealed class RouteChangeRequestsController(IService service) : Controller
     [HttpPost("/api/v1/route-plans/{routePlanId:guid}/change-request")]
     [Authorize(Policy = JwtExtensions.FleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> Create(Guid routePlanId, [FromBody] Request.CreateRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.CreateAsync(routePlanId, AccountId(), request, cancellationToken),
-            "Route change request sent successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.CreateAsync(routePlanId, AccountId, request, cancellationToken), "Route change request sent successfully");
 
     /// <summary>Approve or reject a BACKUP or RETURN route.</summary>
     /// <param name="routePlanId">The route plan UUID.</param>
@@ -32,8 +29,7 @@ public sealed class RouteChangeRequestsController(IService service) : Controller
     [HttpPost("/api/v1/route-plans/{routePlanId:guid}/change-decision")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Decide(Guid routePlanId, [FromBody] Request.DecisionRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.DecideAsync(routePlanId, AccountId(), request, cancellationToken),
-            request.Decision == "APPROVE" ? "Route change approved successfully" : "Route change rejected successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.DecideAsync(routePlanId, AccountId, request, cancellationToken), request.Decision == "APPROVE" ? "Route change approved successfully" : "Route change rejected successfully");
 
     /// <summary>Activate a legally confirmed RETURN route.</summary>
     /// <param name="routePlanId">The RETURN route plan UUID.</param>
@@ -43,8 +39,7 @@ public sealed class RouteChangeRequestsController(IService service) : Controller
     [HttpPost("/api/v1/route-plans/{routePlanId:guid}/return-activation")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> ActivateReturn(Guid routePlanId, [FromBody] Request.ActivationRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.ActivateReturnAsync(routePlanId, AccountId(), request, cancellationToken),
-            "Return route activated successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.ActivateReturnAsync(routePlanId, AccountId, request, cancellationToken), "Return route activated successfully");
 
     /// <summary>Notify PRIMARY drivers about a confirmed or active RETURN route.</summary>
     /// <param name="routePlanId">The RETURN route plan UUID.</param>
@@ -54,9 +49,6 @@ public sealed class RouteChangeRequestsController(IService service) : Controller
     [HttpPost("/api/v1/route-plans/{routePlanId:guid}/driver-notice")]
     [Authorize(Policy = JwtExtensions.FleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> NotifyDrivers(Guid routePlanId, [FromBody] Request.DriverNoticeRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.NotifyDriversAsync(routePlanId, AccountId(), request, cancellationToken),
-            "Driver notified successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.NotifyDriversAsync(routePlanId, AccountId, request, cancellationToken), "Driver notified successfully");
 
-    private Guid AccountId() => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.FindFirstValue("sub"), out var id)
-        ? id : throw new UnauthorizedException("The authentication session is invalid or has expired.");
 }

@@ -14,7 +14,9 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.OutboxService;
-using MailService = Pegaxus.Service.MailService;
+
+using static Pegaxus.Service.Common.DbTime;
+
 using JwtService = Pegaxus.Service.JwtService;
 using Claim = System.Security.Claims.Claim;
 using AppException = Pegaxus.Service.Exceptions.Exceptions;
@@ -658,7 +660,6 @@ public class Service : IService
 
     private static AppException InvalidRefreshToken() =>
         new("Session has expired. Please sign in again", 401, "REFRESH_TOKEN_INVALID");
-    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
     private async Task<string> GenerateCustomerCodeAsync(CancellationToken cancellationToken)
     {

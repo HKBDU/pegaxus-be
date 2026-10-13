@@ -7,6 +7,7 @@ using Npgsql.NameTranslation;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+
 using AppException = Pegaxus.Service.Exceptions.Exceptions;
 
 namespace Pegaxus.Service.Test;
