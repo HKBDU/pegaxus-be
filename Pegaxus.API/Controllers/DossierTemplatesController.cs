@@ -27,7 +27,7 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
     public async Task<IActionResult> GetList([FromQuery] DossierTemplateService.Request.ListRequest request,
         [FromServices] IValidator<DossierTemplateService.Request.ListRequest> validator, CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateRequestAsync(request, validator, cancellationToken, traceId: HttpContext.TraceIdentifier);
         if (error is not null) return error;
         return Success(await service.GetListAsync(request, cancellationToken), "DossierTemplates retrieved successfully.");
     }
@@ -58,7 +58,7 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
     public async Task<IActionResult> Create([FromBody] DossierTemplateService.Request.SaveRequest request,
         [FromServices] IValidator<DossierTemplateService.Request.SaveRequest> validator, CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateRequestAsync(request, validator, cancellationToken, traceId: HttpContext.TraceIdentifier);
         if (error is not null) return error;
         var response = await service.CreateAsync(request, cancellationToken);
         return CreatedAtAction(nameof(Get), new { templateId = response.DossierTemplateId },
@@ -82,7 +82,7 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
     public async Task<IActionResult> Update(Guid templateId, [FromBody] DossierTemplateService.Request.SaveRequest request,
         [FromServices] IValidator<DossierTemplateService.Request.SaveRequest> validator, CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateRequestAsync(request, validator, cancellationToken, traceId: HttpContext.TraceIdentifier);
         if (error is not null) return error;
         return Success(await service.UpdateAsync(templateId, request, cancellationToken), "DossierTemplate saved successfully.");
     }
@@ -102,7 +102,7 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
     public async Task<IActionResult> ChangeStatus(Guid templateId, [FromBody] DossierTemplateService.Request.ChangeStatusRequest request,
         [FromServices] IValidator<DossierTemplateService.Request.ChangeStatusRequest> validator, CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateRequestAsync(request, validator, cancellationToken, traceId: HttpContext.TraceIdentifier);
         if (error is not null) return error;
         return Success(await service.ChangeStatusAsync(templateId, request, cancellationToken), "DossierTemplate status updated successfully.");
     }
@@ -123,17 +123,5 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
         var accountId = AccountId;
         await service.DeleteAsync(templateId, accountId, cancellationToken);
         return Success(null, "DossierTemplate deleted successfully.");
-    }
-
-    private async Task<IActionResult?> ValidateRequestAsync<T>(T request, IValidator<T> validator, CancellationToken cancellationToken)
-    {
-        var result = await validator.ValidateAsync(request, cancellationToken);
-        if (result.IsValid) return null;
-        var errors = result.Errors.Select(error => new
-        {
-            field = string.IsNullOrEmpty(error.PropertyName) ? "$" : char.ToLowerInvariant(error.PropertyName[0]) + error.PropertyName[1..],
-            message = error.ErrorMessage
-        });
-        return BadRequest(ResponseBuilder.ErrorResponse(errors, "The request data is invalid", traceId: HttpContext.TraceIdentifier));
     }
 }
