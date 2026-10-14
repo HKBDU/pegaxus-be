@@ -106,6 +106,10 @@ public class RouteChangePostgresTests
 
         var migration = new Pegaxus.Repository.Migrations.EmergencyRouteChanges();
         var generator = db.GetService<IMigrationsSqlGenerator>();
+        // The database is fully migrated, so RouteChangeRequest is already gone; restore it so that
+        // EmergencyRouteChanges.Down starts from the state it was written for.
+        foreach (var command in generator.Generate(new Pegaxus.Repository.Migrations.DropRouteChangeRequest().DownOperations))
+            await db.Database.ExecuteSqlRawAsync(command.CommandText);
         foreach (var operations in new[] { migration.DownOperations, migration.UpOperations })
         {
             foreach (var command in generator.Generate(operations))
