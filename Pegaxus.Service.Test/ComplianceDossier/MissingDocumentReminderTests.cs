@@ -366,7 +366,7 @@ public class MissingDocumentReminderTests
         public override DateTimeOffset GetUtcNow() => Now;
     }
 
-    private sealed class RecordingMail : Mail.IService
+    private sealed class RecordingMail : Mail.IMailService
     {
         public List<Mail.MailContent> Sent { get; } = [];
         public bool Fail { get; set; }

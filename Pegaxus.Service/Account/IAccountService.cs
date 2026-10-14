@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.AccountService;
 
-public interface IService
+public interface IAccountService
 {
     Task<Response.ProfileResponse> GetCurrentProfileAsync(Guid accountId, CancellationToken cancellationToken = default);
 

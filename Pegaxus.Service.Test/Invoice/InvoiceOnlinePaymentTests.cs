@@ -14,7 +14,7 @@ public class InvoiceOnlinePaymentTests
 {
     internal static readonly DateTime Now = new(2026, 11, 10, 4, 0, 0);
     internal static readonly NullLogger<Invoices.Service> Logger = NullLogger<Invoices.Service>.Instance;
-    internal sealed class Gateway : Pegaxus.Service.PaymentGatewayService.IService
+    internal sealed class Gateway : Pegaxus.Service.PaymentGatewayService.IPaymentGatewayService
     {
         internal int Calls;
         internal string? ReceiptCode;
@@ -36,7 +36,7 @@ public class InvoiceOnlinePaymentTests
             });
         }
     }
-    internal static Invoices.Service CreateService(AppDbContext db, Pegaxus.Service.PaymentGatewayService.IService gateway) =>
+    internal static Invoices.Service CreateService(AppDbContext db, Pegaxus.Service.PaymentGatewayService.IPaymentGatewayService gateway) =>
         InvoicePaymentTests.CreateService(db, gateway: gateway);
 
     internal static async Task<(Account Customer, Account Manager, Invoice Invoice)> SeedAsync(AppDbContext db)

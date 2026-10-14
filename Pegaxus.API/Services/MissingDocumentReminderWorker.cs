@@ -12,7 +12,7 @@ public sealed class MissingDocumentReminderWorker(IServiceScopeFactory scopes, I
             try
             {
                 await using var scope = scopes.CreateAsyncScope();
-                var service = scope.ServiceProvider.GetRequiredService<IService>();
+                var service = scope.ServiceProvider.GetRequiredService<IComplianceDossierService>();
                 await service.DeliverPendingMissingDocumentRemindersAsync(stoppingToken);
                 await service.QueueAutomaticMissingDocumentRemindersAsync(stoppingToken);
                 await service.DeliverPendingMissingDocumentRemindersAsync(stoppingToken);

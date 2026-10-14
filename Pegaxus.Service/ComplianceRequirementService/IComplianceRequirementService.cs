@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.ComplianceRequirementService;
 
-public interface IService
+public interface IComplianceRequirementService
 {
     Task<Response.ListResponse> GetListAsync(Request.ListRequest request, CancellationToken cancellationToken = default);
     Task<Response.DetailResponse> GetAsync(Guid id, CancellationToken cancellationToken = default);

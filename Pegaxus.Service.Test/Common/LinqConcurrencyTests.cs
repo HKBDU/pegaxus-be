@@ -116,7 +116,7 @@ public class LinqConcurrencyTests : IAsyncLifetime
         var mail = new RecordingMail();
         await using var services = new ServiceCollection()
             .AddScoped(_ => CreateDb())
-            .AddSingleton<Pegaxus.Service.MailService.IService>(mail)
+            .AddSingleton<Pegaxus.Service.MailService.IMailService>(mail)
             .BuildServiceProvider();
         using var first = new TransactionalOutboxWorker(services.GetRequiredService<IServiceScopeFactory>(), NullLogger<TransactionalOutboxWorker>.Instance);
         using var second = new TransactionalOutboxWorker(services.GetRequiredService<IServiceScopeFactory>(), NullLogger<TransactionalOutboxWorker>.Instance);
@@ -198,7 +198,7 @@ public class LinqConcurrencyTests : IAsyncLifetime
         public string TranslateMemberName(string name) => name;
     }
 
-    private sealed class RecordingMail : Pegaxus.Service.MailService.IService
+    private sealed class RecordingMail : Pegaxus.Service.MailService.IMailService
     {
         public ConcurrentDictionary<string, int> Deliveries { get; } = new();
         public Task SendMail(MailContent content, CancellationToken cancellationToken = default)

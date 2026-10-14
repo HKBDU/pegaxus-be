@@ -12,7 +12,7 @@ using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.NotificationService;
 
-public sealed class Service : IService
+public sealed class Service : INotificationService
 {
     private readonly AppDbContext _db;
     private readonly INotificationRealtimeService _realtimeService;

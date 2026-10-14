@@ -28,7 +28,7 @@ public sealed partial class BookingController
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> GetInvoiceSuggestion(Guid bookingId,
         [FromQuery] InvoiceService.Request.SuggestionRequest request,
-        [FromServices] InvoiceService.IService invoiceService, CancellationToken cancellationToken)
+        [FromServices] InvoiceService.IInvoiceService invoiceService, CancellationToken cancellationToken)
     {
         var response = await invoiceService.GetSuggestionAsync(AccountId, bookingId, request, cancellationToken);
         return Success(response, "Invoice precheck retrieved successfully");
@@ -51,7 +51,7 @@ public sealed partial class BookingController
     [HttpPost("{bookingId:guid}/invoices")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> CreateInvoice(Guid bookingId, [FromBody] InvoiceService.Request.CreateRequest request,
-        [FromServices] InvoiceService.IService invoiceService, CancellationToken cancellationToken)
+        [FromServices] InvoiceService.IInvoiceService invoiceService, CancellationToken cancellationToken)
     {
         var response = await invoiceService.CreateAsync(AccountId, bookingId, request, cancellationToken);
         return SuccessCreated(response, "Invoice created successfully");

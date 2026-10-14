@@ -78,7 +78,7 @@ pegaxus-be/
 │   └── Program.cs                  # Application bootstrap entry point
 ├── Pegaxus.Service/                # [Business Logic Layer] Application use cases
 │   ├── <Module>/                   # Feature-based folders (Booking, Transport, Dossier)
-│   │   ├── IService.cs             # Service contract interface
+│   │   ├── I<Module>Service.cs     # Service contract interface
 │   │   ├── Service.cs (+ partials) # Business logic, split by use case (Queries, Lifecycle, ...)
 │   │   ├── Request.cs / Response.cs# Inbound / outbound DTOs
 │   │   └── Validations/            # FluentValidation rules

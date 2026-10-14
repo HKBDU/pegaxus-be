@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.RouteService;
 
-public interface IService
+public interface IRouteService
 {
     Task<Response.ListResponse> GetListAsync(Request.ListRequest request, CancellationToken cancellationToken = default);
     Task<Response.DetailResponse> GetAsync(Guid routeId, CancellationToken cancellationToken = default);

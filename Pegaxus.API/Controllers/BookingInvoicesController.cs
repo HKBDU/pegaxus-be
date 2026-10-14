@@ -10,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize(Policy = JwtExtensions.CustomerOrLogisticsManagerPolicy)]
 [Route("api/v1/bookings/{bookingId}/invoices")]
-public sealed class BookingInvoicesController(InvoiceService.IService service) : ApiControllerBase
+public sealed class BookingInvoicesController(InvoiceService.IInvoiceService service) : ApiControllerBase
 {
     /// <summary>
     /// List invoices for a booking.

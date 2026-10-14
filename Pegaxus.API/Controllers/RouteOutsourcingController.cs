@@ -9,7 +9,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
 [Route("api/v1/route-plans/{routePlanId:guid}/segments/{routePlanRouteId:guid}/outsourcing")]
-public sealed class RouteOutsourcingController(Outsourcing.IService service) : ApiControllerBase
+public sealed class RouteOutsourcingController(Outsourcing.IRouteOutsourcingService service) : ApiControllerBase
 {
     /// <summary>
     /// Assign or remove outsourced transport for a segment.

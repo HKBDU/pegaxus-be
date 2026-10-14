@@ -10,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize(Policy = JwtExtensions.CustomerOrLogisticsManagerPolicy)]
 [Route("api/v1/invoices")]
-public sealed class InvoicesController(InvoiceService.IService service) : ApiControllerBase
+public sealed class InvoicesController(InvoiceService.IInvoiceService service) : ApiControllerBase
 {
     /// <summary>Initiate a full online payment for an invoice.</summary>
     /// <remarks>Customers can pay only their own issued DEPOSIT, FINAL or SUPPLEMENTARY invoices in ISSUED or OVERDUE status. Creates a PENDING receipt and replaces older pending receipts. SePay supports whole VND amounts: submit checkoutFields in their returned order as a browser POST to paymentUrl; a GET redirect alone cannot start checkout. Configuration and signing failures roll back receipt changes. Payment confirmation belongs to the webhook.</remarks>

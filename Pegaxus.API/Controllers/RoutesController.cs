@@ -10,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Route("api/v1/routes")]
 [Authorize(Policy = JwtExtensions.LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy)]
-public sealed class RoutesController(Routes.IService service) : ApiControllerBase
+public sealed class RoutesController(Routes.IRouteService service) : ApiControllerBase
 {
     /// <summary>List active master routes.</summary>
     /// <param name="request">Location, mode, search, and pagination filters.</param>

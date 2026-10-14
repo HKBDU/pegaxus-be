@@ -17,8 +17,8 @@ using Pegaxus.Service.OutboxService;
 
 namespace Pegaxus.Service.PaymentService;
 
-public sealed class Service(AppDbContext db, NotificationService.IService notifications,
-    IOptions<SePayWebhookOptions> options, TimeProvider clock, ILogger<Service> logger) : IService
+public sealed class Service(AppDbContext db, NotificationService.INotificationService notifications,
+    IOptions<SePayWebhookOptions> options, TimeProvider clock, ILogger<Service> logger) : IPaymentService
 {
     public async Task HandleWebhookAsync(Request.WebhookRequest request, string? secretKey,
         CancellationToken cancellationToken = default)

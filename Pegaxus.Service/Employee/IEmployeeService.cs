@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.EmployeeService;
 
-public interface IService
+public interface IEmployeeService
 {
     Task<Response.EmployeeListResponse> GetListAsync(Request.EmployeeListRequest request, CancellationToken cancellationToken = default);
     Task<byte[]> ExportAsync(Request.EmployeeListRequest request, CancellationToken cancellationToken = default);

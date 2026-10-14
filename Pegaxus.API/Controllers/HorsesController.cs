@@ -12,9 +12,9 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/horses")]
 public sealed class HorsesController : ApiControllerBase
 {
-    private readonly HorseService.IService _service;
+    private readonly HorseService.IHorseService _service;
 
-    public HorsesController(HorseService.IService service)
+    public HorsesController(HorseService.IHorseService service)
     {
         _service = service;
     }

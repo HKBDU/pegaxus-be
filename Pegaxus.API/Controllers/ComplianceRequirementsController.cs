@@ -11,7 +11,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/compliance-requirements")]
-public sealed class ComplianceRequirementsController(Catalog.IService service) : ApiControllerBase
+public sealed class ComplianceRequirementsController(Catalog.IComplianceRequirementService service) : ApiControllerBase
 {
     /// <summary>
     /// List compliance requirements.

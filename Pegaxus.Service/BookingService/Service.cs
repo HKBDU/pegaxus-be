@@ -11,16 +11,16 @@ using BookingEntity = Pegaxus.Repository.Entities.Booking;
 
 namespace Pegaxus.Service.BookingService;
 
-public partial class Service : IService
+public partial class Service : IBookingService
 {
     private readonly AppDbContext _db;
-    private readonly MailService.IService _mailService;
-    private readonly NotificationService.IService _notificationService;
+    private readonly MailService.IMailService _mailService;
+    private readonly NotificationService.INotificationService _notificationService;
 
     public Service(
         AppDbContext db,
-        MailService.IService mailService,
-        NotificationService.IService notificationService)
+        MailService.IMailService mailService,
+        NotificationService.INotificationService notificationService)
     {
         _db = db;
         _mailService = mailService;

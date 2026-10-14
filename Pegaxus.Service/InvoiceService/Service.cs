@@ -12,12 +12,12 @@ using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.InvoiceService;
 
-public sealed partial class Service(AppDbContext db, PaymentGatewayService.IService gateway, ILogger<Service> logger,
+public sealed partial class Service(AppDbContext db, PaymentGatewayService.IPaymentGatewayService gateway, ILogger<Service> logger,
     TimeProvider clock, IValidator<Request.CreateRequest> validator,
     IValidator<Request.SuggestionRequest> suggestionValidator, IValidator<Request.UpdateRequest> updateValidator,
     IValidator<Request.ListRequest> listValidator, IValidator<Request.BookingListRequest> bookingListValidator,
     IValidator<Request.IssueRequest> issueValidator, IValidator<Request.RecordPaymentRequest> paymentValidator,
-    IValidator<Request.CancelRequest> cancelValidator, NotificationService.IService notifications) : IService
+    IValidator<Request.CancelRequest> cancelValidator, NotificationService.INotificationService notifications) : IInvoiceService
 {
     private const decimal MaxAmount = 9_999_999_999_999_999.99m;
 

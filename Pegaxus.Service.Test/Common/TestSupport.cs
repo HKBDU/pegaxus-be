@@ -142,7 +142,7 @@ internal static class TestSupport
 
     private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
-    internal sealed class RecordingMailService : MailService.IService
+    internal sealed class RecordingMailService : MailService.IMailService
     {
         internal int Calls { get; private set; }
 

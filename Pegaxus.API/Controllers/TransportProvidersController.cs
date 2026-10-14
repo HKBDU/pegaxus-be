@@ -10,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/transport-providers")]
-public sealed class TransportProvidersController(Providers.IService service) : ApiControllerBase
+public sealed class TransportProvidersController(Providers.ITransportProviderService service) : ApiControllerBase
 {
     /// <summary>
     /// List transport providers.

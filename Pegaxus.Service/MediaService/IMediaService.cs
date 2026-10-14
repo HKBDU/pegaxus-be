@@ -2,7 +2,7 @@
 
 namespace Pegaxus.Service.MediaService;
 
-public interface IService
+public interface IMediaService
 {
     public Task<string> UploadImageAsync(IFormFile file);
     Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file);

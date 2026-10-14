@@ -9,7 +9,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [AllowAnonymous]
 [Route("api/v1/payments")]
-public sealed class PaymentsController(PaymentService.IService service) : ApiControllerBase
+public sealed class PaymentsController(PaymentService.IPaymentService service) : ApiControllerBase
 {
     /// <summary>Process a SePay payment gateway IPN.</summary>
     /// <remarks>Configure SePay IPN authentication as SECRET_KEY. X-Secret-Key is required; JWT is not used.</remarks>

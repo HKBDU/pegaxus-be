@@ -20,7 +20,7 @@ namespace Pegaxus.Service.VehicleService;
 public sealed class Service(AppDbContext db, TimeProvider clock,
     IValidator<Request.ListRequest> listValidator, IValidator<Request.CreateRequest> createValidator,
     IValidator<Request.UpdateRequest> updateValidator, IValidator<Request.StatusRequest> statusValidator,
-    NotificationService.IService notifications, ILogger<Service> logger) : IService
+    NotificationService.INotificationService notifications, ILogger<Service> logger) : IVehicleService
 {
     public async Task<Response.ListResponse> GetListAsync(Request.ListRequest request, Guid accountId, CancellationToken cancellationToken = default)
     {

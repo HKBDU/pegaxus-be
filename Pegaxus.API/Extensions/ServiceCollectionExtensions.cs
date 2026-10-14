@@ -185,7 +185,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddAuthModule(this IServiceCollection services)
     {
         services.AddScoped<JwtService.IJwtService, JwtService.JwtServices>();
-        services.AddScoped<AuthService.IService, AuthService.Service>();
+        services.AddScoped<AuthService.IAuthService, AuthService.Service>();
         services.AddScoped<IValidator<AuthService.Request.LoginRequest>, AuthService.Validations.LoginRequestValidator>();
         services.AddScoped<IValidator<AuthService.Request.RegisterRequest>, AuthService.Validations.RegisterRequestValidator>();
         services.AddScoped<IValidator<AuthService.Request.ForgotPasswordRequest>, AuthService.Validations.ForgotPasswordRequestValidator>();
@@ -201,16 +201,16 @@ public static class ServiceCollectionExtensions
     /// <summary>Account profiles, horses and employees.</summary>
     public static IServiceCollection AddAccountsModule(this IServiceCollection services)
     {
-        services.AddScoped<AccountService.IService, AccountService.Service>();
-        services.AddScoped<HorseService.IService, HorseService.Service>();
-        services.AddScoped<EmployeeService.IService, EmployeeService.Service>();
+        services.AddScoped<AccountService.IAccountService, AccountService.Service>();
+        services.AddScoped<HorseService.IHorseService, HorseService.Service>();
+        services.AddScoped<EmployeeService.IEmployeeService, EmployeeService.Service>();
         return services;
     }
 
     /// <summary>Customer bookings and their lifecycle.</summary>
     public static IServiceCollection AddBookingModule(this IServiceCollection services)
     {
-        services.AddScoped<BookingService.IService, BookingService.Service>();
+        services.AddScoped<BookingService.IBookingService, BookingService.Service>();
         services.AddScoped<IValidator<BookingService.Request.CreateBookingRequest>, BookingService.Validations.CreateBookingRequestValidator>();
         services.AddScoped<IValidator<BookingService.Request.UpdateBookingRequest>, BookingService.Validations.UpdateBookingRequestValidator>();
         services.AddScoped<IValidator<BookingService.Request.CancelBookingRequest>, BookingService.Validations.CancelBookingRequestValidator>();
@@ -222,7 +222,7 @@ public static class ServiceCollectionExtensions
     /// <summary>Invoices, online payment checkout and the payment webhook.</summary>
     public static IServiceCollection AddInvoicingModule(this IServiceCollection services, IConfiguration configuration)
     {
-        services.AddScoped<Pegaxus.Service.InvoiceService.IService, Pegaxus.Service.InvoiceService.Service>();
+        services.AddScoped<Pegaxus.Service.InvoiceService.IInvoiceService, Pegaxus.Service.InvoiceService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.BookingListRequest>, Pegaxus.Service.InvoiceService.Validator.BookingListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.ListRequest>, Pegaxus.Service.InvoiceService.Validator.ListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.UpdateRequest>, Pegaxus.Service.InvoiceService.Validator.UpdateRequestValidator>();
@@ -230,9 +230,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.SuggestionRequest>, Pegaxus.Service.InvoiceService.Validator.SuggestionRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.IssueRequest>, Pegaxus.Service.InvoiceService.Validator.IssueRequestValidator>();
         services.Configure<Pegaxus.Service.PaymentService.SePayWebhookOptions>(configuration.GetSection("SePayWebhookOptions"));
-        services.AddScoped<Pegaxus.Service.PaymentService.IService, Pegaxus.Service.PaymentService.Service>();
+        services.AddScoped<Pegaxus.Service.PaymentService.IPaymentService, Pegaxus.Service.PaymentService.Service>();
         services.Configure<Pegaxus.Service.PaymentGatewayService.SePayOptions>(configuration.GetSection(nameof(Pegaxus.Service.PaymentGatewayService.SePayOptions)));
-        services.AddScoped<Pegaxus.Service.PaymentGatewayService.IService, Pegaxus.Service.PaymentGatewayService.Service>();
+        services.AddScoped<Pegaxus.Service.PaymentGatewayService.IPaymentGatewayService, Pegaxus.Service.PaymentGatewayService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.RecordPaymentRequest>, Pegaxus.Service.InvoiceService.Validator.RecordPaymentRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.CancelRequest>, Pegaxus.Service.InvoiceService.Validator.CancelRequestValidator>();
         return services;
@@ -241,18 +241,18 @@ public static class ServiceCollectionExtensions
     /// <summary>Transport plans, route plans, locations, routes, emergency route changes, outsourcing and personnel assignment.</summary>
     public static IServiceCollection AddTransportPlanningModule(this IServiceCollection services)
     {
-        services.AddScoped<TransportPlanService.IService, TransportPlanService.Service>();
-        services.AddScoped<RoutePlanService.IService, RoutePlanService.Service>();
-        services.AddScoped<LocationService.IService, LocationService.Service>();
-        services.AddScoped<RouteService.IService, RouteService.Service>();
-        services.AddScoped<Pegaxus.Service.RouteChangeService.IService, Pegaxus.Service.RouteChangeService.Service>();
+        services.AddScoped<TransportPlanService.ITransportPlanService, TransportPlanService.Service>();
+        services.AddScoped<RoutePlanService.IRoutePlanService, RoutePlanService.Service>();
+        services.AddScoped<LocationService.ILocationService, LocationService.Service>();
+        services.AddScoped<RouteService.IRouteService, RouteService.Service>();
+        services.AddScoped<Pegaxus.Service.RouteChangeService.IRouteChangeService, Pegaxus.Service.RouteChangeService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.CreateRequest>, Pegaxus.Service.RouteChangeService.Validator.CreateRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.DecisionRequest>, Pegaxus.Service.RouteChangeService.Validator.DecisionRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.RouteChangeService.Request.ActivationRequest>, Pegaxus.Service.RouteChangeService.Validator.ActivationRequestValidator>();
-        services.AddScoped<Pegaxus.Service.PersonnelAssignmentService.IService, Pegaxus.Service.PersonnelAssignmentService.Service>();
+        services.AddScoped<Pegaxus.Service.PersonnelAssignmentService.IPersonnelAssignmentService, Pegaxus.Service.PersonnelAssignmentService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.PersonnelAssignmentService.Request.AssignRequest>, Pegaxus.Service.PersonnelAssignmentService.Validator.AssignRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.PersonnelAssignmentService.Request.ReplaceRequest>, Pegaxus.Service.PersonnelAssignmentService.Validator.ReplaceRequestValidator>();
-        services.AddScoped<Pegaxus.Service.RouteOutsourcingService.IService, Pegaxus.Service.RouteOutsourcingService.Service>();
+        services.AddScoped<Pegaxus.Service.RouteOutsourcingService.IRouteOutsourcingService, Pegaxus.Service.RouteOutsourcingService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.RouteOutsourcingService.Request>, Pegaxus.Service.RouteOutsourcingService.Validator.RequestValidator>();
         return services;
     }
@@ -260,12 +260,12 @@ public static class ServiceCollectionExtensions
     /// <summary>Vehicle and transport provider catalogs.</summary>
     public static IServiceCollection AddFleetModule(this IServiceCollection services)
     {
-        services.AddScoped<Pegaxus.Service.VehicleService.IService, Pegaxus.Service.VehicleService.Service>();
+        services.AddScoped<Pegaxus.Service.VehicleService.IVehicleService, Pegaxus.Service.VehicleService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.VehicleService.Request.ListRequest>, Pegaxus.Service.VehicleService.Validator.ListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.VehicleService.Request.CreateRequest>, Pegaxus.Service.VehicleService.Validator.CreateRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.VehicleService.Request.UpdateRequest>, Pegaxus.Service.VehicleService.Validator.UpdateRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.VehicleService.Request.StatusRequest>, Pegaxus.Service.VehicleService.Validator.StatusRequestValidator>();
-        services.AddScoped<Pegaxus.Service.TransportProviderService.IService, Pegaxus.Service.TransportProviderService.Service>();
+        services.AddScoped<Pegaxus.Service.TransportProviderService.ITransportProviderService, Pegaxus.Service.TransportProviderService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.ListRequest>, Pegaxus.Service.TransportProviderService.Validator.ListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.CreateRequest>, Pegaxus.Service.TransportProviderService.Validator.CreateRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.TransportProviderService.Request.UpdateRequest>, Pegaxus.Service.TransportProviderService.Validator.UpdateRequestValidator>();
@@ -276,15 +276,15 @@ public static class ServiceCollectionExtensions
     /// <summary>Compliance dossiers, templates, requirement catalog, document storage and reminders.</summary>
     public static IServiceCollection AddComplianceModule(this IServiceCollection services)
     {
-        services.AddScoped<Pegaxus.Service.DocumentStorageService.IService, Pegaxus.Service.DocumentStorageService.Service>();
-        services.AddScoped<ComplianceDossierService.IService, ComplianceDossierService.Service>();
+        services.AddScoped<Pegaxus.Service.DocumentStorageService.IDocumentStorageService, Pegaxus.Service.DocumentStorageService.Service>();
+        services.AddScoped<ComplianceDossierService.IComplianceDossierService, ComplianceDossierService.Service>();
         services.AddHostedService<Pegaxus.API.Services.MissingDocumentReminderWorker>();
         services.AddScoped<IValidator<ComplianceDossierService.Request.InitializeRequest>, ComplianceDossierService.Validator.InitializeRequestValidator>();
-        services.AddScoped<DossierTemplateService.IService, DossierTemplateService.Service>();
+        services.AddScoped<DossierTemplateService.IDossierTemplateService, DossierTemplateService.Service>();
         services.AddScoped<IValidator<DossierTemplateService.Request.ListRequest>, DossierTemplateService.Validator.ListRequestValidator>();
         services.AddScoped<IValidator<DossierTemplateService.Request.SaveRequest>, DossierTemplateService.Validator.SaveRequestValidator>();
         services.AddScoped<IValidator<DossierTemplateService.Request.ChangeStatusRequest>, DossierTemplateService.Validator.ChangeStatusRequestValidator>();
-        services.AddScoped<ComplianceRequirementService.IService, ComplianceRequirementService.Service>();
+        services.AddScoped<ComplianceRequirementService.IComplianceRequirementService, ComplianceRequirementService.Service>();
         services.AddScoped<IValidator<ComplianceRequirementService.Request.ListRequest>, ComplianceRequirementService.Validator.ListRequestValidator>();
         services.AddScoped<IValidator<ComplianceRequirementService.Request.SaveRequest>, ComplianceRequirementService.Validator.SaveRequestValidator>();
         services.AddScoped<IValidator<ComplianceRequirementService.Request.StatusRequest>, ComplianceRequirementService.Validator.StatusRequestValidator>();
@@ -294,10 +294,10 @@ public static class ServiceCollectionExtensions
     /// <summary>Mail, media storage, notifications and the transactional outbox.</summary>
     public static IServiceCollection AddMessagingModule(this IServiceCollection services)
     {
-        services.AddScoped<MediaService.IService, CloudinaryService.Service>();
-        services.AddScoped<MailService.IService, MailService.Service>();
+        services.AddScoped<MediaService.IMediaService, CloudinaryService.Service>();
+        services.AddScoped<MailService.IMailService, MailService.Service>();
         services.AddHostedService<Pegaxus.API.Services.TransactionalOutboxWorker>();
-        services.AddScoped<NotificationService.IService, NotificationService.Service>();
+        services.AddScoped<NotificationService.INotificationService, NotificationService.Service>();
         services.AddScoped<NotificationService.INotificationRealtimeService, SignalRNotificationRealtimeService>();
         return services;
     }

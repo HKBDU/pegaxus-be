@@ -10,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1")]
-public sealed class PersonnelAssignmentsController(Personnel.IService service) : ApiControllerBase
+public sealed class PersonnelAssignmentsController(Personnel.IPersonnelAssignmentService service) : ApiControllerBase
 {
     /// <summary>Get transport plan personnel assignments.</summary>
     /// <remarks>Logistics Managers and assigned personnel can view phase 1 and phase 2. Phase 2 opens for a confirmed or active PRIMARY route.</remarks>

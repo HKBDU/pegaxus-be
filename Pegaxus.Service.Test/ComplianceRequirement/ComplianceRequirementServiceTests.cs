@@ -239,7 +239,7 @@ public class ComplianceRequirementServiceTests
         Assert.True(new StatusRequestValidator().Validate(new CatalogRequest.StatusRequest { Status = " inactive " }).IsValid);
     }
 
-    private static Pegaxus.Service.ComplianceRequirementService.IService CreateService(Pegaxus.Repository.AppDbContext db) =>
+    private static Pegaxus.Service.ComplianceRequirementService.IComplianceRequirementService CreateService(Pegaxus.Repository.AppDbContext db) =>
         new CatalogService(db, new ListRequestValidator(), new SaveRequestValidator(), new StatusRequestValidator());
 
     private static CatalogRequest.SaveRequest ValidRequest() => new()

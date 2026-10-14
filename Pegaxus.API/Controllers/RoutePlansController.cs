@@ -9,7 +9,7 @@ namespace Pegaxus.API.Controllers;
 
 [ApiController]
 [Authorize]
-public sealed class RoutePlansController(RoutePlanService.IService service) : ApiControllerBase
+public sealed class RoutePlansController(RoutePlanService.IRoutePlanService service) : ApiControllerBase
 {
     /// <summary>Create a route plan.</summary>
     /// <param name="transportPlanId">The transport plan identifier.</param>

@@ -10,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Route("api/v1/vehicles")]
 [Authorize(Policy = JwtExtensions.VehicleManagerPolicy)]
-public sealed class VehiclesController(Vehicles.IService service) : ApiControllerBase
+public sealed class VehiclesController(Vehicles.IVehicleService service) : ApiControllerBase
 {
     /// <summary>List specialized vehicles.</summary>
     /// <remarks>Lists undeleted ROAD, SEA and AIR vehicles. Optional date filters return vehicles without unfinished schedule conflicts.</remarks>

@@ -14,7 +14,7 @@ using static Pegaxus.Service.Common.Text;
 
 namespace Pegaxus.Service.RouteService;
 
-public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactory, IConfiguration configuration) : IService
+public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactory, IConfiguration configuration) : IRouteService
 {
     public async Task<Response.ListResponse> GetListAsync(Request.ListRequest request, CancellationToken cancellationToken = default)
     {

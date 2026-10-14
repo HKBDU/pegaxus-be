@@ -419,7 +419,7 @@ public class DocumentUploadTests
     internal static DossierService CreateService(AppDbContext db, RecordingStorage storage) => new(db, storage,
         new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!, storage, NullLogger<DossierService>.Instance);
 
-    internal sealed class RecordingStorage : Pegaxus.Service.DocumentStorageService.IService, Pegaxus.Service.MediaService.IService
+    internal sealed class RecordingStorage : Pegaxus.Service.DocumentStorageService.IDocumentStorageService, Pegaxus.Service.MediaService.IMediaService
     {
         public Exception? ContentFailure { get; init; }
         public Task ValidateContentAsync(Pegaxus.Service.MediaService.PreviewFile file, CancellationToken cancellationToken = default) =>

@@ -13,9 +13,9 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/employees")]
 public sealed class EmployeesController : ApiControllerBase
 {
-    private readonly EmployeeService.IService _service;
+    private readonly EmployeeService.IEmployeeService _service;
 
-    public EmployeesController(EmployeeService.IService service)
+    public EmployeesController(EmployeeService.IEmployeeService service)
     {
         _service = service;
     }

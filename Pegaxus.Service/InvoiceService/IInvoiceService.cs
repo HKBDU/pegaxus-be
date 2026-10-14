@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.InvoiceService;
 
-public interface IService
+public interface IInvoiceService
 {
     Task<Response.OnlinePaymentResponse> InitiateOnlinePaymentAsync(Guid invoiceId, Guid accountId,
         CancellationToken cancellationToken = default);

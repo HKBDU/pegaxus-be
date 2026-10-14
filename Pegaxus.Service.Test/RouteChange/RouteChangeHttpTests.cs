@@ -47,7 +47,7 @@ public class RouteChangeHttpTests
         builder.Services.AddControllers().AddApplicationPart(typeof(RouteChangeRequestsController).Assembly);
         builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddScoped<GlobalExceptionHandlerMiddleware>();
-        builder.Services.AddScoped<RouteChange.IService>(_ => f.Service);
+        builder.Services.AddScoped<RouteChange.IRouteChangeService>(_ => f.Service);
         await using var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
         app.UseAuthentication();

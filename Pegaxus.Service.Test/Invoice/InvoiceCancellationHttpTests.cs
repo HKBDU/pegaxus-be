@@ -109,8 +109,8 @@ public class InvoiceCancellationHttpTests
                     field = string.IsNullOrEmpty(x.Key) ? "$" : char.ToLowerInvariant(x.Key[0]) + x.Key[1..], message = e.ErrorMessage })),
                 "The request data is invalid")));
         builder.Services.AddJwtServices(builder.Configuration);
-        builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IService, Pegaxus.Service.InvoiceService.Service>();
-        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IService, InvoiceOnlinePaymentTests.Gateway>();
+        builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IInvoiceService, Pegaxus.Service.InvoiceService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IPaymentGatewayService, InvoiceOnlinePaymentTests.Gateway>();
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
@@ -119,7 +119,7 @@ public class InvoiceCancellationHttpTests
         builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.CancelRequest>, CancelRequestValidator>();
-        builder.Services.AddScoped<Pegaxus.Service.NotificationService.IService, Pegaxus.Service.NotificationService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.NotificationService.INotificationService, Pegaxus.Service.NotificationService.Service>();
         builder.Services.AddSingleton<INotificationRealtimeService, NoopNotificationRealtimeService>();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         var app = builder.Build(); app.UseMiddleware<GlobalExceptionHandlerMiddleware>();

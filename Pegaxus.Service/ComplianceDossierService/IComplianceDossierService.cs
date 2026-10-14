@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.ComplianceDossierService;
 
-public interface IService
+public interface IComplianceDossierService
 {
     Task<Response.DocumentUploadResponse> SubmitDocumentVersionAsync(Guid accountId, Guid dossierId, Guid requirementId,
         Request.DocumentUploadRequest request, CancellationToken cancellationToken = default);

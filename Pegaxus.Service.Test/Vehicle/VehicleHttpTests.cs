@@ -115,12 +115,12 @@ public class VehicleHttpTests
                 context.ModelState.Where(x => x.Value!.Errors.Count > 0).SelectMany(x => x.Value!.Errors.Select(e => new { field = x.Key, message = e.ErrorMessage })),
                 "The request data is invalid")));
         builder.Services.AddJwtServices(builder.Configuration);
-        builder.Services.AddScoped<Pegaxus.Service.VehicleService.IService, Pegaxus.Service.VehicleService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.VehicleService.IVehicleService, Pegaxus.Service.VehicleService.Service>();
         builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.StatusRequest>, StatusRequestValidator>();
-        builder.Services.AddScoped<Pegaxus.Service.NotificationService.IService, Pegaxus.Service.NotificationService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.NotificationService.INotificationService, Pegaxus.Service.NotificationService.Service>();
         builder.Services.AddSingleton<INotificationRealtimeService, NoopNotificationRealtimeService>();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         var app = builder.Build();

@@ -13,7 +13,7 @@ using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.EmployeeService;
 
-public sealed class Service : IService
+public sealed class Service : IEmployeeService
 {
     private const string DefaultPassword = "123@Abc.";
     private readonly AppDbContext _db;

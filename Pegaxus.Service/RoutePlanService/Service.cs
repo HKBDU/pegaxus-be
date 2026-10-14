@@ -9,12 +9,12 @@ using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.RoutePlanService;
 
-public sealed partial class Service : IService
+public sealed partial class Service : IRoutePlanService
 {
     private readonly AppDbContext db;
-    private readonly NotificationService.IService notificationService;
+    private readonly NotificationService.INotificationService notificationService;
 
-    public Service(AppDbContext db, NotificationService.IService notificationService)
+    public Service(AppDbContext db, NotificationService.INotificationService notificationService)
     {
         this.db = db;
         this.notificationService = notificationService;

@@ -27,7 +27,7 @@ public class PaymentWebhookHttpTests
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
         builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Services.AddSingleton<IService>(PaymentWebhookTests.CreateService(db));
+        builder.Services.AddSingleton<IPaymentService>(PaymentWebhookTests.CreateService(db));
         builder.Services.AddControllers().AddApplicationPart(typeof(PaymentsController).Assembly)
             .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = context =>
                 new BadRequestObjectResult(ResponseBuilder.ErrorResponse(null, "The request data is invalid")));

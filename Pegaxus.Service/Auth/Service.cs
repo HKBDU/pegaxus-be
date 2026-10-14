@@ -19,7 +19,7 @@ using AccountEntity = Pegaxus.Repository.Entities.Account;
 
 namespace Pegaxus.Service.Auth;
 
-public partial class Service : IService
+public partial class Service : IAuthService
 {
     private const string EmailVerification = "EMAIL_VERIFICATION";
 
@@ -33,7 +33,7 @@ public partial class Service : IService
 
     private readonly IDistributedCache _cache;
 
-    private readonly MailService.IService _mailService;
+    private readonly MailService.IMailService _mailService;
 
     private readonly JwtService.IJwtService _jwtService;
 
@@ -47,7 +47,7 @@ public partial class Service : IService
         AppDbContext db,
         IPasswordHasher<AccountEntity> passwordHasher,
         IDistributedCache cache,
-        MailService.IService mailService,
+        MailService.IMailService mailService,
         JwtService.IJwtService jwtService,
         IHttpContextAccessor httpContextAccessor)
     {

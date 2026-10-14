@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.DossierTemplateService;
 
-public interface IService
+public interface IDossierTemplateService
 {
     Task<Response.ListResponse> GetListAsync(Request.ListRequest request, CancellationToken cancellationToken = default);
     Task<Response.TemplateResponse> GetAsync(Guid templateId, CancellationToken cancellationToken = default);

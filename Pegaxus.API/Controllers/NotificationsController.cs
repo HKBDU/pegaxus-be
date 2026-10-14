@@ -11,9 +11,9 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/notifications")]
 public sealed class NotificationsController : ApiControllerBase
 {
-    private readonly NotificationService.IService _service;
+    private readonly NotificationService.INotificationService _service;
 
-    public NotificationsController(NotificationService.IService service)
+    public NotificationsController(NotificationService.INotificationService service)
     {
         _service = service;
     }

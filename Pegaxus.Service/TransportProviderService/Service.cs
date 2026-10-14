@@ -20,7 +20,7 @@ namespace Pegaxus.Service.TransportProviderService;
 
 public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> listValidator,
     IValidator<Request.CreateRequest> createValidator, IValidator<Request.UpdateRequest> updateValidator,
-    IValidator<Request.StatusRequest> statusValidator, NotificationService.IService notifications, ILogger<Service> logger) : IService
+    IValidator<Request.StatusRequest> statusValidator, NotificationService.INotificationService notifications, ILogger<Service> logger) : ITransportProviderService
 {
     public async Task<Response.ListResponse> GetListAsync(Guid accountId, Request.ListRequest request, CancellationToken cancellationToken = default)
     {

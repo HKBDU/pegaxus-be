@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.Auth;
 
-public interface IService
+public interface IAuthService
 {
     Task<Response.LoginResponse> LoginAsync(Request.LoginRequest request, CancellationToken cancellationToken = default);
     Task<Response.LoginResponse> GoogleLoginAsync(Request.GoogleLoginRequest request, CancellationToken cancellationToken = default);

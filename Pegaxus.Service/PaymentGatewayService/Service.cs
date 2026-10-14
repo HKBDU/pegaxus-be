@@ -7,7 +7,7 @@ using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.PaymentGatewayService;
 
-public sealed class Service(IOptions<SePayOptions> options) : IService
+public sealed class Service(IOptions<SePayOptions> options) : IPaymentGatewayService
 {
     public Task<Checkout> CreateCheckoutAsync(Guid invoiceId, string receiptCode, decimal amount, string currency,
         CancellationToken cancellationToken = default)

@@ -10,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/bookings/{bookingId:guid}/transport-plans")]
-public sealed class TransportPlanController(TransportPlanService.IService service) : ApiControllerBase
+public sealed class TransportPlanController(TransportPlanService.ITransportPlanService service) : ApiControllerBase
 {
     /// <summary>Update transport plan metadata.</summary>
     /// <param name="transportPlanId">The transport plan identifier (UUID).</param>

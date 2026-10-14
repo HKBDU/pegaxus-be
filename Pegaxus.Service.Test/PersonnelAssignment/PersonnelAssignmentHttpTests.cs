@@ -222,10 +222,10 @@ public class PersonnelAssignmentHttpTests
         builder.Services.AddControllers().AddApplicationPart(typeof(PersonnelAssignmentsController).Assembly).ConfigureApiBehaviorOptions(options =>
             options.InvalidModelStateResponseFactory = context => new BadRequestObjectResult(ResponseBuilder.ErrorResponse(null, "The request data is invalid")));
         builder.Services.AddJwtServices(builder.Configuration);
-        builder.Services.AddScoped<Pegaxus.Service.PersonnelAssignmentService.IService, Pegaxus.Service.PersonnelAssignmentService.Service>();
-        builder.Services.AddScoped<Pegaxus.Service.TransportPlanService.IService, Pegaxus.Service.TransportPlanService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.PersonnelAssignmentService.IPersonnelAssignmentService, Pegaxus.Service.PersonnelAssignmentService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.TransportPlanService.ITransportPlanService, Pegaxus.Service.TransportPlanService.Service>();
         builder.Services.AddScoped<IValidator<Request.AssignRequest>, AssignRequestValidator>(); builder.Services.AddScoped<IValidator<Request.ReplaceRequest>, ReplaceRequestValidator>();
-        builder.Services.AddScoped<Pegaxus.Service.NotificationService.IService, Pegaxus.Service.NotificationService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.NotificationService.INotificationService, Pegaxus.Service.NotificationService.Service>();
         builder.Services.AddSingleton<INotificationRealtimeService, NoopNotificationRealtimeService>();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         var app = builder.Build(); app.UseMiddleware<GlobalExceptionHandlerMiddleware>(); app.UseAuthentication(); app.UseAuthorization(); app.MapControllers(); await app.StartAsync(); return app;

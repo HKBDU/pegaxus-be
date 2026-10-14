@@ -9,13 +9,13 @@ using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.AccountService;
 
-public sealed class Service : IService
+public sealed class Service : IAccountService
 {
     private readonly AppDbContext _appDbContext;
-    private readonly MediaService.IService _mediaService;
+    private readonly MediaService.IMediaService _mediaService;
     private readonly IPasswordHasher<Account> _passwordHasher;
 
-    public Service( AppDbContext appDbContext, MediaService.IService mediaService, IPasswordHasher<Account> passwordHasher)
+    public Service( AppDbContext appDbContext, MediaService.IMediaService mediaService, IPasswordHasher<Account> passwordHasher)
     {
         _appDbContext = appDbContext;
         _mediaService = mediaService;

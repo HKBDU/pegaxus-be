@@ -19,7 +19,7 @@ namespace Pegaxus.Service.PersonnelAssignmentService;
 
 public sealed class Service(AppDbContext db, TimeProvider clock,
     IValidator<Request.AssignRequest> assignValidator, IValidator<Request.ReplaceRequest> replaceValidator,
-    NotificationService.IService notifications, ILogger<Service> logger) : IService
+    NotificationService.INotificationService notifications, ILogger<Service> logger) : IPersonnelAssignmentService
 {
     public async Task<Response.AssignmentsResponse> GetAsync(Guid transportPlanId, Guid accountId, CancellationToken cancellationToken = default)
     {

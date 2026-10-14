@@ -17,7 +17,7 @@ using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
-public sealed partial class Service : IService
+public sealed partial class Service : IComplianceDossierService
 {
     private const long MaxProofFileSize = 2 * 1024 * 1024;
 
@@ -33,22 +33,22 @@ public sealed partial class Service : IService
     ];
 
     private readonly AppDbContext _db;
-    private readonly MediaService.IService _mediaService;
+    private readonly MediaService.IMediaService _mediaService;
     private readonly IValidator<Request.InitializeRequest> _initializeValidator;
-    private readonly NotificationService.IService _notificationService;
-    private readonly DocumentStorageService.IService _documentStorage;
+    private readonly NotificationService.INotificationService _notificationService;
+    private readonly DocumentStorageService.IDocumentStorageService _documentStorage;
     private readonly ILogger<Service> _logger;
-    private readonly MailService.IService? _mailService;
+    private readonly MailService.IMailService? _mailService;
     private readonly TimeProvider _reminderClock;
 
     public Service(
         AppDbContext db,
-        MediaService.IService mediaService,
+        MediaService.IMediaService mediaService,
         IValidator<Request.InitializeRequest> initializeValidator,
-        NotificationService.IService notificationService,
-        DocumentStorageService.IService documentStorage,
+        NotificationService.INotificationService notificationService,
+        DocumentStorageService.IDocumentStorageService documentStorage,
         ILogger<Service> logger,
-        MailService.IService? mailService = null,
+        MailService.IMailService? mailService = null,
         TimeProvider? timeProvider = null)
     {
         _db = db;

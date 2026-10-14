@@ -12,9 +12,9 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/uploads")]
 public sealed class UploadsController : ApiControllerBase
 {
-    private readonly IService _mediaService;
+    private readonly IMediaService _mediaService;
 
-    public UploadsController(IService mediaService)
+    public UploadsController(IMediaService mediaService)
     {
         _mediaService = mediaService;
     }

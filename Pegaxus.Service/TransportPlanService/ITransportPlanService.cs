@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.TransportPlanService;
 
-public interface IService
+public interface ITransportPlanService
 {
     Task<Response.CreateResponse> UpdateAsync(
         Guid accountId,

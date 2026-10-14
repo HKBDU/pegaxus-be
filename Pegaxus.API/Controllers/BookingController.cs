@@ -14,9 +14,9 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/bookings")]
 public partial class BookingController : ApiControllerBase
 {
-    private readonly BookingService.IService _service;
+    private readonly BookingService.IBookingService _service;
 
-    public BookingController(BookingService.IService service)
+    public BookingController(BookingService.IBookingService service)
     {
         _service = service;
     }

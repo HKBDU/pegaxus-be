@@ -11,9 +11,9 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/accounts")]
 public sealed class AccountsController : ApiControllerBase
 {
-    private readonly AccountService.IService _service;
+    private readonly AccountService.IAccountService _service;
 
-    public AccountsController(AccountService.IService service)
+    public AccountsController(AccountService.IAccountService service)
     {
         _service = service;
     }

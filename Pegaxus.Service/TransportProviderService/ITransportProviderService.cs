@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.TransportProviderService;
 
-public interface IService
+public interface ITransportProviderService
 {
     Task<Response.ListResponse> GetListAsync(Guid accountId, Request.ListRequest request, CancellationToken cancellationToken = default);
     Task<Response.DetailResponse> GetAsync(Guid accountId, Guid id, CancellationToken cancellationToken = default);

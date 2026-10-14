@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Http;
 
 namespace Pegaxus.Service.DocumentStorageService;
 
-public interface IService
+public interface IDocumentStorageService
 {
     Task ValidateContentAsync(MediaService.PreviewFile file, CancellationToken cancellationToken = default);
     Task<MediaService.PreviewFile> DownloadPreviewAsync(string storageUrl, CancellationToken cancellationToken = default);

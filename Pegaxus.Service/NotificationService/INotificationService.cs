@@ -2,7 +2,7 @@ using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Service.NotificationService;
 
-public interface IService
+public interface INotificationService
 {
     void Queue(NotificationCreateRequest request);
 

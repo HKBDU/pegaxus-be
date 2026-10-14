@@ -19,7 +19,7 @@ namespace Pegaxus.Service.ComplianceRequirementService;
 public sealed class Service(AppDbContext db,
     IValidator<Request.ListRequest> listValidator,
     IValidator<Request.SaveRequest> saveValidator,
-    IValidator<Request.StatusRequest> statusValidator) : IService
+    IValidator<Request.StatusRequest> statusValidator) : IComplianceRequirementService
 {
     private const string DuplicateMessage = "A ComplianceRequirement with this code already exists. Please use a unique code or edit the existing record.";
     private const string ReferencedMessage = "Cannot delete this ComplianceRequirement because it is currently linked to existing DossierTemplates or active ComplianceDossiers. Please deactivate it instead.";

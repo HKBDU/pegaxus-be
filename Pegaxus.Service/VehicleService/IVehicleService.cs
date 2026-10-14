@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.VehicleService;
 
-public interface IService
+public interface IVehicleService
 {
     Task<Response.ListResponse> GetListAsync(Request.ListRequest request, Guid accountId, CancellationToken cancellationToken = default);
     Task<Response.VehicleResponse> GetAsync(Guid vehicleId, Guid accountId, CancellationToken cancellationToken = default);

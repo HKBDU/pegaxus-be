@@ -10,7 +10,7 @@ using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.DocumentStorageService;
 
-public class Service : IService, IDisposable
+public class Service : IDocumentStorageService, IDisposable
 {
     public const long MaxFileSize = 5 * 1024 * 1024;
     private readonly DocumentStorageOptions _options = new();

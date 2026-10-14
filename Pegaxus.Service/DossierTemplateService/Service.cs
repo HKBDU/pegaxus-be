@@ -12,7 +12,7 @@ using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.DossierTemplateService;
 
-public sealed class Service(AppDbContext db) : IService
+public sealed class Service(AppDbContext db) : IDossierTemplateService
 {
     private const string DuplicateCode = "Template code already exists. Please use a unique template code.";
     private const string DuplicateItem = "Duplicate ComplianceRequirement or Sequence Number detected in the same template. Each requirement and sequence number must be unique within a DossierTemplate.";

@@ -8,7 +8,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Route("api/v1/route-change-requests")]
 [Authorize(Policy = JwtExtensions.LogisticsManagerOrFleetRouteCoordinatorPolicy)]
-public sealed class RouteChangeRequestsController(IService service) : ApiControllerBase
+public sealed class RouteChangeRequestsController(IRouteChangeService service) : ApiControllerBase
 {
     /// <summary>Request activation of a confirmed BACKUP route.</summary>
     /// <param name="routePlanId">The BACKUP route plan UUID.</param>

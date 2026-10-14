@@ -11,7 +11,7 @@ using static Pegaxus.Service.Common.Text;
 
 namespace Pegaxus.Service.HorseService;
 
-public sealed class Service : IService
+public sealed class Service : IHorseService
 {
     private readonly AppDbContext _appDbContext;
 

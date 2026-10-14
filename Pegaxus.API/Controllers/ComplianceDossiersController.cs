@@ -12,9 +12,9 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/compliance-dossiers")]
 public sealed partial class ComplianceDossiersController : ApiControllerBase
 {
-    private readonly ComplianceDossierService.IService _service;
+    private readonly ComplianceDossierService.IComplianceDossierService _service;
 
-    public ComplianceDossiersController(ComplianceDossierService.IService service)
+    public ComplianceDossiersController(ComplianceDossierService.IComplianceDossierService service)
     {
         _service = service;
     }

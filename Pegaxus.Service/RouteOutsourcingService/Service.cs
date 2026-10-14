@@ -13,7 +13,7 @@ using static Pegaxus.Service.Common.Text;
 
 namespace Pegaxus.Service.RouteOutsourcingService;
 
-public sealed class Service(AppDbContext db, IValidator<Request> validator, NotificationService.IService notifications, ILogger<Service> logger) : IService
+public sealed class Service(AppDbContext db, IValidator<Request> validator, NotificationService.INotificationService notifications, ILogger<Service> logger) : IRouteOutsourcingService
 {
     public async Task<Response> SetAsync(Guid accountId, Guid routePlanId, Guid segmentId, Request request, CancellationToken cancellationToken = default)
     {

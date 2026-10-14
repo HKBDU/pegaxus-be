@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.LocationService;
 
-public interface IService
+public interface ILocationService
 {
     Task<Response.ListResponse> GetListAsync(Request.ListRequest request, CancellationToken cancellationToken = default);
     Task<Response.DetailResponse> GetAsync(Guid locationId, CancellationToken cancellationToken = default);

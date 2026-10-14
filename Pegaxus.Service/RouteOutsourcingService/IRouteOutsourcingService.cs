@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.RouteOutsourcingService;
 
-public interface IService
+public interface IRouteOutsourcingService
 {
     Task<Response> SetAsync(Guid accountId, Guid routePlanId, Guid segmentId, Request request, CancellationToken cancellationToken = default);
 }

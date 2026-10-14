@@ -1,6 +1,6 @@
 namespace Pegaxus.Service.HorseService;
 
-public interface IService
+public interface IHorseService
 {
     Task<Response.HorseListResponse> GetCustomerHorsesAsync(
         Guid accountId,

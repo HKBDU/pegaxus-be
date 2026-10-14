@@ -258,7 +258,7 @@ public class RouteOutsourcingTests
         builder.Services.AddControllers().AddApplicationPart(typeof(RouteOutsourcingController).Assembly);
         builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddSingleton(db);
-        builder.Services.AddScoped<Outsourcing.IService>(_ => Service(db));
+        builder.Services.AddScoped<Outsourcing.IRouteOutsourcingService>(_ => Service(db));
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         await using var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
@@ -438,7 +438,7 @@ public class RouteOutsourcingTests
         await db.SaveChangesAsync();
         var mail = new ConcurrentMail();
         await using var services = new ServiceCollection().AddScoped(_ => new AppDbContext(options))
-            .AddSingleton<Pegaxus.Service.MailService.IService>(mail).BuildServiceProvider();
+            .AddSingleton<Pegaxus.Service.MailService.IMailService>(mail).BuildServiceProvider();
         var batch = typeof(TransactionalOutboxWorker).GetMethod("ProcessBatchAsync",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
         async Task RunBatchAsync()
@@ -513,7 +513,7 @@ public class RouteOutsourcingTests
         Assert.DoesNotContain("Database internals", response);
     }
 
-    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IService
+    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IMailService
     {
         public System.Collections.Concurrent.ConcurrentBag<string> Subjects { get; } = [];
         public Task SendMail(Pegaxus.Service.MailService.MailContent mailContent, CancellationToken cancellationToken = default)

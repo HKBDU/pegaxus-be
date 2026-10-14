@@ -14,8 +14,8 @@ using static Pegaxus.Service.Common.Validation;
 
 namespace Pegaxus.Service.RouteChangeService;
 
-public sealed partial class Service(AppDbContext db, NotificationService.IService notifications, TimeProvider clock,
-    RoutePlanService.IService routePlans) : IService
+public sealed partial class Service(AppDbContext db, NotificationService.INotificationService notifications, TimeProvider clock,
+    RoutePlanService.IRoutePlanService routePlans) : IRouteChangeService
 {
     private DateTime Now => new(clock.GetUtcNow().Ticks / 10 * 10, DateTimeKind.Unspecified);
 

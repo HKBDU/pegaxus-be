@@ -12,7 +12,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Route("api/v1/dossier-templates")]
 [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
-public sealed class DossierTemplatesController(DossierTemplateService.IService service) : ApiControllerBase
+public sealed class DossierTemplatesController(DossierTemplateService.IDossierTemplateService service) : ApiControllerBase
 {
     /// <summary>
     /// List dossier templates.

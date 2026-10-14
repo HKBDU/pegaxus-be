@@ -15,11 +15,11 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/auth")]
 public sealed class AuthController : ApiControllerBase
 {
-    private readonly AuthService.IService _service;
+    private readonly AuthService.IAuthService _service;
     private readonly IConfiguration _configuration;
     private const string GoogleExternalScheme = "GoogleExternal";
 
-    public AuthController(AuthService.IService service, IConfiguration configuration)
+    public AuthController(AuthService.IAuthService service, IConfiguration configuration)
     {
         _service = service;
         _configuration = configuration;

@@ -11,7 +11,7 @@ using static Pegaxus.Service.Common.Text;
 
 namespace Pegaxus.Service.LocationService;
 
-public sealed class Service(AppDbContext db) : IService
+public sealed class Service(AppDbContext db) : ILocationService
 {
     public async Task<Response.ListResponse> GetListAsync(Request.ListRequest request, CancellationToken cancellationToken = default)
     {

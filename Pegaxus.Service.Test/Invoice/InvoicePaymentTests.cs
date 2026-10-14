@@ -19,7 +19,7 @@ public class InvoicePaymentTests
     }
     internal static readonly Clock TestClock = new();
     internal static InvoicePaymentService CreateService(AppDbContext db, INotificationRealtimeService? realtime = null,
-        Pegaxus.Service.PaymentGatewayService.IService? gateway = null) => new(db,
+        Pegaxus.Service.PaymentGatewayService.IPaymentGatewayService? gateway = null) => new(db,
         gateway ?? new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger,
         TestClock, new CreateRequestValidator(TestClock), new SuggestionRequestValidator(), new UpdateRequestValidator(TestClock),
         new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(TestClock), new CancelRequestValidator(),

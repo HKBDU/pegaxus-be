@@ -1,6 +1,6 @@
 ﻿namespace Pegaxus.Service.MailService;
 
-public interface IService
+public interface IMailService
 {
     public Task SendMail(MailContent mailContent, CancellationToken cancellationToken = default);
 }
