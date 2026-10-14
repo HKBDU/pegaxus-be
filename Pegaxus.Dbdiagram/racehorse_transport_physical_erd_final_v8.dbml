@@ -960,7 +960,6 @@ Table RoutePlanRoute {
   note text
 
   superseded_at timestamp
-  superseded_by_change_request_id uuid
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -1257,48 +1256,6 @@ Table HorseHealthLog {
 //////////////////////////////////////////////////////////////
 // FLOW 4 - INCIDENT / EMERGENCY
 //////////////////////////////////////////////////////////////
-
-Table RouteChangeRequest {
-  route_change_request_id uuid [pk]
-
-  route_plan_id uuid [not null]
-  backup_route_plan_id uuid
-  status varchar(30) [not null]
-  reason text [not null]
-  client_request_id uuid
-
-  submitted_request jsonb [not null]
-  note text
-  new_estimated_arrival_at timestamp [not null]
-  estimated_extra_cost decimal(18,2)
-  currency varchar(3)
-  current_segments jsonb [not null]
-  proposed_segments jsonb [not null]
-  comparison jsonb [not null]
-  approval_reasons text[] [not null]
-
-  requested_by_employee_id uuid [not null]
-  decided_by_employee_id uuid
-  decision_note text
-  decided_at timestamp
-  decision_request jsonb
-  decision_response jsonb
-  incident_report_id uuid
-
-  created_at timestamp [not null]
-  updated_at timestamp [not null]
-
-  indexes {
-    route_plan_id
-    backup_route_plan_id
-    requested_by_employee_id
-    decided_by_employee_id
-    incident_report_id
-    created_at
-    (route_plan_id, client_request_id) [unique]
-  }
-}
-
 
 Table IncidentReport {
   Note: 'IncidentReport: Báo cáo sự cố phát sinh trong quá trình vận chuyển. category gồm VEHICLE, HORSE_HEALTH hoặc BOTH.'
@@ -2563,13 +2520,6 @@ Ref: RoutePlanRoute.route_id > Route.route_id
 Ref: RoutePlanRoute.driver_employee_id > Employee.employee_id
 Ref: RoutePlanRoute.escort_employee_id > Employee.employee_id
 Ref: RoutePlanRoute.transport_provider_id > TransportProvider.transport_provider_id
-Ref: RoutePlanRoute.superseded_by_change_request_id > RouteChangeRequest.route_change_request_id
-
-Ref: RouteChangeRequest.route_plan_id > RoutePlan.route_plan_id
-Ref: RouteChangeRequest.backup_route_plan_id > RoutePlan.route_plan_id
-Ref: RouteChangeRequest.requested_by_employee_id > Employee.employee_id
-Ref: RouteChangeRequest.decided_by_employee_id > Employee.employee_id
-Ref: RouteChangeRequest.incident_report_id > IncidentReport.incident_report_id
 
 // RoutePlanRoute N - N Vehicle
 Ref: RoutePlanRouteVehicle.route_plan_route_id > RoutePlanRoute.route_plan_route_id
