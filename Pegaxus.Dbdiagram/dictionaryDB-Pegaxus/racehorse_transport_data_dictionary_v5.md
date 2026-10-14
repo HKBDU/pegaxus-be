@@ -302,7 +302,7 @@
 
 # 14. `RoutePlanRoute`
 
-**Cập nhật BE:** bổ sung `service_type`, `provider_reference`, `outsourcing_cost_amount`, `outsourcing_currency`, `superseded_at` và `superseded_by_change_request_id` để lưu outsource và route change.
+**Cập nhật BE:** bổ sung `service_type`, `provider_reference`, `outsourcing_cost_amount`, `outsourcing_currency` và `superseded_at` để lưu outsource và route change.
 
 **Ý nghĩa bảng:** RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver/Escort phụ trách, provider thuê ngoài và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.
 
@@ -506,37 +506,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 22. `RouteChangeRequest`
-
-**Ý nghĩa bảng:** Lưu yêu cầu thay đổi route, snapshot route hiện tại/đề xuất, quyết định phê duyệt và liên kết IncidentReport.
-
-| Field | Type | Key | Required | Ý nghĩa |
-|---|---|---|---|---|
-| `route_change_request_id` | `uuid` | PK | No | Khóa chính yêu cầu thay đổi route. |
-| `route_plan_id` | `uuid` | FK | Yes | RoutePlan hiện tại. |
-| `backup_route_plan_id` | `uuid` | FK | No | RoutePlan backup được đề xuất. |
-| `status` | `varchar(30)` |  | Yes | `PENDING`, `APPROVED`, `REJECTED`, `EMERGENCY_RETURN`. |
-| `reason` | `text` |  | Yes | Lý do thay đổi route. |
-| `client_request_id` | `uuid` |  | No | Mã idempotency của client. |
-| `submitted_request` | `jsonb` |  | Yes | Snapshot request ban đầu. |
-| `new_estimated_arrival_at` | `timestamp` |  | Yes | Thời gian đến dự kiến mới. |
-| `estimated_extra_cost` | `decimal(18,2)` |  | No | Chi phí phát sinh ước tính. |
-| `currency` | `varchar(3)` |  | No | Mã tiền tệ. |
-| `current_segments` | `jsonb` |  | Yes | Snapshot segment hiện tại. |
-| `proposed_segments` | `jsonb` |  | Yes | Snapshot segment đề xuất. |
-| `comparison` | `jsonb` |  | Yes | So sánh hai phương án. |
-| `approval_reasons` | `text[]` |  | Yes | Lý do/điều kiện phê duyệt. |
-| `requested_by_employee_id` | `uuid` | FK | Yes | Employee tạo request. |
-| `decided_by_employee_id` | `uuid` | FK | No | Employee quyết định. |
-| `decision_note` | `text` |  | No | Ghi chú quyết định. |
-| `decided_at` | `timestamp` |  | No | Thời điểm quyết định. |
-| `decision_request` | `jsonb` |  | No | Snapshot request khi quyết định. |
-| `decision_response` | `jsonb` |  | No | Snapshot response khi quyết định. |
-| `incident_report_id` | `uuid` | FK | No | IncidentReport liên quan. |
-| `created_at` | `timestamp` |  | Yes | Thời điểm tạo. |
-| `updated_at` | `timestamp` |  | Yes | Thời điểm cập nhật. |
-
-# 23. `IncidentReport`
+# 22. `IncidentReport`
 
 **Cập nhật BE:** bổ sung `transport_id`, `emergency_settlement_required`; `incident_category` bổ sung `ROUTE_CHANGE`.
 
@@ -563,7 +533,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 24. `VehicleIncidentDetail`
+# 23. `VehicleIncidentDetail`
 
 **Ý nghĩa bảng:** Chi tiết phần Vehicle của một IncidentReport.
 
@@ -584,7 +554,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 25. `HorseHealthIncidentDetail`
+# 24. `HorseHealthIncidentDetail`
 
 **Ý nghĩa bảng:** Chi tiết ảnh hưởng sức khỏe lên từng Horse trong một IncidentReport.
 
@@ -609,7 +579,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 26. `EmergencyCostRequest`
+# 25. `EmergencyCostRequest`
 
 **Ý nghĩa bảng:** Yêu cầu phê duyệt chi phí khẩn cấp phát sinh từ Incident.
 
@@ -631,7 +601,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 27. `CostApprovalDecision`
+# 26. `CostApprovalDecision`
 
 **Ý nghĩa bảng:** Quyết định duyệt hoặc từ chối một EmergencyCostRequest.
 
@@ -646,7 +616,7 @@
 | `decided_at` | `timestamp` |  | Yes | Thời điểm đưa ra quyết định. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 
-# 28. `Invoice`
+# 27. `Invoice`
 
 **Ý nghĩa bảng:** Hóa đơn phát sinh cho Booking.
 
@@ -672,7 +642,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 29. `InvoiceItem`
+# 28. `InvoiceItem`
 
 **Ý nghĩa bảng:** Một dòng phí/chi phí chi tiết trong Invoice.
 
@@ -691,7 +661,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 30. `Receipt`
+# 29. `Receipt`
 
 **Ý nghĩa bảng:** Một lần ghi nhận thanh toán cho Invoice.
 
@@ -711,7 +681,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 31. `InvoiceStatusHistory`
+# 30. `InvoiceStatusHistory`
 
 **Ý nghĩa bảng:** InvoiceStatusHistory: Lịch sử thay đổi trạng thái Invoice. type cho biết hành động nghiệp vụ gây ra thay đổi; changed_by_account_id có thể null nếu hệ thống tự động thực hiện, ví dụ MARK_OVERDUE.
 
@@ -729,7 +699,7 @@
 | `changed_at` | `timestamp` |  | Yes | Thời điểm thay đổi trạng thái. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 
-# 32. `FinancialReport`
+# 31. `FinancialReport`
 
 **Ý nghĩa bảng:** FinancialReport: Báo cáo tài chính tổng hợp theo một Transport, được hệ thống sinh từ dữ liệu Invoice, InvoiceItem, Receipt và chi phí liên quan; không có trạng thái lưu nháp.
 
@@ -748,7 +718,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 33. `Claim`
+# 32. `Claim`
 
 **Ý nghĩa bảng:** Claim: Khiếu nại do Customer gửi liên quan đến một lần bàn giao. Hệ thống chỉ lưu khiếu nại và kết quả; việc trao đổi/thương lượng giữa Customer và Manager diễn ra ngoài hệ thống.
 
@@ -774,7 +744,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 34. `ClaimResolution`
+# 33. `ClaimResolution`
 
 **Ý nghĩa bảng:** ClaimResolution: Kết quả xử lý/thỏa thuận cuối cùng của một Claim, ví dụ mức bồi thường thực tế sau khi hai bên trao đổi trực tiếp.
 
@@ -792,7 +762,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 35. `ComplianceRequirement`
+# 34. `ComplianceRequirement`
 
 **Ý nghĩa bảng:** ComplianceRequirement: Danh mục master các loại yêu cầu pháp lý hoặc loại giấy tờ mà hệ thống biết có thể cần trong hồ sơ.
 
@@ -818,7 +788,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 36. `DossierTemplate`
+# 35. `DossierTemplate`
 
 **Ý nghĩa bảng:** DossierTemplate: Bộ hồ sơ pháp lý mẫu cho một kịch bản vận chuyển. Template xác định thông thường cần những loại yêu cầu nào.
 
@@ -840,7 +810,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 37. `DossierTemplateItem`
+# 36. `DossierTemplateItem`
 
 **Ý nghĩa bảng:** DossierTemplateItem: Một dòng yêu cầu nằm trong DossierTemplate, dùng để liên kết Template với ComplianceRequirement và đánh dấu yêu cầu bắt buộc hay không.
 
@@ -856,7 +826,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 38. `ComplianceDossier`
+# 37. `ComplianceDossier`
 
 **Cập nhật BE:** bổ sung `dossier_template_id uuid` nullable, liên kết tới `DossierTemplate`; `transport_id` vẫn unique và quan hệ 1-1 với `Transport`.
 
@@ -881,7 +851,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 39. `DossierRequirement`
+# 38. `DossierRequirement`
 
 **Ý nghĩa bảng:** DossierRequirement: Một yêu cầu pháp lý thực tế đã được sinh ra trong ComplianceDossier của chuyến đi cụ thể, dựa trên loại ComplianceRequirement.
 
@@ -905,7 +875,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 40. `ComplianceDocument`
+# 39. `ComplianceDocument`
 
 **Ý nghĩa bảng:** ComplianceDocument: Giấy tờ thực tế được cung cấp để đáp ứng một DossierRequirement. Đây là document logic, không phải từng file upload.
 
@@ -928,7 +898,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 41. `DocumentVersion`
+# 40. `DocumentVersion`
 
 **Ý nghĩa bảng:** DocumentVersion: Một phiên bản file cụ thể của ComplianceDocument. Khi giấy tờ bị sửa hoặc upload lại thì tạo version mới, không tạo ComplianceDocument mới.
 
@@ -946,7 +916,7 @@
 | `uploaded_at` | `timestamp` |  | Yes | Thời điểm upload file. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 
-# 42. `DocumentAttachment`
+# 41. `DocumentAttachment`
 
 **Ý nghĩa bảng:** DocumentAttachment: Một file vật lý cụ thể thuộc một `DocumentVersion`. Một version có thể có nhiều attachment, ví dụ nhiều ảnh của các trang hộ chiếu ngựa.
 
@@ -961,7 +931,7 @@
 | `sort_order` | `int` |  | Yes | Thứ tự hiển thị/xử lý file trong cùng một `DocumentVersion`; unique theo `document_version_id`. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm attachment được tạo. |
 
-# 43. `DocumentReview`
+# 42. `DocumentReview`
 
 **Ý nghĩa bảng:** DocumentReview: Kết quả kiểm tra của một DocumentVersion cụ thể, ví dụ APPROVED, REJECTED hoặc REVISION_REQUIRED.
 
@@ -975,7 +945,7 @@
 | `reviewed_at` | `timestamp` |  | Yes | Thời điểm review. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 
-# 44. `DocumentRequest`
+# 43. `DocumentRequest`
 
 **Ý nghĩa bảng:** DocumentRequest: Yêu cầu gửi tới Customer để cung cấp, sửa, upload lại hoặc bổ sung thông tin cho một DossierRequirement.
 
@@ -998,7 +968,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 45. `AuthoritySubmission`
+# 44. `AuthoritySubmission`
 
 **Ý nghĩa bảng:** AuthoritySubmission: Một lần thực tế gửi ComplianceDossier tới cơ quan có thẩm quyền. Một dossier có thể được gửi nhiều lần nếu bị trả về hoặc từ chối.
 
@@ -1024,7 +994,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 46. `AuthoritySubmissionEvidenceFile`
+# 45. `AuthoritySubmissionEvidenceFile`
 
 **Ý nghĩa bảng:** AuthoritySubmissionEvidenceFile: File vật lý là bằng chứng phản hồi của cơ quan chức năng cho một lần `AuthoritySubmission`, ví dụ văn bản chấp nhận, từ chối hoặc yêu cầu bổ sung.
 
@@ -1041,7 +1011,7 @@
 | `note` | `text` |  | No | Ghi chú về file hoặc phản hồi của cơ quan. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm file được ghi nhận. |
 
-# 47. `QuarantineProof`
+# 46. `QuarantineProof`
 
 **Ý nghĩa bảng:** QuarantineProof: Bằng chứng và kết quả kiểm dịch tại trạm BCP do Driver hoặc Escort nộp và Transport Specialist xác minh. Đây là entity riêng cho UC-28a/UC-28b; mọi kết quả đạt, tạm giữ, thất bại hoặc từ chối đều lưu tại đây và không ghi vào trạng thái CDos.
 
@@ -1071,7 +1041,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 48. `CustomsClearanceProof`
+# 47. `CustomsClearanceProof`
 
 **Ý nghĩa bảng:** CustomsClearanceProof: Bằng chứng và kết quả thông quan hải quan do Driver nộp và Transport Specialist xác minh. Đây là entity riêng cho UC-29a/UC-29b; kết quả thông quan, tạm giữ hoặc từ chối đều lưu tại đây và không ghi vào trạng thái CDos.
 
@@ -1100,7 +1070,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
-# 49. `ProofAttachment`
+# 48. `ProofAttachment`
 
 **Ý nghĩa bảng:** ProofAttachment: File vật lý thuộc một `QuarantineProof` hoặc `CustomsClearanceProof`. Một proof có thể có nhiều file.
 
@@ -1118,7 +1088,7 @@
 | `sort_order` | `int` |  | Yes | Thứ tự hiển thị/xử lý file trong cùng một proof. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm file được ghi nhận. |
 
-# 50. `AuditDossier`
+# 49. `AuditDossier`
 
 **Ý nghĩa bảng:** AuditDossier: Nhật ký append-only của `ComplianceDossier`. Bản ghi chỉ được thêm mới, không được sửa/xóa qua API.
 
@@ -1137,7 +1107,7 @@
 | `visibility` | `audit_visibility` |  | Yes | PUBLIC hoặc INTERNAL; dùng để giới hạn nội dung Customer được xem. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm sự kiện được ghi nhận. |
 
-# 51. `CatalogAuditLog`
+# 50. `CatalogAuditLog`
 
 **Ý nghĩa bảng:** CatalogAuditLog: Nhật ký append-only cho các thay đổi trên bảng catalog/master như `ComplianceRequirement`. Bảng này không thay thế `AuditDossier`, vì `AuditDossier` dùng cho các sự kiện trong phạm vi một `ComplianceDossier` cụ thể.
 
@@ -1154,7 +1124,7 @@
 | `reference_count_snapshot` | `jsonb` |  | No | Snapshot số lượng reference tại thời điểm thay đổi, nếu có. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm audit event được ghi nhận. |
 
-# 52. `Notification`
+# 51. `Notification`
 
 **Ý nghĩa bảng:** Nội dung thông báo nghiệp vụ được tạo trong phạm vi một Transport.
 
@@ -1172,7 +1142,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `expires_at` | `timestamp` |  | No | Thời điểm token/notification hết hạn tùy bảng. |
 
-# 53. `AccountNotification`
+# 52. `AccountNotification`
 
 **Ý nghĩa bảng:** Bảng N-N giữa Account và Notification, đồng thời lưu trạng thái nhận/đọc theo từng Account.
 
@@ -1185,7 +1155,7 @@
 | `read_at` | `timestamp` |  | No | Thời điểm Account đọc Notification. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 
-# 54. `DocumentRequestComment`
+# 53. `DocumentRequestComment`
 
 **Ý nghĩa bảng:** Lưu trao đổi giữa Customer và Transport Specialist trong phạm vi một `DocumentRequest`.
 
@@ -1197,7 +1167,7 @@
 | `message` | `varchar(2000)` |  | Yes | Nội dung trao đổi. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm tạo bình luận. |
 
-# 55. `MissingDocumentReminder`
+# 54. `MissingDocumentReminder`
 
 **Ý nghĩa bảng:** Hàng đợi durable cho email nhắc Customer bổ sung hồ sơ còn thiếu. Worker cập nhật trạng thái gửi và retry khi lỗi.
 
@@ -1216,7 +1186,7 @@
 | `cancelled_at` | `timestamp` |  | No | Thời điểm reminder bị hủy. |
 | `email_attempts` | `int` |  | Yes | Số lần worker thử gửi email. |
 
-# 56. `OutboxMessage`
+# 55. `OutboxMessage`
 
 **Ý nghĩa bảng:** Lưu integration event trong cùng transaction với thay đổi nghiệp vụ. Worker xử lý sau commit cho email và SignalR.
 
