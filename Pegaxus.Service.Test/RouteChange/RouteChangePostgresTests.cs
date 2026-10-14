@@ -129,6 +129,11 @@ public class RouteChangePostgresTests
         // EF 8 finalizes the cached snapshot on the first check; use a fresh context after migration.
         await using var check = scope.Db();
         Assert.False(check.Database.HasPendingModelChanges());
+        var scales = await check.Database.SqlQuery<int>($"""
+            SELECT numeric_scale::int AS "Value" FROM information_schema.columns
+            WHERE table_schema = current_schema() AND table_name = 'Location' AND column_name IN ('latitude', 'longitude')
+            """).ToListAsync();
+        Assert.Equal([4, 4], scales);
     }
 
     private static async Task CheckOutboxClaimsAsync(DbContextOptions<AppDbContext> options)

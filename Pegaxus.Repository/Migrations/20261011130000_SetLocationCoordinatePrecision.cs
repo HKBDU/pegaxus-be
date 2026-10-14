@@ -1,7 +1,10 @@
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 namespace Pegaxus.Repository.Migrations;
 
+[DbContext(typeof(AppDbContext))]
+[Migration("20261011130000_SetLocationCoordinatePrecision")]
 public partial class SetLocationCoordinatePrecision : Migration
 {
     protected override void Up(MigrationBuilder migrationBuilder)
