@@ -82,7 +82,9 @@ Running the whole suite against PostgreSQL failed 18–19 tests (different ones 
 1. `ManyServiceProvidersCreatedWarning`: each test builds its own data source / interceptors, so EF creates one internal service provider per test and throws after 20. Fix: `Common/NpgsqlTestOptions.cs` → `UseTestNpgsql(source)` ignores that warning; used by all Postgres tests. Two `ReplaceService` InMemory tests ignore it too.
 2. Tests that create a **schema** in the shared database ran in parallel and Npgsql saw several `account_type` enums. Fix: `[Collection("PostgresSharedDatabase")]` on `PersonnelAssignmentPostgresTests`, `RouteOutsourcingTests`, `TransportProviderServiceTests`, `VehiclePostgresTests`.
 
-Result: full suite 1136/1136 against Postgres, repeated runs stable.
+Result: full suite 1136/1136 against Postgres, repeated runs stable locally.
+
+Follow-up (CI): on a 2-vCPU Linux runner three tests still timed out (30 s) in `DROP DATABASE` / DDL because PostgreSQL test classes ran in parallel on one server. All PostgreSQL test classes now carry `[Collection("PostgresSharedDatabase")]` and run sequentially.
 
 ### 2.3 `94a3755` — Controllers and services split
 

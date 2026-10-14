@@ -9,6 +9,7 @@ using Pegaxus.Service.OutboxService;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class InvoiceCancellationPostgresTests
 {
     [PostgresFact]

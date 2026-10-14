@@ -17,6 +17,7 @@ using RouteChange = Pegaxus.Service.RouteChangeService;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class RouteChangePostgresTests
 {
     [PostgresFact]

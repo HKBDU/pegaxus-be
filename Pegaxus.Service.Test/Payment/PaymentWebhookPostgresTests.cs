@@ -10,6 +10,7 @@ using Pegaxus.Service.OutboxService;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class PaymentWebhookPostgresTests : IAsyncLifetime
 {
     private NpgsqlDataSource? source;

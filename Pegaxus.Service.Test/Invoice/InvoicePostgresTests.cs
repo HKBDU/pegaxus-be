@@ -12,6 +12,7 @@ using DraftInvoiceService = Pegaxus.Service.InvoiceService.Service;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class InvoicePostgresTests : IAsyncLifetime
 {
     private NpgsqlDataSource? _source;

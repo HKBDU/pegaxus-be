@@ -14,6 +14,7 @@ using Xunit.Abstractions;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class InvoiceListPostgresTests(ITestOutputHelper output)
 {
     [PostgresFact]

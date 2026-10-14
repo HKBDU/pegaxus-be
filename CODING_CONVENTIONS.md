@@ -135,7 +135,7 @@ PostgreSQL tests run only when `PEGAXUS_TEST_CONNECTION_STRING` is set (CI job `
 
 - Use `NpgsqlTestOptions.UseTestNpgsql(source)` instead of `UseNpgsql(source)` so EF's "many service providers" warning does not fail the suite.
 - Each test creates its own database or schema and drops it in `finally`.
-- Tests that create a schema in the shared database must carry `[Collection("PostgresSharedDatabase")]`.
+- Every PostgreSQL test class must carry `[Collection("PostgresSharedDatabase")]` so they run one after another; parallel DDL / `DROP DATABASE` on one server times out (30 s) on small CI runners.
 - Use the shared `PostgresFactAttribute` (defined in `Common/LinqConcurrencyTests.cs`) for new tests.
 - A new migration needs no new test, but `MigrationDiscoveryTests` and `Migration_UpDownUp_AndSnapshotMatchCurrentModel` must stay green.
 

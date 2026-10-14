@@ -11,6 +11,7 @@ using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class InvoiceDetailPostgresTests
 {
     [PostgresFact]

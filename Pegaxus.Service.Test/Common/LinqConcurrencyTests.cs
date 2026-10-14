@@ -59,6 +59,7 @@ public class LinqConflictResponseTests
     }
 }
 
+[Collection("PostgresSharedDatabase")]
 public class LinqConcurrencyTests : IAsyncLifetime
 {
     private NpgsqlDataSource? _source;

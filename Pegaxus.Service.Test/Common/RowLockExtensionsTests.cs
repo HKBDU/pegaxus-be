@@ -7,6 +7,7 @@ using Pegaxus.Repository.Extensions;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class RowLockExtensionsTests
 {
     [Fact]
