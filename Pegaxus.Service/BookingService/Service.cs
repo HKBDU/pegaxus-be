@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
@@ -6,11 +5,9 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 
-using static Pegaxus.Service.Common.DbTime;
 using static Pegaxus.Service.Common.Text;
 
 using BookingEntity = Pegaxus.Repository.Entities.Booking;
-using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.BookingService;
 

@@ -1,4 +1,3 @@
-using System.Text;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -7,7 +6,6 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
-using Pegaxus.Service.Common;
 using Pegaxus.Service.MediaService;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;

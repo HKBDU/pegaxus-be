@@ -1,9 +1,7 @@
-using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
-using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 using static Pegaxus.Service.Common.DbTime;

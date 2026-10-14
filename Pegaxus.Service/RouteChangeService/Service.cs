@@ -18,6 +18,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
     RoutePlanService.IService routePlans) : IService
 {
     private DateTime Now => new(clock.GetUtcNow().Ticks / 10 * 10, DateTimeKind.Unspecified);
+
     public async Task<Response.Created> CreateAsync(Guid routePlanId, Guid accountId, Request.CreateRequest request, CancellationToken cancellationToken = default)
     {
         Validate(request, new CreateRequestValidator());
@@ -206,41 +207,6 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         return new(routePlanId, "RETURN", "ACTIVE", detail.Segments, AsUtc(now));
     }
 
-    public async Task<Response.DriverNoticeResult> NotifyDriversAsync(Guid routePlanId, Guid accountId, Request.DriverNoticeRequest request, CancellationToken cancellationToken = default)
-    {
-        if (request.Message?.Length > 4000) throw new BadRequestException("Message must not exceed 4000 characters.");
-        var actor = await ActorAsync(accountId, [EmployeeRole.FLEET_ROUTE_COORDINATOR], cancellationToken);
-        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
-        var plan = await LockPlanAsync(routePlanId, cancellationToken);
-        await EnsureCoordinatorAsync(plan, actor, cancellationToken);
-        var segments = await SegmentsAsync(routePlanId, cancellationToken);
-        if (plan.Status is not (RoutePlanStatus.CONFIRMED or RoutePlanStatus.ACTIVE)) throw InvalidStatus(plan);
-        EnsureTypeStatus(plan, segments, "RETURN", plan.Status);
-        var primary = await PrimaryAsync(plan, cancellationToken);
-        var now = Now;
-        var drivers = await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Begin return journey", request.Message, now, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        await notifications.FlushAsync(cancellationToken);
-        return new(routePlanId, drivers.Select(x => Employee(x)!).ToArray(), AsUtc(now));
-    }
-
-    private async Task EnsureCoordinatorAsync(RoutePlan plan, Employee actor, CancellationToken token)
-    {
-        if (!await db.EmployeeTransportPlans.AnyAsync(x => x.TransportPlanId == plan.TransportPlanId &&
-            x.EmployeeId == actor.EmployeeId && x.Responsibility == "FLEET_ROUTE_COORDINATOR", token))
-            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan can perform this action.");
-    }
-
-    private async Task<RoutePlan> PrimaryAsync(RoutePlan plan, CancellationToken token)
-    {
-        var primaryIds = await db.RoutePlans.AsNoTracking().Where(x => x.TransportPlanId == plan.TransportPlanId &&
-            x.Status == RoutePlanStatus.ACTIVE && x.RoutePlanRoutes.Any() &&
-            x.RoutePlanRoutes.All(s => s.RouteType == RouteType.PRIMARY)).Select(x => x.RoutePlanId).ToArrayAsync(token);
-        if (primaryIds.Length != 1) throw new ConflictException("One active PRIMARY route is required.", "PRIMARY_ROUTE_PLAN_REQUIRED");
-        return await LockPlanAsync(primaryIds[0], token);
-    }
-
     private static List<Response.Segment> ReplacementRange(List<Response.Segment> primary, List<Response.Segment> backup)
     {
         if (backup.Count == 0) throw new BadRequestException("Backup itinerary is empty.");
@@ -286,34 +252,6 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
         foreach (var row in rows) { row.SupersededAt = now; row.UpdatedAt = now; }
     }
 
-    private async Task NotifyAssignedAsync(RoutePlan plan, EmployeeRole role, string title, string? message,
-        NotificationPriority priority, DateTime now, CancellationToken token)
-    {
-        var recipients = await db.EmployeeTransportPlans.AsNoTracking().Where(x => x.TransportPlanId == plan.TransportPlanId &&
-            x.Employee.Role == role && x.Employee.IsActive && !x.Employee.IsDeleted &&
-            !x.Employee.Account.IsDeleted && x.Employee.Account.Status == AccountStatus.ACTIVE)
-            .Select(x => x.Employee.AccountId).Distinct().ToArrayAsync(token);
-        foreach (var recipient in recipients) Notify(recipient, plan, title, message, priority, now);
-    }
-
-    private async Task<List<Employee>> NotifyPrimaryDriversAsync(RoutePlan plan, Guid primaryId, string title, string? message, DateTime now, CancellationToken token)
-    {
-        var driverIds = db.RoutePlanRoutes.Where(x => x.RoutePlanId == primaryId && x.DriverEmployeeId.HasValue).Select(x => x.DriverEmployeeId!.Value);
-        var drivers = await db.Employees.AsNoTracking().Active().Where(x => driverIds.Contains(x.EmployeeId) && x.Role == EmployeeRole.DRIVER).OrderBy(x => x.EmployeeCode).ToListAsync(token);
-        foreach (var driver in drivers) Notify(driver.AccountId, plan, title, message, NotificationPriority.URGENT, now);
-        return drivers;
-    }
-
-    private void Notify(Guid accountId, RoutePlan plan, string title, string? message, NotificationPriority priority, DateTime now) =>
-        notifications.Queue(new() { AccountId = accountId, TransportId = plan.TransportPlan.TransportId, Type = NotificationType.ROUTE,
-            Priority = priority, Title = title, Message = $"{plan.RoutePlanCode}: {message}", ReferenceType = "RoutePlan",
-            ReferenceId = plan.RoutePlanId, ActionUrl = $"/admin/route-plans/{plan.RoutePlanId}", CreatedAt = now });
-
-    private void Audit(RoutePlan plan, Guid accountId, string action, string? note, DateTime now) =>
-        db.CatalogAuditLogs.Add(new() { CatalogAuditLogId = Guid.NewGuid(), EntityType = "RoutePlan", EntityId = plan.RoutePlanId,
-            ActorAccountId = accountId, ActionType = action, Summary = note, BeforeData = JsonDocument.Parse("{}"),
-            AfterData = JsonSerializer.SerializeToDocument(new { status = plan.Status.ToString() }), CreatedAt = now });
-
     private static void EnsureInTransit(RoutePlan plan)
     {
         if (plan.TransportPlan.Transport.Status != TransportStatus.IN_TRANSIT)
@@ -327,118 +265,11 @@ public sealed partial class Service(AppDbContext db, NotificationService.IServic
 
     private static ConflictException InvalidStatus(RoutePlan plan) =>
         new($"This action cannot be performed while the route plan is in {plan.Status} status", "INVALID_ROUTE_PLAN_STATUS");
+
     private static void CheckVersion(RoutePlan plan, DateTimeOffset version)
     {
         if (plan.UpdatedAt != Truncate(version)) throw new ConflictException("The route plan was just modified. Please reload the page", "ROUTE_PLAN_MODIFIED");
     }
+
     private DateTime NextVersion(RoutePlan plan) => new(Math.Max(Now.Ticks, plan.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
-
-    private async Task<Employee> ActorAsync(Guid accountId, EmployeeRole[] roles, CancellationToken token)
-    {
-        var actor = await db.Employees.AsNoTracking().Include(x => x.Account).SingleOrDefaultAsync(x => x.AccountId == accountId, token);
-        if (actor is null || !actor.IsActive || actor.IsDeleted || actor.Account.IsDeleted || actor.Account.Status != AccountStatus.ACTIVE ||
-            actor.Account.AccountType != AccountType.EMPLOYEE || !roles.Contains(actor.Role))
-            throw new ForbiddenException("You do not have permission to perform this action.");
-        return actor;
-    }
-
-    private async Task<RoutePlan> LockPlanAsync(Guid routePlanId, CancellationToken token)
-    {
-        var header = await db.RoutePlans.AsNoTracking().Where(x => x.RoutePlanId == routePlanId)
-            .Select(x => new { x.TransportPlanId, x.TransportPlan.TransportId }).SingleOrDefaultAsync(token)
-            ?? throw new NotFoundException("Route plan not found.", "ROUTE_PLAN_NOT_FOUND");
-        if (db.Database.IsRelational())
-        {
-            // Updating the key to itself holds a row lock until the transaction ends.
-            await db.LockRowsAsync(db.Transports.Where(x => x.TransportId == header.TransportId), x => x.TransportId, token);
-            await db.LockRowsAsync(db.TransportPlans.Where(x => x.TransportPlanId == header.TransportPlanId), x => x.TransportPlanId, token);
-            await db.LockRowsAsync(db.RoutePlans.Where(x => x.RoutePlanId == routePlanId), x => x.RoutePlanId, token);
-            await LockSegmentsAsync(routePlanId, token);
-        }
-        var plan = await db.RoutePlans.Include(x => x.TransportPlan).ThenInclude(x => x.Transport).ThenInclude(x => x.Booking).ThenInclude(x => x.Customer).ThenInclude(x => x.Account)
-            .Include(x => x.TransportPlan).ThenInclude(x => x.Transport).ThenInclude(x => x.ComplianceDossier)
-            .SingleAsync(x => x.RoutePlanId == routePlanId, token);
-        await db.Entry(plan).ReloadAsync(token);
-        await db.Entry(plan.TransportPlan).ReloadAsync(token);
-        await db.Entry(plan.TransportPlan.Transport).ReloadAsync(token);
-        var dossier = plan.TransportPlan.Transport.ComplianceDossier;
-        if (dossier is not null && db.Database.IsRelational())
-        {
-            await db.LockRowsAsync(db.ComplianceDossiers.Where(x => x.ComplianceDossierId == dossier.ComplianceDossierId), x => x.ComplianceDossierId, token);
-            await db.Entry(dossier).ReloadAsync(token);
-        }
-        return plan;
-    }
-
-    private async Task LockSegmentsAsync(Guid routePlanId, CancellationToken token)
-    {
-        // Acquire segment locks in the same order for primary and backup routes to avoid deadlocks.
-        var ids = await db.RoutePlanRoutes.Where(x => x.RoutePlanId == routePlanId)
-            .OrderBy(x => x.RoutePlanRouteId).Select(x => x.RoutePlanRouteId).ToArrayAsync(token);
-        foreach (var id in ids)
-            await db.LockRowsAsync(db.RoutePlanRoutes.Where(x => x.RoutePlanRouteId == id), x => x.RoutePlanRouteId, token);
-    }
-
-    private IQueryable<RoutePlanRoute> SegmentQuery() => db.RoutePlanRoutes.AsNoTracking()
-        .Include(x => x.Route).ThenInclude(x => x.FromLocation).Include(x => x.Route).ThenInclude(x => x.ToLocation)
-        .Include(x => x.DriverEmployee).Include(x => x.EscortEmployee).Include(x => x.TransportProvider)
-        .Include(x => x.RoutePlanRouteVehicles).ThenInclude(x => x.Vehicle);
-
-    private async Task<List<Response.Segment>> SegmentsAsync(Guid planId, CancellationToken token)
-    {
-        var rows = await SegmentQuery().Where(x => x.RoutePlanId == planId && x.SupersededAt == null).OrderBy(x => x.SequenceNo).ToListAsync(token);
-        return rows.Select((x, i) => Segment(x, i + 1 < rows.Count ? rows[i + 1].PlannedDepartureAt : null)).ToList();
-    }
-
-    private static Response.EmployeeBrief? Employee(Employee? x) => x is null ? null : new(x.EmployeeId, x.EmployeeCode, x.FullName, x.Role.ToString());
-    private static Response.LocationBrief Location(Location x) => new(x.LocationId, x.LocationName, x.LocationType?.ToString(), x.City, x.Country, x.Latitude, x.Longitude);
-    private static Response.VehicleBrief Vehicle(Vehicle x) => new(x.VehicleId, x.VehicleCode, x.VehicleName, x.LicensePlate, x.TransportMode.ToString(), x.CapacityHorses);
-    private static string[] Modes(string? modes) => (modes ?? "").Split([',', ';', '|', ' ', '[', ']', '"'], StringSplitOptions.RemoveEmptyEntries).Distinct().Order().ToArray();
-    private static Response.Segment Segment(RoutePlanRoute x, DateTime? nextDeparture)
-    {
-        if (x.PlannedArrivalAt is null || x.PlannedDepartureAt is null || x.Route.DistanceKm < 0)
-            throw new ConflictException("A valid segment schedule and nonnegative route distance are required.", "ROUTE_DATA_INCOMPLETE");
-        return new(x.RoutePlanRouteId, x.SequenceNo, x.RouteType.ToString(),
-            new(x.RouteId, x.Route.RouteCode, x.Route.RouteName, x.Route.TransportMode.ToString(), x.Route.DistanceKm, x.Route.EstimatedDurationMinutes),
-            Location(x.Route.FromLocation), Location(x.Route.ToLocation), AsUtc(x.PlannedDepartureAt.Value), AsUtc(x.PlannedArrivalAt.Value),
-            AsUtc(x.ActualDepartureAt), AsUtc(x.ActualArrivalAt), x.ActualArrivalAt.HasValue ? "COMPLETED" : x.ActualDepartureAt.HasValue ? "IN_PROGRESS" : "PLANNED",
-            nextDeparture.HasValue ? (decimal)(nextDeparture.Value - x.PlannedArrivalAt.Value).TotalMinutes : null,
-            x.TransportProviderId.HasValue ? "OUTSOURCED" : "INTERNAL", x.RoutePlanRouteVehicles.OrderBy(v => v.VehicleId).Select(v => Vehicle(v.Vehicle)).ToList(),
-            x.TransportProvider is { } p ? new(new(p.TransportProviderId, p.ProviderCode, p.ProviderName, p.Status.ToString(), Modes(p.SupportedModes)), x.ServiceType, x.ProviderReference) : null,
-            Employee(x.DriverEmployee), Employee(x.EscortEmployee), x.Note);
-    }
-
-    private static Response.Comparison Compare(List<Response.Segment> active, List<Response.Segment> current, List<Response.Segment> proposed, DateTimeOffset eta)
-    {
-        static Guid[] Bcps(List<Response.Segment> list) => list.SelectMany(x => new[] { x.FromLocation, x.ToLocation })
-            .Where(x => x.LocationType == "BORDER_GATE").Select(x => x.LocationId).Distinct().ToArray();
-        Dictionary<Guid, int> Rest(List<Response.Segment> list)
-        {
-            var rest = list.Where(x => x.DwellAfterMinutes >= 1440).GroupBy(x => x.ToLocation.LocationId)
-                .ToDictionary(x => x.Key, x => x.Sum(s => (int)(s.DwellAfterMinutes!.Value / 1440)));
-            if (active.LastOrDefault(x => x.ActualArrivalAt.HasValue)?.ActualArrivalAt is { } arrival)
-            {
-                var days = (int)((list[0].PlannedDepartureAt - arrival).TotalMinutes / 1440);
-                if (days > 0) rest[list[0].FromLocation.LocationId] = rest.GetValueOrDefault(list[0].FromLocation.LocationId) + days;
-            }
-            return rest;
-        }
-        var oldRest = Rest(current);
-        return new(proposed.Sum(x => x.Route.DistanceKm!.Value) - current.Sum(x => x.Route.DistanceKm!.Value),
-            (decimal)(eta - current[^1].PlannedArrivalAt).TotalMinutes, !Bcps(current).SequenceEqual(Bcps(proposed)),
-            Rest(proposed).Any(x => x.Value > oldRest.GetValueOrDefault(x.Key)),
-            current.SelectMany(x => new[] { x.FromLocation, x.ToLocation }).FirstOrDefault(x => x.LocationType == "BORDER_GATE"),
-            proposed.SelectMany(x => new[] { x.FromLocation, x.ToLocation }).FirstOrDefault(x => x.LocationType == "BORDER_GATE"), current[^1].PlannedArrivalAt, eta);
-    }
-
-    private static string[] ApprovalReasons(Response.Comparison comparison)
-    {
-        var reasons = new List<string>();
-        if (comparison.BcpChanged) reasons.Add("BCP_CHANGED");
-        if (comparison.Additional24hRest) reasons.Add("ADDITIONAL_24H_REST");
-        if (Math.Abs(comparison.DistanceDeltaKm) >= 50) reasons.Add("DEVIATION_OVER_50KM");
-        if (comparison.DelayMinutes >= 60) reasons.Add("DELAY_OVER_1H");
-        return reasons.ToArray();
-    }
-
 }

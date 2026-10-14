@@ -1,20 +1,15 @@
 using System.Data;
-using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.OutboxService;
 
 using static Pegaxus.Service.Common.DbTime;
-
-using AppException = Pegaxus.Service.Exceptions.Exceptions;
 
 namespace Pegaxus.Service.InvoiceService;
 

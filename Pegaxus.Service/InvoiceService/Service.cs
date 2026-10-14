@@ -1,19 +1,14 @@
-using System.Globalization;
 using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
 using Pegaxus.Repository;
-using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.OutboxService;
 
 using static Pegaxus.Service.Common.DbTime;
-
-using AppException = Pegaxus.Service.Exceptions.Exceptions;
 
 namespace Pegaxus.Service.InvoiceService;
 

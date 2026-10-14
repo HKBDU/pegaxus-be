@@ -1,7 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.API.Models;
 
 using Outsourcing = Pegaxus.Service.RouteOutsourcingService;
 

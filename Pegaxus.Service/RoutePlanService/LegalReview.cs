@@ -5,12 +5,9 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
-using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 
 using static Pegaxus.Service.Common.DbTime;
-
-using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.RoutePlanService;
 
