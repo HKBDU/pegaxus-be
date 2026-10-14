@@ -16,6 +16,7 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Service.ComplianceRequirementService.Validator;
 using Pegaxus.Service.MailService;
 using Pegaxus.Service.OutboxService;
+
 using CatalogService = Pegaxus.Service.ComplianceRequirementService.Service;
 using TemplateService = Pegaxus.Service.DossierTemplateService.Service;
 using TemplateRequest = Pegaxus.Service.DossierTemplateService.Request;
@@ -58,6 +59,7 @@ public class LinqConflictResponseTests
     }
 }
 
+[Collection("PostgresSharedDatabase")]
 public class LinqConcurrencyTests : IAsyncLifetime
 {
     private NpgsqlDataSource? _source;
@@ -115,7 +117,7 @@ public class LinqConcurrencyTests : IAsyncLifetime
         var mail = new RecordingMail();
         await using var services = new ServiceCollection()
             .AddScoped(_ => CreateDb())
-            .AddSingleton<Pegaxus.Service.MailService.IService>(mail)
+            .AddSingleton<Pegaxus.Service.MailService.IMailService>(mail)
             .BuildServiceProvider();
         using var first = new TransactionalOutboxWorker(services.GetRequiredService<IServiceScopeFactory>(), NullLogger<TransactionalOutboxWorker>.Instance);
         using var second = new TransactionalOutboxWorker(services.GetRequiredService<IServiceScopeFactory>(), NullLogger<TransactionalOutboxWorker>.Instance);
@@ -187,7 +189,7 @@ public class LinqConcurrencyTests : IAsyncLifetime
     }
 
     private AppDbContext CreateDb(params IInterceptor[] interceptors) => new(
-        new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(_source!)
+        new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(_source!)
             .AddInterceptors(interceptors).Options);
 
     private sealed class EnumNameTranslator : INpgsqlNameTranslator
@@ -197,7 +199,7 @@ public class LinqConcurrencyTests : IAsyncLifetime
         public string TranslateMemberName(string name) => name;
     }
 
-    private sealed class RecordingMail : Pegaxus.Service.MailService.IService
+    private sealed class RecordingMail : Pegaxus.Service.MailService.IMailService
     {
         public ConcurrentDictionary<string, int> Deliveries { get; } = new();
         public Task SendMail(MailContent content, CancellationToken cancellationToken = default)

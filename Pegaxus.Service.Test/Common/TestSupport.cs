@@ -7,7 +7,7 @@ using Microsoft.Extensions.Options;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
-using MailService = Pegaxus.Service.MailService;
+
 using JwtService = Pegaxus.Service.JwtService;
 using Claim = System.Security.Claims.Claim;
 
@@ -25,6 +25,9 @@ internal static class TestSupport
         new MemoryDistributedCache(Options.Create(new MemoryDistributedCacheOptions()));
 
     internal static RecordingMailService CreateMailService() => new();
+
+    internal static Pegaxus.Service.NotificationService.Service CreateNotifications(AppDbContext db) =>
+        new(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService());
     internal static JwtService.IJwtService CreateJwtService() => new StubJwtService();
 
     internal static async Task<(Account Account, Customer Customer)> AddCustomerAsync(AppDbContext db)
@@ -139,7 +142,7 @@ internal static class TestSupport
 
     private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
-    internal sealed class RecordingMailService : MailService.IService
+    internal sealed class RecordingMailService : MailService.IMailService
     {
         internal int Calls { get; private set; }
 

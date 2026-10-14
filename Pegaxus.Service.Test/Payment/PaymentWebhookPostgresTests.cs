@@ -10,6 +10,7 @@ using Pegaxus.Service.OutboxService;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class PaymentWebhookPostgresTests : IAsyncLifetime
 {
     private NpgsqlDataSource? source;
@@ -118,7 +119,7 @@ public class PaymentWebhookPostgresTests : IAsyncLifetime
 
     private AppDbContext CreateDb(DbCommandInterceptor? interceptor = null)
     {
-        var builder = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source!);
+        var builder = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source!);
         if (interceptor is not null) builder.AddInterceptors(interceptor);
         return new(builder.Options);
     }

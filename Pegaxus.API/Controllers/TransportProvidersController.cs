@@ -1,9 +1,8 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
+
 using Providers = Pegaxus.Service.TransportProviderService;
 
 namespace Pegaxus.API.Controllers;
@@ -11,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/transport-providers")]
-public sealed class TransportProvidersController(Providers.IService service) : ControllerBase
+public sealed class TransportProvidersController(Providers.ITransportProviderService service) : ApiControllerBase
 {
     /// <summary>
     /// List transport providers.
@@ -23,8 +22,7 @@ public sealed class TransportProvidersController(Providers.IService service) : C
     [HttpGet]
     [Authorize(Policy = JwtExtensions.TransportProviderViewerPolicy)]
     public async Task<IActionResult> GetList([FromQuery] Providers.Request.ListRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.GetListAsync(GetAccountId(), request, cancellationToken),
-            "Transport providers retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.GetListAsync(AccountId, request, cancellationToken), "Transport providers retrieved successfully");
 
     /// <summary>
     /// Get a transport provider.
@@ -36,8 +34,7 @@ public sealed class TransportProvidersController(Providers.IService service) : C
     [HttpGet("{providerId:guid}")]
     [Authorize(Policy = JwtExtensions.TransportProviderViewerPolicy)]
     public async Task<IActionResult> Get(Guid providerId, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.GetAsync(GetAccountId(), providerId, cancellationToken),
-            "Transport provider retrieved successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.GetAsync(AccountId, providerId, cancellationToken), "Transport provider retrieved successfully");
 
     /// <summary>
     /// Create a transport provider.
@@ -50,7 +47,7 @@ public sealed class TransportProvidersController(Providers.IService service) : C
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Create([FromBody] Providers.Request.CreateRequest request, CancellationToken cancellationToken)
     {
-        var result = await service.CreateAsync(GetAccountId(), request, cancellationToken);
+        var result = await service.CreateAsync(AccountId, request, cancellationToken);
         return CreatedAtAction(nameof(Get), new { providerId = result.TransportProviderId }, ResponseBuilder.SuccessResponse(
             result, "Transport provider created successfully", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
     }
@@ -66,8 +63,7 @@ public sealed class TransportProvidersController(Providers.IService service) : C
     [HttpPut("{providerId:guid}")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Update(Guid providerId, [FromBody] Providers.Request.UpdateRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.UpdateAsync(GetAccountId(), providerId, request, cancellationToken),
-            "Transport provider updated successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.UpdateAsync(AccountId, providerId, request, cancellationToken), "Transport provider updated successfully");
 
     /// <summary>
     /// Change a transport provider status.
@@ -80,8 +76,7 @@ public sealed class TransportProvidersController(Providers.IService service) : C
     [HttpPatch("{providerId:guid}/status")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> UpdateStatus(Guid providerId, [FromBody] Providers.Request.StatusRequest request, CancellationToken cancellationToken) =>
-        Ok(ResponseBuilder.SuccessResponse(await service.UpdateStatusAsync(GetAccountId(), providerId, request, cancellationToken),
-            "Provider status updated successfully", traceId: HttpContext.TraceIdentifier));
+        Success(await service.UpdateStatusAsync(AccountId, providerId, request, cancellationToken), "Provider status updated successfully");
 
     /// <summary>
     /// Delete a transport provider.
@@ -94,10 +89,8 @@ public sealed class TransportProvidersController(Providers.IService service) : C
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Delete(Guid providerId, CancellationToken cancellationToken)
     {
-        await service.DeleteAsync(GetAccountId(), providerId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(null, "Transport provider deleted successfully", traceId: HttpContext.TraceIdentifier));
+        await service.DeleteAsync(AccountId, providerId, cancellationToken);
+        return Success(null, "Transport provider deleted successfully");
     }
 
-    private Guid GetAccountId() => Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var id)
-        ? id : throw new UnauthorizedException("The authenticated account identifier is invalid.");
 }

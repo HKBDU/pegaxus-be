@@ -75,7 +75,7 @@ public sealed class TransactionalOutboxWorker(
             switch (message.MessageType)
             {
                 case MessageTypes.Email:
-                    var mail = scope.ServiceProvider.GetRequiredService<Pegaxus.Service.MailService.IService>();
+                    var mail = scope.ServiceProvider.GetRequiredService<Pegaxus.Service.MailService.IMailService>();
                     var email = OutboxQueue.Deserialize<EmailPayload>(message.Payload);
                     await mail.SendMail(new MailContent
                     {

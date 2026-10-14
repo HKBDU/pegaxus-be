@@ -1,5 +1,5 @@
-using FluentValidation;
 using System.Globalization;
+using FluentValidation;
 
 namespace Pegaxus.Service.RouteChangeService.Validator;
 

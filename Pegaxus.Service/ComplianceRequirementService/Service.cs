@@ -1,19 +1,25 @@
-using FluentValidation;
 using System.Data;
 using System.Text.Json;
+using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+
+using static Pegaxus.Service.Common.DbTime;
+using static Pegaxus.Service.Common.Text;
+using static Pegaxus.Service.Common.Validation;
 
 namespace Pegaxus.Service.ComplianceRequirementService;
 
 public sealed class Service(AppDbContext db,
     IValidator<Request.ListRequest> listValidator,
     IValidator<Request.SaveRequest> saveValidator,
-    IValidator<Request.StatusRequest> statusValidator) : IService
+    IValidator<Request.StatusRequest> statusValidator) : IComplianceRequirementService
 {
     private const string DuplicateMessage = "A ComplianceRequirement with this code already exists. Please use a unique code or edit the existing record.";
     private const string ReferencedMessage = "Cannot delete this ComplianceRequirement because it is currently linked to existing DossierTemplates or active ComplianceDossiers. Please deactivate it instead.";
@@ -64,7 +70,7 @@ public sealed class Service(AppDbContext db,
         return new Response.ListResponse
         {
             Items = items, PageIndex = request.PageIndex, PageSize = request.PageSize,
-            TotalItems = total, TotalPages = (int)Math.Ceiling(total / (double)request.PageSize)
+            TotalItems = total, TotalPages = Paging.TotalPages(total, request.PageSize)
         };
     }
 
@@ -112,9 +118,7 @@ public sealed class Service(AppDbContext db,
     public async Task DeleteAsync(Guid id, Guid actorAccountId, CancellationToken cancellationToken = default)
     {
         // Serializable reference writers prevent deletion racing with a newly linked requirement.
-        await using var transaction = db.Database.IsRelational()
-            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : await db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var entity = await GetForUpdateAsync(id, cancellationToken);
         // Include historical references, even requirements belonging to deleted dossiers.
         if (await db.DossierTemplateItems.IgnoreQueryFilters().AnyAsync(item => item.ComplianceRequirementId == id, cancellationToken) ||
@@ -131,9 +135,7 @@ public sealed class Service(AppDbContext db,
     private async Task<ComplianceRequirement> GetForUpdateAsync(Guid id, CancellationToken cancellationToken)
     {
         // Updating the key to itself serializes catalog mutations until the transaction ends.
-        if (db.Database.IsNpgsql())
-            await db.ComplianceRequirements.Where(item => item.ComplianceRequirementId == id)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceRequirementId, item => item.ComplianceRequirementId), cancellationToken);
+        await db.LockRowsAsync(db.ComplianceRequirements.Where(item => item.ComplianceRequirementId == id), item => item.ComplianceRequirementId, cancellationToken);
         var query = db.ComplianceRequirements.AsQueryable();
         return await query.SingleOrDefaultAsync(item => item.ComplianceRequirementId == id && !item.IsDeleted, cancellationToken)
             ?? throw NotFound();
@@ -143,7 +145,7 @@ public sealed class Service(AppDbContext db,
     {
         var status = ParseStatus(request.Status);
         var category = ParseCategory(request.Category);
-        var country = TrimOptional(request.Country)?.ToUpperInvariant();
+        var country = EmptyToNull(request.Country)?.ToUpperInvariant();
         var code = request.RequirementCode.Trim().ToUpperInvariant();
         if (await db.ComplianceRequirements.IgnoreQueryFilters().AnyAsync(item =>
             item.ComplianceRequirementId != entity.ComplianceRequirementId && item.RequirementCode.ToUpper() == code, cancellationToken))
@@ -153,10 +155,10 @@ public sealed class Service(AppDbContext db,
         entity.Country = country;
         entity.Category = category;
         entity.Status = status;
-        entity.BcpCode = TrimOptional(request.BcpCode)?.ToUpperInvariant();
-        entity.IssuingAuthority = TrimOptional(request.IssuingAuthority);
-        entity.Description = TrimOptional(request.Description);
-        entity.LegalBasis = TrimOptional(request.LegalBasis);
+        entity.BcpCode = EmptyToNull(request.BcpCode)?.ToUpperInvariant();
+        entity.IssuingAuthority = EmptyToNull(request.IssuingAuthority);
+        entity.Description = EmptyToNull(request.Description);
+        entity.LegalBasis = EmptyToNull(request.LegalBasis);
         entity.ValidityPeriodDays = request.ValidityPeriodDays;
         entity.ValidityRequired = request.ValidityRequired!.Value;
     }
@@ -197,7 +199,7 @@ public sealed class Service(AppDbContext db,
             LinkedDossierCount = db.DossierRequirements.IgnoreQueryFilters().Where(reference => reference.ComplianceRequirementId == item.ComplianceRequirementId)
                 .Select(reference => reference.ComplianceDossierId).Distinct().Count()
         },
-        CreatedAt = ToUtcOffset(item.CreatedAt), UpdatedAt = ToUtcOffset(item.UpdatedAt)
+        CreatedAt = AsUtc(item.CreatedAt), UpdatedAt = AsUtc(item.UpdatedAt)
     });
 
     private static JsonDocument Snapshot(ComplianceRequirement entity) => JsonSerializer.SerializeToDocument(new
@@ -206,16 +208,9 @@ public sealed class Service(AppDbContext db,
         Status = entity.Status.ToString(), Category = CategoryName(entity.Category), entity.Country,
         entity.BcpCode, entity.IssuingAuthority, entity.Description, entity.LegalBasis,
         entity.ValidityPeriodDays, entity.ValidityRequired, entity.IsDeleted, entity.DeletedByAccountId,
-        DeletedAt = entity.DeletedAt.HasValue ? ToUtcOffset(entity.DeletedAt.Value) : (DateTimeOffset?)null,
-        CreatedAt = ToUtcOffset(entity.CreatedAt), UpdatedAt = ToUtcOffset(entity.UpdatedAt)
+        DeletedAt = entity.DeletedAt.HasValue ? AsUtc(entity.DeletedAt.Value) : (DateTimeOffset?)null,
+        CreatedAt = AsUtc(entity.CreatedAt), UpdatedAt = AsUtc(entity.UpdatedAt)
     });
-
-    private static void Validate<T>(T request, IValidator<T> validator)
-    {
-        var result = validator.Validate(request);
-        if (!result.IsValid)
-            throw new BadRequestException(string.Join(" ", result.Errors.Select(error => error.ErrorMessage)));
-    }
 
     private static ComplianceRequirementStatus ParseStatus(string value) => Enum.Parse<ComplianceRequirementStatus>(value.Trim(), true);
 
@@ -228,10 +223,7 @@ public sealed class Service(AppDbContext db,
         _ => category.ToString().ToUpperInvariant()
     };
 
-    private static string? TrimOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     private static NotFoundException NotFound() => new("ComplianceRequirement not found");
-    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
-    private static DateTimeOffset ToUtcOffset(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
     public sealed class ReferenceImpactException(Response.ReferenceCounts referenceCount) : ConflictException(
         $"This ComplianceRequirement is linked to {referenceCount.LinkedDossierCount} dossiers and {referenceCount.DossierTemplateItemCount} template items. Editing it may affect active records. Confirm that you accept responsibility for this change.",

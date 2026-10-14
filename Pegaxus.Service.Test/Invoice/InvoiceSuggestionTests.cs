@@ -23,7 +23,7 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.InvoiceService.Validator;
 using Pegaxus.Service.JwtService;
-using InvoiceService = Pegaxus.Service.InvoiceService;
+
 using Claim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Test;
@@ -288,9 +288,9 @@ public class InvoiceSuggestionTests
         builder.Services.AddControllers().AddApplicationPart(typeof(BookingController).Assembly);
         builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddScoped<GlobalExceptionHandlerMiddleware>();
-        builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ => new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService()));
-        builder.Services.AddScoped<InvoiceService.IService, InvoiceService.Service>();
-        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IService, InvoiceOnlinePaymentTests.Gateway>();
+        builder.Services.AddScoped<Pegaxus.Service.BookingService.IBookingService>(_ => new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService(), TestSupport.CreateNotifications(db)));
+        builder.Services.AddScoped<InvoiceService.IInvoiceService, InvoiceService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IPaymentGatewayService, InvoiceOnlinePaymentTests.Gateway>();
         builder.Services.AddScoped<IValidator<InvoiceService.Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddSingleton(InvoiceTests.Fixture.Clock);
         builder.Services.AddScoped<IValidator<InvoiceService.Request.CreateRequest>, CreateRequestValidator>();
@@ -300,7 +300,7 @@ public class InvoiceSuggestionTests
         builder.Services.AddScoped<IValidator<InvoiceService.Request.IssueRequest>, IssueRequestValidator>();
         builder.Services.AddScoped<IValidator<InvoiceService.Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
         builder.Services.AddScoped<IValidator<InvoiceService.Request.CancelRequest>, CancelRequestValidator>();
-        builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
+        builder.Services.AddScoped<NotificationService.INotificationService, NotificationService.Service>();
         builder.Services.AddSingleton<NotificationService.INotificationRealtimeService, NotificationService.NoopNotificationRealtimeService>();
         await using var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>();

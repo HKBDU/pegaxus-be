@@ -15,13 +15,13 @@ using Microsoft.Extensions.Logging;
 using Pegaxus.API.Controllers;
 using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
+using Pegaxus.API.Models;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.JwtService;
-using Pegaxus.Service.Models;
 using Pegaxus.Service.NotificationService;
-using Pegaxus.Service.VehicleService;
 using Pegaxus.Service.VehicleService.Validator;
+
 using Request = Pegaxus.Service.VehicleService.Request;
 
 namespace Pegaxus.Service.Test;
@@ -115,12 +115,12 @@ public class VehicleHttpTests
                 context.ModelState.Where(x => x.Value!.Errors.Count > 0).SelectMany(x => x.Value!.Errors.Select(e => new { field = x.Key, message = e.ErrorMessage })),
                 "The request data is invalid")));
         builder.Services.AddJwtServices(builder.Configuration);
-        builder.Services.AddScoped<Pegaxus.Service.VehicleService.IService, Pegaxus.Service.VehicleService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.VehicleService.IVehicleService, Pegaxus.Service.VehicleService.Service>();
         builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.StatusRequest>, StatusRequestValidator>();
-        builder.Services.AddScoped<Pegaxus.Service.NotificationService.IService, Pegaxus.Service.NotificationService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.NotificationService.INotificationService, Pegaxus.Service.NotificationService.Service>();
         builder.Services.AddSingleton<INotificationRealtimeService, NoopNotificationRealtimeService>();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         var app = builder.Build();

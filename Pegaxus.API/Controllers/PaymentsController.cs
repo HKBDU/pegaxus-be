@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
+
 using PaymentService = Pegaxus.Service.PaymentService;
 
 namespace Pegaxus.API.Controllers;
@@ -9,7 +9,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [AllowAnonymous]
 [Route("api/v1/payments")]
-public sealed class PaymentsController(PaymentService.IService service) : ControllerBase
+public sealed class PaymentsController(PaymentService.IPaymentService service) : ApiControllerBase
 {
     /// <summary>Process a SePay payment gateway IPN.</summary>
     /// <remarks>Configure SePay IPN authentication as SECRET_KEY. X-Secret-Key is required; JWT is not used.</remarks>
@@ -27,6 +27,6 @@ public sealed class PaymentsController(PaymentService.IService service) : Contro
         [FromHeader(Name = "X-Secret-Key")] string? secretKey, CancellationToken cancellationToken)
     {
         await service.HandleWebhookAsync(request, Request.Headers["X-Secret-Key"].Count == 1 ? secretKey : null, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(null, "Webhook processed successfully", traceId: HttpContext.TraceIdentifier));
+        return Success(null, "Webhook processed successfully");
     }
 }

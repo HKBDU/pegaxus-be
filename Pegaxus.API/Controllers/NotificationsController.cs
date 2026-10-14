@@ -1,8 +1,7 @@
-using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.Models;
+
 using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.API.Controllers;
@@ -10,11 +9,11 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/notifications")]
-public sealed class NotificationsController : ControllerBase
+public sealed class NotificationsController : ApiControllerBase
 {
-    private readonly NotificationService.IService _service;
+    private readonly NotificationService.INotificationService _service;
 
-    public NotificationsController(NotificationService.IService service)
+    public NotificationsController(NotificationService.INotificationService service)
     {
         _service = service;
     }
@@ -33,11 +32,8 @@ public sealed class NotificationsController : ControllerBase
         [FromQuery] NotificationService.Request.NotificationListRequest request,
         CancellationToken cancellationToken)
     {
-        var response = await _service.GetAsync(GetAccountId(), request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Notifications retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        var response = await _service.GetAsync(AccountId, request, cancellationToken);
+        return Success(response, "Notifications retrieved successfully");
     }
 
     /// <summary>
@@ -50,11 +46,8 @@ public sealed class NotificationsController : ControllerBase
     [HttpGet("unread-count")]
     public async Task<IActionResult> GetUnreadCount(CancellationToken cancellationToken)
     {
-        var count = await _service.GetUnreadCountAsync(GetAccountId(), cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            new { Count = count },
-            "Unread notification count retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        var count = await _service.GetUnreadCountAsync(AccountId, cancellationToken);
+        return Success(new { Count = count }, "Unread notification count retrieved successfully");
     }
 
     /// <summary>
@@ -69,11 +62,8 @@ public sealed class NotificationsController : ControllerBase
     [HttpPatch("{notificationId:guid}/read")]
     public async Task<IActionResult> MarkRead(Guid notificationId, CancellationToken cancellationToken)
     {
-        await _service.MarkReadAsync(GetAccountId(), notificationId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            null,
-            "Notification marked as read",
-            traceId: HttpContext.TraceIdentifier));
+        await _service.MarkReadAsync(AccountId, notificationId, cancellationToken);
+        return Success(null, "Notification marked as read");
     }
 
     /// <summary>
@@ -86,21 +76,8 @@ public sealed class NotificationsController : ControllerBase
     [HttpPatch("read-all")]
     public async Task<IActionResult> MarkAllRead(CancellationToken cancellationToken)
     {
-        await _service.MarkAllReadAsync(GetAccountId(), cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            null,
-            "All notifications marked as read",
-            traceId: HttpContext.TraceIdentifier));
+        await _service.MarkAllReadAsync(AccountId, cancellationToken);
+        return Success(null, "All notifications marked as read");
     }
 
-    private Guid GetAccountId()
-    {
-        var value = User.FindFirstValue(ClaimTypes.NameIdentifier)
-            ?? User.FindFirstValue("sub")
-            ?? User.FindFirstValue("accountId");
-        if (Guid.TryParse(value, out var accountId))
-            return accountId;
-
-        throw new UnauthorizedException("The authentication session is invalid or has expired");
-    }
 }

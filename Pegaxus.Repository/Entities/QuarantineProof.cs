@@ -1,5 +1,5 @@
-using Pegaxus.Repository.Enum;
 using System.Text.Json;
+using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
 

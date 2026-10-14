@@ -9,6 +9,7 @@ using Microsoft.Extensions.Options;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MailService;
 using Pegaxus.Service.NotificationService;
@@ -16,8 +17,8 @@ using Pegaxus.Service.OutboxService;
 
 namespace Pegaxus.Service.PaymentService;
 
-public sealed class Service(AppDbContext db, NotificationService.IService notifications,
-    IOptions<SePayWebhookOptions> options, TimeProvider clock, ILogger<Service> logger) : IService
+public sealed class Service(AppDbContext db, NotificationService.INotificationService notifications,
+    IOptions<SePayWebhookOptions> options, TimeProvider clock, ILogger<Service> logger) : IPaymentService
 {
     public async Task HandleWebhookAsync(Request.WebhookRequest request, string? secretKey,
         CancellationToken cancellationToken = default)
@@ -37,16 +38,12 @@ public sealed class Service(AppDbContext db, NotificationService.IService notifi
         Validate(request);
         var order = request.Order!;
         var payment = request.Transaction!;
-        await using var transaction = db.Database.IsRelational()
-            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : await db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var invoiceId = await db.Receipts.AsNoTracking().Where(x => x.ReceiptCode == order.ReceiptCode)
             .Select(x => (Guid?)x.InvoiceId).SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Receipt not found", "RECEIPT_NOT_FOUND");
 
-        if (db.Database.IsRelational())
-            await db.Invoices.Where(x => x.InvoiceId == invoiceId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(x => x.InvoiceId, x => x.InvoiceId), cancellationToken);
+        await db.LockRowsAsync(db.Invoices.Where(x => x.InvoiceId == invoiceId), x => x.InvoiceId, cancellationToken);
         var receipt = await db.Receipts.SingleAsync(x => x.ReceiptCode == order.ReceiptCode, cancellationToken);
         var invoice = await db.Invoices.SingleAsync(x => x.InvoiceId == invoiceId, cancellationToken);
         if (db.Database.IsRelational())

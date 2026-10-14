@@ -5,7 +5,7 @@ using MimeKit;
 
 namespace Pegaxus.Service.MailService;
 
-public class Service : IService
+public class Service : IMailService
 {
     private readonly MailOptions _mailOptions = new();
 

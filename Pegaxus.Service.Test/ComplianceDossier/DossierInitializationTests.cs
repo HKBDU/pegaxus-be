@@ -3,9 +3,9 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+
 using DossierRequest = Pegaxus.Service.ComplianceDossierService.Request;
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
-using NotificationService = Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.Service.Test;
 
@@ -161,7 +161,7 @@ public class DossierInitializationTests
     {
         await using var db = TestSupport.CreateDb();
         var (booking, _, _) = await SeedAsync(db);
-        var service = new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService());
+        var service = new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService(), TestSupport.CreateNotifications(db));
         await Assert.ThrowsAsync<ForbiddenException>(() => service.NegotiateAsync(booking.Customer.AccountId,
             booking.BookingId, new() { Status = "CANCELLED", Reason = "Unauthorized request" }));
         Assert.Equal(BookingStatus.APPROVED, booking.Status);

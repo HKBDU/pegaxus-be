@@ -1,29 +1,23 @@
 using System.Text.Json;
-using Pegaxus.API.Middleware;
-using Pegaxus.API.Services;
-using Pegaxus.Repository.Entities;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Npgsql.NameTranslation;
+using Pegaxus.API.Middleware;
+using Pegaxus.API.Services;
 using Pegaxus.Repository;
+using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.PersonnelAssignmentService;
 
 namespace Pegaxus.Service.Test;
 
+// These tests create schemas in a shared database; parallel runs make Npgsql see duplicate enum type names.
+[Collection("PostgresSharedDatabase")]
 public class PersonnelAssignmentPostgresTests
 {
-    private sealed class PostgresFactAttribute : FactAttribute
-    {
-        public PostgresFactAttribute()
-        {
-            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PEGAXUS_TEST_CONNECTION_STRING")))
-                Skip = "Set PEGAXUS_TEST_CONNECTION_STRING to an isolated PostgreSQL test database.";
-        }
-    }
     private sealed class EnumTranslator : INpgsqlNameTranslator
     {
         public string TranslateTypeName(string name) => new NpgsqlSnakeCaseNameTranslator().TranslateTypeName(name);
@@ -43,7 +37,7 @@ public class PersonnelAssignmentPostgresTests
         foreach (var type in typeof(EmployeeRole).Assembly.GetTypes().Where(x => x.IsEnum && x.Namespace == typeof(EmployeeRole).Namespace))
             builder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
         await using var source = builder.Build();
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options;
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options;
         try
         {
             Guid actor, driver, escort1, escort2, route1, route2, segment1, segment2, replacement1, replacement2;
@@ -185,7 +179,7 @@ public class PersonnelAssignmentPostgresTests
         await db.SaveChangesAsync();
         var mail = new ConcurrentMail();
         await using var services = new ServiceCollection().AddScoped(_ => new AppDbContext(options))
-            .AddSingleton<Pegaxus.Service.MailService.IService>(mail).BuildServiceProvider();
+            .AddSingleton<Pegaxus.Service.MailService.IMailService>(mail).BuildServiceProvider();
         var batch = typeof(TransactionalOutboxWorker).GetMethod("ProcessBatchAsync",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
         async Task RunBatchAsync()
@@ -260,7 +254,7 @@ public class PersonnelAssignmentPostgresTests
         Assert.DoesNotContain("Database internals", response);
     }
 
-    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IService
+    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IMailService
     {
         public System.Collections.Concurrent.ConcurrentBag<string> Subjects { get; } = [];
         public Task SendMail(Pegaxus.Service.MailService.MailContent mailContent, CancellationToken cancellationToken = default)

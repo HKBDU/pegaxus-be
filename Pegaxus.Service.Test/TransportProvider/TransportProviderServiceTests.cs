@@ -27,11 +27,14 @@ using Pegaxus.Repository.Migrations;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.JwtService;
 using Pegaxus.Service.TransportProviderService.Validator;
+
 using Providers = Pegaxus.Service.TransportProviderService;
 using Claim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Test;
 
+// These tests create schemas in a shared database; parallel runs make Npgsql see duplicate enum type names.
+[Collection("PostgresSharedDatabase")]
 public class TransportProviderServiceTests
 {
     [Fact]
@@ -192,7 +195,7 @@ public class TransportProviderServiceTests
         builder.Services.AddControllers().AddApplicationPart(typeof(TransportProvidersController).Assembly);
         builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddSingleton(db);
-        builder.Services.AddScoped<Providers.IService>(_ => CreateService(db));
+        builder.Services.AddScoped<Providers.ITransportProviderService>(_ => CreateService(db));
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         await using var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
@@ -255,7 +258,7 @@ public class TransportProviderServiceTests
             foreach (var type in typeof(ProviderStatus).Assembly.GetTypes().Where(type => type.IsEnum && type.Namespace == typeof(ProviderStatus).Namespace))
                 sourceBuilder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
             await using var source = sourceBuilder.Build();
-            var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options;
+            var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options;
             await using var db = new AppDbContext(options);
             await new NpgsqlCommand(db.Database.GenerateCreateScript(), admin).ExecuteNonQueryAsync();
             await db.Database.ExecuteSqlRawAsync("DROP INDEX \"TransportProvider_tax_code_key\"; DROP INDEX \"TransportProvider_provider_code_key\"; CREATE UNIQUE INDEX \"TransportProvider_provider_code_key\" ON \"TransportProvider\" (provider_code)");
@@ -340,7 +343,7 @@ public class TransportProviderServiceTests
         await db.SaveChangesAsync();
         var mail = new ConcurrentMail();
         await using var services = new ServiceCollection().AddScoped(_ => new AppDbContext(options))
-            .AddSingleton<Pegaxus.Service.MailService.IService>(mail).BuildServiceProvider();
+            .AddSingleton<Pegaxus.Service.MailService.IMailService>(mail).BuildServiceProvider();
         var batch = typeof(TransactionalOutboxWorker).GetMethod("ProcessBatchAsync",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
         async Task RunBatchAsync()
@@ -415,7 +418,7 @@ public class TransportProviderServiceTests
         Assert.DoesNotContain("Database internals", response);
     }
 
-    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IService
+    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IMailService
     {
         public System.Collections.Concurrent.ConcurrentBag<string> Subjects { get; } = [];
         public Task SendMail(Pegaxus.Service.MailService.MailContent mailContent, CancellationToken cancellationToken = default)

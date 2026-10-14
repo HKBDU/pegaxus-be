@@ -1,5 +1,5 @@
-using System.Text.Json;
 using System.Data;
+using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -7,14 +7,20 @@ using Npgsql;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
+
+using static Pegaxus.Service.Common.DbTime;
+using static Pegaxus.Service.Common.Text;
+using static Pegaxus.Service.Common.Validation;
 
 namespace Pegaxus.Service.TransportProviderService;
 
 public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> listValidator,
     IValidator<Request.CreateRequest> createValidator, IValidator<Request.UpdateRequest> updateValidator,
-    IValidator<Request.StatusRequest> statusValidator, NotificationService.IService notifications, ILogger<Service> logger) : IService
+    IValidator<Request.StatusRequest> statusValidator, NotificationService.INotificationService notifications, ILogger<Service> logger) : ITransportProviderService
 {
     public async Task<Response.ListResponse> GetListAsync(Guid accountId, Request.ListRequest request, CancellationToken cancellationToken = default)
     {
@@ -53,7 +59,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         return new Response.ListResponse
         {
             Items = items.Select(Map).ToArray(), PageIndex = request.PageIndex, PageSize = request.PageSize,
-            TotalItems = total, TotalPages = (int)Math.Ceiling(total / (double)request.PageSize)
+            TotalItems = total, TotalPages = Paging.TotalPages(total, request.PageSize)
         };
     }
 
@@ -72,7 +78,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         var item = new TransportProvider
         {
             TransportProviderId = Guid.NewGuid(), ProviderCode = request.ProviderCode.Trim().ToUpperInvariant(),
-            Status = ProviderStatus.ACTIVE, CreatedAt = UtcNow()
+            Status = ProviderStatus.ACTIVE, CreatedAt = UtcNowTruncated()
         };
         await ApplyAsync(item, request, cancellationToken);
         db.TransportProviders.Add(item);
@@ -96,7 +102,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         await SaveAsync(item, accountId, "UPDATE", before, null, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         Log(item, accountId, "UPDATE");
-        return new Response.WriteResponse { TransportProviderId = id, UpdatedAt = ToUtcOffset(item.UpdatedAt) };
+        return new Response.WriteResponse { TransportProviderId = id, UpdatedAt = AsUtc(item.UpdatedAt) };
     }
 
     public async Task<Response.StatusResponse> UpdateStatusAsync(Guid accountId, Guid id, Request.StatusRequest request, CancellationToken cancellationToken = default)
@@ -110,40 +116,36 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         var status = Enum.Parse<ProviderStatus>(request.Status.Trim(), true);
         if (item.Status != status)
         {
-            var recipients = await db.Employees.AsNoTracking().Where(employee => employee.IsActive && !employee.IsDeleted &&
-                !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE && employee.Account.AccountType == AccountType.EMPLOYEE &&
-                (employee.Role == EmployeeRole.LOGISTICS_MANAGER || employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
+            var recipients = await db.Employees.AsNoTracking().Active().Where(employee => employee.Account.AccountType == AccountType.EMPLOYEE && (employee.Role == EmployeeRole.LOGISTICS_MANAGER || employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
                 .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
             foreach (var recipient in recipients)
                 notifications.Queue(new NotificationCreateRequest
                 {
                     AccountId = recipient, Type = NotificationType.SYSTEM, Title = "Transport provider status changed",
-                    Message = $"{item.ProviderCode}: {item.Status} to {status}. {TrimOptional(request.Reason)}".TrimEnd(),
-                    ReferenceType = nameof(TransportProvider), ReferenceId = id, CreatedAt = UtcNow()
+                    Message = $"{item.ProviderCode}: {item.Status} to {status}. {EmptyToNull(request.Reason)}".TrimEnd(),
+                    ReferenceType = nameof(TransportProvider), ReferenceId = id, CreatedAt = UtcNowTruncated()
                 });
         }
         item.Status = status;
-        await SaveAsync(item, accountId, "STATUS_CHANGED", before, TrimOptional(request.Reason), cancellationToken);
+        await SaveAsync(item, accountId, "STATUS_CHANGED", before, EmptyToNull(request.Reason), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
         Log(item, accountId, "STATUS_CHANGED");
-        return new Response.StatusResponse { TransportProviderId = id, Status = item.Status.ToString(), UpdatedAt = ToUtcOffset(item.UpdatedAt) };
+        return new Response.StatusResponse { TransportProviderId = id, Status = item.Status.ToString(), UpdatedAt = AsUtc(item.UpdatedAt) };
     }
 
     public async Task DeleteAsync(Guid accountId, Guid id, CancellationToken cancellationToken = default)
     {
         await RequireEmployeeAsync(accountId, true, cancellationToken);
         // shortcut: future route writers must validate the provider within a Serializable transaction.
-        await using var transaction = db.Database.IsRelational()
-            ? await db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : await db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var item = await GetForUpdateAsync(id, cancellationToken);
         if (await db.RoutePlanRoutes.AnyAsync(route => route.TransportProviderId == id &&
             route.RoutePlan.Status != RoutePlanStatus.COMPLETED && route.RoutePlan.Status != RoutePlanStatus.CANCELLED, cancellationToken))
             throw new ConflictException("The provider is assigned to route segments that are not completed or cancelled", "PROVIDER_IN_USE");
         var before = Snapshot(item);
         item.IsDeleted = true;
-        item.DeletedAt = UtcNow();
+        item.DeletedAt = UtcNowTruncated();
         item.DeletedByAccountId = accountId;
         await SaveAsync(item, accountId, "DELETE", before, null, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -152,8 +154,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
 
     private async Task<EmployeeRole> RequireEmployeeAsync(Guid accountId, bool write, CancellationToken cancellationToken)
     {
-        var role = await db.Employees.AsNoTracking().Where(item => item.AccountId == accountId && item.IsActive && !item.IsDeleted &&
-            !item.Account.IsDeleted && item.Account.Status == AccountStatus.ACTIVE && item.Account.AccountType == AccountType.EMPLOYEE)
+        var role = await db.Employees.AsNoTracking().Active().Where(item => item.AccountId == accountId && item.Account.AccountType == AccountType.EMPLOYEE)
             .Select(item => (EmployeeRole?)item.Role).SingleOrDefaultAsync(cancellationToken);
         if (role != EmployeeRole.LOGISTICS_MANAGER && (write || role != EmployeeRole.FLEET_ROUTE_COORDINATOR))
             throw new ForbiddenException("Only Logistics Managers may manage providers; Fleet Route Coordinators have read-only access.");
@@ -163,9 +164,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
     private async Task<TransportProvider> GetForUpdateAsync(Guid id, CancellationToken cancellationToken)
     {
         // Updating the key to itself serializes catalog mutations until the transaction ends.
-        if (db.Database.IsNpgsql())
-            await db.TransportProviders.Where(item => item.TransportProviderId == id)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.TransportProviderId, item => item.TransportProviderId), cancellationToken);
+        await db.LockRowsAsync(db.TransportProviders.Where(item => item.TransportProviderId == id), item => item.TransportProviderId, cancellationToken);
         var query = db.TransportProviders.AsQueryable();
         var item = await query.SingleOrDefaultAsync(item => item.TransportProviderId == id && !item.IsDeleted, cancellationToken) ?? throw NotFound();
         await db.Entry(item).ReloadAsync(cancellationToken);
@@ -185,17 +184,17 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         item.ProviderName = request.ProviderName.Trim();
         item.TaxCode = taxCode;
         item.SupportedModes = string.Join(',', request.SupportedModes.Select(mode => mode.Trim().ToUpperInvariant()).Distinct().Order());
-        item.ContactName = TrimOptional(request.ContactName);
-        item.Phone = TrimOptional(request.Phone);
-        item.Email = TrimOptional(request.Email);
-        item.Address = TrimOptional(request.Address);
-        item.Country = TrimOptional(request.Country)?.ToUpperInvariant();
-        item.Note = TrimOptional(request.Note);
+        item.ContactName = EmptyToNull(request.ContactName);
+        item.Phone = EmptyToNull(request.Phone);
+        item.Email = EmptyToNull(request.Email);
+        item.Address = EmptyToNull(request.Address);
+        item.Country = EmptyToNull(request.Country)?.ToUpperInvariant();
+        item.Note = EmptyToNull(request.Note);
     }
 
     private async Task SaveAsync(TransportProvider item, Guid actor, string action, JsonDocument before, string? reason, CancellationToken cancellationToken)
     {
-        var now = UtcNow();
+        var now = UtcNowTruncated();
         item.UpdatedAt = now > item.UpdatedAt ? now : item.UpdatedAt.AddTicks(10);
         db.CatalogAuditLogs.Add(new CatalogAuditLog
         {
@@ -220,18 +219,13 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         TransportProviderId = item.TransportProviderId, ProviderCode = item.ProviderCode, ProviderName = item.ProviderName,
         Status = item.Status.ToString(), SupportedModes = (item.SupportedModes ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
         TaxCode = item.TaxCode, ContactName = item.ContactName, Phone = item.Phone, Email = item.Email, Address = item.Address,
-        Country = item.Country, Note = item.Note, CreatedAt = ToUtcOffset(item.CreatedAt), UpdatedAt = ToUtcOffset(item.UpdatedAt)
+        Country = item.Country, Note = item.Note, CreatedAt = AsUtc(item.CreatedAt), UpdatedAt = AsUtc(item.UpdatedAt)
     };
 
     private static JsonDocument Snapshot(TransportProvider item) => JsonSerializer.SerializeToDocument(new
     {
         Provider = Map(item), item.IsDeleted, item.DeletedAt, item.DeletedByAccountId
     });
-    private static void Validate<T>(T request, IValidator<T> validator)
-    {
-        var result = validator.Validate(request);
-        if (!result.IsValid) throw new BadRequestException(string.Join(" ", result.Errors.Select(error => error.ErrorMessage)));
-    }
     private static void CheckVersion(TransportProvider item, DateTimeOffset expected)
     {
         if (DateTime.SpecifyKind(item.UpdatedAt, DateTimeKind.Utc) != expected.UtcDateTime) throw Modified();
@@ -239,7 +233,4 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
     private static ConflictException Modified() => new("The provider was just modified. Please reload the page", "PROVIDER_MODIFIED");
     private static ConflictException Duplicate(string code) => new("Transport Provider with this Code / Tax ID already exists.", code);
     private static NotFoundException NotFound() => new("Transport Provider not found", "PROVIDER_NOT_FOUND");
-    private static string? TrimOptional(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
-    private static DateTime UtcNow() => new(DateTime.UtcNow.Ticks / 10 * 10, DateTimeKind.Unspecified);
-    private static DateTimeOffset ToUtcOffset(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 }

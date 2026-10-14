@@ -1,21 +1,23 @@
-using Pegaxus.API.Middleware;
-using Pegaxus.API.Services;
-using Pegaxus.Repository.Entities;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Npgsql.NameTranslation;
+using Pegaxus.API.Middleware;
+using Pegaxus.API.Services;
 using Pegaxus.Repository;
+using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
+
 using RouteChange = Pegaxus.Service.RouteChangeService;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class RouteChangePostgresTests
 {
     [PostgresFact]
@@ -36,7 +38,7 @@ public class RouteChangePostgresTests
         Assert.Equal(4, await check.Notifications.CountAsync());
         Assert.Equal(4, await check.OutboxMessages.CountAsync());
         Assert.Empty(await check.IncidentReports.ToListAsync());
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(scope.Source).Options;
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(scope.Source).Options;
         await CheckOutboxClaimsAsync(options);
         await CheckRequirementReferenceRaceAsync(options, f.Manager.AccountId);
     }
@@ -128,6 +130,11 @@ public class RouteChangePostgresTests
         // EF 8 finalizes the cached snapshot on the first check; use a fresh context after migration.
         await using var check = scope.Db();
         Assert.False(check.Database.HasPendingModelChanges());
+        var scales = await check.Database.SqlQuery<int>($"""
+            SELECT numeric_scale::int AS "Value" FROM information_schema.columns
+            WHERE table_schema = current_schema() AND table_name = 'Location' AND column_name IN ('latitude', 'longitude')
+            """).ToListAsync();
+        Assert.Equal([4, 4], scales);
     }
 
     private static async Task CheckOutboxClaimsAsync(DbContextOptions<AppDbContext> options)
@@ -147,7 +154,7 @@ public class RouteChangePostgresTests
         await db.SaveChangesAsync();
         var mail = new ConcurrentMail();
         await using var services = new ServiceCollection().AddScoped(_ => new AppDbContext(options))
-            .AddSingleton<Pegaxus.Service.MailService.IService>(mail).BuildServiceProvider();
+            .AddSingleton<Pegaxus.Service.MailService.IMailService>(mail).BuildServiceProvider();
         var batch = typeof(TransactionalOutboxWorker).GetMethod("ProcessBatchAsync",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
         async Task RunBatchAsync()
@@ -222,7 +229,7 @@ public class RouteChangePostgresTests
         Assert.DoesNotContain("Database internals", response);
     }
 
-    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IService
+    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IMailService
     {
         public System.Collections.Concurrent.ConcurrentBag<string> Subjects { get; } = [];
         public Task SendMail(Pegaxus.Service.MailService.MailContent mailContent, CancellationToken cancellationToken = default)
@@ -233,16 +240,9 @@ public class RouteChangePostgresTests
     }
 
     private static RouteChange.Service Service(AppDbContext db) => new(db,
-        new Pegaxus.Service.NotificationService.Service(db, new NoopNotificationRealtimeService()), new RouteChangeTests.Fixture.FixedClock());
+        new Pegaxus.Service.NotificationService.Service(db, new NoopNotificationRealtimeService()), new RouteChangeTests.Fixture.FixedClock(),
+        new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db)));
 
-    internal sealed class PostgresFactAttribute : FactAttribute
-    {
-        public PostgresFactAttribute()
-        {
-            if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("PEGAXUS_TEST_CONNECTION_STRING")))
-                Skip = "Set PEGAXUS_TEST_CONNECTION_STRING to a disposable PostgreSQL server; tests create and drop their own databases.";
-        }
-    }
 
     private sealed class EnumNames : INpgsqlNameTranslator
     {
@@ -254,7 +254,7 @@ public class RouteChangePostgresTests
     private sealed class DatabaseScope(string admin, string name, NpgsqlDataSource source) : IAsyncDisposable
     {
         internal NpgsqlDataSource Source => source;
-        internal AppDbContext Db() => new(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options);
+        internal AppDbContext Db() => new(new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options);
         internal static async Task<DatabaseScope> CreateAsync()
         {
             var admin = Environment.GetEnvironmentVariable("PEGAXUS_TEST_CONNECTION_STRING")!;

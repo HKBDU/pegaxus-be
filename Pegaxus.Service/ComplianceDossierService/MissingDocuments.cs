@@ -2,10 +2,10 @@ using System.Data;
 using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
-using Npgsql;
+using Microsoft.Extensions.Logging;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -37,7 +37,7 @@ public sealed partial class Service
         if (request.DueDate == default || request.DueDate < today || request.Note?.Length > 2000)
             throw new BadRequestException("DueDate cannot be in the past; Note must not exceed 2000 characters.");
         Response.MissingDocumentsResponse response;
-        await using (var transaction = await BeginReminderTransactionAsync(cancellationToken))
+        await using (var transaction = await _db.Database.BeginSerializableAsync(cancellationToken))
         {
             try
             {
@@ -98,7 +98,7 @@ public sealed partial class Service
                     Requirements = selected.Select(item => MapRequirement(item, dossier.Transport.Booking.RequestedDepartureDate)).ToList()
                 };
             }
-            catch (Exception error) when (ReminderWriteConflict(error))
+            catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
             {
                 throw new ConflictException("The dossier changed. Reload before requesting missing documents.", "MISSING_DOCUMENT_REMINDER_CONFLICT");
             }
@@ -136,7 +136,7 @@ public sealed partial class Service
         var queued = 0;
         foreach (var dossierId in candidates)
         {
-            await using var transaction = await BeginReminderTransactionAsync(cancellationToken);
+            await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
             try
             {
                 var dossier = await MissingReminderDossierAsync(dossierId, true, cancellationToken);
@@ -153,7 +153,7 @@ public sealed partial class Service
                 queued++;
                 await _notificationService.FlushAsync(cancellationToken);
             }
-            catch (Exception error) when (ReminderWriteConflict(error))
+            catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
             {
                 _db.ChangeTracker.Clear();
                 return queued;
@@ -177,9 +177,7 @@ public sealed partial class Service
         var mail = _mailService ?? throw new InvalidOperationException("MailService must be configured for missing-document reminders.");
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         // Updating the key to itself holds a row lock until the transaction ends.
-        if (_db.Database.IsRelational())
-            await _db.MissingDocumentReminders.Where(item => item.MissingDocumentReminderId == reminderId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.MissingDocumentReminderId, item => item.MissingDocumentReminderId), cancellationToken);
+        await _db.LockRowsAsync(_db.MissingDocumentReminders.Where(item => item.MissingDocumentReminderId == reminderId), item => item.MissingDocumentReminderId, cancellationToken);
         var reminders = _db.MissingDocumentReminders.AsQueryable();
         var reminder = await reminders.AsTracking().SingleAsync(item => item.MissingDocumentReminderId == reminderId, cancellationToken);
         await _db.Entry(reminder).ReloadAsync(cancellationToken);
@@ -215,7 +213,7 @@ public sealed partial class Service
             }
             catch (Exception error) when (error is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
-                Console.Error.WriteLine($"MissingDocumentReminder {reminderId}: email pending retry ({error.GetType().Name}).");
+                _logger.LogWarning("MissingDocumentReminder {ReminderId}: email pending retry ({ErrorType}).", reminderId, error.GetType().Name);
             }
         }
         await _db.SaveChangesAsync(CancellationToken.None);
@@ -246,8 +244,7 @@ public sealed partial class Service
     private async Task<ComplianceDossier> MissingReminderDossierAsync(Guid dossierId, bool forUpdate, CancellationToken cancellationToken)
     {
         if (forUpdate && _db.Database.IsRelational())
-            await _db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDossierId, item => item.ComplianceDossierId), cancellationToken);
+            await _db.LockRowsAsync(_db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId), item => item.ComplianceDossierId, cancellationToken);
         var query = _db.ComplianceDossiers.AsQueryable();
         query = forUpdate ? query.AsTracking() : query.AsNoTracking();
         var dossier = await query.Include(item => item.Transport).ThenInclude(item => item.Booking).ThenInclude(item => item.Customer)
@@ -282,11 +279,4 @@ public sealed partial class Service
 
     private DateTime ReminderNow() => DateTime.SpecifyKind(_reminderClock.GetUtcNow().UtcDateTime, DateTimeKind.Unspecified);
 
-    private Task<IDbContextTransaction> BeginReminderTransactionAsync(CancellationToken cancellationToken) => _db.Database.IsRelational()
-        ? _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-        : _db.Database.BeginTransactionAsync(cancellationToken);
-
-    private static bool ReminderWriteConflict(Exception error) => error is DbUpdateConcurrencyException ||
-        error is DbUpdateException { InnerException: PostgresException { SqlState: "23505" or "40001" or "40P01" } } ||
-        error is PostgresException { SqlState: "23505" or "40001" or "40P01" };
 }

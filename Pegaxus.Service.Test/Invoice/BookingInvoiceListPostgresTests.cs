@@ -14,6 +14,7 @@ using Xunit.Abstractions;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class BookingInvoiceListPostgresTests(ITestOutputHelper output)
 {
     [PostgresFact]
@@ -30,7 +31,7 @@ public class BookingInvoiceListPostgresTests(ITestOutputHelper output)
             builder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
         await using var source = builder.Build();
         var commands = new ReadCommands();
-        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).AddInterceptors(commands).Options);
+        await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).AddInterceptors(commands).Options);
         try
         {
             await db.Database.EnsureCreatedAsync();

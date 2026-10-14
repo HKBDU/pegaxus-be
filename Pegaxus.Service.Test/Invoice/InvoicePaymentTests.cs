@@ -1,4 +1,3 @@
-using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -6,6 +5,7 @@ using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.InvoiceService.Validator;
 using Pegaxus.Service.NotificationService;
 using Pegaxus.Service.OutboxService;
+
 using InvoicePaymentService = Pegaxus.Service.InvoiceService.Service;
 using Request = Pegaxus.Service.InvoiceService.Request;
 
@@ -19,7 +19,7 @@ public class InvoicePaymentTests
     }
     internal static readonly Clock TestClock = new();
     internal static InvoicePaymentService CreateService(AppDbContext db, INotificationRealtimeService? realtime = null,
-        Pegaxus.Service.PaymentGatewayService.IService? gateway = null) => new(db,
+        Pegaxus.Service.PaymentGatewayService.IPaymentGatewayService? gateway = null) => new(db,
         gateway ?? new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger,
         TestClock, new CreateRequestValidator(TestClock), new SuggestionRequestValidator(), new UpdateRequestValidator(TestClock),
         new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(TestClock), new CancelRequestValidator(),

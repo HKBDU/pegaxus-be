@@ -4,22 +4,23 @@ using System.Net.Http.Json;
 using System.Security.Claims;
 using System.Text.Json;
 using FluentValidation;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Pegaxus.API.Controllers;
 using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
+using Pegaxus.API.Models;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.InvoiceService;
 using Pegaxus.Service.InvoiceService.Validator;
 using Pegaxus.Service.JwtService;
-using Pegaxus.Service.Models;
+
 using Claim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Test;
@@ -44,8 +45,8 @@ public class InvoiceHttpTests
         });
         builder.Services.AddSingleton(db);
         builder.Services.AddSingleton(InvoiceTests.Fixture.Clock);
-        builder.Services.AddScoped<IService, InvoiceService.Service>();
-        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IService, InvoiceOnlinePaymentTests.Gateway>();
+        builder.Services.AddScoped<IInvoiceService, InvoiceService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IPaymentGatewayService, InvoiceOnlinePaymentTests.Gateway>();
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
@@ -54,10 +55,10 @@ public class InvoiceHttpTests
         builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.CancelRequest>, CancelRequestValidator>();
-        builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
+        builder.Services.AddScoped<NotificationService.INotificationService, NotificationService.Service>();
         builder.Services.AddSingleton<NotificationService.INotificationRealtimeService, NotificationService.NoopNotificationRealtimeService>();
-        builder.Services.AddScoped<Pegaxus.Service.BookingService.IService>(_ =>
-            new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService()));
+        builder.Services.AddScoped<Pegaxus.Service.BookingService.IBookingService>(_ =>
+            new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService(), TestSupport.CreateNotifications(db)));
         builder.Services.AddControllers().AddApplicationPart(typeof(BookingController).Assembly)
             .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = context =>
                 new BadRequestObjectResult(ResponseBuilder.ErrorResponse(

@@ -9,17 +9,18 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Hosting.Server;
 using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.EntityFrameworkCore;
 using Pegaxus.API.Controllers;
 using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
+using Pegaxus.API.Models;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.InvoiceService;
 using Pegaxus.Service.InvoiceService.Validator;
 using Pegaxus.Service.JwtService;
-using Pegaxus.Service.Models;
+
 using Claim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Test;
@@ -44,8 +45,8 @@ public class InvoiceUpdateHttpTests
         });
         builder.Services.AddSingleton(db);
         builder.Services.AddSingleton(InvoiceUpdateTests.Fixture.Clock);
-        builder.Services.AddScoped<IService, InvoiceService.Service>();
-        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IService, InvoiceOnlinePaymentTests.Gateway>();
+        builder.Services.AddScoped<IInvoiceService, InvoiceService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IPaymentGatewayService, InvoiceOnlinePaymentTests.Gateway>();
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.CreateRequest>, CreateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.SuggestionRequest>, SuggestionRequestValidator>();
@@ -54,7 +55,7 @@ public class InvoiceUpdateHttpTests
         builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.CancelRequest>, CancelRequestValidator>();
-        builder.Services.AddScoped<NotificationService.IService, NotificationService.Service>();
+        builder.Services.AddScoped<NotificationService.INotificationService, NotificationService.Service>();
         builder.Services.AddSingleton<NotificationService.INotificationRealtimeService, NotificationService.NoopNotificationRealtimeService>();
         builder.Services.AddControllers().AddApplicationPart(typeof(InvoicesController).Assembly)
             .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = context =>

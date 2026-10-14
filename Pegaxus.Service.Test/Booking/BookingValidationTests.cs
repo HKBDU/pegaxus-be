@@ -1,4 +1,5 @@
 using Pegaxus.Service.BookingService.Validations;
+
 using BookingRequest = Pegaxus.Service.BookingService.Request;
 
 namespace Pegaxus.Service.Test;

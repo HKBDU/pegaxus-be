@@ -12,7 +12,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Pegaxus.API.Controllers;
 using Pegaxus.API.Middleware;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
 using Pegaxus.Service.PaymentService;
 
 namespace Pegaxus.Service.Test;
@@ -27,7 +27,7 @@ public class PaymentWebhookHttpTests
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
         builder.Logging.ClearProviders();
         builder.WebHost.UseUrls("http://127.0.0.1:0");
-        builder.Services.AddSingleton<IService>(PaymentWebhookTests.CreateService(db));
+        builder.Services.AddSingleton<IPaymentService>(PaymentWebhookTests.CreateService(db));
         builder.Services.AddControllers().AddApplicationPart(typeof(PaymentsController).Assembly)
             .ConfigureApiBehaviorOptions(options => options.InvalidModelStateResponseFactory = context =>
                 new BadRequestObjectResult(ResponseBuilder.ErrorResponse(null, "The request data is invalid")));

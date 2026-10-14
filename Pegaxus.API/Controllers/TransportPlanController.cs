@@ -1,7 +1,8 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
+
 using TransportPlanService = Pegaxus.Service.TransportPlanService;
 
 namespace Pegaxus.API.Controllers;
@@ -9,7 +10,7 @@ namespace Pegaxus.API.Controllers;
 [ApiController]
 [Authorize]
 [Route("api/v1/bookings/{bookingId:guid}/transport-plans")]
-public sealed class TransportPlanController(TransportPlanService.IService service) : ControllerBase
+public sealed class TransportPlanController(TransportPlanService.ITransportPlanService service) : ApiControllerBase
 {
     /// <summary>Update transport plan metadata.</summary>
     /// <param name="transportPlanId">The transport plan identifier (UUID).</param>
@@ -24,11 +25,8 @@ public sealed class TransportPlanController(TransportPlanService.IService servic
         CancellationToken cancellationToken)
     {
         var response = await service.UpdateAsync(
-            GetAccountId(), transportPlanId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Transport plan updated successfully",
-            traceId: HttpContext.TraceIdentifier));
+            AccountId, transportPlanId, request, cancellationToken);
+        return Success(response, "Transport plan updated successfully");
     }
 
     /// <summary>Get transport plan details.</summary>
@@ -39,11 +37,8 @@ public sealed class TransportPlanController(TransportPlanService.IService servic
     [Authorize(Policy = JwtExtensions.LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> GetById(Guid transportPlanId, CancellationToken cancellationToken)
     {
-        var response = await service.GetByIdAsync(GetAccountId(), transportPlanId, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Transport plan retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        var response = await service.GetByIdAsync(AccountId, transportPlanId, cancellationToken);
+        return Success(response, "Transport plan retrieved successfully");
     }
 
     /// <summary>List transport plans.</summary>
@@ -56,11 +51,8 @@ public sealed class TransportPlanController(TransportPlanService.IService servic
         [FromQuery] TransportPlanService.Request.ListRequest request,
         CancellationToken cancellationToken)
     {
-        var response = await service.GetListAsync(GetAccountId(), request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Transport plans retrieved successfully",
-            traceId: HttpContext.TraceIdentifier));
+        var response = await service.GetListAsync(AccountId, request, cancellationToken);
+        return Success(response, "Transport plans retrieved successfully");
     }
 
     /// <summary>Create an overall transport plan.</summary>
@@ -76,7 +68,7 @@ public sealed class TransportPlanController(TransportPlanService.IService servic
         CancellationToken cancellationToken)
     {
         var response = await service.CreateAsync(
-            GetAccountId(), bookingId, request, cancellationToken);
+            AccountId, bookingId, request, cancellationToken);
         return CreatedAtAction(
             nameof(Create),
             new { bookingId },
@@ -100,7 +92,7 @@ public sealed class TransportPlanController(TransportPlanService.IService servic
         CancellationToken cancellationToken)
     {
         var response = await service.AssignPhase1Async(
-            GetAccountId(), transportPlanId, request, cancellationToken);
+            AccountId, transportPlanId, request, cancellationToken);
         return Created(
             $"/api/v1/transport-plans/{transportPlanId}",
             ResponseBuilder.SuccessResponse(
@@ -123,19 +115,8 @@ public sealed class TransportPlanController(TransportPlanService.IService servic
         CancellationToken cancellationToken)
     {
         var response = await service.UpdatePhase1Async(
-            GetAccountId(), transportPlanId, request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response,
-            "Phase 1 personnel updated successfully",
-            traceId: HttpContext.TraceIdentifier));
+            AccountId, transportPlanId, request, cancellationToken);
+        return Success(response, "Phase 1 personnel updated successfully");
     }
 
-    private Guid GetAccountId()
-    {
-        var value = User.FindFirst("accountId")?.Value
-            ?? User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
-        return Guid.TryParse(value, out var accountId)
-            ? accountId
-            : throw new InvalidOperationException("The authenticated account id is invalid.");
-    }
 }

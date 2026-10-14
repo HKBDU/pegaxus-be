@@ -7,10 +7,12 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.InvoiceService.Validator;
+
 using DraftInvoiceService = Pegaxus.Service.InvoiceService.Service;
 
 namespace Pegaxus.Service.Test;
 
+[Collection("PostgresSharedDatabase")]
 public class InvoiceUpdatePostgresTests : IAsyncLifetime
 {
     private NpgsqlDataSource? _source;
@@ -150,7 +152,7 @@ public class InvoiceUpdatePostgresTests : IAsyncLifetime
     }
 
     private AppDbContext CreateDb(params IInterceptor[] interceptors) => new(
-        new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(_source!).AddInterceptors(interceptors).Options);
+        new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(_source!).AddInterceptors(interceptors).Options);
     private static DraftInvoiceService Service(AppDbContext db) => new(db,
         new InvoiceOnlinePaymentTests.Gateway(), InvoiceOnlinePaymentTests.Logger, InvoiceUpdateTests.Fixture.Clock,
         new CreateRequestValidator(InvoiceUpdateTests.Fixture.Clock), new SuggestionRequestValidator(), new UpdateRequestValidator(InvoiceUpdateTests.Fixture.Clock),

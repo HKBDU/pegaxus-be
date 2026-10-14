@@ -1,9 +1,9 @@
 using System.Data;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
-using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -13,9 +13,7 @@ public sealed partial class Service
     public async Task<Response.DocumentMetadataResponse> UpdateDocumentMetadataAsync(Guid accountId, Guid dossierId, Guid requirementId,
         Request.DocumentMetadataRequest request, CancellationToken cancellationToken = default)
     {
-        await using var transaction = _db.Database.IsRelational()
-            ? await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : await _db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
         try
         {
             var (dossier, requirement) = await UploadContextAsync(accountId, dossierId, requirementId, true, cancellationToken, true);
@@ -42,9 +40,7 @@ public sealed partial class Service
                 Status = document.Status.ToString()
             };
         }
-        catch (Exception error) when (error is DbUpdateConcurrencyException ||
-            error is DbUpdateException { InnerException: PostgresException { SqlState: "23505" or "40001" or "40P01" } } ||
-            error is PostgresException { SqlState: "23505" or "40001" or "40P01" })
+        catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
         {
             throw new ConflictException("The document changed. Reload before updating metadata.", "DOCUMENT_UPDATE_CONFLICT");
         }
@@ -98,17 +94,15 @@ public sealed partial class Service
     {
         // Updating the key to itself holds a row lock until the transaction ends.
         if (tracking && _db.Database.IsRelational())
-            await _db.ComplianceDocuments.Where(item => item.DossierRequirementId == requirementId)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.ComplianceDocumentId, item => item.ComplianceDocumentId), cancellationToken);
+            await _db.LockRowsAsync(_db.ComplianceDocuments.Where(item => item.DossierRequirementId == requirementId), item => item.ComplianceDocumentId, cancellationToken);
         var documents = _db.ComplianceDocuments.AsQueryable();
         var document = await (tracking ? documents.AsTracking() : documents.AsNoTracking())
             .SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId, cancellationToken)
             ?? throw new NotFoundException("ComplianceDocument not found.", "DOCUMENT_NOT_FOUND");
         if (tracking) await _db.Entry(document).ReloadAsync(cancellationToken);
         if (tracking && _db.Database.IsRelational())
-            await _db.DocumentVersions.Where(item => item.ComplianceDocumentId == document.ComplianceDocumentId)
-                .OrderByDescending(item => item.VersionNo).Take(1)
-                .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.DocumentVersionId, item => item.DocumentVersionId), cancellationToken);
+            await _db.LockRowsAsync(_db.DocumentVersions.Where(item => item.ComplianceDocumentId == document.ComplianceDocumentId)
+                .OrderByDescending(item => item.VersionNo).Take(1), item => item.DocumentVersionId, cancellationToken);
         var versions = _db.DocumentVersions.AsQueryable();
         var latest = await (tracking ? versions.AsTracking() : versions.AsNoTracking())
             .Include(item => item.DocumentAttachments).Include(item => item.DocumentReviews)

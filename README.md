@@ -79,15 +79,18 @@ pegaxus-be/
 ├── Pegaxus.Service/                # [Business Logic Layer] Application use cases
 │   ├── <Module>/                   # Feature-based folders (Booking, Transport, Dossier)
 │   │   ├── I<Module>Service.cs     # Service contract interface
-│   │   ├── <Module>Service.cs      # Core business logic implementation
-│   │   ├── Requests/               # Inbound DTO payloads
-│   │   ├── Responses/              # Outbound DTO models
+│   │   ├── Service.cs (+ partials) # Business logic, split by use case (Queries, Lifecycle, ...)
+│   │   ├── Request.cs / Response.cs# Inbound / outbound DTOs
 │   │   └── Validations/            # FluentValidation rules
+│   ├── Common/                     # Shared helpers (DbTime, Paging, Text, Validation)
 ├── Pegaxus.Repository/             # [Data Access Layer] Persistence & database context
-│   ├── Abstractions/               # Generic Repository and Unit of Work interfaces
-│   ├── Configurations/             # EF Core Fluent API entity relationships
-│   ├── Context/                    # ApplicationDbContext
-│   └── Entities/                   # Database POCO entities
+│   ├── Configurations/             # One IEntityTypeConfiguration<T> per entity (applied by AppDbContext)
+│   ├── Entities/                   # Database POCO entities
+│   ├── Enum/                       # PostgreSQL enum types
+│   ├── Extensions/                 # Row-lock, serializable-transaction & Postgres error helpers
+│   ├── Migrations/                 # EF Core migrations (never edit applied ones)
+│   └── AppDbContext.cs             # DbContext (no repository / unit-of-work layer)
+├── Directory.Build.props           # Shared TargetFramework / ImplicitUsings / Nullable
 ├── .dockerignore                   # Docker build context exclusion rules
 ├── .env.example                    # Environment variables template
 ├── docker-compose.yml              # Local multi-container orchestration (API + PostgreSQL)

@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.ComplianceDossierService;
 using Pegaxus.Service.Exceptions;
+
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
 using DossierEntity = Pegaxus.Repository.Entities.ComplianceDossier;
 

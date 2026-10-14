@@ -3,6 +3,8 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 
+using static Pegaxus.Service.Common.DbTime;
+
 namespace Pegaxus.Service.BookingService;
 
 public partial class Service
@@ -88,7 +90,7 @@ public partial class Service
 
         var current = transportPlan.EmployeeTransportPlans
             .SingleOrDefault(item => item.Employee.Role == role);
-        var now = UtcNow();
+        var now = UtcNowTruncated();
         if (current is not null)
         {
             if (current.EmployeeId == employee.EmployeeId)

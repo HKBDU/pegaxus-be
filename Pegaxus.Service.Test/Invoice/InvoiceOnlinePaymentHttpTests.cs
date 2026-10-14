@@ -18,6 +18,7 @@ using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.JwtService;
+
 using Invoices = Pegaxus.Service.InvoiceService;
 
 namespace Pegaxus.Service.Test;
@@ -43,7 +44,7 @@ public class InvoiceOnlinePaymentHttpTests
         builder.Services.AddSingleton(db); builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddControllers().AddApplicationPart(typeof(InvoicesController).Assembly);
         builder.Services.AddScoped<GlobalExceptionHandlerMiddleware>();
-        builder.Services.AddScoped<Invoices.IService>(_ => InvoiceOnlinePaymentTests.CreateService(db, gateway));
+        builder.Services.AddScoped<Invoices.IInvoiceService>(_ => InvoiceOnlinePaymentTests.CreateService(db, gateway));
         await using var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>(); app.UseAuthentication(); app.UseAuthorization(); app.MapControllers();
         await app.StartAsync();

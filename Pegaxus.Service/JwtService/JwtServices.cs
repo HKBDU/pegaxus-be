@@ -5,6 +5,7 @@ using System.Text;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using Pegaxus.Repository.Enum;
+
 using AppException = Pegaxus.Service.Exceptions.Exceptions;
 
 namespace Pegaxus.Service.JwtService;

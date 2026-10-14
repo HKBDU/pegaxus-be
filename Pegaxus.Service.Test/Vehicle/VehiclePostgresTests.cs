@@ -1,13 +1,13 @@
-using Pegaxus.API.Middleware;
-using Pegaxus.API.Services;
-using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging.Abstractions;
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
 using Npgsql.NameTranslation;
+using Pegaxus.API.Middleware;
+using Pegaxus.API.Services;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -17,6 +17,8 @@ using Pegaxus.Service.VehicleService;
 
 namespace Pegaxus.Service.Test;
 
+// These tests create schemas in a shared database; parallel runs make Npgsql see duplicate enum type names.
+[Collection("PostgresSharedDatabase")]
 public class VehiclePostgresTests
 {
     private sealed class PostgresFactAttribute : FactAttribute
@@ -48,7 +50,7 @@ public class VehiclePostgresTests
         foreach (var type in typeof(VehicleStatus).Assembly.GetTypes().Where(x => x.IsEnum && x.Namespace == typeof(VehicleStatus).Namespace))
             sourceBuilder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
         await using var source = sourceBuilder.Build();
-        var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options;
+        var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options;
         try
         {
             await using (var modelDb = new AppDbContext(options))
@@ -218,7 +220,7 @@ public class VehiclePostgresTests
         await db.SaveChangesAsync();
         var mail = new ConcurrentMail();
         await using var services = new ServiceCollection().AddScoped(_ => new AppDbContext(options))
-            .AddSingleton<Pegaxus.Service.MailService.IService>(mail).BuildServiceProvider();
+            .AddSingleton<Pegaxus.Service.MailService.IMailService>(mail).BuildServiceProvider();
         var batch = typeof(TransactionalOutboxWorker).GetMethod("ProcessBatchAsync",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
         async Task RunBatchAsync()
@@ -293,7 +295,7 @@ public class VehiclePostgresTests
         Assert.DoesNotContain("Database internals", response);
     }
 
-    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IService
+    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IMailService
     {
         public System.Collections.Concurrent.ConcurrentBag<string> Subjects { get; } = [];
         public Task SendMail(Pegaxus.Service.MailService.MailContent mailContent, CancellationToken cancellationToken = default)

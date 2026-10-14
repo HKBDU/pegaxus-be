@@ -4,6 +4,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.InvoiceService.Validator;
+
 using DetailService = Pegaxus.Service.InvoiceService.Service;
 
 namespace Pegaxus.Service.Test;

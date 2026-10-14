@@ -1,8 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
-using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.DossierTemplateService.Validator;
+using Pegaxus.Service.Exceptions;
+
 using TemplateRequest = Pegaxus.Service.DossierTemplateService.Request;
 using TemplateService = Pegaxus.Service.DossierTemplateService.Service;
 

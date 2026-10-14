@@ -1,9 +1,10 @@
-using System.Text.Json;
 using System.Data;
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -19,9 +20,7 @@ public sealed partial class Service
             throw new BadRequestException("ComplianceRequirementId is required.");
         if (request.DueDate.HasValue && request.LeadTimeDays.HasValue)
             throw new BadRequestException("Provide DueDate or LeadTimeDays, not both.");
-        await using var transaction = _db.Database.IsRelational()
-            ? await _db.Database.BeginTransactionAsync(IsolationLevel.Serializable, cancellationToken)
-            : await _db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
         var dossier = await EditableDossierAsync(dossierId, cancellationToken);
         var booking = dossier.Transport.Booking;
         var requirement = await _db.ComplianceRequirements.SingleOrDefaultAsync(item =>

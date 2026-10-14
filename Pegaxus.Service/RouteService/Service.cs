@@ -5,11 +5,16 @@ using Microsoft.Extensions.Configuration;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+
+using static Pegaxus.Service.Common.DbTime;
+using static Pegaxus.Service.Common.Text;
 
 namespace Pegaxus.Service.RouteService;
 
-public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactory, IConfiguration configuration) : IService
+public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactory, IConfiguration configuration) : IRouteService
 {
     public async Task<Response.ListResponse> GetListAsync(Request.ListRequest request, CancellationToken cancellationToken = default)
     {
@@ -31,7 +36,7 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
         return new Response.ListResponse
         {
             Items = rows.Select(Map).ToList(), PageIndex = request.PageIndex, PageSize = request.PageSize,
-            TotalItems = totalItems, TotalPages = (int)Math.Ceiling(totalItems / (double)request.PageSize)
+            TotalItems = totalItems, TotalPages = Paging.TotalPages(totalItems, request.PageSize)
         };
     }
 
@@ -153,7 +158,7 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
     }
 
     private async Task<Employee> RequireCoordinatorAsync(Guid accountId, CancellationToken token) =>
-        await db.Employees.Include(item => item.Account).SingleOrDefaultAsync(item => item.AccountId == accountId && item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && item.IsActive && !item.IsDeleted && !item.Account.IsDeleted && item.Account.Status == AccountStatus.ACTIVE, token)
+        await db.Employees.Include(item => item.Account).Active().SingleOrDefaultAsync(item => item.AccountId == accountId && item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR, token)
         ?? throw new ForbiddenException("Only Fleet Route Coordinators can manage Routes");
 
     private static TransportMode ParseMode(string? value) => !string.IsNullOrWhiteSpace(value) && Enum.TryParse<TransportMode>(value.Trim(), true, out var mode)
@@ -164,11 +169,8 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
     private static Response.LocationResponse MapLocation(Location item) => new() { LocationId = item.LocationId, LocationName = item.LocationName, LocationType = item.LocationType?.ToString(), City = item.City, Country = item.Country, Latitude = item.Latitude, Longitude = item.Longitude };
     private static decimal Haversine(decimal lat1, decimal lon1, decimal lat2, decimal lon2) { const double earth = 6371; var dLat = (double)(lat2 - lat1) * Math.PI / 180; var dLon = (double)(lon2 - lon1) * Math.PI / 180; var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos((double)lat1 * Math.PI / 180) * Math.Cos((double)lat2 * Math.PI / 180) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2); return (decimal)(earth * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a))); }
     private static void ValidatePaging(int page, int size) { if (page < 1 || size is < 1 or > 100) throw new BadRequestException("Invalid pagination", "VALIDATION_ERROR"); }
-    private static string? EmptyToNull(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     // The database stores timestamps as `timestamp without time zone`.
     // Keep the UTC instant while writing an unspecified DateTime so Npgsql
     // does not reject the value because of its Kind metadata.
-    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
-    private static DateTimeOffset AsUtc(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
     private static void EnsureConcurrency(DateTime actual, DateTimeOffset expected) { if (actual != expected.UtcDateTime) throw new ConflictException("Route was modified. Please reload the latest data.", "ROUTE_MODIFIED"); }
 }

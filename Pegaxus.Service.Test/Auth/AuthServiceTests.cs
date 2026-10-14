@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Distributed;
 using Pegaxus.Repository.Entities;
+
 using AuthRequest = Pegaxus.Service.Auth.Request;
 using AuthService = Pegaxus.Service.Auth.Service;
 

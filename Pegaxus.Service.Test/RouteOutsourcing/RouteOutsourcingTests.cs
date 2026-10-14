@@ -22,16 +22,19 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Migrations;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.JwtService;
 using Pegaxus.Service.NotificationService;
-using Pegaxus.Service.Common;
+
 using Outsourcing = Pegaxus.Service.RouteOutsourcingService;
 using Claim = System.Security.Claims.Claim;
 using ClaimTypes = System.Security.Claims.ClaimTypes;
 
 namespace Pegaxus.Service.Test;
 
+// These tests create schemas in a shared database; parallel runs make Npgsql see duplicate enum type names.
+[Collection("PostgresSharedDatabase")]
 public class RouteOutsourcingTests
 {
     [Fact]
@@ -255,7 +258,7 @@ public class RouteOutsourcingTests
         builder.Services.AddControllers().AddApplicationPart(typeof(RouteOutsourcingController).Assembly);
         builder.Services.AddJwtServices(builder.Configuration);
         builder.Services.AddSingleton(db);
-        builder.Services.AddScoped<Outsourcing.IService>(_ => Service(db));
+        builder.Services.AddScoped<Outsourcing.IRouteOutsourcingService>(_ => Service(db));
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         await using var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
@@ -342,7 +345,7 @@ public class RouteOutsourcingTests
             foreach (var type in typeof(ProviderStatus).Assembly.GetTypes().Where(type => type.IsEnum && type.Namespace == typeof(ProviderStatus).Namespace))
                 sourceBuilder.MapEnum(type, translator.TranslateTypeName(type.Name), translator);
             await using var source = sourceBuilder.Build();
-            var options = new DbContextOptionsBuilder<AppDbContext>().UseNpgsql(source).Options;
+            var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(source).Options;
             await using var db = new AppDbContext(options);
             var script = db.Database.GenerateCreateScript();
             var oldScript = script.Replace("'CANCELLED', 'PENDING_LEGAL_REVIEW', 'PENDING_MANAGER_APPROVAL', 'REJECTED_BY_MANAGER', 'APPROVED'", "'CANCELLED'");
@@ -435,7 +438,7 @@ public class RouteOutsourcingTests
         await db.SaveChangesAsync();
         var mail = new ConcurrentMail();
         await using var services = new ServiceCollection().AddScoped(_ => new AppDbContext(options))
-            .AddSingleton<Pegaxus.Service.MailService.IService>(mail).BuildServiceProvider();
+            .AddSingleton<Pegaxus.Service.MailService.IMailService>(mail).BuildServiceProvider();
         var batch = typeof(TransactionalOutboxWorker).GetMethod("ProcessBatchAsync",
             System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!;
         async Task RunBatchAsync()
@@ -510,7 +513,7 @@ public class RouteOutsourcingTests
         Assert.DoesNotContain("Database internals", response);
     }
 
-    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IService
+    private sealed class ConcurrentMail : Pegaxus.Service.MailService.IMailService
     {
         public System.Collections.Concurrent.ConcurrentBag<string> Subjects { get; } = [];
         public Task SendMail(Pegaxus.Service.MailService.MailContent mailContent, CancellationToken cancellationToken = default)

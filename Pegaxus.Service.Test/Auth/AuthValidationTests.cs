@@ -1,4 +1,5 @@
 using Pegaxus.Service.Auth.Validations;
+
 using AuthRequest = Pegaxus.Service.Auth.Request;
 
 namespace Pegaxus.Service.Test;

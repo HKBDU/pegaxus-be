@@ -3,10 +3,10 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Pegaxus.API.Models;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.JwtService;
-using Pegaxus.Service.Models;
 
 namespace Pegaxus.API.Extensions;
 

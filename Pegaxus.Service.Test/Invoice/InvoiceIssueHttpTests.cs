@@ -14,12 +14,13 @@ using Microsoft.Extensions.Logging;
 using Pegaxus.API.Controllers;
 using Pegaxus.API.Extensions;
 using Pegaxus.API.Middleware;
+using Pegaxus.API.Models;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.InvoiceService.Validator;
 using Pegaxus.Service.JwtService;
-using Pegaxus.Service.Models;
 using Pegaxus.Service.NotificationService;
+
 using Request = Pegaxus.Service.InvoiceService.Request;
 
 namespace Pegaxus.Service.Test;
@@ -108,8 +109,8 @@ public class InvoiceIssueHttpTests
                     field = string.IsNullOrEmpty(x.Key) ? "$" : char.ToLowerInvariant(x.Key[0]) + x.Key[1..], message = e.ErrorMessage })),
                 "The request data is invalid")));
         builder.Services.AddJwtServices(builder.Configuration);
-        builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IService, Pegaxus.Service.InvoiceService.Service>();
-        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IService, InvoiceOnlinePaymentTests.Gateway>();
+        builder.Services.AddScoped<Pegaxus.Service.InvoiceService.IInvoiceService, Pegaxus.Service.InvoiceService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.PaymentGatewayService.IPaymentGatewayService, InvoiceOnlinePaymentTests.Gateway>();
         builder.Services.AddScoped<IValidator<Request.IssueRequest>, IssueRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.RecordPaymentRequest>, RecordPaymentRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.CancelRequest>, CancelRequestValidator>();
@@ -118,7 +119,7 @@ public class InvoiceIssueHttpTests
         builder.Services.AddScoped<IValidator<Request.UpdateRequest>, UpdateRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.ListRequest>, ListRequestValidator>();
         builder.Services.AddScoped<IValidator<Request.BookingListRequest>, BookingListRequestValidator>();
-        builder.Services.AddScoped<Pegaxus.Service.NotificationService.IService, Pegaxus.Service.NotificationService.Service>();
+        builder.Services.AddScoped<Pegaxus.Service.NotificationService.INotificationService, Pegaxus.Service.NotificationService.Service>();
         builder.Services.AddSingleton<INotificationRealtimeService, NoopNotificationRealtimeService>();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         var app = builder.Build(); app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
