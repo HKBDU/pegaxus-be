@@ -4,6 +4,8 @@ public static class Request
 {
     public sealed class CreateRequest
     {
+        public Guid? OriginLocationId { get; set; }
+        public Guid? DestinationLocationId { get; set; }
         public DateTimeOffset PlannedStartAt { get; set; }
         public DateTimeOffset PlannedEndAt { get; set; }
         public decimal? EstimatedDistanceKm { get; set; }
@@ -23,6 +25,8 @@ public static class Request
 
     public sealed class UpdateRequest
     {
+        public Guid? OriginLocationId { get; set; }
+        public Guid? DestinationLocationId { get; set; }
         public DateTimeOffset LastUpdatedAt { get; set; }
         public string? UpdateReason { get; set; }
         public DateTimeOffset? PlannedStartAt { get; set; }

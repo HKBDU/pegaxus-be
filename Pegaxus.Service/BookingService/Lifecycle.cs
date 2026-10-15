@@ -59,8 +59,11 @@ public sealed partial class Service
                 ? "Booking moved to draft"
                 : "Booking submitted for review",
             now);
+        if (targetStatus == BookingStatus.PENDING)
+            await NotifyManagersAsync(booking, "Booking submitted for review", now, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
     }
 
     public async Task<Response.CreateBookingResponse> CreateAsync(
@@ -123,8 +126,10 @@ public sealed partial class Service
             CreatedAt = now
         }));
         AddHistory(booking.BookingId, accountId, BookingHistoryType.SUBMIT, null, BookingStatus.PENDING, null, now);
+        await NotifyManagersAsync(booking, "Booking submitted for review", now, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
 
         return new Response.CreateBookingResponse
         {
@@ -206,8 +211,10 @@ public sealed partial class Service
         booking.CancellationReason = reason;
         booking.UpdatedAt = now;
         AddHistory(bookingId, accountId, BookingHistoryType.CANCEL, BookingStatus.PENDING, BookingStatus.CANCELLED, reason, now);
+        await NotifyManagersAsync(booking, "Booking cancelled by customer", now, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+        await _notificationService.FlushAsync(cancellationToken);
     }
 
     public async Task<Response.ApproveBookingResponse> ApproveAsync(

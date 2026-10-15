@@ -21,7 +21,7 @@ public sealed class Service(IOptions<SePayOptions> options) : IPaymentGatewaySer
             throw new InvalidDataException("Invalid receipt code");
         var settings = options.Value;
         if (string.IsNullOrWhiteSpace(settings.MerchantId) || string.IsNullOrWhiteSpace(settings.SecretKey))
-            throw new InvalidOperationException("SePay merchant credentials are not configured");
+            throw new Pegaxus.Service.Exceptions.Exceptions("Payment gateway is not configured", 503, "PAYMENT_GATEWAY_NOT_CONFIGURED");
         var endpoint = settings.Environment switch
         {
             "sandbox" => "https://pay-sandbox.sepay.vn/v1/checkout/init",

@@ -27,6 +27,8 @@ public static class Response
     public sealed class CreateResponse
     {
         public Guid TransportPlanId { get; init; }
+        public Guid? OriginLocationId { get; init; }
+        public Guid? DestinationLocationId { get; init; }
         public required string PlanCode { get; init; }
         public required string Status { get; init; }
         public required BookingResponse Booking { get; init; }

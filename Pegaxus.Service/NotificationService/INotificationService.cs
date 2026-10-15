@@ -90,4 +90,6 @@ public sealed class NotificationRealtimeDto
     public string? ReferenceType { get; init; }
 
     public Guid? ReferenceId { get; init; }
+
+    public string? ActionUrl { get; init; }
 }

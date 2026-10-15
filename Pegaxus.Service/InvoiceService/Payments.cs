@@ -75,7 +75,7 @@ public sealed partial class Service
                 if (!Uri.TryCreate(checkout.PaymentUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length != 0)
                     throw new InvalidDataException("The gateway returned an invalid payment URL");
             }
-            catch (Exception exception) when (exception is not UnprocessableEntityException &&
+            catch (Exception exception) when (exception is not AppException &&
                 (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested))
             {
                 logger.LogWarning(exception, "Payment gateway failed for receipt {ReceiptCode}", receipt.ReceiptCode);

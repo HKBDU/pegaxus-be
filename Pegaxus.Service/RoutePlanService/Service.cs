@@ -13,11 +13,13 @@ public sealed partial class Service : IRoutePlanService
 {
     private readonly AppDbContext db;
     private readonly NotificationService.INotificationService notificationService;
+    private readonly RouteService.IRouteService routeService;
 
-    public Service(AppDbContext db, NotificationService.INotificationService notificationService)
+    public Service(AppDbContext db, NotificationService.INotificationService notificationService, RouteService.IRouteService routeService)
     {
         this.db = db;
         this.notificationService = notificationService;
+        this.routeService = routeService;
     }
 
     private async Task<Employee> RequireEmployeeAsync(Guid accountId, CancellationToken cancellationToken)
