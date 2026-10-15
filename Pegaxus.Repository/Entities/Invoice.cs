@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
@@ -18,6 +17,8 @@ public partial class Invoice
     public Guid BookingId { get; set; }
 
     public Guid EmployeeId { get; set; }
+
+    public InvoiceType Type { get; set; } = InvoiceType.QUOTATION;
 
     public InvoiceStatus Status { get; set; } = InvoiceStatus.DRAFT;
 

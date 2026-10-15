@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
@@ -47,4 +46,6 @@ public partial class TransportProvider
     public virtual Account? DeletedByAccount { get; set; }
 
     public virtual ICollection<TransportPlanProvider> TransportPlanProviders { get; set; } = new List<TransportPlanProvider>();
+
+    public virtual ICollection<RoutePlanRoute> RoutePlanRoutes { get; set; } = new List<RoutePlanRoute>();
 }

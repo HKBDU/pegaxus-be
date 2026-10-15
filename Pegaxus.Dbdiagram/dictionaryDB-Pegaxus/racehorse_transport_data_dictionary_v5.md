@@ -1,7 +1,7 @@
 # Racehorse Cross-Border Transport System
-## Data Dictionary V7 — Ý nghĩa từng bảng và từng field
+## Data Dictionary V8 — Ý nghĩa từng bảng và từng field
 
-> Tài liệu này được đối chiếu với `racehorse_transport_physical_erd_final_v7.dbml`.
+> Tài liệu này được đối chiếu với `racehorse_transport_physical_erd_final_v8.dbml`.
 > Mục tiêu: giải thích **từng field**, kiểu dữ liệu, PK/FK, bắt buộc/nullable và ý nghĩa nghiệp vụ.
 
 ### Quy ước
@@ -11,7 +11,7 @@
 - **Required = Yes**: field có `not null` trong DBML.
 - Field nullable không có nghĩa luôn được phép bỏ trống trong mọi trạng thái; một số business rule được backend kiểm tra.
 - Các field `created_at` / `updated_at` là metadata thời gian của bản ghi.
-- V7 dùng **soft delete** cho 11 bảng master/profile/config: `Account`, `Customer`, `Employee`, `Horse`, `Location`, `Route`, `Vehicle`, `TransportProvider`, `ComplianceRequirement`, `DossierTemplate`, `DossierRequirement` (chỉ áp dụng cho optional requirement).
+- V8 dùng **soft delete** cho 11 bảng master/profile/config: `Account`, `Customer`, `Employee`, `Horse`, `Location`, `Route`, `Vehicle`, `TransportProvider`, `ComplianceRequirement`, `DossierTemplate`, `DossierRequirement` (chỉ áp dụng cho optional requirement).
 - Với các bảng này: `is_deleted` cho biết đã xóa logic hay chưa; `deleted_at` là thời điểm xóa; `deleted_by_account_id` là Account thực hiện xóa.
 - `DossierRequirement.horse_id = NULL` nghĩa là requirement áp dụng cho toàn chuyến; có giá trị nghĩa là requirement áp dụng riêng cho Horse đó.
 - `ComplianceRequirement.validity_period_days` là số ngày hiệu lực mặc định của requirement. Khi áp dụng vào dossier, backend tính và lưu `DossierRequirement.valid_until`.
@@ -31,7 +31,7 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `account_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Account`. |
+| `account_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Account`. |
 | `email` | `varchar(255)` |  | Yes | Địa chỉ email dùng cho liên hệ/đăng nhập tùy ngữ cảnh của bảng. |
 | `password_hash` | `varchar(255)` |  | Yes | Mật khẩu đã băm; không lưu mật khẩu thô. |
 | `account_type` | `account_type` |  | Yes | Loại tài khoản: Customer hoặc Employee. Enum `account_type`: CUSTOMER, EMPLOYEE. |
@@ -41,7 +41,7 @@
 | `avatar_url` | `varchar(500)` |  | No | URL ảnh đại diện của tài khoản. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -51,18 +51,20 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `refresh_token_id` | `bigint` | PK | No | Khóa chính của refresh token/session record. |
-| `account_id` | `bigint` | FK | Yes | Account sở hữu refresh token này. |
+| `refresh_token_id` | `uuid` | PK | No | Khóa chính của refresh token/session record. |
+| `account_id` | `uuid` | FK | Yes | Account sở hữu refresh token này. |
 | `token_hash` | `varchar(255)` |  | Yes | Giá trị refresh token đã được băm; không lưu raw token. |
 | `expires_at` | `timestamp` |  | Yes | Thời điểm token/notification hết hạn tùy bảng. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `revoked_at` | `timestamp` |  | No | Thời điểm refresh token bị thu hồi. |
-| `replaced_by_token_id` | `bigint` | FK | No | RefreshToken mới thay thế token hiện tại khi sử dụng token rotation; NULL nếu chưa bị thay thế. |
+| `replaced_by_token_id` | `uuid` | FK | No | RefreshToken mới thay thế token hiện tại khi sử dụng token rotation; NULL nếu chưa bị thay thế. |
 | `created_by_ip` | `varchar(64)` |  | No | Địa chỉ IP tại thời điểm refresh token được tạo. |
 | `revoked_by_ip` | `varchar(64)` |  | No | Địa chỉ IP tại thời điểm refresh token bị thu hồi. |
 | `device_info` | `varchar(500)` |  | No | Thông tin thiết bị/browser gắn với refresh token. |
 
 # 3. `Customer`
+
+**Cập nhật BE:** bổ sung `customer_code varchar(20) NOT NULL UNIQUE`, format sinh mã `CUS-YYYYMMDD-XXXX`.
 
 **Ý nghĩa bảng:** Hồ sơ nghiệp vụ của khách hàng.
 
@@ -70,8 +72,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `customer_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Customer`. |
-| `account_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Account.account_id`. |
+| `customer_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Customer`. |
+| `account_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Account.account_id`. |
 | `full_name` | `varchar(150)` |  | Yes | Họ và tên đầy đủ. |
 | `phone` | `varchar(30)` |  | No | Số điện thoại liên hệ. |
 | `date_of_birth` | `date` |  | No | Ngày sinh. |
@@ -80,11 +82,13 @@
 | `identity_number` | `varchar(100)` |  | No | Số giấy tờ định danh của khách hàng. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
 # 4. `Employee`
+
+**Cập nhật BE:** bổ sung `date_of_birth date`, `address varchar(500)` và `country varchar(100)`.
 
 **Ý nghĩa bảng:** Hồ sơ nghiệp vụ của nhân viên và vai trò trong hệ thống.
 
@@ -92,8 +96,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `employee_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Employee`. |
-| `account_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Account.account_id`. |
+| `employee_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Employee`. |
+| `account_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Account.account_id`. |
 | `employee_code` | `varchar(50)` |  | Yes | Mã nhân viên duy nhất. |
 | `full_name` | `varchar(150)` |  | Yes | Họ và tên đầy đủ. |
 | `phone` | `varchar(30)` |  | No | Số điện thoại liên hệ. |
@@ -102,7 +106,7 @@
 | `is_active` | `boolean` |  | Yes | Cho biết bản ghi nhân viên còn đang hoạt động hay không. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -116,8 +120,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `horse_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Horse`. |
-| `customer_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Customer.customer_id`. |
+| `horse_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Horse`. |
+| `customer_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Customer.customer_id`. |
 | `horse_name` | `varchar(150)` |  | Yes | Tên của ngựa. |
 | `passport_number` | `varchar(100)` |  | No | Số hộ chiếu ngựa, nếu có. |
 | `microchip_number` | `varchar(100)` |  | No | Mã microchip nhận dạng ngựa, nếu có. |
@@ -131,7 +135,7 @@
 | `identification_notes` | `text` |  | No | Ghi chú bổ sung để nhận dạng ngựa. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -141,10 +145,10 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `booking_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Booking`. |
+| `booking_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Booking`. |
 | `booking_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `Booking`. |
-| `customer_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Customer.customer_id`. |
-| `assigned_employee_id` | `bigint` | FK | No | Employee đang được phân công phụ trách Booking; có thể NULL trước khi được assign. |
+| `customer_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Customer.customer_id`. |
+| `assigned_employee_id` | `uuid` | FK | No | Employee đang được phân công phụ trách Booking; có thể NULL trước khi được assign. |
 | `status` | `booking_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `booking_status`: PENDING, APPROVED, REJECTED, CANCELLED. |
 | `origin_address` | `varchar(500)` |  | Yes | Địa chỉ xuất phát theo yêu cầu Booking. |
 | `origin_country` | `varchar(100)` |  | Yes | Quốc gia xuất phát theo Booking. |
@@ -169,8 +173,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `booking_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Booking.booking_id`. |
-| `horse_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Horse.horse_id`. |
+| `booking_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Booking.booking_id`. |
+| `horse_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Horse.horse_id`. |
 | `special_handling_notes` | `text` |  | No | Hướng dẫn xử lý/chăm sóc đặc biệt cho Horse trong Booking. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 
@@ -182,12 +186,12 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `booking_status_history_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `BookingStatusHistory`. |
-| `booking_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Booking.booking_id`. |
+| `booking_status_history_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `BookingStatusHistory`. |
+| `booking_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Booking.booking_id`. |
 | `type` | `booking_history_type` |  | Yes | Loại hành động gây ra thay đổi Booking: SUBMIT, APPROVE, REJECT hoặc CANCEL. Enum `booking_history_type`: SUBMIT, APPROVE, REJECT, CANCEL. |
 | `previous_status` | `booking_status` |  | No | Trạng thái trước khi hành động xảy ra. Enum `booking_status`: PENDING, APPROVED, REJECTED, CANCELLED. |
 | `new_status` | `booking_status` |  | Yes | Trạng thái sau khi hành động xảy ra. Enum `booking_status`: PENDING, APPROVED, REJECTED, CANCELLED. |
-| `changed_by_account_id` | `bigint` | FK | Yes | Account thực hiện hành động thay đổi trạng thái Booking. |
+| `changed_by_account_id` | `uuid` | FK | Yes | Account thực hiện hành động thay đổi trạng thái Booking. |
 | `reason` | `text` |  | No | Lý do của hành động/thay đổi. |
 | `changed_at` | `timestamp` |  | Yes | Thời điểm thay đổi trạng thái. |
 
@@ -197,9 +201,9 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `transport_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Transport`. |
+| `transport_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Transport`. |
 | `transport_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `Transport`. |
-| `booking_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Booking.booking_id`. |
+| `booking_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Booking.booking_id`. |
 | `status` | `transport_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `transport_status`: CREATED, PLANNING, READY, IN_TRANSIT, COMPLETED, CANCELLED. |
 | `actual_departure_at` | `timestamp` |  | No | Thời điểm khởi hành thực tế. |
 | `actual_arrival_at` | `timestamp` |  | No | Thời điểm đến thực tế. |
@@ -215,8 +219,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `transport_plan_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `TransportPlan`. |
-| `transport_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Transport.transport_id`. |
+| `transport_plan_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `TransportPlan`. |
+| `transport_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Transport.transport_id`. |
 | `plan_code` | `varchar(50)` |  | Yes | Mã duy nhất của TransportPlan. |
 | `status` | `transport_plan_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `transport_plan_status`: DRAFT, PENDING, APPROVED, IN_PROGRESS, COMPLETED, CANCELLED. |
 | `planned_start_at` | `timestamp` |  | No | Thời điểm dự kiến bắt đầu TransportPlan. |
@@ -224,19 +228,23 @@
 | `planning_note` | `text` |  | No | Ghi chú trong quá trình lập TransportPlan. |
 | `estimated_duration_minutes` | `int` |  | No | Thời lượng ước tính, tính bằng phút. |
 | `estimated_distance_km` | `decimal(10,2)` |  | No | Tổng khoảng cách ước tính của TransportPlan, đơn vị km. |
-| `approved_by_employee_id` | `bigint` | FK | No | Employee đã phê duyệt TransportPlan. |
+| `approved_by_employee_id` | `uuid` | FK | No | Employee đã phê duyệt TransportPlan. |
 | `approved_at` | `timestamp` |  | No | Thời điểm được phê duyệt. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
 # 11. `RoutePlan`
 
-**Ý nghĩa bảng:** RoutePlan: Kế hoạch tuyến đường của một TransportPlan. Đây là tập hợp các Route được sắp xếp nối tiếp từ điểm đầu đến điểm cuối.
+**Cập nhật BE:** bổ sung `primary_route_plan_id` (FK tự tham chiếu) và các trạng thái `PENDING_LEGAL_REVIEW`, `PENDING_MANAGER_APPROVAL`, `REJECTED_BY_MANAGER`, `APPROVED`.
+
+**Ý nghĩa bảng:** RoutePlan: Một phương án kế hoạch tuyến đường thuộc một TransportPlan. Một TransportPlan có thể có nhiều RoutePlan, ví dụ phương án PRIMARY, BACKUP hoặc RETURN. Mỗi RoutePlan là tập hợp các RoutePlanRoute được sắp xếp nối tiếp từ điểm đầu đến điểm cuối.
+
+**Business rule quan trọng:** `RoutePlan.transport_plan_id` không unique; quan hệ là `TransportPlan 1-N RoutePlan`. Việc giới hạn số lượng PRIMARY/BACKUP/RETURN đang hoạt động được kiểm tra ở business layer hoặc bằng constraint/index phù hợp, không bằng unique đơn trên `transport_plan_id`.
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `route_plan_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `RoutePlan`. |
-| `transport_plan_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `TransportPlan.transport_plan_id`. |
+| `route_plan_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `RoutePlan`. |
+| `transport_plan_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `TransportPlan.transport_plan_id`. Một TransportPlan có thể được tham chiếu bởi nhiều RoutePlan. |
 | `route_plan_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `RoutePlan`. |
 | `status` | `route_plan_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `route_plan_status`: DRAFT, CONFIRMED, ACTIVE, COMPLETED, CANCELLED. |
 | `total_distance_km` | `decimal(10,2)` |  | No | Tổng khoảng cách của RoutePlan, đơn vị km. |
@@ -253,19 +261,19 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `location_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Location`. |
+| `location_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Location`. |
 | `location_name` | `varchar(200)` |  | Yes | Tên địa điểm. |
 | `location_type` | `location_type` |  | No | Loại địa điểm trên bản đồ. Enum `location_type`: CITY, BORDER_GATE, AIRPORT, SEAPORT, STABLE, REST_STOP, OTHER. |
 | `address` | `varchar(500)` |  | No | Địa chỉ chi tiết. |
 | `city` | `varchar(100)` |  | No | Thành phố. |
 | `state_province` | `varchar(100)` |  | No | Bang/tỉnh/thành hoặc đơn vị hành chính tương đương. |
 | `country` | `varchar(100)` |  | Yes | Quốc gia. |
-| `latitude` | `decimal(10,7)` |  | No | Vĩ độ của Location. |
-| `longitude` | `decimal(10,7)` |  | No | Kinh độ của Location. |
+| `latitude` | `decimal(10,4)` |  | No | Vĩ độ của Location. |
+| `longitude` | `decimal(10,4)` |  | No | Kinh độ của Location. |
 | `location_note` | `text` |  | No | Ghi chú bổ sung về Location. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -277,10 +285,10 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `route_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Route`. |
+| `route_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Route`. |
 | `route_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `Route`. |
-| `from_location_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Location.location_id`. |
-| `to_location_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Location.location_id`. |
+| `from_location_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Location.location_id`. |
+| `to_location_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Location.location_id`. |
 | `route_name` | `varchar(200)` |  | No | Tên mô tả của Route. |
 | `transport_mode` | `transport_mode` |  | Yes | Phương thức vận chuyển: ROAD, SEA hoặc AIR. Enum `transport_mode`: ROAD, SEA, AIR. |
 | `distance_km` | `decimal(10,2)` |  | No | Khoảng cách của tuyến, tính bằng km. |
@@ -288,24 +296,33 @@
 | `route_note` | `text` |  | No | Ghi chú về Route/RoutePlan. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
 # 14. `RoutePlanRoute`
 
-**Ý nghĩa bảng:** RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver phụ trách và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.
+**Cập nhật BE:** bổ sung `service_type`, `provider_reference`, `outsourcing_cost_amount`, `outsourcing_currency` và `superseded_at` để lưu outsource và route change.
 
-**Business rule quan trọng:** `driver_employee_id` có thể NULL khi plan còn `DRAFT`, nhưng phải được gán trước khi RoutePlan `CONFIRMED/ACTIVE`; Employee được gán phải có `role = DRIVER`.
+**Ý nghĩa bảng:** RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver/Escort phụ trách, provider thuê ngoài và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.
+
+**Business rule quan trọng:**
+
+- `driver_employee_id` và `escort_employee_id` có thể NULL khi plan còn `DRAFT`.
+- Chặng nội bộ khi được phân công phải có Driver và Escort đúng role.
+- `transport_provider_id` có thể NULL với chặng nội bộ; nếu có giá trị thì chặng là outsource và không được gán vehicle/driver/escort nội bộ.
+- Thiết kế hiện tại hỗ trợ một Driver, một Escort và một Provider cho mỗi chặng. Nếu nghiệp vụ cần nhiều người/provider trên cùng chặng, cần tách thành các bảng assignment N-N.
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `route_plan_route_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `RoutePlanRoute`. |
-| `route_plan_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `RoutePlan.route_plan_id`. |
-| `route_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Route.route_id`. |
+| `route_plan_route_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `RoutePlanRoute`. |
+| `route_plan_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `RoutePlan.route_plan_id`. |
+| `route_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Route.route_id`. |
 | `sequence_no` | `int` |  | Yes | Thứ tự chặng trong RoutePlan; duy nhất trong cùng một RoutePlan. |
 | `route_type` | `route_type` |  | Yes | Vai trò của Route trong RoutePlanRoute. Enum `route_type`: PRIMARY, BACKUP, RETURN. `RETURN` dùng cho chặng quay về. |
-| `driver_employee_id` | `bigint` | FK | No | Driver phụ trách chặng này. Có thể NULL khi RoutePlan còn DRAFT; phải là Employee có role=DRIVER trước CONFIRMED/ACTIVE. |
+| `driver_employee_id` | `uuid` | FK | No | Driver phụ trách chặng này. Có thể NULL khi RoutePlan còn DRAFT; phải là Employee có role=DRIVER trước CONFIRMED/ACTIVE. |
+| `escort_employee_id` | `uuid` | FK | No | Escort phụ trách chặng này. Phải là Employee có role=ESCORT khi chặng nội bộ được phân công. |
+| `transport_provider_id` | `uuid` | FK | No | Provider thực hiện chặng thuê ngoài. NULL nghĩa là chặng nội bộ; có giá trị thì không gán vehicle/driver/escort nội bộ. |
 | `planned_departure_at` | `timestamp` |  | No | Thời điểm dự kiến khởi hành của chặng. |
 | `planned_arrival_at` | `timestamp` |  | No | Thời điểm dự kiến đến của chặng. |
 | `actual_departure_at` | `timestamp` |  | No | Thời điểm khởi hành thực tế. |
@@ -316,13 +333,15 @@
 
 # 15. `Vehicle`
 
+**Cập nhật BE:** enum `vehicle_status` bổ sung `SUSPENDED` và `OUT_OF_SERVICE`.
+
 **Ý nghĩa bảng:** Vehicle: Phương tiện vận chuyển master dùng chung cho ROAD, AIR hoặc SEA, ví dụ xe tải chở ngựa, máy bay hoặc tàu. Vehicle không thuộc cố định một TransportPlan; phương tiện được gán vào từng chặng RoutePlanRoute.
 
 **Soft delete:** Bảng này thuộc scope soft delete của V6. Record không bị xóa vật lý khi user thực hiện thao tác xóa.
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `vehicle_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Vehicle`. |
+| `vehicle_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Vehicle`. |
 | `vehicle_code` | `varchar(50)` |  | Yes | Mã phương tiện duy nhất. |
 | `vehicle_name` | `varchar(200)` |  | No | Tên/nhãn hiển thị của phương tiện. |
 | `transport_mode` | `transport_mode` |  | Yes | Phương thức vận chuyển: ROAD, SEA hoặc AIR. Enum `transport_mode`: ROAD, SEA, AIR. |
@@ -339,7 +358,7 @@
 | `special_equipment` | `text` |  | No | Mô tả thiết bị đặc biệt có trên phương tiện. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -349,8 +368,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `route_plan_route_id` | `bigint` | FK | Yes | Chặng cụ thể được gán phương tiện. |
-| `vehicle_id` | `bigint` | FK | Yes | Vehicle được sử dụng cho chặng. |
+| `route_plan_route_id` | `uuid` | FK | Yes | Chặng cụ thể được gán phương tiện. |
+| `vehicle_id` | `uuid` | FK | Yes | Vehicle được sử dụng cho chặng. |
 | `assigned_at` | `timestamp` |  | Yes | Thời điểm Vehicle được gán vào chặng. |
 | `note` | `text` |  | No | Ghi chú bổ sung. |
 
@@ -362,7 +381,7 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `transport_provider_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `TransportProvider`. |
+| `transport_provider_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `TransportProvider`. |
 | `provider_code` | `varchar(50)` |  | Yes | Mã TransportProvider duy nhất. |
 | `provider_name` | `varchar(200)` |  | Yes | Tên đơn vị vận chuyển/provider. |
 | `status` | `provider_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `provider_status`: ACTIVE, INACTIVE, SUSPENDED. |
@@ -376,7 +395,7 @@
 | `note` | `text` |  | No | Ghi chú bổ sung. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -386,8 +405,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `transport_plan_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `TransportPlan.transport_plan_id`. |
-| `transport_provider_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `TransportProvider.transport_provider_id`. |
+| `transport_plan_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `TransportPlan.transport_plan_id`. |
+| `transport_provider_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `TransportProvider.transport_provider_id`. |
 | `service_type` | `varchar(100)` |  | No | Loại dịch vụ provider cung cấp trong plan này. |
 | `assigned_at` | `timestamp` |  | Yes | Thời điểm được phân công/gán vào nghiệp vụ. |
 | `note` | `text` |  | No | Ghi chú bổ sung. |
@@ -398,8 +417,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `employee_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Employee.employee_id`. |
-| `transport_plan_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `TransportPlan.transport_plan_id`. |
+| `employee_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Employee.employee_id`. |
+| `transport_plan_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `TransportPlan.transport_plan_id`. |
 | `responsibility` | `varchar(150)` |  | No | Trách nhiệm/vai trò cụ thể của Employee trong TransportPlan. |
 | `assigned_at` | `timestamp` |  | Yes | Thời điểm được phân công/gán vào nghiệp vụ. |
 | `is_primary` | `boolean` |  | Yes | Cho biết đây có phải nhân sự chính của phân công hay không. |
@@ -418,8 +437,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `handover_record_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `HandoverRecord`. |
-| `transport_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Transport.transport_id`. |
+| `handover_record_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `HandoverRecord`. |
+| `transport_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Transport.transport_id`. |
 | `handover_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `HandoverRecord`. |
 | `sequence_no` | `int` |  | Yes | Thứ tự lần bàn giao trong cùng Transport. |
 | `handover_type` | `handover_type` |  | Yes | Loại bàn giao: pickup, transfer, border handover, carrier handover, delivery hoặc khác. Enum `handover_type`: PICKUP, TRANSFER, BORDER_HANDOVER, CARRIER_HANDOVER, DELIVERY, OTHER. |
@@ -428,12 +447,12 @@
 | `actual_handover_at` | `timestamp` |  | No | Thời điểm bàn giao thực tế. |
 | `from_type` | `handover_party_type` |  | Yes | Loại bên giao: CUSTOMER hoặc EMPLOYEE. Enum `handover_party_type`: CUSTOMER, EMPLOYEE. |
 | `to_type` | `handover_party_type` |  | Yes | Loại bên nhận: CUSTOMER hoặc EMPLOYEE. Enum `handover_party_type`: CUSTOMER, EMPLOYEE. |
-| `from_customer_id` | `bigint` | FK | No | Customer bên giao; chỉ dùng khi from_type=CUSTOMER. |
-| `from_employee_id` | `bigint` | FK | No | Employee bên giao; chỉ dùng khi from_type=EMPLOYEE. |
-| `to_customer_id` | `bigint` | FK | No | Customer bên nhận; chỉ dùng khi to_type=CUSTOMER. |
-| `to_employee_id` | `bigint` | FK | No | Employee bên nhận; chỉ dùng khi to_type=EMPLOYEE. |
-| `from_route_plan_route_id` | `bigint` | FK | No | Chặng vừa kết thúc trước bàn giao. NULL ở pickup đầu chuyến. |
-| `to_route_plan_route_id` | `bigint` | FK | No | Chặng tiếp theo sau bàn giao. NULL ở delivery cuối chuyến. |
+| `from_customer_id` | `uuid` | FK | No | Customer bên giao; chỉ dùng khi from_type=CUSTOMER. |
+| `from_employee_id` | `uuid` | FK | No | Employee bên giao; chỉ dùng khi from_type=EMPLOYEE. |
+| `to_customer_id` | `uuid` | FK | No | Customer bên nhận; chỉ dùng khi to_type=CUSTOMER. |
+| `to_employee_id` | `uuid` | FK | No | Employee bên nhận; chỉ dùng khi to_type=EMPLOYEE. |
+| `from_route_plan_route_id` | `uuid` | FK | No | Chặng vừa kết thúc trước bàn giao. NULL ở pickup đầu chuyến. |
+| `to_route_plan_route_id` | `uuid` | FK | No | Chặng tiếp theo sau bàn giao. NULL ở delivery cuối chuyến. |
 | `from_party_name` | `varchar(200)` |  | No | Tên hiển thị/snapshot của bên giao tại thời điểm bàn giao. |
 | `from_contact_name` | `varchar(150)` |  | No | Tên người liên hệ phía giao. |
 | `from_contact_phone` | `varchar(30)` |  | No | Số điện thoại liên hệ phía giao. |
@@ -461,10 +480,10 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `horse_health_log_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `HorseHealthLog`. |
-| `transport_id` | `bigint` | FK | Yes | Transport mà health log này phát sinh trong đó. |
-| `horse_id` | `bigint` | FK | Yes | Horse được kiểm tra. |
-| `employee_id` | `bigint` | FK | Yes | Employee thực hiện/ghi nhận lần kiểm tra sức khỏe. |
+| `horse_health_log_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `HorseHealthLog`. |
+| `transport_id` | `uuid` | FK | Yes | Transport mà health log này phát sinh trong đó. |
+| `horse_id` | `uuid` | FK | Yes | Horse được kiểm tra. |
+| `employee_id` | `uuid` | FK | Yes | Employee thực hiện/ghi nhận lần kiểm tra sức khỏe. |
 | `log_type` | `horse_health_log_type` |  | Yes | Loại health check/log theo thời điểm nghiệp vụ. Enum `horse_health_log_type`: PRE_TRIP_CHECK, ROUTINE_CHECK, BORDER_CHECK, REST_STOP_CHECK, INCIDENT_FOLLOWUP, POST_TRIP_CHECK, OTHER. |
 | `health_status` | `horse_health_status` |  | Yes | Đánh giá tổng quát sức khỏe Horse tại lần kiểm tra. Enum `horse_health_status`: NORMAL, OBSERVATION_REQUIRED, AT_RISK, CRITICAL. |
 | `checked_at` | `timestamp` |  | Yes | Thời điểm thực hiện kiểm tra sức khỏe. |
@@ -489,14 +508,16 @@
 
 # 22. `IncidentReport`
 
+**Cập nhật BE:** bổ sung `transport_id`, `emergency_settlement_required`; `incident_category` bổ sung `ROUTE_CHANGE`.
+
 **Ý nghĩa bảng:** IncidentReport: Báo cáo sự cố phát sinh trong quá trình vận chuyển. category gồm VEHICLE, HORSE_HEALTH hoặc BOTH.
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `incident_report_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `IncidentReport`. |
+| `incident_report_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `IncidentReport`. |
 | `incident_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `IncidentReport`. |
-| `employee_id` | `bigint` | FK | Yes | Employee báo cáo sự cố. |
-| `location_id` | `bigint` | FK | Yes | Location nơi sự cố xảy ra/được ghi nhận. |
+| `employee_id` | `uuid` | FK | Yes | Employee báo cáo sự cố. |
+| `location_id` | `uuid` | FK | Yes | Location nơi sự cố xảy ra/được ghi nhận. |
 | `category` | `incident_category` |  | Yes | Phạm vi sự cố: VEHICLE, HORSE_HEALTH hoặc BOTH. Enum `incident_category`: VEHICLE, HORSE_HEALTH, BOTH. |
 | `severity` | `incident_severity` |  | Yes | Mức độ nghiêm trọng của sự cố. Enum `incident_severity`: LOW, MEDIUM, HIGH, CRITICAL. |
 | `status` | `incident_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `incident_status`: REPORTED, PENDING, RESOLVED, CANCELLED. |
@@ -518,9 +539,9 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `vehicle_incident_detail_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `VehicleIncidentDetail`. |
-| `incident_report_id` | `bigint` | FK | Yes | IncidentReport mà chi tiết Vehicle này thuộc về; tối đa một VehicleIncidentDetail cho một IncidentReport. |
-| `vehicle_id` | `bigint` | FK | Yes | Vehicle bị ảnh hưởng trong sự cố. |
+| `vehicle_incident_detail_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `VehicleIncidentDetail`. |
+| `incident_report_id` | `uuid` | FK | Yes | IncidentReport mà chi tiết Vehicle này thuộc về; tối đa một VehicleIncidentDetail cho một IncidentReport. |
+| `vehicle_id` | `uuid` | FK | Yes | Vehicle bị ảnh hưởng trong sự cố. |
 | `incident_type` | `vehicle_incident_type` |  | Yes | Loại sự cố chi tiết của Vehicle hoặc Horse tùy bảng. Enum `vehicle_incident_type`: BREAKDOWN, ACCIDENT, TIRE_DAMAGE, ENGINE_FAILURE, TEMPERATURE_CONTROL_FAILURE, EQUIPMENT_FAILURE, OTHER. |
 | `vehicle_condition` | `text` |  | No | Mô tả tình trạng phương tiện sau sự cố. |
 | `damage_description` | `text` |  | No | Mô tả thiệt hại/hư hỏng phương tiện. |
@@ -539,9 +560,9 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `horse_health_incident_detail_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `HorseHealthIncidentDetail`. |
-| `incident_report_id` | `bigint` | FK | Yes | IncidentReport chứa sự cố sức khỏe này. |
-| `horse_id` | `bigint` | FK | Yes | Horse bị ảnh hưởng. |
+| `horse_health_incident_detail_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `HorseHealthIncidentDetail`. |
+| `incident_report_id` | `uuid` | FK | Yes | IncidentReport chứa sự cố sức khỏe này. |
+| `horse_id` | `uuid` | FK | Yes | Horse bị ảnh hưởng. |
 | `incident_type` | `horse_incident_type` |  | Yes | Loại sự cố chi tiết của Vehicle hoặc Horse tùy bảng. Enum `horse_incident_type`: INJURY, DEHYDRATION, RESPIRATORY_ISSUE, FEVER, STRESS, COLIC, FATIGUE, OTHER. |
 | `condition_description` | `text` |  | Yes | Mô tả tình trạng Horse trong sự cố. |
 | `symptoms` | `text` |  | No | Các triệu chứng quan sát được. |
@@ -564,8 +585,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `emergency_cost_request_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `EmergencyCostRequest`. |
-| `incident_report_id` | `bigint` | FK | Yes | IncidentReport làm phát sinh khoản chi phí khẩn cấp. |
+| `emergency_cost_request_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `EmergencyCostRequest`. |
+| `incident_report_id` | `uuid` | FK | Yes | IncidentReport làm phát sinh khoản chi phí khẩn cấp. |
 | `request_code` | `varchar(50)` |  | Yes | Mã yêu cầu bổ sung/sửa giấy tờ. |
 | `category` | `emergency_cost_category` |  | Yes | Nhóm chi phí khẩn cấp như veterinary, medication, repair, towing, route change... Enum `emergency_cost_category`: VETERINARY, MEDICATION, VEHICLE_REPAIR, TOWING, REPLACEMENT_VEHICLE, EMERGENCY_STABLE, ROUTE_CHANGE, ACCOMMODATION, OTHER. |
 | `description` | `text` |  | Yes | Mô tả chi tiết. |
@@ -586,9 +607,9 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `cost_approval_decision_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `CostApprovalDecision`. |
-| `emergency_cost_request_id` | `bigint` | FK | Yes | EmergencyCostRequest được quyết định; một request có tối đa một decision theo model hiện tại. |
-| `employee_id` | `bigint` | FK | Yes | Employee đưa ra quyết định. |
+| `cost_approval_decision_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `CostApprovalDecision`. |
+| `emergency_cost_request_id` | `uuid` | FK | Yes | EmergencyCostRequest được quyết định; một request có tối đa một decision theo model hiện tại. |
+| `employee_id` | `uuid` | FK | Yes | Employee đưa ra quyết định. |
 | `decision` | `approval_decision` |  | Yes | Kết quả quyết định duyệt hoặc từ chối. Enum `approval_decision`: APPROVED, REJECTED. |
 | `approved_amount` | `decimal(18,2)` |  | No | Số tiền thực tế được phê duyệt. |
 | `decision_reason` | `text` |  | No | Lý do của quyết định. |
@@ -601,10 +622,11 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `invoice_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Invoice`. |
+| `invoice_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Invoice`. |
 | `invoice_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `Invoice`. |
-| `booking_id` | `bigint` | FK | Yes | Booking mà hóa đơn này được lập cho. |
-| `employee_id` | `bigint` | FK | Yes | Employee phụ trách/lập hóa đơn. |
+| `booking_id` | `uuid` | FK | Yes | Booking mà hóa đơn này được lập cho. |
+| `employee_id` | `uuid` | FK | Yes | Employee phụ trách/lập hóa đơn. |
+| `type` | `invoice_type` |  | Yes | Loại chứng từ tài chính: QUOTATION (báo giá), DEPOSIT (đặt cọc), FINAL (quyết toán cuối), SUPPLEMENTARY (phát sinh thêm) hoặc CREDIT_NOTE (điều chỉnh giảm/hoàn tiền). Mặc định là QUOTATION. Các loại hóa đơn của cùng một Booking được truy xuất qua `booking_id`. |
 | `status` | `invoice_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `invoice_status`: DRAFT, ISSUED, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED. |
 | `currency` | `varchar(3)` |  | Yes | Mã tiền tệ, thường theo chuẩn 3 ký tự như USD/VND. |
 | `subtotal` | `decimal(18,2)` |  | Yes | Tổng tiền trước giảm giá và thuế. |
@@ -626,10 +648,10 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `invoice_item_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `InvoiceItem`. |
-| `invoice_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Invoice.invoice_id`. |
-| `horse_id` | `bigint` | FK | No | Horse liên quan trực tiếp tới dòng phí; có thể NULL với phí chung. |
-| `emergency_cost_request_id` | `bigint` | FK | No | EmergencyCostRequest được billing vào dòng này; NULL nếu không phải emergency cost. |
+| `invoice_item_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `InvoiceItem`. |
+| `invoice_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Invoice.invoice_id`. |
+| `horse_id` | `uuid` | FK | No | Horse liên quan trực tiếp tới dòng phí; có thể NULL với phí chung. |
+| `emergency_cost_request_id` | `uuid` | FK | No | EmergencyCostRequest được billing vào dòng này; NULL nếu không phải emergency cost. |
 | `item_type` | `invoice_item_type` |  | Yes | Loại dòng phí của InvoiceItem. Enum `invoice_item_type`: TRANSPORT_FEE, HORSE_SERVICE_FEE, HANDLING_FEE, COMPLIANCE_FEE, EMERGENCY_COST, OTHER. |
 | `description` | `varchar(500)` |  | Yes | Mô tả chi tiết. |
 | `quantity` | `decimal(10,2)` |  | Yes | Số lượng tính phí của dòng InvoiceItem. |
@@ -645,9 +667,9 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `receipt_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Receipt`. |
+| `receipt_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Receipt`. |
 | `receipt_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `Receipt`. |
-| `invoice_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Invoice.invoice_id`. |
+| `invoice_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Invoice.invoice_id`. |
 | `amount` | `decimal(18,2)` |  | Yes | Số tiền của giao dịch/bản ghi. |
 | `currency` | `varchar(3)` |  | Yes | Mã tiền tệ, thường theo chuẩn 3 ký tự như USD/VND. |
 | `payment_method` | `payment_method` |  | Yes | Phương thức thanh toán. Enum `payment_method`: CASH, BANK_TRANSFER, OTHER. |
@@ -667,12 +689,12 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `invoice_status_history_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `InvoiceStatusHistory`. |
-| `invoice_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Invoice.invoice_id`. |
+| `invoice_status_history_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `InvoiceStatusHistory`. |
+| `invoice_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Invoice.invoice_id`. |
 | `type` | `invoice_history_type` |  | Yes | Loại hành động gây thay đổi Invoice: CREATE, ISSUE, RECORD_PAYMENT, MARK_OVERDUE hoặc CANCEL. Enum `invoice_history_type`: CREATE, ISSUE, RECORD_PAYMENT, MARK_OVERDUE, CANCEL. |
 | `previous_status` | `invoice_status` |  | No | Trạng thái trước khi hành động xảy ra. Enum `invoice_status`: DRAFT, ISSUED, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED. |
 | `new_status` | `invoice_status` |  | Yes | Trạng thái sau khi hành động xảy ra. Enum `invoice_status`: DRAFT, ISSUED, PARTIALLY_PAID, PAID, OVERDUE, CANCELLED. |
-| `changed_by_account_id` | `bigint` | FK | No | Account thực hiện thay đổi; có thể NULL nếu hệ thống tự động thực hiện, ví dụ MARK_OVERDUE. |
+| `changed_by_account_id` | `uuid` | FK | No | Account thực hiện thay đổi; có thể NULL nếu hệ thống tự động thực hiện, ví dụ MARK_OVERDUE. |
 | `reason` | `text` |  | No | Lý do của hành động/thay đổi. |
 | `changed_at` | `timestamp` |  | Yes | Thời điểm thay đổi trạng thái. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
@@ -683,9 +705,9 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `financial_report_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `FinancialReport`. |
+| `financial_report_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `FinancialReport`. |
 | `report_code` | `varchar(50)` |  | Yes | Mã báo cáo duy nhất. |
-| `transport_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Transport.transport_id`. |
+| `transport_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Transport.transport_id`. |
 | `currency` | `varchar(3)` |  | Yes | Mã tiền tệ, thường theo chuẩn 3 ký tự như USD/VND. |
 | `total_invoiced_amount` | `decimal(18,2)` |  | Yes | Tổng giá trị đã xuất hóa đơn cho Transport. |
 | `total_paid_amount` | `decimal(18,2)` |  | Yes | Tổng số tiền đã thanh toán/xác nhận. |
@@ -702,10 +724,10 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `claim_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Claim`. |
+| `claim_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Claim`. |
 | `claim_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `Claim`. |
-| `customer_id` | `bigint` | FK | Yes | Khóa ngoại tham chiếu `Customer.customer_id`. |
-| `handover_record_id` | `bigint` | FK | Yes | Lần bàn giao mà Claim liên quan tới. |
+| `customer_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Customer.customer_id`. |
+| `handover_record_id` | `uuid` | FK | Yes | Lần bàn giao mà Claim liên quan tới. |
 | `claim_type` | `claim_type` |  | Yes | Loại khiếu nại. Enum `claim_type`: HORSE_INJURY, HORSE_HEALTH, LOSS, DAMAGE, DELAY, DOCUMENT_ISSUE, SERVICE_ISSUE, OTHER. |
 | `status` | `claim_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `claim_status`: PENDING, APPROVED, REJECTED, RESOLVED, CANCELLED. |
 | `title` | `varchar(200)` |  | Yes | Tiêu đề ngắn của bản ghi/nghiệp vụ. |
@@ -728,8 +750,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `claim_resolution_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `ClaimResolution`. |
-| `claim_id` | `bigint` | FK | Yes | Claim được giải quyết; mỗi Claim có tối đa một ClaimResolution theo model hiện tại. |
+| `claim_resolution_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `ClaimResolution`. |
+| `claim_id` | `uuid` | FK | Yes | Claim được giải quyết; mỗi Claim có tối đa một ClaimResolution theo model hiện tại. |
 | `resolution_type` | `claim_resolution_type` |  | Yes | Hình thức giải quyết Claim. Enum `claim_resolution_type`: COMPENSATION, PARTIAL_COMPENSATION, REFUND, SERVICE_RECOVERY, NO_COMPENSATION, OTHER. |
 | `resolution_summary` | `text` |  | Yes | Tóm tắt cách sự cố/claim được giải quyết. |
 | `approved_compensation_amount` | `decimal(18,2)` |  | No | Mức bồi thường cuối cùng được chấp thuận/thỏa thuận. |
@@ -748,7 +770,7 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `compliance_requirement_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `ComplianceRequirement`. |
+| `compliance_requirement_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `ComplianceRequirement`. |
 | `requirement_code` | `varchar(50)` |  | Yes | Mã master của loại yêu cầu pháp lý. |
 | `requirement_name` | `varchar(200)` |  | Yes | Tên loại yêu cầu pháp lý. |
 | `description` | `text` |  | No | Mô tả chi tiết. |
@@ -762,7 +784,7 @@
 | `status` | `compliance_requirement_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `compliance_requirement_status`: ACTIVE, INACTIVE. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -774,7 +796,7 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `dossier_template_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `DossierTemplate`. |
+| `dossier_template_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `DossierTemplate`. |
 | `template_code` | `varchar(50)` |  | Yes | Mã bộ hồ sơ mẫu. |
 | `template_name` | `varchar(200)` |  | Yes | Tên bộ hồ sơ mẫu. |
 | `description` | `text` |  | No | Mô tả chi tiết. |
@@ -784,7 +806,7 @@
 | `effective_to` | `date` |  | No | Ngày kết thúc hiệu lực. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -794,9 +816,9 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `dossier_template_item_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `DossierTemplateItem`. |
-| `dossier_template_id` | `bigint` | FK | Yes | DossierTemplate chứa requirement này. |
-| `compliance_requirement_id` | `bigint` | FK | Yes | Loại ComplianceRequirement được đưa vào template. |
+| `dossier_template_item_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `DossierTemplateItem`. |
+| `dossier_template_id` | `uuid` | FK | Yes | DossierTemplate chứa requirement này. |
+| `compliance_requirement_id` | `uuid` | FK | Yes | Loại ComplianceRequirement được đưa vào template. |
 | `sequence_no` | `int` |  | Yes | Thứ tự requirement trong template. |
 | `is_mandatory` | `boolean` |  | Yes | Cho biết requirement có bắt buộc hay không. |
 | `applies_per_horse` | `boolean` |  | Yes | Cho biết khi Apply Template có tạo một `DossierRequirement` riêng cho từng Horse hay chỉ tạo một requirement chung; mặc định `false`. |
@@ -806,15 +828,18 @@
 
 # 37. `ComplianceDossier`
 
+**Cập nhật BE:** bổ sung `dossier_template_id uuid` nullable, liên kết tới `DossierTemplate`; `transport_id` vẫn unique và quan hệ 1-1 với `Transport`.
+
 **Ý nghĩa bảng:** ComplianceDossier: Bộ hồ sơ pháp lý do Transport Specialist lập và chịu trách nhiệm hoàn thiện trước khi Transport xuất phát.
 
 **Context:** đây là **bộ hồ sơ chuẩn bị trước chuyến của một Transport**, không phải template và không phải trạng thái tổng của toàn chuyến. Kết quả phát sinh tại cửa khẩu nằm ở `QuarantineProof` và `CustomsClearanceProof`.
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `compliance_dossier_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `ComplianceDossier`. |
+| `compliance_dossier_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `ComplianceDossier`. |
 | `dossier_code` | `varchar(50)` |  | Yes | Mã bộ hồ sơ pháp lý thực tế. |
-| `transport_id` | `bigint` | FK | Yes | Transport sở hữu bộ hồ sơ pháp lý thực tế này; quan hệ 1-1. |
+| `transport_id` | `uuid` | FK | Yes | Transport sở hữu bộ hồ sơ pháp lý thực tế này; quan hệ 1-1. |
+| `dossier_template_id` | `uuid` | FK | No | Template dùng làm cơ sở sinh các yêu cầu pháp lý cho dossier; có thể NULL. |
 | `status` | `compliance_dossier_status` |  | Yes | Trạng thái vòng đời bộ hồ sơ trước chuyến/AuthoritySubmission. Enum: DRAFT, IN_PREPARATION, READY_FOR_SUBMISSION, SUBMITTED, PENDING, APPROVED, REJECTED, CLOSED. Không cập nhật field này từ kết quả BCP/Hải quan. |
 | `opened_at` | `timestamp` |  | Yes | Thời điểm bộ hồ sơ thực tế được mở/tạo để xử lý. |
 | `ready_for_submission_at` | `timestamp` |  | No | Thời điểm dossier đạt trạng thái sẵn sàng gửi cơ quan. |
@@ -832,15 +857,15 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `dossier_requirement_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `DossierRequirement`. |
-| `compliance_dossier_id` | `bigint` | FK | Yes | ComplianceDossier thực tế chứa requirement này. |
-| `compliance_requirement_id` | `bigint` | FK | Yes | Loại requirement master mà instance thực tế này dựa trên. |
-| `horse_id` | `bigint` | FK | No | Horse cụ thể mà requirement áp dụng. NULL nghĩa là requirement chung cho toàn chuyến; có giá trị nghĩa là requirement riêng cho Horse đó. |
+| `dossier_requirement_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `DossierRequirement`. |
+| `compliance_dossier_id` | `uuid` | FK | Yes | ComplianceDossier thực tế chứa requirement này. |
+| `compliance_requirement_id` | `uuid` | FK | Yes | Loại requirement master mà instance thực tế này dựa trên. |
+| `horse_id` | `uuid` | FK | No | Horse cụ thể mà requirement áp dụng. NULL nghĩa là requirement chung cho toàn chuyến; có giá trị nghĩa là requirement riêng cho Horse đó. |
 | `status` | `dossier_requirement_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `dossier_requirement_status`: PENDING, REQUESTED, PROVIDED, SATISFIED, REJECTED, WAIVED. |
 | `is_mandatory` | `boolean` |  | Yes | Cho biết requirement có bắt buộc hay không. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete cho Optional DossierRequirement; requirement mandatory không được xóa logic. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm requirement bị soft delete. |
-| `deleted_by_account_id` | `bigint` | FK | No | Account thực hiện soft delete requirement. |
+| `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện soft delete requirement. |
 | `due_date` | `date` |  | No | Ngày đến hạn thanh toán hoặc hoàn thành yêu cầu, tùy bảng. |
 | `valid_until` | `date` |  | No | Ngày hết hiệu lực của requirement instance, được backend tính khi áp dụng từ `ComplianceRequirement.validity_period_days`. |
 | `instruction` | `text` |  | No | Hướng dẫn chi tiết cách đáp ứng requirement. |
@@ -858,8 +883,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `compliance_document_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `ComplianceDocument`. |
-| `dossier_requirement_id` | `bigint` | FK | Yes | DossierRequirement mà giấy tờ này dùng để đáp ứng; hiện model 1-0..1. |
+| `compliance_document_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `ComplianceDocument`. |
+| `dossier_requirement_id` | `uuid` | FK | Yes | DossierRequirement mà giấy tờ này dùng để đáp ứng; hiện model 1-0..1. |
 | `document_code` | `varchar(50)` |  | Yes | Mã document logic. |
 | `document_name` | `varchar(200)` |  | Yes | Tên giấy tờ thực tế. |
 | `status` | `compliance_document_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `compliance_document_status`: PROVIDED, PENDING, APPROVED, REJECTED, EXPIRED. |
@@ -868,8 +893,8 @@
 | `issued_date` | `date` |  | No | Ngày giấy tờ được cấp. |
 | `expiry_date` | `date` |  | No | Ngày hết hạn của giấy tờ. |
 | `note` | `text` |  | No | Ghi chú bổ sung. |
-| `created_by_account_id` | `bigint` | FK | Yes | Account tạo ComplianceDocument; dùng để lưu actor khi thao tác thay Customer. |
-| `updated_by_account_id` | `bigint` | FK | Yes | Account cập nhật ComplianceDocument gần nhất. |
+| `created_by_account_id` | `uuid` | FK | Yes | Account tạo ComplianceDocument; dùng để lưu actor khi thao tác thay Customer. |
+| `updated_by_account_id` | `uuid` | FK | Yes | Account cập nhật ComplianceDocument gần nhất. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -879,15 +904,15 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `document_version_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `DocumentVersion`. |
-| `compliance_document_id` | `bigint` | FK | Yes | ComplianceDocument logic mà file/version này thuộc về. |
+| `document_version_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `DocumentVersion`. |
+| `compliance_document_id` | `uuid` | FK | Yes | ComplianceDocument logic mà file/version này thuộc về. |
 | `version_no` | `int` |  | Yes | Số phiên bản. |
 | `file_name` | `varchar(255)` |  | Yes | Tên file đã upload. |
 | `file_url` | `varchar(1000)` |  | Yes | URL/vị trí lưu file. |
 | `mime_type` | `varchar(100)` |  | No | MIME type của file, ví dụ application/pdf. |
-| `file_size_bytes` | `bigint` |  | No | Kích thước file tính bằng byte. |
+| `file_size_bytes` | `uuid` |  | No | Kích thước file tính bằng byte. |
 | `upload_note` | `text` |  | No | Ghi chú khi upload phiên bản file. |
-| `uploaded_by_account_id` | `bigint` | FK | Yes | Account thực hiện upload version; có thể là Customer hoặc Transport Specialist. |
+| `uploaded_by_account_id` | `uuid` | FK | Yes | Account thực hiện upload version; có thể là Customer hoặc Transport Specialist. |
 | `uploaded_at` | `timestamp` |  | Yes | Thời điểm upload file. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 
@@ -898,11 +923,11 @@
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
 | `document_attachment_id` | `uuid` | PK | No | Khóa chính định danh duy nhất file attachment. |
-| `document_version_id` | `bigint` | FK | Yes | `DocumentVersion` mà file này thuộc về. |
+| `document_version_id` | `uuid` | FK | Yes | `DocumentVersion` mà file này thuộc về. |
 | `file_name` | `varchar(255)` |  | Yes | Tên file vật lý. |
 | `file_url` | `varchar(1000)` |  | Yes | URL/vị trí lưu file. |
 | `mime_type` | `varchar(100)` |  | No | MIME type của file. |
-| `file_size_bytes` | `bigint` |  | No | Kích thước file tính bằng byte. |
+| `file_size_bytes` | `uuid` |  | No | Kích thước file tính bằng byte. |
 | `sort_order` | `int` |  | Yes | Thứ tự hiển thị/xử lý file trong cùng một `DocumentVersion`; unique theo `document_version_id`. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm attachment được tạo. |
 
@@ -912,11 +937,11 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `document_review_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `DocumentReview`. |
-| `document_version_id` | `bigint` | FK | Yes | DocumentVersion được kiểm tra. |
+| `document_review_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `DocumentReview`. |
+| `document_version_id` | `uuid` | FK | Yes | DocumentVersion được kiểm tra. |
 | `result` | `document_review_result` |  | Yes | Kết quả review của DocumentVersion. Enum `document_review_result`: APPROVED, REJECTED, REVISION_REQUIRED, REVOKED. |
 | `review_comment` | `text` |  | No | Nhận xét của lần review. |
-| `reviewed_by_account_id` | `bigint` | FK | Yes | Account thực hiện review; theo contract là Transport Specialist. |
+| `reviewed_by_account_id` | `uuid` | FK | Yes | Account thực hiện review; theo contract là Transport Specialist. |
 | `reviewed_at` | `timestamp` |  | Yes | Thời điểm review. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 
@@ -926,9 +951,9 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `document_request_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `DocumentRequest`. |
+| `document_request_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `DocumentRequest`. |
 | `document_review_id` | `uuid` | FK, UQ | No | DocumentReview tạo ra yêu cầu này; một review chỉ gắn tối đa một DocumentRequest. |
-| `dossier_requirement_id` | `bigint` | FK | Yes | DossierRequirement cần Customer bổ sung/sửa giấy tờ. |
+| `dossier_requirement_id` | `uuid` | FK | Yes | DossierRequirement cần Customer bổ sung/sửa giấy tờ. |
 | `error_category` | `varchar(40)` |  | No | Nhóm lỗi của giấy tờ bị từ chối hoặc cần chỉnh sửa. |
 | `request_code` | `varchar(50)` |  | Yes | Mã yêu cầu bổ sung/sửa giấy tờ. |
 | `request_type` | `document_request_type` |  | Yes | Loại yêu cầu gửi Customer. Enum `document_request_type`: MISSING_DOCUMENT, REVISION, REUPLOAD, ADDITIONAL_INFORMATION. |
@@ -939,7 +964,7 @@
 | `fulfilled_at` | `timestamp` |  | No | Thời điểm DocumentRequest được đáp ứng. |
 | `cancelled_at` | `timestamp` |  | No | Thời điểm nghiệp vụ/bản ghi bị hủy. |
 | `cancellation_reason` | `text` |  | No | Lý do hủy. |
-| `requested_by_account_id` | `bigint` | FK | Yes | Account tạo DocumentRequest; theo contract là Transport Specialist. |
+| `requested_by_account_id` | `uuid` | FK | Yes | Account tạo DocumentRequest; theo contract là Transport Specialist. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -949,14 +974,14 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `authority_submission_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `AuthoritySubmission`. |
-| `compliance_dossier_id` | `bigint` | FK | Yes | ComplianceDossier được gửi trong lần submission này. |
+| `authority_submission_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `AuthoritySubmission`. |
+| `compliance_dossier_id` | `uuid` | FK | Yes | ComplianceDossier được gửi trong lần submission này. |
 | `submission_no` | `int` |  | Yes | Số thứ tự lần gửi dossier tới cơ quan. |
 | `authority_name` | `varchar(200)` |  | Yes | Tên cơ quan có thẩm quyền nhận hồ sơ. |
 | `status` | `authority_submission_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `authority_submission_status`: DRAFT, SUBMITTED, PENDING, APPROVED, REJECTED, RETURNED. |
 | `submission_reference` | `varchar(150)` |  | No | Mã tham chiếu của lần nộp/gửi hồ sơ. |
 | `submission_method` | `varchar(100)` |  | No | Phương thức nộp hồ sơ, ví dụ trực tiếp/portal/email tùy nghiệp vụ. |
-| `submitted_by_account_id` | `bigint` | FK | Yes | Account ghi nhận lần nộp hồ sơ. |
+| `submitted_by_account_id` | `uuid` | FK | Yes | Account ghi nhận lần nộp hồ sơ. |
 | `is_required` | `boolean` |  | Yes | Cho biết authority submission có bắt buộc để ComplianceDossier được APPROVED hay không; mặc định `true`. |
 | `permit_number` | `varchar(150)` |  | No | Số giấy phép/quyết định của cơ quan; bắt buộc khi decision là APPROVED. |
 | `permit_issued_date` | `date` |  | No | Ngày cấp giấy phép/quyết định. |
@@ -976,13 +1001,13 @@
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
 | `authority_submission_evidence_file_id` | `uuid` | PK | No | Khóa chính định danh duy nhất file bằng chứng. |
-| `authority_submission_id` | `bigint` | FK | Yes | Lần `AuthoritySubmission` mà file phản hồi thuộc về. |
+| `authority_submission_id` | `uuid` | FK | Yes | Lần `AuthoritySubmission` mà file phản hồi thuộc về. |
 | `evidence_type` | `authority_evidence_type` |  | Yes | Loại văn bản: ACCEPTANCE, REJECTION, ADDITIONAL_INFORMATION hoặc OTHER. |
-| `uploaded_by_employee_id` | `bigint` | FK | Yes | Employee upload/lưu văn bản phản hồi vào hệ thống. |
+| `uploaded_by_employee_id` | `uuid` | FK | Yes | Employee upload/lưu văn bản phản hồi vào hệ thống. |
 | `file_name` | `varchar(255)` |  | Yes | Tên file vật lý. |
 | `file_url` | `varchar(1000)` |  | Yes | URL/vị trí lưu file. |
 | `mime_type` | `varchar(100)` |  | No | MIME type của file. |
-| `file_size_bytes` | `bigint` |  | No | Kích thước file tính bằng byte. |
+| `file_size_bytes` | `uuid` |  | No | Kích thước file tính bằng byte. |
 | `note` | `text` |  | No | Ghi chú về file hoặc phản hồi của cơ quan. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm file được ghi nhận. |
 
@@ -994,12 +1019,12 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `quarantine_proof_id` | `bigint` | PK | No | Khóa chính định danh bằng chứng kiểm dịch. |
-| `compliance_dossier_id` | `bigint` | FK | Yes | Dossier của chuyến đi mà bằng chứng kiểm dịch thuộc về. |
+| `quarantine_proof_id` | `uuid` | PK | No | Khóa chính định danh bằng chứng kiểm dịch. |
+| `compliance_dossier_id` | `uuid` | FK | Yes | Dossier của chuyến đi mà bằng chứng kiểm dịch thuộc về. |
 | `status` | `quarantine_proof_status` |  | Yes | Trạng thái: PENDING_VERIFICATION, PASSED, PASSED_WITH_CONDITIONS, HOLDBACK, FAILED hoặc REJECTED. |
-| `submitted_by_employee_id` | `bigint` | FK | Yes | Driver/Escort nộp bằng chứng. Business logic phải kiểm tra role phù hợp. |
-| `verified_by_employee_id` | `bigint` | FK | No | Transport Specialist xác minh/chốt bằng chứng. |
-| `location_id` | `bigint` | FK | No | Location của trạm BCP hoặc nơi kiểm dịch. |
+| `submitted_by_employee_id` | `uuid` | FK | Yes | Driver/Escort nộp bằng chứng. Business logic phải kiểm tra role phù hợp. |
+| `verified_by_employee_id` | `uuid` | FK | No | Transport Specialist xác minh/chốt bằng chứng. |
+| `location_id` | `uuid` | FK | No | Location của trạm BCP hoặc nơi kiểm dịch. |
 | `bcp_name` | `varchar(200)` |  | Yes | Tên trạm kiểm soát biên giới BCP. |
 | `official_veterinarian_name` | `varchar(200)` |  | No | Tên bác sĩ thú y chính thức tại BCP. |
 | `bcp_receipt_number` | `varchar(150)` |  | No | Số biên nhận/tờ khai kiểm dịch BCP. |
@@ -1024,13 +1049,13 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `customs_clearance_proof_id` | `bigint` | PK | No | Khóa chính định danh bằng chứng thông quan hải quan. |
-| `compliance_dossier_id` | `bigint` | FK | Yes | Dossier của chuyến đi mà bằng chứng hải quan thuộc về. |
+| `customs_clearance_proof_id` | `uuid` | PK | No | Khóa chính định danh bằng chứng thông quan hải quan. |
+| `compliance_dossier_id` | `uuid` | FK | Yes | Dossier của chuyến đi mà bằng chứng hải quan thuộc về. |
 | `status` | `customs_clearance_proof_status` |  | Yes | Trạng thái: PENDING_VERIFICATION, CLEARED, HELD hoặc REJECTED. |
 | `customs_lane` | `customs_lane` |  | No | Phân luồng hải quan: GREEN_LANE, ORANGE_LANE hoặc RED_LANE. |
-| `submitted_by_employee_id` | `bigint` | FK | Yes | Driver nộp bằng chứng. |
-| `verified_by_employee_id` | `bigint` | FK | No | Transport Specialist xác minh/chốt bằng chứng. |
-| `location_id` | `bigint` | FK | No | Location của cửa khẩu/cảng hải quan. |
+| `submitted_by_employee_id` | `uuid` | FK | Yes | Driver nộp bằng chứng. |
+| `verified_by_employee_id` | `uuid` | FK | No | Transport Specialist xác minh/chốt bằng chứng. |
+| `location_id` | `uuid` | FK | No | Location của cửa khẩu/cảng hải quan. |
 | `customs_port_name` | `varchar(200)` |  | Yes | Tên cửa khẩu/cảng hải quan. |
 | `mrn_number` | `varchar(150)` |  | No | Mã MRN hoặc mã tham chiếu tờ khai hải quan. |
 | `submitted_note` | `text` |  | No | Ghi chú nhanh do Driver gửi cùng proof, đặc biệt khi shipment bị giữ. |
@@ -1054,12 +1079,12 @@
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
 | `proof_attachment_id` | `uuid` | PK | No | Khóa chính định danh file proof. |
-| `quarantine_proof_id` | `bigint` | FK | No | Proof kiểm dịch mà file thuộc về; chỉ được có giá trị khi `customs_clearance_proof_id` là NULL. |
-| `customs_clearance_proof_id` | `bigint` | FK | No | Proof hải quan mà file thuộc về; chỉ được có giá trị khi `quarantine_proof_id` là NULL. |
+| `quarantine_proof_id` | `uuid` | FK | No | Proof kiểm dịch mà file thuộc về; chỉ được có giá trị khi `customs_clearance_proof_id` là NULL. |
+| `customs_clearance_proof_id` | `uuid` | FK | No | Proof hải quan mà file thuộc về; chỉ được có giá trị khi `quarantine_proof_id` là NULL. |
 | `file_name` | `varchar(255)` |  | Yes | Tên file vật lý. |
 | `file_url` | `varchar(1000)` |  | Yes | URL/vị trí lưu file. |
 | `mime_type` | `varchar(100)` |  | No | MIME type của file. |
-| `file_size_bytes` | `bigint` |  | No | Kích thước file tính bằng byte. |
+| `file_size_bytes` | `uuid` |  | No | Kích thước file tính bằng byte. |
 | `sort_order` | `int` |  | Yes | Thứ tự hiển thị/xử lý file trong cùng một proof. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm file được ghi nhận. |
 
@@ -1071,12 +1096,12 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `audit_dossier_id` | `bigint` | PK | No | Khóa chính định danh dòng audit. |
-| `compliance_dossier_id` | `bigint` | FK | Yes | Dossier làm phạm vi của sự kiện audit. |
+| `audit_dossier_id` | `uuid` | PK | No | Khóa chính định danh dòng audit. |
+| `compliance_dossier_id` | `uuid` | FK | Yes | Dossier làm phạm vi của sự kiện audit. |
 | `action_type` | `varchar(100)` |  | Yes | Loại hành động, ví dụ DOSSIER_INITIALIZED, DOCUMENT_VERSION_SUBMITTED, DOCUMENT_REVIEW_APPROVED, AUTHORITY_SUBMITTED, PROOF_VERIFIED. |
 | `target_entity` | `varchar(100)` |  | Yes | Tên entity bị tác động. |
-| `target_id` | `bigint` |  | No | ID của target entity; nullable nếu sự kiện không gắn một record cụ thể. |
-| `actor_account_id` | `bigint` | FK | Yes | Account thực hiện hành động. |
+| `target_id` | `uuid` |  | No | ID của target entity; nullable nếu sự kiện không gắn một record cụ thể. |
+| `actor_account_id` | `uuid` | FK | Yes | Account thực hiện hành động. |
 | `summary` | `varchar(500)` |  | No | Tóm tắt ngắn của sự kiện. |
 | `details` | `jsonb` |  | No | Chi tiết mở rộng trước/sau, metadata hoặc nội dung audit. |
 | `visibility` | `audit_visibility` |  | Yes | PUBLIC hoặc INTERNAL; dùng để giới hạn nội dung Customer được xem. |
@@ -1088,11 +1113,11 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `catalog_audit_log_id` | `bigint` | PK | No | Khóa chính định danh dòng audit catalog. |
+| `catalog_audit_log_id` | `uuid` | PK | No | Khóa chính định danh dòng audit catalog. |
 | `entity_type` | `varchar(100)` |  | Yes | Tên loại entity catalog bị thay đổi, ví dụ `ComplianceRequirement`. |
-| `entity_id` | `bigint` |  | Yes | ID của entity catalog bị thay đổi. |
+| `entity_id` | `uuid` |  | Yes | ID của entity catalog bị thay đổi. |
 | `action_type` | `varchar(100)` |  | Yes | Loại hành động, ví dụ CREATE, UPDATE hoặc STATUS_CHANGED. |
-| `actor_account_id` | `bigint` | FK | Yes | Account thực hiện thay đổi catalog. |
+| `actor_account_id` | `uuid` | FK | Yes | Account thực hiện thay đổi catalog. |
 | `summary` | `varchar(500)` |  | No | Tóm tắt ngắn của thay đổi. |
 | `before_data` | `jsonb` |  | Yes | Snapshot dữ liệu trước khi thay đổi. |
 | `after_data` | `jsonb` |  | Yes | Snapshot dữ liệu sau khi thay đổi. |
@@ -1105,14 +1130,14 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `notification_id` | `bigint` | PK | No | Khóa chính định danh duy nhất bản ghi `Notification`. |
-| `transport_id` | `bigint` | FK | Yes | Transport làm ngữ cảnh chính của Notification. |
+| `notification_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Notification`. |
+| `transport_id` | `uuid` | FK | Yes | Transport làm ngữ cảnh chính của Notification. |
 | `notification_type` | `notification_type` |  | Yes | Nhóm nghiệp vụ phát sinh Notification. Enum `notification_type`: BOOKING, TRANSPORT, ROUTE, HANDOVER, HORSE_HEALTH, INCIDENT, EMERGENCY_COST, PAYMENT, CLAIM, COMPLIANCE, DOCUMENT, SYSTEM. |
 | `priority` | `notification_priority` |  | Yes | Mức độ ưu tiên của Notification. Enum `notification_priority`: LOW, NORMAL, HIGH, URGENT. |
 | `title` | `varchar(200)` |  | Yes | Tiêu đề ngắn của bản ghi/nghiệp vụ. |
 | `message` | `text` |  | Yes | Nội dung thông báo/yêu cầu gửi tới người nhận. |
 | `reference_type` | `varchar(100)` |  | No | Tên loại entity nghiệp vụ mà Notification đang tham chiếu. |
-| `reference_id` | `bigint` |  | No | ID của entity được tham chiếu bởi Notification; được kiểm tra bằng business logic. |
+| `reference_id` | `uuid` |  | No | ID của entity được tham chiếu bởi Notification; được kiểm tra bằng business logic. |
 | `action_url` | `varchar(1000)` |  | No | URL/deep-link đưa người dùng tới màn hình liên quan. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `expires_at` | `timestamp` |  | No | Thời điểm token/notification hết hạn tùy bảng. |
@@ -1123,8 +1148,8 @@
 
 | Field | Type | Key | Required | Ý nghĩa |
 |---|---|---|---|---|
-| `account_id` | `bigint` | FK | Yes | Account nhận Notification. |
-| `notification_id` | `bigint` | FK | Yes | Notification được gửi tới Account. |
+| `account_id` | `uuid` | FK | Yes | Account nhận Notification. |
+| `notification_id` | `uuid` | FK | Yes | Notification được gửi tới Account. |
 | `status` | `recipient_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `recipient_status`: PENDING, DELIVERED, READ, FAILED. |
 | `delivered_at` | `timestamp` |  | No | Thời điểm Notification được giao tới Account. |
 | `read_at` | `timestamp` |  | No | Thời điểm Account đọc Notification. |
@@ -1179,25 +1204,7 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm tạo message trong transaction nghiệp vụ. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm cập nhật message gần nhất. |
 
-# 56. `BookingEmployeeAssignment`
-
-**Ý nghĩa bảng:** Lưu phân công của Logistics Manager cho nhân sự xử lý một Booking. Transport Specialist phụ trách hồ sơ pháp lý; Fleet Route Coordinator phụ trách kế hoạch vận chuyển và lộ trình.
-
-| Field | Type | Key | Required | Ý nghĩa |
-|---|---|---|---|---|
-| `booking_employee_assignment_id` | `uuid` | PK | No | Khóa chính của assignment. |
-| `booking_id` | `uuid` | FK | Yes | Booking được phân công. |
-| `employee_id` | `uuid` | FK | Yes | Nhân sự được phân công; phải là TS hoặc Fleet Route Coordinator đúng với `assignment_role`. |
-| `assignment_role` | `employee_role` |  | Yes | Vai trò xử lý: `TRANSPORT_SPECIALIST` hoặc `FLEET_ROUTE_COORDINATOR`. |
-| `assigned_by_employee_id` | `uuid` | FK | Yes | Logistics Manager thực hiện phân công. |
-| `status` | `booking_assignment_status` |  | Yes | Trạng thái: `ACTIVE` hoặc `REVOKED`. |
-| `assigned_at` | `timestamp` |  | Yes | Thời điểm phân công. |
-| `revoked_at` | `timestamp` |  | No | Thời điểm thu hồi assignment. |
-| `note` | `text` |  | No | Ghi chú phân công. |
-
-**Business rule:** Một Booking chỉ có tối đa một assignment `ACTIVE` cho mỗi role. Khi đổi người, assignment cũ chuyển `REVOKED` để giữ lịch sử.
-
-# Appendix A — Các business rule V7 cần backend kiểm tra
+# Appendix A — Các business rule V8 cần backend kiểm tra
 
 1. `Vehicle.transport_mode` phải phù hợp với `Route.transport_mode` của chặng được gán qua `RoutePlanRouteVehicle`.
 2. `RoutePlanRoute.driver_employee_id` nếu có phải trỏ tới Employee có `role = DRIVER`.
@@ -1240,5 +1247,6 @@
 | `AuditDossier` | Nhật ký audit append-only cho các thay đổi trong compliance dossier. |
 
 **Tổng số bảng:** 56
-**Tổng số enum:** 55
+**Tổng số enum:** 56
 **Tổng số field được mô tả:** 702
+

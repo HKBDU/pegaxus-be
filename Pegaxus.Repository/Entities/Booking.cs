@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
@@ -55,8 +54,6 @@ public partial class Booking
     public virtual Employee? AssignedEmployee { get; set; }
 
     public virtual ICollection<BookingHorse> BookingHorses { get; set; } = new List<BookingHorse>();
-
-    public virtual ICollection<BookingEmployeeAssignment> EmployeeAssignments { get; set; } = new List<BookingEmployeeAssignment>();
 
     public virtual ICollection<BookingStatusHistory> BookingStatusHistories { get; set; } = new List<BookingStatusHistory>();
 

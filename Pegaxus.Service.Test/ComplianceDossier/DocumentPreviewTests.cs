@@ -1,6 +1,7 @@
 using System.Net;
 using Microsoft.Extensions.Configuration;
 using Pegaxus.Service.Exceptions;
+
 using CloudinaryPreviewService = Pegaxus.Service.CloudinaryService.Service;
 
 namespace Pegaxus.Service.Test;

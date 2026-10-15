@@ -1,11 +1,11 @@
+using System.Security.Claims;
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Pegaxus.Service.Models;
+using Pegaxus.API.Models;
 using Pegaxus.Service.Exceptions;
-using System.Security.Claims;
 
 using AuthService = Pegaxus.Service.Auth;
 
@@ -13,13 +13,13 @@ namespace Pegaxus.API.Controllers;
 
 [ApiController]
 [Route("api/v1/auth")]
-public sealed class AuthController : ControllerBase
+public sealed class AuthController : ApiControllerBase
 {
-    private readonly AuthService.IService _service;
+    private readonly AuthService.IAuthService _service;
     private readonly IConfiguration _configuration;
     private const string GoogleExternalScheme = "GoogleExternal";
 
-    public AuthController(AuthService.IService service, IConfiguration configuration)
+    public AuthController(AuthService.IAuthService service, IConfiguration configuration)
     {
         _service = service;
         _configuration = configuration;
@@ -109,8 +109,7 @@ public sealed class AuthController : ControllerBase
         CancellationToken cancellationToken)
     {
         var response = await _service.ExchangeGoogleLoginCodeAsync(request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(
-            response, "Google login successful. Welcome back!", traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Google login successful. Welcome back!");
     }
 
     private string GetFrontendCallbackUrl()
@@ -139,12 +138,12 @@ public sealed class AuthController : ControllerBase
         [FromServices] IValidator<AuthService.Request.LoginRequest> validator,
         CancellationToken cancellationToken)
     {
-        var validationError = await ValidateRequestAsync(request, validator, cancellationToken);
+        var validationError = await ValidateAuthRequestAsync(request, validator, cancellationToken);
         if (validationError is not null)
             return validationError;
 
         var response = await _service.LoginAsync(request, cancellationToken);
-        return Ok(ResponseBuilder.SuccessResponse(response, "Login successful. Welcome back!", traceId: HttpContext.TraceIdentifier));
+        return Success(response, "Login successful. Welcome back!");
     }
 
     /// <summary>
@@ -162,7 +161,7 @@ public sealed class AuthController : ControllerBase
         [FromServices] IValidator<AuthService.Request.RegisterRequest> validator,
         CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateAuthRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         var response = await _service.RegisterAsync(request, cancellationToken);
         return StatusCode(201, ResponseBuilder.SuccessResponse(
@@ -186,7 +185,7 @@ public sealed class AuthController : ControllerBase
         [FromServices] IValidator<AuthService.Request.ForgotPasswordRequest> validator,
         CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateAuthRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         await _service.ForgotPasswordAsync(request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(null, "If the email exists, an OTP has been sent"));
@@ -207,7 +206,7 @@ public sealed class AuthController : ControllerBase
         [FromServices] IValidator<AuthService.Request.VerifyEmailRequest> validator,
         CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateAuthRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         await _service.VerifyEmailAsync(request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(null, "Email verified successfully"));
@@ -228,7 +227,7 @@ public sealed class AuthController : ControllerBase
         [FromServices] IValidator<AuthService.Request.ResendOtpRequest> validator,
         CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateAuthRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         var response = await _service.ResendOtpAsync(request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(response, "OTP has been resent"));
@@ -249,7 +248,7 @@ public sealed class AuthController : ControllerBase
         [FromServices] IValidator<AuthService.Request.RefreshTokenRequest> validator,
         CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateAuthRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         var response = await _service.RefreshTokenAsync(request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(response, "Token refreshed successfully"));
@@ -270,7 +269,7 @@ public sealed class AuthController : ControllerBase
         [FromServices] IValidator<AuthService.Request.ResetPasswordRequest> validator,
         CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateAuthRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         await _service.ResetPasswordAsync(request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(null, "Password reset successfully. Please sign in again"));
@@ -292,30 +291,25 @@ public sealed class AuthController : ControllerBase
         [FromServices] IValidator<AuthService.Request.LogoutRequest> validator,
         CancellationToken cancellationToken)
     {
-        var error = await ValidateRequestAsync(request, validator, cancellationToken);
+        var error = await ValidateAuthRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         await _service.LogoutAsync(request, cancellationToken);
         return Ok(ResponseBuilder.SuccessResponse(null, "Logout successful"));
     }
 
-    private async Task<BadRequestObjectResult?> ValidateRequestAsync<T>(
+    private async Task<BadRequestObjectResult?> ValidateAuthRequestAsync<T>(
         T request,
         IValidator<T> validator,
         CancellationToken cancellationToken)
     {
         var validation = await validator.ValidateAsync(request, cancellationToken);
         if (validation.IsValid) return null;
-        var errors = validation.Errors.Select(validationError => new
-        {
-            field = char.ToLowerInvariant(validationError.PropertyName[0]) + validationError.PropertyName[1..],
-            message = validationError.ErrorMessage
-        });
         var errorCode = validation.Errors.Any(error =>
             error.PropertyName == "ConfirmPassword" && error.ErrorMessage.Contains("match", StringComparison.OrdinalIgnoreCase))
             ? "PASSWORD_MISMATCH"
             : "VALIDATION_ERROR";
         return BadRequest(ResponseBuilder.ErrorResponse(
-            errors,
+            FieldErrors(validation),
             errorCode == "PASSWORD_MISMATCH" ? "Password confirmation does not match" : "The request data is invalid",
             errorCode));
     }

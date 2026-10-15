@@ -1,7 +1,7 @@
 using Pegaxus.Service.Exceptions;
+
 using HorseServiceImpl = Pegaxus.Service.HorseService.Service;
 using HorseRequest = Pegaxus.Service.HorseService.Request;
-using Xunit;
 
 namespace Pegaxus.Service.Test.HorseTests;
 

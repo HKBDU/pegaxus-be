@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
@@ -41,7 +40,7 @@ public partial class TransportPlan
 
     public virtual ICollection<EmployeeTransportPlan> EmployeeTransportPlans { get; set; } = new List<EmployeeTransportPlan>();
 
-    public virtual RoutePlan? RoutePlan { get; set; }
+    public virtual ICollection<RoutePlan> RoutePlans { get; set; } = new List<RoutePlan>();
 
     public virtual Transport Transport { get; set; } = null!;
 

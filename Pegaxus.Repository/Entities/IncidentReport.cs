@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
@@ -11,6 +10,9 @@ namespace Pegaxus.Repository.Entities;
 public partial class IncidentReport
 {
     public Guid IncidentReportId { get; set; }
+
+    public Guid? TransportId { get; set; }
+    public bool EmergencySettlementRequired { get; set; }
 
     public string IncidentCode { get; set; } = null!;
 

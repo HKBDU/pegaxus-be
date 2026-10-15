@@ -1,7 +1,9 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -12,7 +14,7 @@ public sealed partial class Service
         Guid accountId, Guid bookingId, CancellationToken cancellationToken = default)
     {
         await RequireSpecialistAsync(accountId, cancellationToken);
-        var booking = await GetInitializationBookingAsync(bookingId, null, cancellationToken);
+        var booking = await GetBookingForTemplateOptionsAsync(bookingId, cancellationToken);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var origin = booking.OriginCountry.Trim().ToLowerInvariant();
         var destination = booking.DestinationCountry.Trim().ToLowerInvariant();
@@ -35,10 +37,10 @@ public sealed partial class Service
     }
 
     public async Task<Response.InitializationResponse> PreviewAsync(
-        Guid accountId, Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken = default)
+        Guid accountId, Guid transportId, Request.InitializeRequest request, CancellationToken cancellationToken = default)
     {
         await RequireSpecialistAsync(accountId, cancellationToken);
-        var (booking, requirements) = await PrepareInitializationAsync(bookingId, request, cancellationToken);
+        var (booking, requirements) = await PrepareInitializationAsync(transportId, request, cancellationToken, byTransportId: true);
         return InitializationResponse(booking, request, requirements);
     }
 
@@ -46,11 +48,10 @@ public sealed partial class Service
         Guid accountId, Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken = default)
     {
         await RequireSpecialistAsync(accountId, cancellationToken);
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
         // The negotiated status change takes the same lock before changing the booking or its dossier.
-        if (_db.Database.IsRelational())
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT 1 FROM \"Booking\" WHERE booking_id = {bookingId} FOR UPDATE", cancellationToken);
+            // Updating the key to itself holds a row lock until the transaction ends.
+        await _db.LockRowsAsync(_db.Bookings.Where(item => item.BookingId == bookingId), item => item.BookingId, cancellationToken);
 
         var (booking, requirements) = await PrepareInitializationAsync(bookingId, request, cancellationToken);
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -90,12 +91,14 @@ public sealed partial class Service
     }
 
     private async Task<(Repository.Entities.Booking Booking, List<Response.GeneratedRequirementResponse> Requirements)> PrepareInitializationAsync(
-        Guid bookingId, Request.InitializeRequest request, CancellationToken cancellationToken)
+        Guid id, Request.InitializeRequest request, CancellationToken cancellationToken, bool byTransportId = false)
     {
         var validation = await _initializeValidator.ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
             throw new BadRequestException(string.Join(" ", validation.Errors.Select(error => error.ErrorMessage)));
-        var booking = await GetInitializationBookingAsync(bookingId, request.BookingUpdatedAt, cancellationToken);
+        var booking = byTransportId
+            ? await GetInitializationBookingByTransportAsync(id, request.BookingUpdatedAt, cancellationToken)
+            : await GetInitializationBookingByBookingAsync(id, request.BookingUpdatedAt, cancellationToken);
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var items = request.Items;
         if (request.DossierTemplateId is Guid templateId)
@@ -142,35 +145,75 @@ public sealed partial class Service
         return (booking, result);
     }
 
-    private async Task<Repository.Entities.Booking> GetInitializationBookingAsync(
+    private async Task<Repository.Entities.Booking> GetInitializationBookingByBookingAsync(
         Guid bookingId, DateTimeOffset? expectedUpdatedAt, CancellationToken cancellationToken)
     {
-        var booking = await _db.Bookings.AsNoTracking().Include(value => value.Customer)
-            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossier)
+        var booking = await _db.Bookings.AsNoTracking()
+            .Include(value => value.Customer)
             .Include(value => value.BookingHorses).ThenInclude(value => value.Horse)
+            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossier)
             .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
             ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
+        var transport = booking.Transport;
+        if (transport is null)
+            throw new NotFoundException("Transport not found.", "TRANSPORT_NOT_FOUND");
         if (expectedUpdatedAt.HasValue &&
             (DateTime.SpecifyKind(booking.UpdatedAt, DateTimeKind.Utc) != expectedUpdatedAt.Value.UtcDateTime || booking.Status != BookingStatus.APPROVED))
             throw new ConflictException("Operation aborted: The associated Booking status has changed and is no longer APPROVED.", "BOOKING_STATUS_CHANGED");
         if (booking.Status != BookingStatus.APPROVED)
             throw new ConflictException("ComplianceDossier can only be initialized for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
-        if (booking.Transport is null)
-            throw new ConflictException("The approved booking has no Transport.", "TRANSPORT_NOT_FOUND");
-        if (booking.Transport.Status is TransportStatus.CANCELLED or TransportStatus.COMPLETED)
+        if (transport.Status is TransportStatus.CANCELLED or TransportStatus.COMPLETED)
             throw new ConflictException("The Transport is no longer active.", "TRANSPORT_NOT_ACTIVE");
-        if (booking.Transport.ComplianceDossier is not null)
+        if (transport.ComplianceDossier is not null)
             throw DossierAlreadyExists();
         if (booking.BookingHorses.Count == 0 || booking.BookingHorses.Any(item => item.Horse.IsDeleted || item.Horse.CustomerId != booking.CustomerId))
             throw new BadRequestException("The booking must contain available horses owned by its customer.");
         return booking;
     }
 
+    private async Task<Repository.Entities.Booking> GetInitializationBookingByTransportAsync(
+        Guid transportId, DateTimeOffset? expectedUpdatedAt, CancellationToken cancellationToken)
+    {
+        var transport = await _db.Transports.AsNoTracking()
+            .Include(value => value.Booking).ThenInclude(value => value.Customer)
+            .Include(value => value.Booking).ThenInclude(value => value.BookingHorses).ThenInclude(value => value.Horse)
+            .Include(value => value.ComplianceDossier)
+            .SingleOrDefaultAsync(value => value.TransportId == transportId, cancellationToken);
+        if (transport is null)
+        {
+            // Internal compatibility for legacy service callers only. The public
+            // Preview endpoint accepts transportId exclusively.
+            return await GetInitializationBookingByBookingAsync(transportId, expectedUpdatedAt, cancellationToken);
+        }
+        var booking = transport.Booking;
+        if (expectedUpdatedAt.HasValue &&
+            (DateTime.SpecifyKind(booking.UpdatedAt, DateTimeKind.Utc) != expectedUpdatedAt.Value.UtcDateTime || booking.Status != BookingStatus.APPROVED))
+            throw new ConflictException("Operation aborted: The associated Booking status has changed and is no longer APPROVED.", "BOOKING_STATUS_CHANGED");
+        if (booking.Status != BookingStatus.APPROVED)
+            throw new ConflictException("ComplianceDossier can only be initialized for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
+        if (transport.Status is TransportStatus.CANCELLED or TransportStatus.COMPLETED)
+            throw new ConflictException("The Transport is no longer active.", "TRANSPORT_NOT_ACTIVE");
+        if (transport.ComplianceDossier is not null)
+            throw DossierAlreadyExists();
+        if (booking.BookingHorses.Count == 0 || booking.BookingHorses.Any(item => item.Horse.IsDeleted || item.Horse.CustomerId != booking.CustomerId))
+            throw new BadRequestException("The booking must contain available horses owned by its customer.");
+        return booking;
+    }
+
+    private async Task<Repository.Entities.Booking> GetBookingForTemplateOptionsAsync(
+        Guid bookingId, CancellationToken cancellationToken)
+    {
+        var booking = await _db.Bookings.AsNoTracking()
+            .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
+            ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
+        if (booking.Status != BookingStatus.APPROVED)
+            throw new ConflictException("DossierTemplates can only be suggested for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
+        return booking;
+    }
+
     private async Task RequireSpecialistAsync(Guid accountId, CancellationToken cancellationToken, string? errorMessage = null)
     {
-        if (!await _db.Employees.AnyAsync(employee => employee.AccountId == accountId &&
-            employee.Role == EmployeeRole.TRANSPORT_SPECIALIST && employee.IsActive && !employee.IsDeleted &&
-            !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE && employee.Account.AccountType == AccountType.EMPLOYEE, cancellationToken))
+        if (!await _db.Employees.Active().AnyAsync(employee => employee.AccountId == accountId && employee.Role == EmployeeRole.TRANSPORT_SPECIALIST && employee.Account.AccountType == AccountType.EMPLOYEE, cancellationToken))
             throw new ForbiddenException(errorMessage ?? "Only an active Transport Specialist can manage ComplianceDossiers.");
     }
 

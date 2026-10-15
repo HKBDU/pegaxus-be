@@ -1,6 +1,9 @@
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
+
+using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.BookingService;
 
@@ -15,9 +18,8 @@ public partial class Service
             throw new BadRequestException(string.Join(" ", validation.Errors.Select(error => error.ErrorMessage)));
 
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
-        if (_db.Database.IsRelational())
-            await _db.Database.ExecuteSqlInterpolatedAsync(
-                $"SELECT 1 FROM \"Booking\" WHERE booking_id = {bookingId} FOR UPDATE", cancellationToken);
+            // Updating the key to itself holds a row lock until the transaction ends.
+        await _db.LockRowsAsync(_db.Bookings.Where(item => item.BookingId == bookingId), item => item.BookingId, cancellationToken);
         var booking = await _db.Bookings.Include(value => value.Customer)
             .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossier).ThenInclude(value => value!.DossierRequirements)
             .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
@@ -26,7 +28,7 @@ public partial class Service
         if (booking.Status != BookingStatus.APPROVED)
             throw new ConflictException("Only APPROVED bookings can be changed through negotiation.", "INVALID_BOOKING_STATUS");
 
-        var now = UtcNow();
+        var now = UtcNowTruncated();
         var status = request.Status.Trim().ToUpperInvariant() == "CANCELLED" ? BookingStatus.CANCELLED : BookingStatus.DRAFT;
         var reason = request.Reason.Trim();
         booking.Status = status;
@@ -61,8 +63,7 @@ public partial class Service
         }
         AddHistory(bookingId, accountId, status == BookingStatus.CANCELLED ? BookingHistoryType.CANCEL : BookingHistoryType.SUBMIT,
             BookingStatus.APPROVED, status, reason, now);
-        var recipients = await _db.Employees.Where(employee => employee.Role == EmployeeRole.TRANSPORT_SPECIALIST &&
-                employee.IsActive && !employee.IsDeleted && !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE)
+        var recipients = await _db.Employees.Active().Where(employee => employee.Role == EmployeeRole.TRANSPORT_SPECIALIST)
             .Select(employee => employee.AccountId).ToListAsync(cancellationToken);
         recipients.Add(booking.Customer.AccountId);
         foreach (var recipient in recipients.Distinct())

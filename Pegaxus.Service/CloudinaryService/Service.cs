@@ -1,15 +1,15 @@
-﻿using CloudinaryDotNet;
+﻿using System.Security.Cryptography;
+using System.Text;
+using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
-using Pegaxus.Service.MediaService;
-using System.Security.Cryptography;
-using System.Text;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.MediaService;
 
 namespace Pegaxus.Service.CloudinaryService;
 
-public class Service : IService
+public class Service : IMediaService
 {
     public const string PreviewHttpClient = "ComplianceDocumentPreview";
     private const long MaxSignedUploadSize = DocumentStorageService.Service.MaxFileSize;

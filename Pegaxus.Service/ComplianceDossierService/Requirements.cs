@@ -1,8 +1,10 @@
+using System.Data;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -18,6 +20,7 @@ public sealed partial class Service
             throw new BadRequestException("ComplianceRequirementId is required.");
         if (request.DueDate.HasValue && request.LeadTimeDays.HasValue)
             throw new BadRequestException("Provide DueDate or LeadTimeDays, not both.");
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
         var dossier = await EditableDossierAsync(dossierId, cancellationToken);
         var booking = dossier.Transport.Booking;
         var requirement = await _db.ComplianceRequirements.SingleOrDefaultAsync(item =>
@@ -50,7 +53,11 @@ public sealed partial class Service
             new { item.ComplianceRequirementId, item.HorseId, item.IsMandatory, item.DueDate, item.Instruction });
         AddNotification(booking.Customer.AccountId, dossier, "DossierRequirement added", now,
             message: $"A new DossierRequirement ({requirement.RequirementName}) was added to your ComplianceDossier.");
-        try { await _db.SaveChangesAsync(cancellationToken); }
+        try
+        {
+            await _db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+        }
         catch (DbUpdateException exception) when (exception.InnerException is PostgresException
             { SqlState: PostgresErrorCodes.UniqueViolation,
                 ConstraintName: "DossierRequirement_dossier_requirement_global_key" or

@@ -10,6 +10,27 @@
 [![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
+### SePay checkout (UC-70 / IV11)
+
+`POST /api/v1/invoices/{invoiceId}/online-payments` requires the owning Customer and no body.
+Set the four `SePayOptions__*` variables in `.env.example`; use separate Sandbox and Production credentials.
+`InvoiceDetailsUrlTemplate` must contain `{invoiceId}`. Production requires HTTPS; Sandbox allows HTTP for localhost.
+
+The response adds `value.checkoutFields` to the Flow 6 contract's `receipt` and `paymentUrl`.
+Create a browser form with `method="POST"`, `action=value.paymentUrl`, and hidden inputs from `checkoutFields` in their returned order.
+SePay uses signed forms, so redirecting with GET does not start checkout. The secret stays on the backend.
+Checkout preparation runs locally; provider errors after form submission are handled by SePay and its IPN.
+The receipt stays `PENDING`; only IV12 may confirm payment. Do not confirm it from a success redirect.
+
+SePay bank transfers require whole VND amounts. EUR/USD return `422 UNSUPPORTED_PAYMENT_CURRENCY`;
+fractional VND returns `422 UNSUPPORTED_PAYMENT_AMOUNT`. Missing configuration returns `502 PAYMENT_GATEWAY_ERROR`.
+Failures during preparation roll back both the new receipt and changes to older pending receipts.
+This endpoint does not call SePay to create a remote session; immediate provider-outage detection from the generic contract does not apply to this form flow.
+
+References: [SePay checkout](https://developer.sepay.vn/vi/cong-thanh-toan/sdk/nodejs),
+[Sandbox](https://developer.sepay.vn/vi/cong-thanh-toan/sandbox),
+[official PHP currency/amount validation](https://github.com/sepayvn/sepay-pg-php/blob/main/src/Builders/CheckoutBuilder.php).
+
 ---
 
 ## 📖 1. Project Overview
@@ -58,15 +79,18 @@ pegaxus-be/
 ├── Pegaxus.Service/                # [Business Logic Layer] Application use cases
 │   ├── <Module>/                   # Feature-based folders (Booking, Transport, Dossier)
 │   │   ├── I<Module>Service.cs     # Service contract interface
-│   │   ├── <Module>Service.cs      # Core business logic implementation
-│   │   ├── Requests/               # Inbound DTO payloads
-│   │   ├── Responses/              # Outbound DTO models
+│   │   ├── Service.cs (+ partials) # Business logic, split by use case (Queries, Lifecycle, ...)
+│   │   ├── Request.cs / Response.cs# Inbound / outbound DTOs
 │   │   └── Validations/            # FluentValidation rules
+│   ├── Common/                     # Shared helpers (DbTime, Paging, Text, Validation)
 ├── Pegaxus.Repository/             # [Data Access Layer] Persistence & database context
-│   ├── Abstractions/               # Generic Repository and Unit of Work interfaces
-│   ├── Configurations/             # EF Core Fluent API entity relationships
-│   ├── Context/                    # ApplicationDbContext
-│   └── Entities/                   # Database POCO entities
+│   ├── Configurations/             # One IEntityTypeConfiguration<T> per entity (applied by AppDbContext)
+│   ├── Entities/                   # Database POCO entities
+│   ├── Enum/                       # PostgreSQL enum types
+│   ├── Extensions/                 # Row-lock, serializable-transaction & Postgres error helpers
+│   ├── Migrations/                 # EF Core migrations (never edit applied ones)
+│   └── AppDbContext.cs             # DbContext (no repository / unit-of-work layer)
+├── Directory.Build.props           # Shared TargetFramework / ImplicitUsings / Nullable
 ├── .dockerignore                   # Docker build context exclusion rules
 ├── .env.example                    # Environment variables template
 ├── docker-compose.yml              # Local multi-container orchestration (API + PostgreSQL)
@@ -100,6 +124,10 @@ pegaxus-be/
    # Linux/macOS:
    cp .env.example .env
    ```
+
+   For local `dotnet` / `dotnet ef`, set `ConnectionStrings__DefaultConnection` in `.env`
+   to your PostgreSQL connection string (host, port, database, username, password).
+   `POSTGRES_*` variables configure Docker Compose; they do not configure EF CLI directly.
 
 3. **Start PostgreSQL Database**:
    ```bash

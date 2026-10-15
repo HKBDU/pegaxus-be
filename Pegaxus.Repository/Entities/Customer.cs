@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace Pegaxus.Repository.Entities;
 
@@ -12,6 +11,8 @@ public partial class Customer
     public Guid CustomerId { get; set; }
 
     public Guid AccountId { get; set; }
+
+    public string CustomerCode { get; set; } = null!;
 
     public string FullName { get; set; } = null!;
 

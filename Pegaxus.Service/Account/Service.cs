@@ -5,15 +5,17 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Service.Exceptions;
 
+using static Pegaxus.Service.Common.DbTime;
+
 namespace Pegaxus.Service.AccountService;
 
-public sealed class Service : IService
+public sealed class Service : IAccountService
 {
     private readonly AppDbContext _appDbContext;
-    private readonly MediaService.IService _mediaService;
+    private readonly MediaService.IMediaService _mediaService;
     private readonly IPasswordHasher<Account> _passwordHasher;
 
-    public Service( AppDbContext appDbContext, MediaService.IService mediaService, IPasswordHasher<Account> passwordHasher)
+    public Service( AppDbContext appDbContext, MediaService.IMediaService mediaService, IPasswordHasher<Account> passwordHasher)
     {
         _appDbContext = appDbContext;
         _mediaService = mediaService;
@@ -69,16 +71,14 @@ public sealed class Service : IService
             AvatarUrl = account.AvatarUrl,
             Customer = customer,
             Employee = employee,
-            CreatedAt = ToUtcOffset(account.CreatedAt),
+            CreatedAt = AsUtc(account.CreatedAt),
             LastLoginAt = account.LastLoginAt.HasValue
-                ? ToUtcOffset(account.LastLoginAt.Value)
+                ? AsUtc(account.LastLoginAt.Value)
                 : null,
             UpdatedAt = new DateTimeOffset(DateTime.SpecifyKind(account.UpdatedAt, DateTimeKind.Utc))
         };
     }
 
-    private static DateTimeOffset ToUtcOffset(DateTime value) =>
-        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 
     public async Task<Response.ProfileResponse> UpdateProfileAsync(
         Guid accountId,
@@ -151,7 +151,7 @@ public sealed class Service : IService
         if (request.Avatar is not null)
             account.AvatarUrl = await _mediaService.UploadImageAsync(request.Avatar);
 
-        account.UpdatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        account.UpdatedAt = UtcNow();
         await _appDbContext.SaveChangesAsync(cancellationToken);
 
         return await GetCurrentProfileAsync(accountId, cancellationToken);
@@ -202,7 +202,7 @@ public sealed class Service : IService
 
         ValidatePassword(request.NewPassword);
         account.PasswordHash = _passwordHasher.HashPassword(account, request.NewPassword);
-        account.UpdatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        account.UpdatedAt = UtcNow();
 
         await _appDbContext.SaveChangesAsync(cancellationToken);
     }

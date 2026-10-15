@@ -1,11 +1,12 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.ComplianceDossierService;
 using Pegaxus.Service.Exceptions;
+
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
 using Mail = Pegaxus.Service.MailService;
 
@@ -365,7 +366,7 @@ public class MissingDocumentReminderTests
         public override DateTimeOffset GetUtcNow() => Now;
     }
 
-    private sealed class RecordingMail : Mail.IService
+    private sealed class RecordingMail : Mail.IMailService
     {
         public List<Mail.MailContent> Sent { get; } = [];
         public bool Fail { get; set; }

@@ -6,6 +6,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.ComplianceDossierService;
 using Pegaxus.Service.Exceptions;
+
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
 using Mail = Pegaxus.Service.MailService;
 
@@ -344,7 +345,7 @@ public class DocumentRejectionTests
         VersionUploadedAt = version.UploadedAt, DocumentUpdatedAt = version.ComplianceDocument.UpdatedAt
     };
 
-    private static DossierService CreateService(AppDbContext db, Mail.IService mail) => new(db, null!,
+    private static DossierService CreateService(AppDbContext db, Mail.IMailService mail) => new(db, null!,
         new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
         new Pegaxus.Service.NotificationService.Service(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService()),
         null!, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance, mail);
@@ -371,7 +372,7 @@ public class DocumentRejectionTests
         return (specialist.AccountId, customer.AccountId, dossier, requirement, version);
     }
 
-    private sealed class CaptureMailService : Mail.IService
+    private sealed class CaptureMailService : Mail.IMailService
     {
         public List<Mail.MailContent> Sent { get; } = [];
         public bool Fail { get; init; }

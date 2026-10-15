@@ -7,9 +7,9 @@ namespace Pegaxus.API.Hubs;
 [Authorize]
 public sealed class NotificationHub : Hub<INotificationClient>
 {
-    private readonly IService _notificationService;
+    private readonly INotificationService _notificationService;
 
-    public NotificationHub(IService notificationService)
+    public NotificationHub(INotificationService notificationService)
     {
         _notificationService = notificationService;
     }

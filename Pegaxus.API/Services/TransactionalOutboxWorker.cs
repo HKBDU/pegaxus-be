@@ -10,12 +10,11 @@ public sealed class TransactionalOutboxWorker(
     IServiceScopeFactory scopes,
     ILogger<TransactionalOutboxWorker> logger) : BackgroundService
 {
-    private const int BatchSize = 20;
     private const int MaxAttempts = 8;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
-        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         do
         {
             try
@@ -37,35 +36,28 @@ public sealed class TransactionalOutboxWorker(
     {
         await using var claimScope = scopes.CreateAsyncScope();
         var db = claimScope.ServiceProvider.GetRequiredService<AppDbContext>();
-        var now = DateTime.UtcNow;
-        var staleLock = now.AddMinutes(-10);
-
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        var messages = await db.OutboxMessages
-            .FromSqlInterpolated($"""
-                SELECT *
-                FROM "OutboxMessage"
-                WHERE (status = {"PENDING"} OR status = {"FAILED"}
-                    OR (status = {"PROCESSING"} AND locked_at < {staleLock}))
-                  AND available_at <= {now}
-                ORDER BY created_at
-                LIMIT {BatchSize}
-                FOR UPDATE SKIP LOCKED
-                """)
+        var now = UtcNow();
+        var staleBefore = now.AddMinutes(-10);
+        var eligible = db.OutboxMessages.Where(message =>
+            (message.Status == "PENDING" || message.Status == "FAILED" ||
+                (message.Status == "PROCESSING" && message.LockedAt < staleBefore)) &&
+            message.AvailableAt <= now);
+        var candidates = await eligible.OrderBy(message => message.CreatedAt).ThenBy(message => message.OutboxMessageId)
+            .Select(message => message.OutboxMessageId).Take(20)
             .ToListAsync(cancellationToken);
-
-        foreach (var message in messages)
+        var claimed = new List<Guid>();
+        foreach (var messageId in candidates)
         {
-            message.Status = "PROCESSING";
-            message.LockedAt = now;
-            message.UpdatedAt = now;
+            // Recheck eligibility atomically so competing workers cannot claim the same message.
+            if (await eligible.Where(message => message.OutboxMessageId == messageId)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(message => message.Status, "PROCESSING")
+                    .SetProperty(message => message.LockedAt, now)
+                    .SetProperty(message => message.UpdatedAt, now), cancellationToken) == 1)
+                claimed.Add(messageId);
         }
-
-        await db.SaveChangesAsync(cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-
-        foreach (var message in messages)
-            await ProcessMessageAsync(message.OutboxMessageId, cancellationToken);
+        foreach (var messageId in claimed)
+            await ProcessMessageAsync(messageId, cancellationToken);
     }
 
     private async Task ProcessMessageAsync(Guid messageId, CancellationToken cancellationToken)
@@ -83,7 +75,7 @@ public sealed class TransactionalOutboxWorker(
             switch (message.MessageType)
             {
                 case MessageTypes.Email:
-                    var mail = scope.ServiceProvider.GetRequiredService<Pegaxus.Service.MailService.IService>();
+                    var mail = scope.ServiceProvider.GetRequiredService<Pegaxus.Service.MailService.IMailService>();
                     var email = OutboxQueue.Deserialize<EmailPayload>(message.Payload);
                     await mail.SendMail(new MailContent
                     {
@@ -104,7 +96,7 @@ public sealed class TransactionalOutboxWorker(
             }
 
             message.Status = "PROCESSED";
-            message.ProcessedAt = DateTime.UtcNow;
+            message.ProcessedAt = UtcNow();
             message.UpdatedAt = message.ProcessedAt.Value;
             message.LastError = null;
             await db.SaveChangesAsync(cancellationToken);
@@ -127,10 +119,13 @@ public sealed class TransactionalOutboxWorker(
 
         message.Attempts++;
         message.Status = message.Attempts >= MaxAttempts ? "DEAD" : "FAILED";
-        message.AvailableAt = DateTime.UtcNow.AddSeconds(Math.Min(300, Math.Pow(2, message.Attempts) * 5));
+        message.AvailableAt = UtcNow().AddSeconds(Math.Min(300, Math.Pow(2, message.Attempts) * 5));
         message.LastError = error.ToString()[..Math.Min(4000, error.ToString().Length)];
-        message.UpdatedAt = DateTime.UtcNow;
+        message.UpdatedAt = UtcNow();
         await db.SaveChangesAsync(cancellationToken);
         logger.LogError(error, "Outbox message {OutboxMessageId} failed on attempt {Attempt}.", messageId, message.Attempts);
     }
+
+    private static DateTime UtcNow() =>
+        DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 }

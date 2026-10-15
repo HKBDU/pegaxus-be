@@ -1,6 +1,7 @@
-using Pegaxus.Service.Models;
-using Pegaxus.Service.Exceptions;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using Pegaxus.API.Models;
+using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.API.Middleware;
 
@@ -25,16 +26,27 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
                 throw;
 
             var statusCode = MapStatusCode(ex);
-            _logger.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+            // Logging must not replace the original API error response. Some hosts
+            // (notably Windows EventLog without source permissions) can throw while
+            // writing a log entry, which otherwise closes the HTTP response early.
+            try
+            {
+                _logger.LogError(ex, "Unhandled exception for {Method} {Path}", context.Request.Method, context.Request.Path);
+            }
+            catch
+            {
+                // Preserve the mapped error response when a logging provider fails.
+            }
 
             context.Response.Clear();
             context.Response.StatusCode = statusCode;
             await context.Response.WriteAsJsonAsync(ResponseBuilder.ErrorResponse(
-                null,
+                (ex as FieldValidationException)?.Errors,
                 GetErrorMessage(ex, statusCode),
                 errorCode: GetErrorCode(ex, statusCode),
                 code: statusCode,
-                traceId: context.TraceIdentifier));
+                traceId: context.TraceIdentifier,
+                value: (ex as ConflictException)?.Value));
         }
     }
 
@@ -44,6 +56,14 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
         {
             Exceptions appEx => appEx.StatusCode,
             DbUpdateConcurrencyException => StatusCodes.Status409Conflict,
+            PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } => StatusCodes.Status409Conflict,
+            DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } } => StatusCodes.Status409Conflict,
+            InvalidOperationException
+            {
+                InnerException:
+                PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } or
+                DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } }
+            } => StatusCodes.Status409Conflict,
             ArgumentException => StatusCodes.Status400BadRequest,
             UnauthorizedAccessException => StatusCodes.Status401Unauthorized,
             KeyNotFoundException => StatusCodes.Status404NotFound,
@@ -53,7 +73,7 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
 
     private static string GetErrorMessage(Exception ex, int statusCode)
     {
-        if (ex is DbUpdateConcurrencyException)
+        if (statusCode == StatusCodes.Status409Conflict && ex is not Exceptions)
             return "The record changed. Reload it and try again.";
         return statusCode >= StatusCodes.Status500InternalServerError
             ? "A system error occurred. Please try again later"

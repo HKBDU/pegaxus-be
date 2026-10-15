@@ -6,11 +6,14 @@ using Npgsql;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+
+using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.EmployeeService;
 
-public sealed class Service : IService
+public sealed class Service : IEmployeeService
 {
     private const string DefaultPassword = "123@Abc.";
     private readonly AppDbContext _db;
@@ -44,7 +47,7 @@ public sealed class Service : IService
                 Role = employee.Role.ToString(),
                 AccountStatus = employee.Account.Status.ToString(),
                 WorkingStatus = employee.IsActive ? "ACTIVE" : "INACTIVE",
-                CreatedAt = ToUtcOffset(employee.CreatedAt)
+                CreatedAt = AsUtc(employee.CreatedAt)
             })
             .ToListAsync(cancellationToken);
 
@@ -54,7 +57,7 @@ public sealed class Service : IService
             PageIndex = request.PageIndex,
             PageSize = request.PageSize,
             TotalItems = totalItems,
-            TotalPages = (int)Math.Ceiling(totalItems / (double)request.PageSize)
+            TotalPages = Paging.TotalPages(totalItems, request.PageSize)
         };
     }
 
@@ -93,7 +96,7 @@ public sealed class Service : IService
             sheet.Cell(row, 5).Value = employee.Role;
             sheet.Cell(row, 6).Value = employee.AccountStatus;
             sheet.Cell(row, 7).Value = employee.WorkingStatus;
-            sheet.Cell(row, 8).Value = ToUtcOffset(employee.CreatedAt).UtcDateTime;
+            sheet.Cell(row, 8).Value = AsUtc(employee.CreatedAt).UtcDateTime;
         }
         sheet.Row(1).Style.Font.Bold = true;
         sheet.SheetView.FreezeRows(1);
@@ -169,7 +172,7 @@ public sealed class Service : IService
             AccountType = account.AccountType.ToString(),
             AccountStatus = account.Status.ToString(),
             WorkingStatus = "ACTIVE",
-            CreatedAt = ToUtcOffset(employee.CreatedAt)
+            CreatedAt = AsUtc(employee.CreatedAt)
         };
     }
 
@@ -196,7 +199,7 @@ public sealed class Service : IService
         employee.UpdatedAt = now;
         employee.Account.UpdatedAt = now;
         await _db.SaveChangesAsync(cancellationToken);
-        return new Response.EmploymentUpdatedResponse { UpdatedAt = ToUtcOffset(now) };
+        return new Response.EmploymentUpdatedResponse { UpdatedAt = AsUtc(now) };
     }
 
     public async Task<Response.AccountStatusUpdatedResponse> UpdateStatusAsync(
@@ -317,17 +320,17 @@ public sealed class Service : IService
         Phone = employee.Phone,
         DateOfBirth = employee.DateOfBirth,
         AvatarUrl = employee.Account.AvatarUrl,
-        LastLoginAt = employee.Account.LastLoginAt.HasValue ? ToUtcOffset(employee.Account.LastLoginAt.Value) : null,
-        CreatedAt = ToUtcOffset(employee.CreatedAt),
-        UpdatedAt = ToUtcOffset(employee.UpdatedAt)
+        LastLoginAt = employee.Account.LastLoginAt.HasValue ? AsUtc(employee.Account.LastLoginAt.Value) : null,
+        CreatedAt = AsUtc(employee.CreatedAt),
+        UpdatedAt = AsUtc(employee.UpdatedAt)
     };
 
     private static Response.AccountStatusUpdatedResponse ToStatusResponse(Employee employee, DateTime? deletedAt) => new()
     {
         Status = employee.Account.Status.ToString(),
         IsDeleted = employee.IsDeleted,
-        DeletedAt = deletedAt.HasValue ? ToUtcOffset(deletedAt.Value) : null,
-        UpdatedAt = ToUtcOffset(employee.UpdatedAt)
+        DeletedAt = deletedAt.HasValue ? AsUtc(deletedAt.Value) : null,
+        UpdatedAt = AsUtc(employee.UpdatedAt)
     };
 
     private static void EnsureNotSelf(Employee employee, Guid managerAccountId)
@@ -372,6 +375,4 @@ public sealed class Service : IService
         if (value?.Length > maxLength) throw new BadRequestException($"{field} must not exceed {maxLength} characters");
     }
 
-    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
-    private static DateTimeOffset ToUtcOffset(DateTime value) => new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 }

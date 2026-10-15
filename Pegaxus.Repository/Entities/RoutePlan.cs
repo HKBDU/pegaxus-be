@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
@@ -13,6 +12,8 @@ public partial class RoutePlan
     public Guid RoutePlanId { get; set; }
 
     public Guid TransportPlanId { get; set; }
+
+    public Guid? PrimaryRoutePlanId { get; set; }
 
     public string RoutePlanCode { get; set; } = null!;
 
@@ -29,6 +30,5 @@ public partial class RoutePlan
     public DateTime UpdatedAt { get; set; }
 
     public virtual ICollection<RoutePlanRoute> RoutePlanRoutes { get; set; } = new List<RoutePlanRoute>();
-
     public virtual TransportPlan TransportPlan { get; set; } = null!;
 }

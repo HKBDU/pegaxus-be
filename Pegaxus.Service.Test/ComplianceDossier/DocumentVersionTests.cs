@@ -1,12 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
-using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.ComplianceDossierService;
 using Pegaxus.Service.Exceptions;
+
 using static Pegaxus.Service.Test.DocumentUploadTests;
 
 namespace Pegaxus.Service.Test;
@@ -231,7 +231,8 @@ public class DocumentVersionTests
         await CreateService(originalDb, new RecordingStorage()).UploadDocumentAsync(account.AccountId, dossier.ComplianceDossierId,
             requirement.DossierRequirementId, ValidRequest(dossier));
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
-            .UseInMemoryDatabase(name, root).ReplaceService<IDbContextTransactionManager, LostCommitTransactionManager>().Options);
+            .UseInMemoryDatabase(name, root).ReplaceService<IDbContextTransactionManager, LostCommitTransactionManager>()
+            .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)).Options);
         var storage = new RecordingStorage();
         await Assert.ThrowsAsync<IOException>(() => CreateService(db, storage).SubmitDocumentVersionAsync(account.AccountId,
             dossier.ComplianceDossierId, requirement.DossierRequirementId, ValidRequest(dossier)));

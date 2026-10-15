@@ -1,6 +1,6 @@
-using Microsoft.AspNetCore.Http;
 using System.Collections.Concurrent;
 using System.Text.Json;
+using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Infrastructure;
@@ -11,6 +11,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.DocumentStorageService;
 using Pegaxus.Service.Exceptions;
+
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
 using DossierRequest = Pegaxus.Service.ComplianceDossierService.Request;
 
@@ -353,7 +354,8 @@ public class DocumentUploadTests
     {
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString())
-            .ReplaceService<IDbContextTransactionManager, LostCommitTransactionManager>().Options);
+            .ReplaceService<IDbContextTransactionManager, LostCommitTransactionManager>()
+            .ConfigureWarnings(warnings => warnings.Ignore(CoreEventId.ManyServiceProvidersCreatedWarning)).Options);
         var (account, dossier, requirement) = await SeedAsync(db);
         var storage = new RecordingStorage();
         await Assert.ThrowsAsync<IOException>(() => CreateService(db, storage).UploadDocumentAsync(account.AccountId,
@@ -400,7 +402,8 @@ public class DocumentUploadTests
             ValidUntil = booking.RequestedDepartureDate.AddDays(14),
             ComplianceRequirement = new ComplianceRequirement
             {
-                ComplianceRequirementId = Guid.NewGuid(), RequirementCode = "PASS", RequirementName = "Horse Passport", ValidityRequired = true
+                ComplianceRequirementId = Guid.NewGuid(), RequirementCode = "PASS", RequirementName = "Horse Passport",
+                Category = ComplianceRequirementCategory.HorseIdentity, ValidityRequired = true
             }
         };
         var dossier = new Pegaxus.Repository.Entities.ComplianceDossier
@@ -416,7 +419,7 @@ public class DocumentUploadTests
     internal static DossierService CreateService(AppDbContext db, RecordingStorage storage) => new(db, storage,
         new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!, storage, NullLogger<DossierService>.Instance);
 
-    internal sealed class RecordingStorage : Pegaxus.Service.DocumentStorageService.IService, Pegaxus.Service.MediaService.IService
+    internal sealed class RecordingStorage : Pegaxus.Service.DocumentStorageService.IDocumentStorageService, Pegaxus.Service.MediaService.IMediaService
     {
         public Exception? ContentFailure { get; init; }
         public Task ValidateContentAsync(Pegaxus.Service.MediaService.PreviewFile file, CancellationToken cancellationToken = default) =>

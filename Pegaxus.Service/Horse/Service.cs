@@ -3,11 +3,15 @@ using Npgsql;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+
+using static Pegaxus.Service.Common.DbTime;
+using static Pegaxus.Service.Common.Text;
 
 namespace Pegaxus.Service.HorseService;
 
-public sealed class Service : IService
+public sealed class Service : IHorseService
 {
     private readonly AppDbContext _appDbContext;
 
@@ -74,7 +78,7 @@ public sealed class Service : IService
             PageIndex = request.PageIndex,
             PageSize = request.PageSize,
             TotalItems = totalItems,
-            TotalPages = (int)Math.Ceiling(totalItems / (double)request.PageSize)
+            TotalPages = Paging.TotalPages(totalItems, request.PageSize)
         };
     }
 
@@ -108,8 +112,8 @@ public sealed class Service : IService
 
         var sex = ParseSex(request.Sex);
 
-        var microchipNumber = NormalizeOptional(request.MicrochipNumber);
-        var passportNumber = NormalizeOptional(request.PassportNumber);
+        var microchipNumber = EmptyToNull(request.MicrochipNumber);
+        var passportNumber = EmptyToNull(request.PassportNumber);
 
         if (microchipNumber is not null && await _appDbContext.Horses.AnyAsync(
                 horse => horse.MicrochipNumber == microchipNumber,
@@ -125,22 +129,22 @@ public sealed class Service : IService
                 "Passport number already exists",
                 "DUPLICATE_PASSPORT");
 
-        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var now = UtcNow();
         var horse = new Horse
         {
             HorseId = Guid.NewGuid(),
             CustomerId = customerId.Value,
             HorseName = horseName,
             Sex = sex,
-            Breed = NormalizeOptional(request.Breed),
+            Breed = EmptyToNull(request.Breed),
             DateOfBirth = request.DateOfBirth,
-            Color = NormalizeOptional(request.Color),
-            CountryOfOrigin = NormalizeOptional(request.CountryOfOrigin),
+            Color = EmptyToNull(request.Color),
+            CountryOfOrigin = EmptyToNull(request.CountryOfOrigin),
             WeightKg = request.WeightKg,
             HeightCm = request.HeightCm,
             MicrochipNumber = microchipNumber,
             PassportNumber = passportNumber,
-            IdentificationNotes = NormalizeOptional(request.IdentificationNotes),
+            IdentificationNotes = EmptyToNull(request.IdentificationNotes),
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -207,8 +211,8 @@ public sealed class Service : IService
             PassportNumber = horse.PassportNumber,
             MicrochipNumber = horse.MicrochipNumber,
             IdentificationNotes = horse.IdentificationNotes,
-            CreatedAt = ToUtcOffset(horse.CreatedAt),
-            UpdatedAt = ToUtcOffset(horse.UpdatedAt)
+            CreatedAt = AsUtc(horse.CreatedAt),
+            UpdatedAt = AsUtc(horse.UpdatedAt)
         };
     }
 
@@ -252,8 +256,8 @@ public sealed class Service : IService
         ValidateRequiredMeasurement(request.HeightCm, "HeightCm");
 
         var sex = ParseSex(request.Sex);
-        var microchipNumber = NormalizeOptional(request.MicrochipNumber);
-        var passportNumber = NormalizeOptional(request.PassportNumber);
+        var microchipNumber = EmptyToNull(request.MicrochipNumber);
+        var passportNumber = EmptyToNull(request.PassportNumber);
 
         if (microchipNumber is not null && await _appDbContext.Horses.AnyAsync(item =>
                 item.HorseId != horseId && item.MicrochipNumber == microchipNumber,
@@ -271,16 +275,16 @@ public sealed class Service : IService
 
         horse.HorseName = horseName;
         horse.Sex = sex;
-        horse.Breed = NormalizeOptional(request.Breed);
+        horse.Breed = EmptyToNull(request.Breed);
         horse.DateOfBirth = request.DateOfBirth;
-        horse.Color = NormalizeOptional(request.Color);
-        horse.CountryOfOrigin = NormalizeOptional(request.CountryOfOrigin);
+        horse.Color = EmptyToNull(request.Color);
+        horse.CountryOfOrigin = EmptyToNull(request.CountryOfOrigin);
         horse.WeightKg = request.WeightKg;
         horse.HeightCm = request.HeightCm;
         horse.MicrochipNumber = microchipNumber;
         horse.PassportNumber = passportNumber;
-        horse.IdentificationNotes = NormalizeOptional(request.IdentificationNotes);
-        horse.UpdatedAt = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        horse.IdentificationNotes = EmptyToNull(request.IdentificationNotes);
+        horse.UpdatedAt = UtcNow();
 
         try
         {
@@ -327,7 +331,7 @@ public sealed class Service : IService
                 "Horse belongs to an approved request and cannot be deleted",
                 "HORSE_IN_APPROVED_BOOKING");
 
-        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var now = UtcNow();
         horse.IsDeleted = true;
         horse.DeletedAt = now;
         horse.DeletedByAccountId = accountId;
@@ -393,9 +397,5 @@ public sealed class Service : IService
         return sex;
     }
 
-    private static string? NormalizeOptional(string? value) =>
-        string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
-    private static DateTimeOffset ToUtcOffset(DateTime value) =>
-        new(DateTime.SpecifyKind(value, DateTimeKind.Utc));
 }

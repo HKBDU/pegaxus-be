@@ -1,13 +1,18 @@
+using System.Data;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+
+using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.DossierTemplateService;
 
-public sealed class Service(AppDbContext db) : IService
+public sealed class Service(AppDbContext db) : IDossierTemplateService
 {
     private const string DuplicateCode = "Template code already exists. Please use a unique template code.";
     private const string DuplicateItem = "Duplicate ComplianceRequirement or Sequence Number detected in the same template. Each requirement and sequence number must be unique within a DossierTemplate.";
@@ -44,7 +49,7 @@ public sealed class Service(AppDbContext db) : IService
         return new Response.ListResponse
         {
             Items = items, PageIndex = request.PageIndex, PageSize = request.PageSize,
-            TotalItems = count, TotalPages = (int)Math.Ceiling(count / (double)request.PageSize)
+            TotalItems = count, TotalPages = Paging.TotalPages(count, request.PageSize)
         };
     }
 
@@ -58,6 +63,7 @@ public sealed class Service(AppDbContext db) : IService
         var status = ParseStatus(request.Status);
         if (status == DossierTemplateStatus.INACTIVE)
             throw new BadRequestException("Initial status must be DRAFT or ACTIVE.");
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         await ValidateSaveAsync(request, status, null, cancellationToken);
         var now = UtcNow();
         var template = new DossierTemplate
@@ -67,17 +73,18 @@ public sealed class Service(AppDbContext db) : IService
         Apply(template, request, status);
         db.DossierTemplates.Add(template);
         await SaveAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         return await GetAsync(template.DossierTemplateId, cancellationToken);
     }
 
     public async Task<Response.TemplateResponse> UpdateAsync(Guid templateId, Request.SaveRequest request, CancellationToken cancellationToken = default)
     {
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var template = await FindAsync(templateId, cancellationToken);
         var status = ParseStatus(request.Status);
         ValidateTransition(template.Status, status);
         await ValidateSaveAsync(request, status, templateId, cancellationToken);
 
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         template.VersionNo++;
         template.UpdatedAt = UtcNow();
         // Delete before inserting so swapping sequence numbers cannot violate the unique indexes.
@@ -235,5 +242,4 @@ public sealed class Service(AppDbContext db) : IService
         }
     }
 
-    private static DateTime UtcNow() => DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 }

@@ -1,5 +1,5 @@
-using System.Text.Json;
 using System.Security.Claims;
+using System.Text.Json;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -11,8 +11,8 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MediaService;
+
 using DossierService = Pegaxus.Service.ComplianceDossierService.Service;
-using DossierRequest = Pegaxus.Service.ComplianceDossierService.Request;
 
 namespace Pegaxus.Service.Test;
 
@@ -366,7 +366,7 @@ public class DossierViewingTests
         new(db, media ?? new RecordingMediaService(), new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!,
             storage ?? new RecordingDocumentStorage(), Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance);
 
-    private sealed class RecordingDocumentStorage : Pegaxus.Service.DocumentStorageService.IService
+    private sealed class RecordingDocumentStorage : Pegaxus.Service.DocumentStorageService.IDocumentStorageService
     {
         public Task ValidateContentAsync(PreviewFile file, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public List<string> PreviewedUrls { get; } = [];
@@ -380,7 +380,7 @@ public class DossierViewingTests
         public Task DeleteAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
-    private sealed class RecordingMediaService : Pegaxus.Service.MediaService.IService
+    private sealed class RecordingMediaService : Pegaxus.Service.MediaService.IMediaService
     {
         public List<string> DownloadedUrls { get; } = [];
         public Task<PreviewFile> DownloadPreviewAsync(string fileUrl, CancellationToken cancellationToken = default)

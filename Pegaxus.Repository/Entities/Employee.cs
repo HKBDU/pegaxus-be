@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Pegaxus.Repository.Enum;
 
 namespace Pegaxus.Repository.Entities;
@@ -45,10 +44,6 @@ public partial class Employee
 
     public virtual ICollection<Booking> Bookings { get; set; } = new List<Booking>();
 
-    public virtual ICollection<BookingEmployeeAssignment> BookingAssignments { get; set; } = new List<BookingEmployeeAssignment>();
-
-    public virtual ICollection<BookingEmployeeAssignment> CreatedBookingAssignments { get; set; } = new List<BookingEmployeeAssignment>();
-
     public virtual ICollection<CostApprovalDecision> CostApprovalDecisions { get; set; } = new List<CostApprovalDecision>();
 
     public virtual Account? DeletedByAccount { get; set; }
@@ -66,6 +61,8 @@ public partial class Employee
     public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
 
     public virtual ICollection<RoutePlanRoute> RoutePlanRoutes { get; set; } = new List<RoutePlanRoute>();
+
+    public virtual ICollection<RoutePlanRoute> EscortRoutePlanRoutes { get; set; } = new List<RoutePlanRoute>();
 
     public virtual ICollection<TransportPlan> TransportPlans { get; set; } = new List<TransportPlan>();
 }
