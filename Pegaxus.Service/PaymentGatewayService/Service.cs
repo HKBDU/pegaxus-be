@@ -10,7 +10,7 @@ namespace Pegaxus.Service.PaymentGatewayService;
 public sealed class Service(IOptions<SePayOptions> options) : IPaymentGatewayService
 {
     public Task<Checkout> CreateCheckoutAsync(Guid invoiceId, string receiptCode, decimal amount, string currency,
-        CancellationToken cancellationToken = default)
+        Guid? bookingId = null, CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         if (currency != "VND")
@@ -28,7 +28,12 @@ public sealed class Service(IOptions<SePayOptions> options) : IPaymentGatewaySer
             "production" => "https://pay.sepay.vn/v1/checkout/init",
             _ => throw new InvalidOperationException("SePay environment must be sandbox or production")
         };
-        var callback = settings.InvoiceDetailsUrlTemplate.Replace("{invoiceId}", invoiceId.ToString(), StringComparison.Ordinal);
+        // Customers open invoices at /bookings/{bookingId}/invoices/{invoiceId}, so the template may use both placeholders.
+        if (settings.InvoiceDetailsUrlTemplate.Contains("{bookingId}", StringComparison.Ordinal) && bookingId is null)
+            throw new InvalidOperationException("SePay invoice details URL uses {bookingId} but no booking was supplied");
+        var callback = settings.InvoiceDetailsUrlTemplate
+            .Replace("{invoiceId}", invoiceId.ToString(), StringComparison.Ordinal)
+            .Replace("{bookingId}", bookingId?.ToString() ?? "", StringComparison.Ordinal);
         if (!settings.InvoiceDetailsUrlTemplate.Contains("{invoiceId}", StringComparison.Ordinal) ||
             !Uri.TryCreate(callback, UriKind.Absolute, out var uri) || uri.UserInfo.Length != 0 ||
             uri.Scheme != Uri.UriSchemeHttps && !(settings.Environment == "sandbox" && uri.Scheme == Uri.UriSchemeHttp && uri.IsLoopback))

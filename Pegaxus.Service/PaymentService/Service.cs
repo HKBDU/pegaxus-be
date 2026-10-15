@@ -52,15 +52,32 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             await db.Entry(invoice).ReloadAsync(cancellationToken);
         }
 
-        if (receipt.Status is ReceiptStatus.CONFIRMED or ReceiptStatus.REFUNDED)
+        var now = DateTime.SpecifyKind(clock.GetUtcNow().UtcDateTime, DateTimeKind.Unspecified);
+        var isVoid = request.NotificationType == "TRANSACTION_VOID";
+        if (receipt.Status == ReceiptStatus.REFUNDED)
         {
-            if (request.NotificationType == "TRANSACTION_VOID" || receipt.TransactionReference != payment.Reference)
-                LogForAccounting(receipt, payment.Reference);
+            LogForAccounting(receipt, payment.Reference);
             return;
         }
 
-        var now = DateTime.SpecifyKind(clock.GetUtcNow().UtcDateTime, DateTimeKind.Unspecified);
-        if (request.NotificationType == "TRANSACTION_VOID")
+        if (receipt.Status == ReceiptStatus.CONFIRMED)
+        {
+            // An identical re-delivery is silently acknowledged. A void or a second transaction on a paid receipt
+            // needs a person to reconcile it, because the gateway state no longer matches the invoice.
+            if (isVoid || receipt.TransactionReference != payment.Reference)
+            {
+                LogForAccounting(receipt, payment.Reference);
+                await FlagForReconciliationAsync(receipt, invoice, payment.Reference!, isVoid
+                    ? "The gateway voided a payment that was already confirmed"
+                    : "The gateway reported another transaction for a receipt that was already paid", now, cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                await notifications.FlushAsync(cancellationToken);
+            }
+            return;
+        }
+
+        if (isVoid)
         {
             if (receipt.Status == ReceiptStatus.PENDING)
             {
@@ -79,12 +96,28 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             logger.LogWarning("SePay payment amount/currency mismatch for receipt {ReceiptCode}", receipt.ReceiptCode);
             throw new UnprocessableEntityException("Payment amount or currency does not match the receipt", "AMOUNT_MISMATCH");
         }
-        if (receipt.Status != ReceiptStatus.PENDING || invoice.Status is InvoiceStatus.PAID or InvoiceStatus.CANCELLED ||
-            await db.Receipts.AnyAsync(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.CONFIRMED, cancellationToken))
+        if (receipt.Status == ReceiptStatus.FAILED && receipt.TransactionReference == payment.Reference)
         {
+            // This exact transaction was voided earlier, so a later "paid" event for it cannot be trusted.
             LogForAccounting(receipt, payment.Reference);
             return;
         }
+
+        if (invoice.Status is InvoiceStatus.PAID or InvoiceStatus.CANCELLED ||
+            await db.Receipts.AnyAsync(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.CONFIRMED, cancellationToken))
+        {
+            // The money arrived but the invoice cannot take it (already paid by another receipt, or cancelled).
+            LogForAccounting(receipt, payment.Reference);
+            await FlagForReconciliationAsync(receipt, invoice, payment.Reference!,
+                $"A payment was received for invoice {invoice.InvoiceCode}, which is already {invoice.Status}", now, cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            await notifications.FlushAsync(cancellationToken);
+            return;
+        }
+
+        // A receipt that is still PENDING, or FAILED only because a newer checkout replaced it, is confirmed here:
+        // the gateway has captured the money, so the invoice must reflect it.
         if (invoice.Type is not (InvoiceType.DEPOSIT or InvoiceType.FINAL or InvoiceType.SUPPLEMENTARY))
             throw new UnprocessableEntityException("This invoice type cannot be paid online", "UNPAYABLE_INVOICE_TYPE");
         if (invoice.Status is not (InvoiceStatus.ISSUED or InvoiceStatus.OVERDUE) || invoice.IssuedAt is null)
@@ -142,6 +175,39 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
+    }
+
+    private async Task FlagForReconciliationAsync(Receipt receipt, Invoice invoice, string reference, string reason,
+        DateTime now, CancellationToken cancellationToken)
+    {
+        const string title = "Payment needs reconciliation";
+        // SePay retries a webhook until it is acknowledged, so one gateway transaction must flag only once.
+        if (await db.Notifications.AnyAsync(x => x.ReferenceType == nameof(Receipt) && x.ReferenceId == receipt.ReceiptId &&
+                x.Title == title && x.Message.Contains(reference), cancellationToken))
+            return;
+
+        var managers = await db.Employees.AsNoTracking().Active().Where(x => x.Role == EmployeeRole.LOGISTICS_MANAGER)
+            .Select(x => new { x.AccountId, x.Account.Email }).ToListAsync(cancellationToken);
+        if (managers.Count == 0)
+        {
+            logger.LogError("SePay payment {Reference} for receipt {ReceiptCode} needs reconciliation but no active Logistics Manager exists",
+                reference, receipt.ReceiptCode);
+            return;
+        }
+
+        var message = $"{reason}. Receipt: {receipt.ReceiptCode} ({receipt.Status}). Gateway reference: {reference}. " +
+            $"Amount: {receipt.Amount.ToString("0.##", CultureInfo.InvariantCulture)} {receipt.Currency}. " +
+            $"Invoice: {invoice.InvoiceCode} ({invoice.Status}). Check the bank statement and refund or reconcile manually.";
+        foreach (var manager in managers)
+        {
+            notifications.Queue(new NotificationCreateRequest
+            {
+                AccountId = manager.AccountId, Type = NotificationType.PAYMENT, Priority = NotificationPriority.URGENT,
+                Title = title, Message = message, ReferenceType = nameof(Receipt), ReferenceId = receipt.ReceiptId,
+                ActionUrl = $"/invoices/{invoice.InvoiceId}", CreatedAt = now
+            });
+            OutboxQueue.AddEmail(db, new MailContent { To = manager.Email, Subject = title, Body = WebUtility.HtmlEncode(message) }, now);
+        }
     }
 
     private void LogForAccounting(Receipt receipt, string? reference) =>

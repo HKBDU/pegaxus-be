@@ -70,7 +70,8 @@ public sealed partial class Service
             PaymentGatewayService.Checkout checkout;
             try
             {
-                checkout = await gateway.CreateCheckoutAsync(invoiceId, receipt.ReceiptCode, receipt.Amount, receipt.Currency, cancellationToken);
+                checkout = await gateway.CreateCheckoutAsync(invoiceId, receipt.ReceiptCode, receipt.Amount, receipt.Currency,
+                    invoice.BookingId, cancellationToken);
                 if (!Uri.TryCreate(checkout.PaymentUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length != 0)
                     throw new InvalidDataException("The gateway returned an invalid payment URL");
             }
