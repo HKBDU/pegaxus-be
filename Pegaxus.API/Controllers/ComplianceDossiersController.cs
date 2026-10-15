@@ -37,6 +37,20 @@ public sealed partial class ComplianceDossiersController : ApiControllerBase
         Success(await _service.GetByBookingAsync(AccountId, bookingId, request, cancellationToken), "ComplianceDossier retrieved successfully.");
 
     /// <summary>
+    /// List compliance dossier requirements.
+    /// </summary>
+    /// <remarks>Returns all trip and horse requirements in one paginated list. Customers may view only their own dossiers.</remarks>
+    /// <param name="dossierId">The compliance dossier identifier (UUID).</param>
+    /// <param name="request">The status, horse, sorting, and pagination filters.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the paginated requirement list.</returns>
+    [HttpGet("{dossierId:guid}/requirements")]
+    [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
+    public async Task<IActionResult> GetRequirements(Guid dossierId, [FromQuery] ComplianceDossierService.Request.RequirementListRequest request,
+        CancellationToken cancellationToken) =>
+        Success(await _service.GetRequirementsAsync(AccountId, dossierId, request, cancellationToken), "DossierRequirements retrieved successfully");
+
+    /// <summary>
     /// Get compliance dossier details.
     /// </summary>
     /// <remarks>Customers may view only their own dossiers; Transport Specialists and Logistics Managers may view accessible dossiers. SATISFIED and WAIVED requirements count toward completion.</remarks>

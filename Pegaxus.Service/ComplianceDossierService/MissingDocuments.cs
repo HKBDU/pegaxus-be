@@ -206,7 +206,7 @@ public sealed partial class Service
             {
                 await mail.SendMail(new MailService.MailContent
                 {
-                    To = recipient.Email, Subject = $"Nhắc nộp giấy tờ - {dossier.DossierCode}",
+                    To = recipient.Email, Subject = $"Missing document reminder - {dossier.DossierCode}",
                     Body = $"<p>{WebUtility.HtmlEncode(MissingReminderMessage(dossier, missing, reminder.DueDate, reminder.Note)).Replace("\n", "<br>")}</p>"
                 }, timeout.Token);
                 reminder.EmailSentAt = ReminderNow();
@@ -231,7 +231,7 @@ public sealed partial class Service
             DueDate = dueDate, Note = note?.Trim(), AutomaticDate = automaticDate, CreatedAt = now
         };
         _db.MissingDocumentReminders.Add(reminder);
-        AddNotification(reminder.RecipientAccountId, dossier, "Nhắc nộp bổ sung giấy tờ còn thiếu", now,
+        AddNotification(reminder.RecipientAccountId, dossier, "Missing document reminder", now,
             message: MissingReminderMessage(dossier, requirements, dueDate, note));
         return reminder;
     }
@@ -272,9 +272,9 @@ public sealed partial class Service
     }
 
     private static string MissingReminderMessage(ComplianceDossier dossier, List<DossierRequirement> requirements, DateOnly dueDate, string? note) =>
-        $"Hồ sơ {dossier.DossierCode}: vui lòng nộp bổ sung các giấy tờ còn thiếu.\n" +
+        $"Dossier {dossier.DossierCode}: please submit the missing documents.\n" +
         string.Join("\n", requirements.Select(item => $"- {item.ComplianceRequirement.RequirementName}" +
-            (item.Horse is null ? "" : $" ({item.Horse.HorseName})") + $"; hạn nộp: {item.DueDate ?? dueDate:yyyy-MM-dd}")) +
+            (item.Horse is null ? "" : $" ({item.Horse.HorseName})") + $"; due date: {item.DueDate ?? dueDate:yyyy-MM-dd}")) +
         (string.IsNullOrWhiteSpace(note) ? "" : $"\n{note.Trim()}");
 
     private DateTime ReminderNow() => DateTime.SpecifyKind(_reminderClock.GetUtcNow().UtcDateTime, DateTimeKind.Unspecified);

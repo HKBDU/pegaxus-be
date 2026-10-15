@@ -33,12 +33,23 @@ public sealed partial class Service
             EstimatedDurationMinutes = item.EstimatedDurationMinutes ?? 0,
             SegmentCount = segments.Count,
             IsPersonnelComplete = segments.Where(segment => !segment.TransportProviderId.HasValue).All(segment => segment.DriverEmployeeId.HasValue && segment.EscortEmployeeId.HasValue),
-            ReplacesSequenceNo = routeType == RouteType.BACKUP && segments.Count > 0
-                ? new Response.SequenceRangeResponse { From = segments[0].SequenceNo, To = segments[^1].SequenceNo }
-                : null,
+            ReplacesSequenceNo = routeType == RouteType.BACKUP ? ReplacementSequenceRange(item, segments) : null,
             RouteNote = item.RouteNote,
             UpdatedAt = AsUtc(item.UpdatedAt)
         };
+    }
+
+    private static Response.SequenceRangeResponse? ReplacementSequenceRange(RoutePlan item, List<RoutePlanRoute> segments)
+    {
+        if (segments.Count == 0) return null;
+        var primary = item.TransportPlan.RoutePlans.SingleOrDefault(plan => plan.RoutePlanId == item.PrimaryRoutePlanId);
+        var primarySegments = primary?.RoutePlanRoutes.OrderBy(segment => segment.SequenceNo).ToList();
+        if (primarySegments is null) return null;
+        var start = primarySegments.FindIndex(segment => segment.Route.FromLocationId == segments[0].Route.FromLocationId);
+        var end = primarySegments.FindLastIndex(segment => segment.Route.ToLocationId == segments[^1].Route.ToLocationId);
+        return start >= 0 && end >= start
+            ? new Response.SequenceRangeResponse { From = primarySegments[start].SequenceNo, To = primarySegments[end].SequenceNo }
+            : null;
     }
 
     private static Response.DetailResponse ToDetail(RoutePlan item, Response.LegalReviewResponse? legalReview = null)

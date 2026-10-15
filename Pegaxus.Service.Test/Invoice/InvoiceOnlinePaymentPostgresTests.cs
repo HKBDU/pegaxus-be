@@ -35,7 +35,7 @@ public class InvoiceOnlinePaymentPostgresTests
             await using (var db = new AppDbContext(options))
             {
                 var gateway = new Pegaxus.Service.PaymentGatewayService.Service(Options.Create(new Pegaxus.Service.PaymentGatewayService.SePayOptions()));
-                Assert.Equal("PAYMENT_GATEWAY_ERROR", (await Assert.ThrowsAsync<AppException>(() => InvoiceOnlinePaymentTests.CreateService(db, gateway)
+                Assert.Equal("PAYMENT_GATEWAY_NOT_CONFIGURED", (await Assert.ThrowsAsync<AppException>(() => InvoiceOnlinePaymentTests.CreateService(db, gateway)
                     .InitiateOnlinePaymentAsync(invoice.InvoiceId, customer.AccountId))).ErrorCode);
             }
             invoice.Currency = "EUR"; await seed.SaveChangesAsync();
@@ -185,11 +185,16 @@ public class InvoiceOnlinePaymentPostgresTests
 
     private sealed class InvoiceUpdateSignal(TaskCompletionSource started) : DbCommandInterceptor
     {
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            if (command.CommandText.Contains("UPDATE \"Invoice\"")) started.TrySetResult();
-            return ValueTask.FromResult(result);
+            if (command.CommandText.Contains("UPDATE \"Invoice\""))
+            {
+                // Pin the competing transaction's snapshot before the first checkout can commit.
+                await Assert.IsType<AppDbContext>(eventData.Context).Invoices.AnyAsync(cancellationToken);
+                started.TrySetResult();
+            }
+            return result;
         }
     }
     private sealed class EnumTranslator : INpgsqlNameTranslator

@@ -64,8 +64,10 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddFrontendCors(this IServiceCollection services)
+    public static IServiceCollection AddFrontendCors(this IServiceCollection services, IConfiguration configuration)
     {
+        var origins = (configuration["ALLOWED_ORIGINS"] ?? "http://localhost:5173")
+            .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         services.AddCors(options =>
         {
             options.AddPolicy("Frontend", policy =>

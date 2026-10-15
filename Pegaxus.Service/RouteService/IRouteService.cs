@@ -1,7 +1,11 @@
+using Pegaxus.Repository.Entities;
+using Pegaxus.Repository.Enum;
+
 namespace Pegaxus.Service.RouteService;
 
 public interface IRouteService
 {
+    Task<(decimal? DistanceKm, int? DurationMinutes)> CalculateMetricsAsync(Location from, Location to, TransportMode mode, CancellationToken cancellationToken = default);
     Task<Response.ListResponse> GetListAsync(Request.ListRequest request, CancellationToken cancellationToken = default);
     Task<Response.DetailResponse> GetAsync(Guid routeId, CancellationToken cancellationToken = default);
     Task<Response.DetailResponse> CreateAsync(Guid accountId, Request.CreateRequest request, CancellationToken cancellationToken = default);

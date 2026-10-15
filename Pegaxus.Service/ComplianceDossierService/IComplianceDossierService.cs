@@ -33,6 +33,7 @@ public interface IComplianceDossierService
 
     Task<Response.OverviewResponse> GetByBookingAsync(Guid accountId, Guid bookingId, Request.ViewRequest request, CancellationToken cancellationToken = default);
     Task<Response.OverviewResponse> GetDossierAsync(Guid accountId, Guid dossierId, Request.ViewRequest request, CancellationToken cancellationToken = default);
+    Task<Response.RequirementListResponse> GetRequirementsAsync(Guid accountId, Guid dossierId, Request.RequirementListRequest request, CancellationToken cancellationToken = default);
     Task<Response.RequirementDetailResponse> GetRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, CancellationToken cancellationToken = default);
     Task<MediaService.PreviewFile> GetDocumentPreviewAsync(Guid accountId, Guid dossierId, Guid requirementId, Guid versionId, Guid? attachmentId, CancellationToken cancellationToken = default);
 

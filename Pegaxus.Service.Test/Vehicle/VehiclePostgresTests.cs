@@ -74,6 +74,7 @@ public class VehiclePostgresTests
             await using (var db = new AppDbContext(options))
             {
                 actor = (await TestSupport.AddLogisticsManagerAsync(db)).Account.AccountId;
+                await TestSupport.AddLogisticsManagerAsync(db);
                 vehicle = await VehicleServiceTests.CreateService(db).CreateAsync(VehicleServiceTests.ValidRequest(), actor);
                 Assert.Single(await db.OutboxMessages.ToListAsync());
                 var segment = await VehicleServiceTests.AddAssignmentAsync(db, await db.Vehicles.SingleAsync());

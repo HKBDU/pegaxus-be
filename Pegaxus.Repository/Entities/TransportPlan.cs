@@ -14,6 +14,10 @@ public partial class TransportPlan
 
     public Guid TransportId { get; set; }
 
+    public Guid? OriginLocationId { get; set; }
+
+    public Guid? DestinationLocationId { get; set; }
+
     public string PlanCode { get; set; } = null!;
 
     public TransportPlanStatus Status { get; set; } = TransportPlanStatus.DRAFT;

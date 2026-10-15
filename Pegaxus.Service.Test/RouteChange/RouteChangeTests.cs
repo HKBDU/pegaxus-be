@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.Extensions.Configuration;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -15,6 +16,83 @@ namespace Pegaxus.Service.Test;
 
 public class RouteChangeTests
 {
+    [Fact]
+    public async Task Backup_SummaryReportsPrimaryReplacementSequence_NotBackupSequence()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        var backup = await f.AlternateAsync();
+        db.ChangeTracker.Clear();
+        var result = await TestSupport.CreateRoutePlans(db).GetListAsync(f.Manager.AccountId, f.Plan.TransportPlanId, new());
+        var summary = Assert.Single(result.Items, item => item.RoutePlanId == backup.RoutePlanId);
+        Assert.Equal(2, summary.ReplacesSequenceNo!.From);
+        Assert.Equal(2, summary.ReplacesSequenceNo.To);
+    }
+
+    [Fact]
+    public async Task Return_ApprovedDraftCannotBeCancelled_LeavesReopenedDossierIntact()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        var returning = await f.AlternateAsync(RouteType.RETURN);
+        var decision = await f.Service.DecideAsync(returning.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = Fixture.Version(returning) });
+        var error = await Assert.ThrowsAsync<ConflictException>(() => TestSupport.CreateRoutePlans(db).CancelAsync(
+            f.Coordinator.AccountId, returning.RoutePlanId, new() { LastUpdatedAt = decision.UpdatedAt, Reason = "Cancel return itinerary" }));
+        Assert.Equal("RETURN_ALREADY_APPROVED", error.ErrorCode);
+        Assert.Equal(RoutePlanStatus.DRAFT, returning.Status);
+        Assert.Equal(ComplianceDossierStatus.DRAFT, f.Transport.ComplianceDossier!.Status);
+    }
+
+    [Fact]
+    public async Task Return_UnapprovedDraftCanStillBeCancelled()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        var returning = await f.AlternateAsync(RouteType.RETURN);
+        var result = await TestSupport.CreateRoutePlans(db).CancelAsync(f.Coordinator.AccountId, returning.RoutePlanId,
+            new() { LastUpdatedAt = Fixture.Version(returning), Reason = "Cancel return itinerary" });
+        Assert.Equal("CANCELLED", result.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier!.Status);
+    }
+
+    [Fact]
+    public async Task Return_AutoCreatedRoadRoutePersistsProviderDistance_AndPlanTotal()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        f.Transport.Booking.OriginCountry = f.Transport.Booking.DestinationCountry = "FR";
+        f.Start.Latitude = 48; f.Start.Longitude = 2;
+        f.Origin.Latitude = 49; f.Origin.Longitude = 3;
+        await db.SaveChangesAsync();
+        var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
+            .AddInMemoryCollection(new Dictionary<string, string?> { ["Geoapify:ApiKey"] = "test-key" }).Build();
+        var routes = new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db),
+            new Pegaxus.Service.RouteService.Service(db, new RoutingClientFactory(), configuration));
+        var result = await routes.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, new()
+        {
+            RouteType = "RETURN", Action = "SAVE_DRAFT", RouteNote = "Return to origin after road closure",
+            Segments = [new() { SequenceNo = 1, FromLocationId = f.Start.LocationId, ToLocationId = f.Origin.LocationId,
+                TransportMode = "ROAD", PlannedDepartureAt = Fixture.StartAt, PlannedArrivalAt = Fixture.StartAt.AddHours(2) }]
+        });
+        Assert.Equal(125.5m, result.TotalDistanceKm);
+        Assert.Equal(125.5m, Assert.Single(result.Segments).Route.DistanceKm);
+        var route = await db.Routes.SingleAsync(item => item.RouteId == result.Segments[0].Route.RouteId);
+        Assert.Equal(125.5m, route.DistanceKm);
+        Assert.Equal(91, route.EstimatedDurationMinutes);
+    }
+
+    private sealed class RoutingClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new(new RoutingHandler());
+        private sealed class RoutingHandler : HttpMessageHandler
+        {
+            protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) =>
+                Task.FromResult(new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+                { Content = new StringContent("{\"results\":[{\"distance\":125500,\"time\":5401}]}") });
+        }
+    }
+
     [Fact]
     public void RouteChangeRequests_AreServiceDtos_NotDatabaseEntities()
     {
@@ -55,6 +133,7 @@ public class RouteChangeTests
             Assert.Equal(NotificationPriority.URGENT, notification.Priority); Assert.Equal("RoutePlan", notification.ReferenceType);
             Assert.Equal(backup.RoutePlanId, notification.ReferenceId);
             Assert.Contains("1800 EUR", notification.Message);
+            Assert.Contains(FormattableString.Invariant($"ETA: {f.Proposal(delay).NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC"), notification.Message);
         }
         else
             Assert.Equal("APPROVAL_NOT_REQUIRED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
@@ -104,7 +183,7 @@ public class RouteChangeTests
         Assert.Equal("ACTIVE", result.Status); Assert.Null(result.ComplianceDossier);
         Assert.Equal(RoutePlanStatus.ACTIVE, f.Plan.Status);
         Assert.Null(f.Completed.SupersededAt); Assert.Null(suffix.SupersededAt); Assert.NotNull(f.Current.SupersededAt);
-        var detail = await new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db)).GetByIdAsync(f.Manager.AccountId, f.Plan.RoutePlanId);
+        var detail = await TestSupport.CreateRoutePlans(db).GetByIdAsync(f.Manager.AccountId, f.Plan.RoutePlanId);
         Assert.Equal(new[] { f.Completed.RouteId, f.Alternative.RouteId, suffix.RouteId }, detail.Segments.Select(x => x.Route.RouteId));
         Assert.Equal(f.Driver.EmployeeId, detail.Segments[1].Driver!.EmployeeId);
         Assert.Equal(205m, detail.TotalDistanceKm); Assert.Equal(420, detail.EstimatedDurationMinutes);
@@ -145,7 +224,7 @@ public class RouteChangeTests
         Assert.Equal("DRAFT", decision.Status); Assert.Equal("DRAFT", decision.ComplianceDossier!.Status);
         Assert.Single(db.AuditDossiers); Assert.Equal(2, await db.Notifications.CountAsync());
         var specialist = await db.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST);
-        var reviewed = await new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db)).ReviewLegalAsync(specialist.AccountId, plan.RoutePlanId,
+        var reviewed = await TestSupport.CreateRoutePlans(db).ReviewLegalAsync(specialist.AccountId, plan.RoutePlanId,
             new() { LastUpdatedAt = decision.UpdatedAt, IsFeasible = true });
         Assert.Equal("CONFIRMED", reviewed.Status); Assert.False(reviewed.CustomerUploadEnabled);
         Assert.False(reviewed.PersonnelAssignmentPhase2Enabled);
@@ -162,7 +241,7 @@ public class RouteChangeTests
         Assert.Equal(RoutePlanStatus.ACTIVE, f.Plan.Status); Assert.Equal(TransportStatus.IN_TRANSIT, f.Transport.Status);
         var notice = await f.Service.NotifyDriversAsync(plan.RoutePlanId, f.Coordinator.AccountId, new() { Message = "Dossier approved, return now" });
         Assert.Equal(f.Driver.EmployeeId, Assert.Single(notice.NotifiedDrivers).EmployeeId);
-        var detail = await new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db)).GetByIdAsync(f.Manager.AccountId, f.Plan.RoutePlanId);
+        var detail = await TestSupport.CreateRoutePlans(db).GetByIdAsync(f.Manager.AccountId, f.Plan.RoutePlanId);
         Assert.Equal(new[] { f.Completed.RouteId, row.RouteId }, detail.Segments.Select(x => x.Route.RouteId));
         Assert.Empty(db.EmergencyCostRequests);
     }
@@ -174,7 +253,7 @@ public class RouteChangeTests
         var f = await Fixture.CreateAsync(db);
         f.Transport.Booking.OriginCountry = f.Transport.Booking.DestinationCountry = "FR";
         var back = f.NewRoute(f.Start, f.Origin, 70); await db.SaveChangesAsync();
-        var routes = new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db));
+        var routes = TestSupport.CreateRoutePlans(db);
         var (_, unrelated) = await TestSupport.AddLogisticsManagerAsync(db);
         unrelated.Role = EmployeeRole.FLEET_ROUTE_COORDINATOR; await db.SaveChangesAsync();
         await Assert.ThrowsAsync<ForbiddenException>(() => routes.CreateAsync(unrelated.AccountId, f.Plan.TransportPlanId, new() {
@@ -201,6 +280,8 @@ public class RouteChangeTests
         change.LastUpdatedAt = approved.UpdatedAt;
         var updated = await routes.UpdateAsync(f.Coordinator.AccountId, draft.RoutePlanId, change);
         Assert.Equal("DRAFT", updated.Status); Assert.True(updated.UpdatedAt > approved.UpdatedAt);
+        Assert.Contains(await db.Notifications.ToListAsync(), notification =>
+            notification.Title == "Route plan waiting for legal review" && notification.Priority == NotificationPriority.HIGH);
         await routes.ReviewLegalAsync(specialist.AccountId, draft.RoutePlanId,
             new() { LastUpdatedAt = updated.UpdatedAt, IsFeasible = true });
         Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier.Status);
@@ -307,7 +388,7 @@ public class RouteChangeTests
         internal RoutePlanRoute Current = null!, Completed = null!;
         internal Transport Transport = null!;
         internal RouteChange.Service Service = new(db, new Pegaxus.Service.NotificationService.Service(db, new NoopNotificationRealtimeService()), new FixedClock(),
-            new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db)));
+            TestSupport.CreateRoutePlans(db));
         internal static async Task<Fixture> CreateAsync(AppDbContext db)
         {
             var f = new Fixture(db);

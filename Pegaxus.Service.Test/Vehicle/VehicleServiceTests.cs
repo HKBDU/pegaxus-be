@@ -47,6 +47,7 @@ public class VehicleServiceTests
         await using var db = TestSupport.CreateDb();
         var (account, employee) = await TestSupport.AddLogisticsManagerAsync(db);
         employee.Role = EmployeeRole.FLEET_ROUTE_COORDINATOR;
+        var (recipient, _) = await TestSupport.AddLogisticsManagerAsync(db);
         await db.SaveChangesAsync();
         var request = ValidRequest("veh-road-005", " 29c-99988 ");
         var result = await CreateService(db).CreateAsync(request, account.AccountId);
@@ -74,6 +75,7 @@ public class VehicleServiceTests
         Assert.Equal("CREATE", audit.ActionType);
         Assert.Equal("VEH-ROAD-005", audit.AfterData.RootElement.GetProperty("vehicleCode").GetString());
         Assert.Equal(vehicle.VehicleId, (await db.Notifications.SingleAsync()).ReferenceId);
+        Assert.Equal(recipient.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
     }
 
     [Theory]

@@ -13,6 +13,7 @@ namespace Pegaxus.API.Controllers;
 public sealed class TransportPlanController(TransportPlanService.ITransportPlanService service) : ApiControllerBase
 {
     /// <summary>Update transport plan metadata.</summary>
+    /// <remarks>Use originLocationId and destinationLocationId to select canonical locations. Omitted IDs retain existing selections.</remarks>
     /// <param name="transportPlanId">The transport plan identifier (UUID).</param>
     /// <param name="request">The concurrency token and metadata changes.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
@@ -30,6 +31,7 @@ public sealed class TransportPlanController(TransportPlanService.ITransportPlanS
     }
 
     /// <summary>Get transport plan details.</summary>
+    /// <remarks>originLocationId and destinationLocationId identify canonical catalog locations. Legacy plans without selections return null; free-text addresses are never guessed.</remarks>
     /// <param name="transportPlanId">The transport plan identifier (UUID).</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the complete transport plan and booking context.</returns>
@@ -56,6 +58,7 @@ public sealed class TransportPlanController(TransportPlanService.ITransportPlanS
     }
 
     /// <summary>Create an overall transport plan.</summary>
+    /// <remarks>Optional originLocationId and destinationLocationId select canonical catalog locations independently of booking free-text addresses.</remarks>
     /// <param name="bookingId">The approved booking identifier (UUID).</param>
     /// <param name="request">The transport plan schedule and estimate metadata.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>

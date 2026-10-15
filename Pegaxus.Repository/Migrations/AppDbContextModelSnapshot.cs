@@ -4156,6 +4156,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<Guid?>("DestinationLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("destination_location_id");
+
                     b.Property<decimal?>("EstimatedDistanceKm")
                         .HasPrecision(10, 2)
                         .HasColumnType("numeric(10,2)")
@@ -4164,6 +4168,10 @@ namespace Pegaxus.Repository.Migrations
                     b.Property<int?>("EstimatedDurationMinutes")
                         .HasColumnType("integer")
                         .HasColumnName("estimated_duration_minutes");
+
+                    b.Property<Guid?>("OriginLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("origin_location_id");
 
                     b.Property<string>("PlanCode")
                         .IsRequired()
@@ -4204,6 +4212,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasDatabaseName("TransportPlan_status_idx");
 
                     b.HasIndex(new[] { "ApprovedByEmployeeId" }, "TransportPlan_approved_by_employee_id_idx");
+
+                    b.HasIndex(new[] { "DestinationLocationId" }, "TransportPlan_destination_location_id_idx");
+
+                    b.HasIndex(new[] { "OriginLocationId" }, "TransportPlan_origin_location_id_idx");
 
                     b.HasIndex(new[] { "PlanCode" }, "TransportPlan_plan_code_key")
                         .IsUnique();
@@ -5524,6 +5536,18 @@ namespace Pegaxus.Repository.Migrations
                         .WithMany("TransportPlans")
                         .HasForeignKey("ApprovedByEmployeeId")
                         .HasConstraintName("TransportPlan_approved_by_employee_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Location", null)
+                        .WithMany()
+                        .HasForeignKey("DestinationLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("TransportPlan_destination_location_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Location", null)
+                        .WithMany()
+                        .HasForeignKey("OriginLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("TransportPlan_origin_location_id_fkey");
 
                     b.HasOne("Pegaxus.Repository.Entities.Transport", "Transport")
                         .WithMany("TransportPlans")

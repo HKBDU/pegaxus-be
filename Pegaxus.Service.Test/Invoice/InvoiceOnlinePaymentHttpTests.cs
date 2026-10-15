@@ -100,6 +100,12 @@ public class InvoiceOnlinePaymentHttpTests
         var failed = await client.PostAsync(path, null);
         Assert.Equal(HttpStatusCode.BadGateway, failed.StatusCode);
         Assert.Equal("PAYMENT_GATEWAY_ERROR", (await failed.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        gateway.Failure = new Pegaxus.Service.Exceptions.Exceptions("Payment gateway is not configured", 503, "PAYMENT_GATEWAY_NOT_CONFIGURED");
+        var unconfigured = await client.PostAsync(path, null);
+        Assert.Equal(HttpStatusCode.ServiceUnavailable, unconfigured.StatusCode);
+        var unavailableBody = await unconfigured.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal("PAYMENT_GATEWAY_NOT_CONFIGURED", unavailableBody.GetProperty("errorCode").GetString());
+        Assert.Equal("Payment gateway is not configured", unavailableBody.GetProperty("message").GetString());
         manager.EmployeeAccount!.Role = EmployeeRole.LOGISTICS_MANAGER; await db.SaveChangesAsync();
         SignIn(client, manager.AccountId, "LogisticsManager");
         var cancelled = await client.PostAsJsonAsync(cancelPath, InvoiceCancellationTests.ValidRequest());

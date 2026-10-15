@@ -19,6 +19,90 @@ namespace Pegaxus.Service.Test;
 public class DossierViewingTests
 {
     [Fact]
+    public async Task RequirementListController_ReturnsFlatPaginatedContract()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, dossier) = await SeedAsync(db);
+        var controller = new ComplianceDossiersController(CreateService(db))
+        {
+            ControllerContext = new ControllerContext { HttpContext = new DefaultHttpContext
+            {
+                User = new ClaimsPrincipal(new ClaimsIdentity([new System.Security.Claims.Claim(ClaimTypes.NameIdentifier, account.AccountId.ToString())], "test"))
+            } }
+        };
+        var response = Assert.IsType<OkObjectResult>(await controller.GetRequirements(dossier.ComplianceDossierId, new() { PageSize = 3 }, default));
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(response.Value, new JsonSerializerOptions(JsonSerializerDefaults.Web)));
+        var value = json.RootElement.GetProperty("value");
+        Assert.Equal(3, value.GetProperty("items").GetArrayLength());
+        Assert.Equal(8, value.GetProperty("totalItems").GetInt32());
+        var action = typeof(ComplianceDossiersController).GetMethod(nameof(ComplianceDossiersController.GetRequirements))!;
+        Assert.Equal("{dossierId:guid}/requirements", Assert.Single(action.GetCustomAttributes(typeof(HttpGetAttribute), false).Cast<HttpGetAttribute>()).Template);
+        Assert.Equal(JwtExtensions.ComplianceDossierViewerPolicy, Assert.Single(action.GetCustomAttributes(typeof(AuthorizeAttribute), false).Cast<AuthorizeAttribute>()).Policy);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task Overview_ReturnsBookingAndCustomerMetadata(bool byBooking)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, dossier) = await SeedAsync(db);
+        db.ChangeTracker.Clear();
+        var service = CreateService(db);
+        var result = byBooking
+            ? await service.GetByBookingAsync(account.AccountId, dossier.Transport.BookingId, new())
+            : await service.GetDossierAsync(account.AccountId, dossier.ComplianceDossierId, new());
+        Assert.Equal(account.CustomerAccount!.FullName, result.BookingSummary.CustomerName);
+        Assert.Equal(account.CustomerAccount.CustomerId, result.Customer.CustomerId);
+        Assert.Equal(account.CustomerAccount.FullName, result.Customer.FullName);
+        Assert.Equal(dossier.Transport.Booking.RequestedDepartureDate, result.BookingSummary.RequestedDepartureDate);
+        Assert.Equal(dossier.Transport.Booking.Status.ToString(), result.BookingSummary.BookingStatus);
+        Assert.Equal(dossier.Transport.Booking.BookingHorses.Count, result.BookingSummary.HorseCount);
+        Assert.DoesNotContain("password", JsonSerializer.Serialize(result).ToLowerInvariant());
+    }
+
+    [Fact]
+    public async Task RequirementList_PaginatesBothScopes_ExcludesDeleted_ProtectsOwnership()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, dossier) = await SeedAsync(db);
+        var requirements = dossier.DossierRequirements.ToList();
+        requirements[0].IsDeleted = true;
+        requirements[1].Note = "Customer correction required";
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        var service = CreateService(db);
+        var all = await service.GetRequirementsAsync(account.AccountId, dossier.ComplianceDossierId, new() { PageSize = 100 });
+        Assert.Equal(7, all.TotalItems);
+        Assert.DoesNotContain(all.Items, item => item.DossierRequirementId == requirements[0].DossierRequirementId);
+        Assert.Contains(all.Items, item => item.HorseId.HasValue);
+        Assert.Contains(all.Items, item => !item.HorseId.HasValue);
+        Assert.Contains(all.Items, item => item.Note == "Customer correction required");
+        var page = await service.GetRequirementsAsync(account.AccountId, dossier.ComplianceDossierId, new() { PageIndex = 2, PageSize = 3 });
+        Assert.Equal(3, page.TotalPages);
+        Assert.Equal(all.Items.Skip(3).Take(3).Select(item => item.DossierRequirementId), page.Items.Select(item => item.DossierRequirementId));
+        var horseId = all.Items.First(item => item.HorseId.HasValue).HorseId;
+        var filtered = await service.GetRequirementsAsync(account.AccountId, dossier.ComplianceDossierId, new() { HorseId = horseId, Status = "REJECTED", SortBy = "dueDate:desc" });
+        Assert.All(filtered.Items, item => { Assert.Equal(horseId, item.HorseId); Assert.Equal("REJECTED", item.Status); });
+        var (foreign, _) = await TestSupport.AddCustomerAsync(db);
+        await Assert.ThrowsAsync<ForbiddenException>(() => service.GetRequirementsAsync(foreign.AccountId, dossier.ComplianceDossierId, new()));
+    }
+
+    [Theory]
+    [InlineData(0, 20, null, null)]
+    [InlineData(1, 101, null, null)]
+    [InlineData(int.MaxValue, 100, null, null)]
+    [InlineData(1, 20, "999", null)]
+    [InlineData(1, 20, null, "unknown:asc")]
+    public async Task RequirementList_RejectsInvalidFilters(int pageIndex, int pageSize, string? status, string? sortBy)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, dossier) = await SeedAsync(db);
+        await Assert.ThrowsAsync<BadRequestException>(() => CreateService(db).GetRequirementsAsync(account.AccountId, dossier.ComplianceDossierId,
+            new() { PageIndex = pageIndex, PageSize = pageSize, Status = status, SortBy = sortBy }));
+    }
+
+    [Fact]
     public async Task Customer_SeesOwnDossierWithWholeProgressAndHorseGroups()
     {
         await using var db = TestSupport.CreateDb();
