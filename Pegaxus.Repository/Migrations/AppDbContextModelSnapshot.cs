@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Pegaxus.Repository;
+using Pegaxus.Repository.Enum;
 
 #nullable disable
 
@@ -58,8 +59,8 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "incident_status", new[] { "REPORTED", "PENDING", "RESOLVED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_history_type", new[] { "CREATE", "ISSUE", "RECORD_PAYMENT", "MARK_OVERDUE", "CANCEL" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_item_type", new[] { "TRANSPORT_FEE", "HORSE_SERVICE_FEE", "HANDLING_FEE", "COMPLIANCE_FEE", "EMERGENCY_COST", "OTHER" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_type", new[] { "QUOTATION", "DEPOSIT", "FINAL", "SUPPLEMENTARY", "CREDIT_NOTE" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_status", new[] { "DRAFT", "ISSUED", "PARTIALLY_PAID", "PAID", "OVERDUE", "CANCELLED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "invoice_type", new[] { "QUOTATION", "DEPOSIT", "FINAL", "SUPPLEMENTARY", "CREDIT_NOTE" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "location_type", new[] { "CITY", "BORDER_GATE", "AIRPORT", "SEAPORT", "STABLE", "REST_STOP", "OTHER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "notification_priority", new[] { "LOW", "NORMAL", "HIGH", "URGENT" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "notification_type", new[] { "BOOKING", "TRANSPORT", "ROUTE", "HANDOVER", "HORSE_HEALTH", "INCIDENT", "EMERGENCY_COST", "PAYMENT", "CLAIM", "COMPLIANCE", "DOCUMENT", "SYSTEM" });
@@ -84,7 +85,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
-                    b.Property<int>("AccountType")
+                    b.Property<AccountType>("AccountType")
                         .HasColumnType("account_type")
                         .HasColumnName("account_type");
 
@@ -131,7 +132,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(255)")
                         .HasColumnName("password_hash");
 
-                    b.Property<int>("Status")
+                    b.Property<AccountStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("account_status")
                         .HasColumnName("status")
@@ -182,7 +183,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("read_at");
 
-                    b.Property<int>("Status")
+                    b.Property<RecipientStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("recipient_status")
                         .HasColumnName("status")
@@ -244,7 +245,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("target_id");
 
-                    b.Property<int>("Visibility")
+                    b.Property<AuditVisibility>("Visibility")
                         .HasColumnType("audit_visibility")
                         .HasColumnName("visibility");
 
@@ -319,7 +320,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("date")
                         .HasColumnName("revision_due_date");
 
-                    b.Property<int>("Status")
+                    b.Property<AuthoritySubmissionStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("authority_submission_status")
                         .HasColumnName("status")
@@ -387,7 +388,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<int>("EvidenceType")
+                    b.Property<AuthorityEvidenceType>("EvidenceType")
                         .HasColumnType("authority_evidence_type")
                         .HasColumnName("evidence_type");
 
@@ -518,7 +519,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("special_requirements");
 
-                    b.Property<int>("Status")
+                    b.Property<BookingStatus>("Status")
                         .IsConcurrencyToken()
                         .ValueGeneratedOnAdd()
                         .HasColumnType("booking_status")
@@ -596,11 +597,11 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("changed_by_account_id");
 
-                    b.Property<int>("NewStatus")
+                    b.Property<BookingStatus>("NewStatus")
                         .HasColumnType("booking_status")
                         .HasColumnName("new_status");
 
-                    b.Property<int?>("PreviousStatus")
+                    b.Property<BookingStatus?>("PreviousStatus")
                         .HasColumnType("booking_status")
                         .HasColumnName("previous_status");
 
@@ -608,7 +609,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("reason");
 
-                    b.Property<int>("Type")
+                    b.Property<BookingHistoryType>("Type")
                         .HasColumnType("booking_history_type")
                         .HasColumnName("type");
 
@@ -712,7 +713,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("claim_code");
 
-                    b.Property<int>("ClaimType")
+                    b.Property<ClaimType>("ClaimType")
                         .HasColumnType("claim_type")
                         .HasColumnName("claim_type");
 
@@ -759,7 +760,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("reviewed_at");
 
-                    b.Property<int>("Status")
+                    b.Property<ClaimStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("claim_status")
                         .HasColumnName("status")
@@ -841,7 +842,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("resolution_summary");
 
-                    b.Property<int>("ResolutionType")
+                    b.Property<ClaimResolutionType>("ResolutionType")
                         .HasColumnType("claim_resolution_type")
                         .HasColumnName("resolution_type");
 
@@ -923,7 +924,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("note");
 
-                    b.Property<int>("Status")
+                    b.Property<ComplianceDocumentStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("compliance_document_status")
                         .HasColumnName("status")
@@ -1012,7 +1013,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("rejection_reason");
 
-                    b.Property<int>("Status")
+                    b.Property<ComplianceDossierStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("compliance_dossier_status")
                         .HasColumnName("status")
@@ -1058,7 +1059,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("bcp_code");
 
-                    b.Property<int>("Category")
+                    b.Property<ComplianceRequirementCategory>("Category")
                         .HasColumnType("compliance_requirement_category")
                         .HasColumnName("category");
 
@@ -1110,7 +1111,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("requirement_name");
 
-                    b.Property<int>("Status")
+                    b.Property<ComplianceRequirementStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("compliance_requirement_status")
                         .HasColumnName("status")
@@ -1174,7 +1175,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("decided_at");
 
-                    b.Property<int>("Decision")
+                    b.Property<ApprovalDecision>("Decision")
                         .HasColumnType("approval_decision")
                         .HasColumnName("decision");
 
@@ -1217,12 +1218,6 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("account_id");
 
-                    b.Property<string>("CustomerCode")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)")
-                        .HasColumnName("customer_code");
-
                     b.Property<string>("Address")
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)")
@@ -1236,6 +1231,12 @@ namespace Pegaxus.Repository.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
+
+                    b.Property<string>("CustomerCode")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasColumnName("customer_code");
 
                     b.Property<DateOnly?>("DateOfBirth")
                         .HasColumnType("date")
@@ -1316,7 +1317,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<int?>("CustomsLane")
+                    b.Property<CustomsLane?>("CustomsLane")
                         .HasColumnType("customs_lane")
                         .HasColumnName("customs_lane");
 
@@ -1349,7 +1350,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("rejection_reason");
 
-                    b.Property<int>("Status")
+                    b.Property<CustomsClearanceProofStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("customs_clearance_proof_status")
                         .HasColumnName("status")
@@ -1508,7 +1509,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("request_code");
 
-                    b.Property<int>("RequestType")
+                    b.Property<DocumentRequestType>("RequestType")
                         .HasColumnType("document_request_type")
                         .HasColumnName("request_type");
 
@@ -1520,7 +1521,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("requested_by_account_id");
 
-                    b.Property<int>("Status")
+                    b.Property<DocumentRequestStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("document_request_status")
                         .HasColumnName("status")
@@ -1607,7 +1608,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("document_version_id");
 
-                    b.Property<int>("Result")
+                    b.Property<DocumentReviewResult>("Result")
                         .HasColumnType("document_review_result")
                         .HasColumnName("result");
 
@@ -1768,7 +1769,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("satisfied_at");
 
-                    b.Property<int>("Status")
+                    b.Property<DossierRequirementStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("dossier_requirement_status")
                         .HasColumnName("status")
@@ -1851,7 +1852,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasDefaultValue(false)
                         .HasColumnName("is_deleted");
 
-                    b.Property<int>("Status")
+                    b.Property<DossierTemplateStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("dossier_template_status")
                         .HasColumnName("status")
@@ -1983,7 +1984,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("cancelled_at");
 
-                    b.Property<int>("Category")
+                    b.Property<EmergencyCostCategory>("Category")
                         .HasColumnType("emergency_cost_category")
                         .HasColumnName("category");
 
@@ -2026,7 +2027,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("requested_at");
 
-                    b.Property<int>("Status")
+                    b.Property<EmergencyCostStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("emergency_cost_status")
                         .HasColumnName("status")
@@ -2119,7 +2120,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(30)")
                         .HasColumnName("phone");
 
-                    b.Property<int>("Role")
+                    b.Property<EmployeeRole>("Role")
                         .HasColumnType("employee_role")
                         .HasColumnName("role");
 
@@ -2335,7 +2336,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("from_route_plan_route_id");
 
-                    b.Property<int>("FromType")
+                    b.Property<HandoverPartyType>("FromType")
                         .HasColumnType("handover_party_type")
                         .HasColumnName("from_type");
 
@@ -2345,7 +2346,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("handover_code");
 
-                    b.Property<int>("HandoverType")
+                    b.Property<HandoverType>("HandoverType")
                         .HasColumnType("handover_type")
                         .HasColumnName("handover_type");
 
@@ -2376,7 +2377,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("sequence_no");
 
-                    b.Property<int>("Status")
+                    b.Property<HandoverStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("handover_status")
                         .HasColumnName("status")
@@ -2409,7 +2410,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("to_route_plan_route_id");
 
-                    b.Property<int>("ToType")
+                    b.Property<HandoverPartyType>("ToType")
                         .HasColumnType("handover_party_type")
                         .HasColumnName("to_type");
 
@@ -2534,7 +2535,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("passport_number");
 
-                    b.Property<int?>("Sex")
+                    b.Property<HorseSex?>("Sex")
                         .HasColumnType("horse_sex")
                         .HasColumnName("sex");
 
@@ -2608,7 +2609,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("incident_report_id");
 
-                    b.Property<int>("IncidentType")
+                    b.Property<HorseIncidentType>("IncidentType")
                         .HasColumnType("horse_incident_type")
                         .HasColumnName("incident_type");
 
@@ -2692,7 +2693,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("general_note");
 
-                    b.Property<int>("HealthStatus")
+                    b.Property<HorseHealthStatus>("HealthStatus")
                         .HasColumnType("horse_health_status")
                         .HasColumnName("health_status");
 
@@ -2708,7 +2709,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("hydration_note");
 
-                    b.Property<int?>("HydrationStatus")
+                    b.Property<HydrationStatus?>("HydrationStatus")
                         .HasColumnType("hydration_status")
                         .HasColumnName("hydration_status");
 
@@ -2721,7 +2722,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(500)")
                         .HasColumnName("location_description");
 
-                    b.Property<int>("LogType")
+                    b.Property<HorseHealthLogType>("LogType")
                         .HasColumnType("horse_health_log_type")
                         .HasColumnName("log_type");
 
@@ -2803,7 +2804,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("cancelled_at");
 
-                    b.Property<int>("Category")
+                    b.Property<IncidentCategory>("Category")
                         .HasColumnType("incident_category")
                         .HasColumnName("category");
 
@@ -2854,11 +2855,11 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("resolved_at");
 
-                    b.Property<int>("Severity")
+                    b.Property<IncidentSeverity>("Severity")
                         .HasColumnType("incident_severity")
                         .HasColumnName("severity");
 
-                    b.Property<int>("Status")
+                    b.Property<IncidentStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("incident_status")
                         .HasColumnName("status")
@@ -2959,12 +2960,6 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("invoice_code");
 
-                    b.Property<int>("Type")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("invoice_type")
-                        .HasColumnName("type")
-                        .HasDefaultValueSql("'QUOTATION'::invoice_type");
-
                     b.Property<DateTime?>("IssuedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("issued_at");
@@ -2973,7 +2968,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("paid_at");
 
-                    b.Property<int>("Status")
+                    b.Property<InvoiceStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("invoice_status")
                         .HasColumnName("status")
@@ -2993,6 +2988,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("total_amount");
+
+                    b.Property<InvoiceType>("Type")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("invoice_type")
+                        .HasColumnName("type")
+                        .HasDefaultValueSql("'QUOTATION'::invoice_type");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp without time zone")
@@ -3048,7 +3049,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("invoice_id");
 
-                    b.Property<int>("ItemType")
+                    b.Property<InvoiceItemType>("ItemType")
                         .HasColumnType("invoice_item_type")
                         .HasColumnName("item_type");
 
@@ -3116,11 +3117,11 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("invoice_id");
 
-                    b.Property<int>("NewStatus")
+                    b.Property<InvoiceStatus>("NewStatus")
                         .HasColumnType("invoice_status")
                         .HasColumnName("new_status");
 
-                    b.Property<int?>("PreviousStatus")
+                    b.Property<InvoiceStatus?>("PreviousStatus")
                         .HasColumnType("invoice_status")
                         .HasColumnName("previous_status");
 
@@ -3128,7 +3129,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("reason");
 
-                    b.Property<int>("Type")
+                    b.Property<InvoiceHistoryType>("Type")
                         .HasColumnType("invoice_history_type")
                         .HasColumnName("type");
 
@@ -3209,7 +3210,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("location_note");
 
-                    b.Property<int?>("LocationType")
+                    b.Property<LocationType?>("LocationType")
                         .HasColumnType("location_type")
                         .HasColumnName("location_type");
 
@@ -3339,11 +3340,11 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("message");
 
-                    b.Property<int>("NotificationType")
+                    b.Property<NotificationType>("NotificationType")
                         .HasColumnType("notification_type")
                         .HasColumnName("notification_type");
 
-                    b.Property<int>("Priority")
+                    b.Property<NotificationPriority>("Priority")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("notification_priority")
                         .HasColumnName("priority")
@@ -3570,7 +3571,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("rejection_reason");
 
-                    b.Property<int>("Status")
+                    b.Property<QuarantineProofStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("quarantine_proof_status")
                         .HasColumnName("status")
@@ -3659,7 +3660,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("paid_at");
 
-                    b.Property<int>("PaymentMethod")
+                    b.Property<PaymentMethod>("PaymentMethod")
                         .HasColumnType("payment_method")
                         .HasColumnName("payment_method");
 
@@ -3669,7 +3670,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("receipt_code");
 
-                    b.Property<int>("Status")
+                    b.Property<ReceiptStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("receipt_status")
                         .HasColumnName("status")
@@ -3827,7 +3828,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("to_location_id");
 
-                    b.Property<int>("TransportMode")
+                    b.Property<TransportMode>("TransportMode")
                         .HasColumnType("transport_mode")
                         .HasColumnName("transport_mode");
 
@@ -3887,7 +3888,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(50)")
                         .HasColumnName("route_plan_code");
 
-                    b.Property<int>("Status")
+                    b.Property<RoutePlanStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("route_plan_status")
                         .HasColumnName("status")
@@ -3953,6 +3954,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("escort_employee_id");
 
+                    b.Property<string>("Note")
+                        .HasColumnType("text")
+                        .HasColumnName("note");
+
                     b.Property<decimal?>("OutsourcingCostAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
@@ -3962,10 +3967,6 @@ namespace Pegaxus.Repository.Migrations
                         .HasMaxLength(3)
                         .HasColumnType("character varying(3)")
                         .HasColumnName("outsourcing_currency");
-
-                    b.Property<string>("Note")
-                        .HasColumnType("text")
-                        .HasColumnName("note");
 
                     b.Property<DateTime?>("PlannedArrivalAt")
                         .HasColumnType("timestamp without time zone")
@@ -3988,7 +3989,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("route_plan_id");
 
-                    b.Property<int>("RouteType")
+                    b.Property<RouteType>("RouteType")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("route_type")
                         .HasColumnName("route_type")
@@ -4105,7 +4106,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
-                    b.Property<int>("Status")
+                    b.Property<TransportStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("transport_status")
                         .HasColumnName("status")
@@ -4182,7 +4183,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("planning_note");
 
-                    b.Property<int>("Status")
+                    b.Property<TransportPlanStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("transport_plan_status")
                         .HasColumnName("status")
@@ -4309,7 +4310,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(200)")
                         .HasColumnName("provider_name");
 
-                    b.Property<int>("Status")
+                    b.Property<ProviderStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("provider_status")
                         .HasColumnName("status")
@@ -4344,11 +4345,11 @@ namespace Pegaxus.Repository.Migrations
                         .IsUnique()
                         .HasFilter("is_deleted = false");
 
+                    b.HasIndex(new[] { "ProviderName" }, "TransportProvider_provider_name_idx");
+
                     b.HasIndex(new[] { "TaxCode" }, "TransportProvider_tax_code_key")
                         .IsUnique()
                         .HasFilter("is_deleted = false");
-
-                    b.HasIndex(new[] { "ProviderName" }, "TransportProvider_provider_name_idx");
 
                     b.ToTable("TransportProvider", (string)null);
                 });
@@ -4419,13 +4420,13 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("special_equipment");
 
-                    b.Property<int>("Status")
+                    b.Property<VehicleStatus>("Status")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("vehicle_status")
                         .HasColumnName("status")
                         .HasDefaultValueSql("'AVAILABLE'::vehicle_status");
 
-                    b.Property<int>("TransportMode")
+                    b.Property<TransportMode>("TransportMode")
                         .HasColumnType("transport_mode")
                         .HasColumnName("transport_mode");
 
@@ -4501,7 +4502,7 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("incident_report_id");
 
-                    b.Property<int>("IncidentType")
+                    b.Property<VehicleIncidentType>("IncidentType")
                         .HasColumnType("vehicle_incident_type")
                         .HasColumnName("incident_type");
 

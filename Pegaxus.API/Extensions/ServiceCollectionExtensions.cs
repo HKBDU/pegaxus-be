@@ -71,7 +71,7 @@ public static class ServiceCollectionExtensions
             options.AddPolicy("Frontend", policy =>
             {
                 policy
-                    .WithOrigins("http://localhost:5173")
+                    .WithOrigins("http://localhost:5173","https://pegaxus-fe.vercel.app/","https://pegaxus-fe-git-dev-pegaxus.vercel.app")
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();
