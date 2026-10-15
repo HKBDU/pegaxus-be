@@ -1,9 +1,7 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.AspNetCore.SignalR;
 using Pegaxus.API.Extensions;
-using Pegaxus.API.Hubs;
 using Pegaxus.Service.Exceptions;
 
 using BookingService = Pegaxus.Service.BookingService;
@@ -19,8 +17,6 @@ public sealed partial class BookingController
     /// <param name="bookingId">The booking identifier (UUID).</param>
     /// <param name="request">The negotiated status and required reason.</param>
     /// <param name="validator">The injected validator for the request.</param>
-    /// <param name="hub">The injected hub used to broadcast booking status changes.</param>
-    /// <param name="logger">The injected logger for notification broadcast failures.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the updated booking and dossier statuses.</returns>
     /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
@@ -31,21 +27,11 @@ public sealed partial class BookingController
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Negotiate(Guid bookingId, [FromBody] BookingService.Request.NegotiateBookingRequest request,
         [FromServices] IValidator<BookingService.Request.NegotiateBookingRequest> validator,
-        [FromServices] IHubContext<ComplianceDossierHub> hub, [FromServices] ILogger<BookingController> logger,
         CancellationToken cancellationToken)
     {
         var error = await ValidateRequestAsync(request, validator, cancellationToken);
         if (error is not null) return error;
         var response = await _service.NegotiateAsync(AccountId, bookingId, request, cancellationToken);
-        try
-        {
-            await hub.Clients.All.SendAsync("BookingStatusChanged", response, CancellationToken.None);
-        }
-        catch (Exception exception)
-        {
-            // The status change and durable notifications are already committed.
-            logger.LogWarning(exception, "Unable to broadcast negotiated status for booking {BookingId}", bookingId);
-        }
         return Success(response, "Booking status changed; dossier operations suspended.");
     }
 

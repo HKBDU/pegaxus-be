@@ -62,7 +62,8 @@ public sealed class Service : INotificationService
             Status = RecipientStatus.PENDING.ToString(),
             CreatedAt = AsUtc(request.CreatedAt),
             ReferenceType = request.ReferenceType,
-            ReferenceId = request.ReferenceId
+            ReferenceId = request.ReferenceId,
+            ActionUrl = request.ActionUrl
         };
 
         if (OutboxQueue.IsEnabled(_db))
@@ -166,7 +167,7 @@ public sealed class Service : INotificationService
             return;
 
         recipient.Status = RecipientStatus.READ;
-        recipient.ReadAt = DateTime.UtcNow;
+        recipient.ReadAt = UtcNow();
         if (recipient.DeliveredAt is null)
             recipient.DeliveredAt = recipient.ReadAt;
         await _db.SaveChangesAsync(cancellationToken);
@@ -177,7 +178,7 @@ public sealed class Service : INotificationService
         var recipients = await _db.AccountNotifications
             .Where(item => item.AccountId == accountId && item.Status != RecipientStatus.READ)
             .ToListAsync(cancellationToken);
-        var now = DateTime.UtcNow;
+        var now = UtcNow();
         foreach (var recipient in recipients)
         {
             recipient.Status = RecipientStatus.READ;
@@ -198,7 +199,7 @@ public sealed class Service : INotificationService
             return;
 
         recipient.Status = RecipientStatus.DELIVERED;
-        recipient.DeliveredAt = DateTime.UtcNow;
+        recipient.DeliveredAt = UtcNow();
         await _db.SaveChangesAsync(cancellationToken);
     }
 

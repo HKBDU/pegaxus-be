@@ -42,6 +42,7 @@ public class TransportProviderServiceTests
     {
         await using var db = TestSupport.CreateDb();
         var (actor, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var (recipient, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var service = CreateService(db);
         var created = await service.CreateAsync(actor.AccountId, CreateRequest());
         Assert.Equal("PRV-LUFTHANSA-01", created.ProviderCode);
@@ -79,6 +80,7 @@ public class TransportProviderServiceTests
         Assert.Equal("Contract ended", audits[2].Summary);
         Assert.True(audits[4].AfterData.RootElement.GetProperty("IsDeleted").GetBoolean());
         Assert.Equal(2, await db.Notifications.CountAsync());
+        Assert.All(await db.AccountNotifications.ToListAsync(), item => Assert.Equal(recipient.AccountId, item.AccountId));
     }
 
     [Theory]
@@ -270,6 +272,7 @@ public class TransportProviderServiceTests
             foreach (var command in generator.Generate(new AddTransportProviderCatalogConstraints().UpOperations, db.Model))
                 await db.Database.ExecuteSqlRawAsync(command.CommandText);
             var (actor, _) = await TestSupport.AddLogisticsManagerAsync(db);
+            await TestSupport.AddLogisticsManagerAsync(db);
             var provider = await CreateService(db).CreateAsync(actor.AccountId, CreateRequest());
             Assert.Single((await CreateService(db).GetListAsync(actor.AccountId, new() { SupportedMode = "AIR" })).Items);
             await using var first = new AppDbContext(options);

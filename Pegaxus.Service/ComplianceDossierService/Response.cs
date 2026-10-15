@@ -119,6 +119,8 @@ public class Response
         public string? Message { get; init; }
         public Guid BookingId { get; init; }
         public string BookingCode { get; init; } = string.Empty;
+        public BookingSummaryResponse BookingSummary { get; init; } = new();
+        public CustomerResponse Customer => new() { CustomerId = BookingSummary.CustomerId, FullName = BookingSummary.CustomerName };
         public Guid? ComplianceDossierId { get; init; }
         public string? DossierCode { get; init; }
         public string? Status { get; init; }
@@ -128,6 +130,64 @@ public class Response
         public IReadOnlyList<RequirementResponse> TripRequirements { get; init; } = [];
         public IReadOnlyList<HorseRequirementsResponse> HorseRequirements { get; init; } = [];
         public ActionsResponse Actions { get; init; } = new();
+    }
+
+    public sealed class BookingSummaryResponse
+    {
+        public Guid CustomerId { get; init; }
+        public string BookingStatus { get; init; } = string.Empty;
+        public string OriginCountry { get; init; } = string.Empty;
+        public string DestinationCountry { get; init; } = string.Empty;
+        public DateOnly RequestedDepartureDate { get; init; }
+        public string CustomerName { get; init; } = string.Empty;
+        public int HorseCount => Horses.Count;
+        public IReadOnlyList<HorseSummaryResponse> Horses { get; init; } = [];
+    }
+
+    public sealed class CustomerResponse
+    {
+        public Guid CustomerId { get; init; }
+        public string FullName { get; init; } = string.Empty;
+    }
+
+    public sealed class HorseSummaryResponse
+    {
+        public Guid HorseId { get; init; }
+        public string HorseName { get; init; } = string.Empty;
+    }
+
+    public sealed class RequirementListResponse
+    {
+        public IReadOnlyList<RequirementListItemResponse> Items { get; init; } = [];
+        public int PageIndex { get; init; }
+        public int PageSize { get; init; }
+        public int TotalItems { get; init; }
+        public int TotalPages { get; init; }
+    }
+
+    public sealed class RequirementListItemResponse
+    {
+        public Guid DossierRequirementId { get; init; }
+        public Guid ComplianceRequirementId { get; init; }
+        public string RequirementName { get; init; } = string.Empty;
+        public Guid? HorseId { get; init; }
+        public string? HorseName { get; init; }
+        public string Status { get; init; } = string.Empty;
+        public bool IsMandatory { get; init; }
+        public DateOnly? DueDate { get; init; }
+        public DateOnly? ValidUntil { get; init; }
+        public DateTimeOffset? SatisfiedAt { get; init; }
+        public string? WaivedReason { get; init; }
+        public string? Note { get; init; }
+        public RequirementDocumentResponse? Document { get; init; }
+    }
+
+    public sealed class RequirementDocumentResponse
+    {
+        public Guid ComplianceDocumentId { get; init; }
+        public string DocumentCode { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
+        public int? LatestVersionNo { get; init; }
     }
 
     public sealed class HorseRequirementsResponse

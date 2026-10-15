@@ -129,10 +129,6 @@ public static class AppDbContextSeedData
         var transports = await SeedDemoTransportsAsync(db, bookings, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
 
-        var plans = await SeedDemoTransportPlansAsync(db, transports, now, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        await SeedDemoAssignmentsAsync(db, plans, employees, now, cancellationToken);
-
         var templates = await SeedDemoTemplatesAsync(db, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await SeedDemoDossiersAsync(db, transports, templates, horses, now, cancellationToken);
@@ -310,84 +306,6 @@ public static class AppDbContextSeedData
             result[seed.BookingCode] = transport;
         }
         return result;
-    }
-
-    private static async Task<Dictionary<string, TransportPlan>> SeedDemoTransportPlansAsync(
-        AppDbContext db,
-        IReadOnlyDictionary<string, Transport> transports,
-        DateTime now,
-        CancellationToken cancellationToken)
-    {
-        var seeds = new[]
-        {
-            new TransportPlanSeed("TP-20261010-DEMO-0004", "REQ-20261010-DEMO-0004", TransportPlanStatus.DRAFT),
-            new TransportPlanSeed("TP-20261010-DEMO-0005", "REQ-20261010-DEMO-0005", TransportPlanStatus.APPROVED)
-        };
-        var result = new Dictionary<string, TransportPlan>(StringComparer.OrdinalIgnoreCase);
-        foreach (var seed in seeds)
-        {
-            var plan = await db.TransportPlans.SingleOrDefaultAsync(item => item.PlanCode == seed.PlanCode, cancellationToken);
-            if (plan is null)
-            {
-                plan = new TransportPlan
-                {
-                    TransportPlanId = seed.Id,
-                    TransportId = transports[seed.BookingCode].TransportId,
-                    PlanCode = seed.PlanCode,
-                    Status = seed.Status,
-                    PlannedStartAt = now.AddDays(20),
-                    PlannedEndAt = now.AddDays(25),
-                    PlanningNote = "Seeded overall transport plan for Swagger testing.",
-                    EstimatedDistanceKm = 920.5m,
-                    EstimatedDurationMinutes = 1260,
-                    ApprovedAt = seed.Status == TransportPlanStatus.APPROVED ? now.AddDays(-1) : null,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                };
-                db.TransportPlans.Add(plan);
-            }
-            result[seed.BookingCode] = plan;
-        }
-        return result;
-    }
-
-    private static async Task SeedDemoAssignmentsAsync(
-        AppDbContext db,
-        IReadOnlyDictionary<string, TransportPlan> plans,
-        IReadOnlyDictionary<string, Employee> employees,
-        DateTime now,
-        CancellationToken cancellationToken)
-    {
-        var plan = plans["REQ-20261010-DEMO-0005"];
-        var assignments = new[]
-        {
-            (Email: "huyvog6226@gmail.com", Responsibility: EmployeeRole.TRANSPORT_SPECIALIST.ToString(), IsPrimary: true),
-            (Email: "hoanguyen91011@gmail.com", Responsibility: EmployeeRole.FLEET_ROUTE_COORDINATOR.ToString(), IsPrimary: true)
-        };
-        foreach (var assignment in assignments)
-        {
-            var employeeId = employees[assignment.Email].EmployeeId;
-            var existing = await db.EmployeeTransportPlans.SingleOrDefaultAsync(item =>
-                item.EmployeeId == employeeId && item.TransportPlanId == plan.TransportPlanId, cancellationToken);
-            if (existing is not null)
-            {
-                if (existing.Responsibility is "Compliance dossier" or "Route planning")
-                    existing.Responsibility = assignment.Responsibility;
-                continue;
-            }
-            if (await db.EmployeeTransportPlans.AnyAsync(item => item.TransportPlanId == plan.TransportPlanId &&
-                item.IsPrimary && item.Responsibility == assignment.Responsibility, cancellationToken))
-                continue;
-            db.EmployeeTransportPlans.Add(new EmployeeTransportPlan
-            {
-                EmployeeId = employeeId,
-                TransportPlanId = plan.TransportPlanId,
-                Responsibility = assignment.Responsibility,
-                AssignedAt = now.AddDays(-1),
-                IsPrimary = assignment.IsPrimary,
-                Note = "Seeded demo assignment."
-            });
-        }
     }
 
     private static async Task<Dictionary<string, DossierTemplate>> SeedDemoTemplatesAsync(AppDbContext db, DateTime now, CancellationToken cancellationToken)
@@ -699,14 +617,6 @@ public static class AppDbContextSeedData
         TransportStatus Status)
     {
         public Guid Id => StableGuid(TransportCode);
-    }
-
-    private sealed record TransportPlanSeed(
-        string PlanCode,
-        string BookingCode,
-        TransportPlanStatus Status)
-    {
-        public Guid Id => StableGuid(PlanCode);
     }
 
     private sealed record TemplateSeed(

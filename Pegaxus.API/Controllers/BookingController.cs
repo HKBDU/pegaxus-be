@@ -2,7 +2,6 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
-using Pegaxus.API.Hubs;
 using Pegaxus.API.Models;
 
 using BookingService = Pegaxus.Service.BookingService;

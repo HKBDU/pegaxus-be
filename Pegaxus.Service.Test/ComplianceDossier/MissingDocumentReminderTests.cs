@@ -31,6 +31,7 @@ public class MissingDocumentReminderTests
         Assert.Equal(2, await db.AuditDossiers.CountAsync(item => item.ActionType == "DOSSIER_REQUIREMENT_REMINDED"));
         Assert.Equal(seed.Customer, (await db.AccountNotifications.SingleAsync()).AccountId);
         Assert.Contains("EHC", (await db.Notifications.SingleAsync()).Message);
+        Assert.Contains("please submit the missing documents", (await db.Notifications.SingleAsync()).Message);
         Assert.Contains("PASSPORT", Assert.Single(mail.Sent).Body);
         Assert.True(result.EmailSent);
         Assert.NotNull((await db.MissingDocumentReminders.SingleAsync()).EmailSentAt);

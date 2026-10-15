@@ -59,10 +59,17 @@ public class Request
         public string? Note { get; set; }
     }
 
-    public sealed class ViewRequest
+    public class ViewRequest
     {
         public string? Status { get; set; }
         public Guid? HorseId { get; set; }
+    }
+
+    public sealed class RequirementListRequest : ViewRequest
+    {
+        public int PageIndex { get; set; } = 1;
+        public int PageSize { get; set; } = 20;
+        public string? SortBy { get; set; }
     }
 
     public sealed class RequirementRequest

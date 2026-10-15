@@ -122,7 +122,7 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
             throw new ConflictException("A Route with the same locations and transport mode already exists", "ROUTE_DUPLICATED");
     }
 
-    private async Task<(decimal? DistanceKm, int? DurationMinutes)> CalculateMetricsAsync(Location from, Location to, TransportMode mode, CancellationToken token)
+    public async Task<(decimal? DistanceKm, int? DurationMinutes)> CalculateMetricsAsync(Location from, Location to, TransportMode mode, CancellationToken token = default)
     {
         if (!from.Latitude.HasValue || !from.Longitude.HasValue || !to.Latitude.HasValue || !to.Longitude.HasValue)
             throw new BadRequestException("Both Locations must have valid coordinates", "INVALID_COORDINATES");

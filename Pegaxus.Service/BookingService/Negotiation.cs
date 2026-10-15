@@ -63,7 +63,8 @@ public partial class Service
         }
         AddHistory(bookingId, accountId, status == BookingStatus.CANCELLED ? BookingHistoryType.CANCEL : BookingHistoryType.SUBMIT,
             BookingStatus.APPROVED, status, reason, now);
-        var recipients = await _db.Employees.Active().Where(employee => employee.Role == EmployeeRole.TRANSPORT_SPECIALIST)
+        var recipients = await _db.Employees.Active().Where(employee => employee.Role == EmployeeRole.TRANSPORT_SPECIALIST &&
+                employee.EmployeeTransportPlans.Any(assignment => assignment.TransportPlan.Transport.BookingId == bookingId))
             .Select(employee => employee.AccountId).ToListAsync(cancellationToken);
         recipients.Add(booking.Customer.AccountId);
         foreach (var recipient in recipients.Distinct())

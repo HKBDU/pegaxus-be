@@ -188,6 +188,72 @@ public class LinqConcurrencyTests : IAsyncLifetime
         Assert.Empty(await verification.DossierTemplates.ToListAsync());
     }
 
+    [PostgresFact]
+    public async Task NotificationAcknowledgements_PersistReadAndDeliveredTimestamps()
+    {
+        await using var db = CreateDb();
+        var (account, _) = await TestSupport.AddCustomerAsync(db);
+        var service = TestSupport.CreateNotifications(db);
+        for (var index = 0; index < 3; index++)
+            service.Queue(new()
+            {
+                AccountId = account.AccountId, Type = NotificationType.SYSTEM, Title = "Timestamp regression", Message = "Test",
+                CreatedAt = Pegaxus.Service.Common.DbTime.UtcNow()
+            });
+        await db.SaveChangesAsync();
+        var ids = await db.AccountNotifications.Select(item => item.NotificationId).ToListAsync();
+
+        await service.AcknowledgeDeliveredAsync(account.AccountId, ids[0]);
+        await service.MarkReadAsync(account.AccountId, ids[1]);
+        db.ChangeTracker.Clear();
+        var delivered = await db.AccountNotifications.SingleAsync(item => item.NotificationId == ids[0]);
+        Assert.Equal(RecipientStatus.DELIVERED, delivered.Status);
+        Assert.Equal(DateTimeKind.Unspecified, delivered.DeliveredAt!.Value.Kind);
+        Assert.Null(delivered.ReadAt);
+        var read = await db.AccountNotifications.SingleAsync(item => item.NotificationId == ids[1]);
+        Assert.Equal(read.ReadAt, read.DeliveredAt);
+        Assert.Equal(DateTimeKind.Unspecified, read.ReadAt!.Value.Kind);
+
+        await service.MarkAllReadAsync(account.AccountId);
+        db.ChangeTracker.Clear();
+        Assert.All(await db.AccountNotifications.ToListAsync(), item =>
+        {
+            Assert.Equal(RecipientStatus.READ, item.Status);
+            Assert.Equal(DateTimeKind.Unspecified, item.ReadAt!.Value.Kind);
+            Assert.Equal(DateTimeKind.Unspecified, item.DeliveredAt!.Value.Kind);
+        });
+    }
+
+    [PostgresFact]
+    public async Task AuditHistory_OffsetDateBoundsFilterUtcTimestampColumns()
+    {
+        await using var db = CreateDb();
+        var (_, dossier, _) = await DocumentUploadTests.SeedAsync(db);
+        var (actor, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var occurredAt = new DateTime(2026, 10, 15, 10, 0, 0, DateTimeKind.Unspecified);
+        for (var index = -1; index <= 1; index++)
+            db.AuditDossiers.Add(new()
+            {
+                AuditDossierId = Guid.NewGuid(), ComplianceDossierId = dossier.ComplianceDossierId,
+                ActorAccountId = actor.AccountId, ActionType = "ADD_REQUIREMENT", TargetEntity = "DossierRequirement",
+                Visibility = AuditVisibility.Public, CreatedAt = occurredAt.AddHours(index)
+            });
+        await db.SaveChangesAsync();
+
+        var bound = Pegaxus.Service.Common.DbTime.AsUtc(occurredAt).ToOffset(TimeSpan.FromHours(7));
+        var service = DocumentUploadTests.CreateService(db, new DocumentUploadTests.RecordingStorage());
+        var result = await service.GetAuditHistoryAsync(actor.AccountId, dossier.ComplianceDossierId, new() { From = bound, To = bound });
+
+        Assert.Equal(1, result.TotalItems);
+        Assert.Equal(bound, Assert.Single(result.Items).OccurredAt);
+        db.ChangeTracker.Clear();
+        var overview = await service.GetDossierAsync(actor.AccountId, dossier.ComplianceDossierId, new());
+        var requirements = await service.GetRequirementsAsync(actor.AccountId, dossier.ComplianceDossierId, new());
+        Assert.NotEqual(Guid.Empty, overview.Customer.CustomerId);
+        Assert.NotEqual(default, overview.BookingSummary.RequestedDepartureDate);
+        Assert.Single(requirements.Items);
+    }
+
     private AppDbContext CreateDb(params IInterceptor[] interceptors) => new(
         new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(_source!)
             .AddInterceptors(interceptors).Options);
