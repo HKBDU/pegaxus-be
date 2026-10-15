@@ -116,7 +116,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         var status = Enum.Parse<ProviderStatus>(request.Status.Trim(), true);
         if (item.Status != status)
         {
-            var recipients = await db.Employees.AsNoTracking().Active().Where(employee => employee.Account.AccountType == AccountType.EMPLOYEE && (employee.Role == EmployeeRole.LOGISTICS_MANAGER || employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
+            var recipients = await db.Employees.AsNoTracking().Active().Where(employee => employee.AccountId != accountId && employee.Account.AccountType == AccountType.EMPLOYEE && (employee.Role == EmployeeRole.LOGISTICS_MANAGER || employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
                 .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
             foreach (var recipient in recipients)
                 notifications.Queue(new NotificationCreateRequest

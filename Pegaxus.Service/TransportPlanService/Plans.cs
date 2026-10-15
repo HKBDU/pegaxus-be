@@ -54,12 +54,16 @@ public sealed partial class Service
                 "The Transport Plan has been modified by another request. Please reload and try again.",
                 "TRANSPORT_PLAN_CONCURRENCY_CONFLICT");
 
+        await ValidateLocationsAsync(request.OriginLocationId, request.DestinationLocationId, cancellationToken);
+
         var start = request.PlannedStartAt ?? plan.PlannedStartAt;
         var end = request.PlannedEndAt ?? plan.PlannedEndAt;
         if (start.HasValue && end.HasValue && end <= start)
             throw new BadRequestException("plannedEndAt must be after plannedStartAt");
 
         var now = UtcNowTruncated();
+        plan.OriginLocationId = request.OriginLocationId ?? plan.OriginLocationId;
+        plan.DestinationLocationId = request.DestinationLocationId ?? plan.DestinationLocationId;
         plan.PlannedStartAt = request.PlannedStartAt.HasValue
             ? Truncate(request.PlannedStartAt.Value.UtcDateTime)
             : plan.PlannedStartAt;
@@ -142,6 +146,8 @@ public sealed partial class Service
         return new Response.CreateResponse
         {
             TransportPlanId = plan.TransportPlanId,
+            OriginLocationId = plan.OriginLocationId,
+            DestinationLocationId = plan.DestinationLocationId,
             PlanCode = plan.PlanCode,
             Status = plan.Status.ToString(),
             Booking = new Response.BookingResponse
@@ -322,11 +328,15 @@ public sealed partial class Service
                 "Transport Plan already exists for this booking. Please edit the existing plan.",
                 "TRANSPORT_PLAN_EXISTS");
 
+        await ValidateLocationsAsync(request.OriginLocationId, request.DestinationLocationId, cancellationToken);
+
         var now = UtcNowTruncated();
         var transportPlan = new TransportPlan
         {
             TransportPlanId = Guid.NewGuid(),
             TransportId = booking.Transport.TransportId,
+            OriginLocationId = request.OriginLocationId,
+            DestinationLocationId = request.DestinationLocationId,
             PlanCode = await GenerateCodeAsync("TP", code =>
                 db.TransportPlans.AnyAsync(plan => plan.PlanCode == code, cancellationToken)),
             Status = TransportPlanStatus.DRAFT,
@@ -349,6 +359,8 @@ public sealed partial class Service
         return new Response.CreateResponse
         {
             TransportPlanId = transportPlan.TransportPlanId,
+            OriginLocationId = transportPlan.OriginLocationId,
+            DestinationLocationId = transportPlan.DestinationLocationId,
             PlanCode = transportPlan.PlanCode,
             Status = transportPlan.Status.ToString(),
             Booking = new Response.BookingResponse
@@ -384,6 +396,13 @@ public sealed partial class Service
             CreatedAt = AsUtc(transportPlan.CreatedAt),
             UpdatedAt = AsUtc(transportPlan.UpdatedAt)
         };
+    }
+
+    private async Task ValidateLocationsAsync(Guid? originId, Guid? destinationId, CancellationToken cancellationToken)
+    {
+        foreach (var locationId in new[] { originId, destinationId }.Where(id => id.HasValue).Distinct())
+            if (!await db.Locations.AnyAsync(location => location.LocationId == locationId && !location.IsDeleted, cancellationToken))
+                throw new NotFoundException("Location not found", "LOCATION_NOT_FOUND");
     }
 
     private static IQueryable<TransportPlan> ApplySorting(IQueryable<TransportPlan> query, string? sortBy)

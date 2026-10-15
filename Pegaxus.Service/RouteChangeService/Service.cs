@@ -42,7 +42,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             .Select(x => x.AccountId).ToArrayAsync(cancellationToken);
         if (managers.Length == 0) throw new ConflictException("No active Logistics Manager can review this request.", "REVIEWER_UNAVAILABLE");
         var now = Now;
-        var message = $"{request.Reason.Trim()}\nETA: {request.NewEstimatedArrivalAt:O}\nEstimated extra cost: {request.EstimatedExtraCost} {request.Currency}\n{request.Note}";
+        var message = FormattableString.Invariant($"{request.Reason.Trim()}\nETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC\nEstimated extra cost: {request.EstimatedExtraCost} {request.Currency}\n{request.Note}");
         foreach (var manager in managers)
             Notify(manager, plan, "Emergency backup activation requested", message, NotificationPriority.URGENT, now);
         await db.SaveChangesAsync(cancellationToken);

@@ -22,6 +22,7 @@ public sealed partial class Service
             return new Response.OverviewResponse
             {
                 BookingId = bookingId, BookingCode = booking.BookingCode,
+                BookingSummary = await BuildBookingSummaryAsync(bookingId, cancellationToken),
                 Message = "ComplianceDossier has not been initialized. Waiting for transport booking approval."
             };
         return await BuildOverviewAsync(dossier, booking, viewer.Role, request, cancellationToken);
@@ -168,6 +169,7 @@ public sealed partial class Service
         return new Response.OverviewResponse
         {
             IsInitialized = true, BookingId = booking.BookingId, BookingCode = booking.BookingCode,
+            BookingSummary = await BuildBookingSummaryAsync(booking.BookingId, cancellationToken),
             ComplianceDossierId = dossier.ComplianceDossierId, DossierCode = dossier.DossierCode, Status = dossier.Status.ToString(),
             FulfilledCount = fulfilled, RequirementCount = requirements.Count,
             CompletionPercent = requirements.Count == 0 ? 0 : 100m * fulfilled / requirements.Count,
@@ -180,6 +182,16 @@ public sealed partial class Service
             Actions = ViewActions(role)
         };
     }
+
+    private async Task<Response.BookingSummaryResponse> BuildBookingSummaryAsync(Guid bookingId, CancellationToken cancellationToken) =>
+        await _db.Bookings.AsNoTracking().Where(item => item.BookingId == bookingId)
+            .Select(item => new Response.BookingSummaryResponse
+            {
+                BookingStatus = item.Status.ToString(), OriginCountry = item.OriginCountry, DestinationCountry = item.DestinationCountry,
+                RequestedDepartureDate = item.RequestedDepartureDate, CustomerId = item.CustomerId, CustomerName = item.Customer.FullName,
+                Horses = item.BookingHorses.OrderBy(horse => horse.Horse.HorseName).ThenBy(horse => horse.HorseId)
+                    .Select(horse => new Response.HorseSummaryResponse { HorseId = horse.HorseId, HorseName = horse.Horse.HorseName }).ToList()
+            }).SingleAsync(cancellationToken);
 
     private static DossierRequirementStatus? ValidateViewFilter(Request.ViewRequest request)
     {

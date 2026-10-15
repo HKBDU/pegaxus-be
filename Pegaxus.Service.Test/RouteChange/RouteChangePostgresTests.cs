@@ -245,7 +245,7 @@ public class RouteChangePostgresTests
 
     private static RouteChange.Service Service(AppDbContext db) => new(db,
         new Pegaxus.Service.NotificationService.Service(db, new NoopNotificationRealtimeService()), new RouteChangeTests.Fixture.FixedClock(),
-        new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db)));
+        TestSupport.CreateRoutePlans(db));
 
 
     private sealed class EnumNames : INpgsqlNameTranslator

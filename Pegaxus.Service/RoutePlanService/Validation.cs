@@ -72,6 +72,12 @@ public sealed partial class Service
                     db.Routes.Add(route);
                 route.FromLocation = from;
                 route.ToLocation = to;
+                if (!route.DistanceKm.HasValue || !route.EstimatedDurationMinutes.HasValue)
+                {
+                    var metrics = await routeService.CalculateMetricsAsync(from, to, mode, cancellationToken);
+                    route.DistanceKm = metrics.DistanceKm;
+                    route.EstimatedDurationMinutes = metrics.DurationMinutes;
+                }
             }
             await ValidateVehicleAndProviderAsync(request, route, plan, excludedRoutePlanId, cancellationToken);
             result.Add(new MaterializedSegment(request, route));
@@ -107,14 +113,16 @@ public sealed partial class Service
             throw new UnprocessableEntityException("The vehicle registration or insurance is expired for this segment", "VEHICLE_DOCUMENT_EXPIRED");
 
         var vehicleIds = vehicles.Select(item => item.VehicleId).ToList();
+        var departureAt = Truncate(request.PlannedDepartureAt);
+        var arrivalAt = Truncate(request.PlannedArrivalAt);
         var overlappingAssignment = await db.RoutePlanRouteVehicles
             .Include(item => item.RoutePlanRoute)
                 .ThenInclude(item => item.RoutePlan)
             .Where(item => vehicleIds.Contains(item.VehicleId) &&
                 item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED &&
                 (!excludedRoutePlanId.HasValue || item.RoutePlanRoute.RoutePlanId != excludedRoutePlanId.Value) &&
-                item.RoutePlanRoute.PlannedDepartureAt < request.PlannedArrivalAt.UtcDateTime &&
-                item.RoutePlanRoute.PlannedArrivalAt > request.PlannedDepartureAt.UtcDateTime)
+                item.RoutePlanRoute.PlannedDepartureAt < arrivalAt &&
+                item.RoutePlanRoute.PlannedArrivalAt > departureAt)
             .Select(item => item.VehicleId)
             .FirstOrDefaultAsync(cancellationToken);
         if (overlappingAssignment != Guid.Empty)

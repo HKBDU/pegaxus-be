@@ -81,6 +81,16 @@ public partial class Service : IBookingService
         });
     }
 
+    private async Task NotifyManagersAsync(BookingEntity booking, string title, DateTime now, CancellationToken cancellationToken)
+    {
+        var recipients = await _db.Employees.Active()
+            .Where(employee => employee.Role == EmployeeRole.LOGISTICS_MANAGER ||
+                employee.EmployeeTransportPlans.Any(assignment => assignment.TransportPlan.Transport.BookingId == booking.BookingId))
+            .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
+        foreach (var recipient in recipients)
+            AddNotification(recipient, booking.Transport?.TransportId, booking, title, now);
+    }
+
     private Task<bool> HasHorseAsync(Guid bookingId, CancellationToken cancellationToken) =>
         _db.BookingHorses.AnyAsync(item => item.BookingId == bookingId && !item.Horse.IsDeleted, cancellationToken);
 }

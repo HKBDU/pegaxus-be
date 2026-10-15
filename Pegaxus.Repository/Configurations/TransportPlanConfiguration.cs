@@ -19,6 +19,8 @@ public sealed class TransportPlanConfiguration : IEntityTypeConfiguration<Transp
         entity.HasIndex(e => e.PlanCode, "TransportPlan_plan_code_key").IsUnique();
 
         entity.HasIndex(e => e.TransportId, "TransportPlan_transport_id_idx");
+        entity.HasIndex(e => e.OriginLocationId, "TransportPlan_origin_location_id_idx");
+        entity.HasIndex(e => e.DestinationLocationId, "TransportPlan_destination_location_id_idx");
 
         entity.Property(e => e.TransportPlanId).HasColumnName("transport_plan_id");
         entity.Property(e => e.ApprovedAt)
@@ -43,6 +45,8 @@ public sealed class TransportPlanConfiguration : IEntityTypeConfiguration<Transp
             .HasColumnName("planned_start_at");
         entity.Property(e => e.PlanningNote).HasColumnName("planning_note");
         entity.Property(e => e.TransportId).HasColumnName("transport_id");
+        entity.Property(e => e.OriginLocationId).HasColumnName("origin_location_id");
+        entity.Property(e => e.DestinationLocationId).HasColumnName("destination_location_id");
         entity.Property(e => e.UpdatedAt)
             .HasColumnType("timestamp without time zone")
             .HasColumnName("updated_at");
@@ -55,5 +59,10 @@ public sealed class TransportPlanConfiguration : IEntityTypeConfiguration<Transp
             .HasForeignKey(d => d.TransportId)
             .OnDelete(DeleteBehavior.ClientSetNull)
             .HasConstraintName("TransportPlan_transport_id_fkey");
+
+        entity.HasOne<Location>().WithMany().HasForeignKey(e => e.OriginLocationId)
+            .OnDelete(DeleteBehavior.Restrict).HasConstraintName("TransportPlan_origin_location_id_fkey");
+        entity.HasOne<Location>().WithMany().HasForeignKey(e => e.DestinationLocationId)
+            .OnDelete(DeleteBehavior.Restrict).HasConstraintName("TransportPlan_destination_location_id_fkey");
     }
 }

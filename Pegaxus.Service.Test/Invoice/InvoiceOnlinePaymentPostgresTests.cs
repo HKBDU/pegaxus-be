@@ -35,7 +35,7 @@ public class InvoiceOnlinePaymentPostgresTests
             await using (var db = new AppDbContext(options))
             {
                 var gateway = new Pegaxus.Service.PaymentGatewayService.Service(Options.Create(new Pegaxus.Service.PaymentGatewayService.SePayOptions()));
-                Assert.Equal("PAYMENT_GATEWAY_ERROR", (await Assert.ThrowsAsync<AppException>(() => InvoiceOnlinePaymentTests.CreateService(db, gateway)
+                Assert.Equal("PAYMENT_GATEWAY_NOT_CONFIGURED", (await Assert.ThrowsAsync<AppException>(() => InvoiceOnlinePaymentTests.CreateService(db, gateway)
                     .InitiateOnlinePaymentAsync(invoice.InvoiceId, customer.AccountId))).ErrorCode);
             }
             invoice.Currency = "EUR"; await seed.SaveChangesAsync();

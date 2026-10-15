@@ -226,7 +226,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         db.CatalogAuditLogs.Add(new CatalogAuditLog { CatalogAuditLogId = Guid.NewGuid(), EntityType = nameof(Vehicle),
             EntityId = vehicle.VehicleId, ActionType = action, ActorAccountId = accountId, Summary = reason,
             BeforeData = before, AfterData = Snapshot(vehicle), CreatedAt = vehicle.UpdatedAt });
-        var recipients = await db.Employees.AsNoTracking().Active().Where(x => x.Account.AccountType == AccountType.EMPLOYEE && (x.Role == EmployeeRole.LOGISTICS_MANAGER || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
+        var recipients = await db.Employees.AsNoTracking().Active().Where(x => x.AccountId != accountId && x.Account.AccountType == AccountType.EMPLOYEE && (x.Role == EmployeeRole.LOGISTICS_MANAGER || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
             .Select(x => x.AccountId).Distinct().ToListAsync(cancellationToken);
         foreach (var recipient in recipients)
             notifications.Queue(new NotificationCreateRequest { AccountId = recipient, Type = NotificationType.SYSTEM,

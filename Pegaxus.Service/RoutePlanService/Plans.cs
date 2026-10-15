@@ -223,6 +223,7 @@ public sealed partial class Service
     public async Task<Response.CancelResponse> CancelAsync(Guid accountId, Guid routePlanId, Request.CancelRequest request, CancellationToken cancellationToken = default)
     {
         var employee = await RequireEmployeeAsync(accountId, cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableOrNoneAsync(cancellationToken);
         var routePlan = await LoadRoutePlanAsync(routePlanId, cancellationToken);
         if (routePlan is null)
             throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
@@ -232,8 +233,12 @@ public sealed partial class Service
             throw new BadRequestException("lastUpdatedAt is required");
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new BadRequestException("reason is required");
+        if (routeType == RouteType.RETURN && await db.AuditDossiers.AnyAsync(audit =>
+                audit.TargetEntity == "RoutePlan" && audit.TargetId == routePlanId &&
+                audit.ActionType == "RETURN_DOSSIER_REOPENED", cancellationToken))
+            throw new ConflictException("The RETURN Route Plan has already been approved by the Logistics Manager and cannot be cancelled.", "RETURN_ALREADY_APPROVED");
         if (routePlan.Status != RoutePlanStatus.DRAFT)
-            throw new ConflictException("Cannot cancel a Confirmed Route Plan. Please contact Logistics Manager if a route change is required.", "INVALID_ROUTE_PLAN_STATUS");
+            throw new ConflictException($"Cannot cancel a {routePlan.Status} Route Plan. Please contact Logistics Manager if a route change is required.", "INVALID_ROUTE_PLAN_STATUS");
         EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
         var cancelledAt = UtcNowTruncated();
         routePlan.Status = RoutePlanStatus.CANCELLED;
@@ -242,6 +247,8 @@ public sealed partial class Service
             : $"{routePlan.RouteNote} | Cancelled: {request.Reason.Trim()}";
         routePlan.UpdatedAt = cancelledAt;
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null)
+            await transaction.CommitAsync(cancellationToken);
         return new Response.CancelResponse
         {
             RoutePlanId = routePlan.RoutePlanId,
@@ -272,8 +279,8 @@ public sealed partial class Service
                 AccountId = accountId,
                 TransportId = routePlan.TransportPlan.TransportId,
                 Type = NotificationType.COMPLIANCE,
-                Priority = NotificationPriority.NORMAL,
-                Title = "Route Plan requires legal re-review",
+                Priority = NotificationPriority.HIGH,
+                Title = "Route plan waiting for legal review",
                 Message = $"Route Plan {routePlan.RoutePlanCode} was updated. Reason: {reason}",
                 ReferenceType = "RoutePlan",
                 ReferenceId = routePlan.RoutePlanId,

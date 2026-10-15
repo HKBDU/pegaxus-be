@@ -61,7 +61,7 @@ public sealed partial class Service
             throw new ConflictException("Compliance Dossier must be initialized before legal review", "DOSSIER_NOT_INITIALIZED");
         if (routeType == RouteType.RETURN && dossier.Status != ComplianceDossierStatus.DRAFT)
             throw new ConflictException("Route Plan RETURN has not been approved by the Logistics Manager", "RETURN_NOT_APPROVED");
-        if (request.IsFeasible && dossier.Status != ComplianceDossierStatus.DRAFT)
+        if (request.IsFeasible && dossier.Status is not (ComplianceDossierStatus.DRAFT or ComplianceDossierStatus.IN_PREPARATION))
             throw new ConflictException("Compliance Dossier must be in DRAFT before legal review", "INVALID_DOSSIER_STATUS");
 
         var now = new DateTime(Math.Max(UtcNowTruncated().Ticks, routePlan.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);

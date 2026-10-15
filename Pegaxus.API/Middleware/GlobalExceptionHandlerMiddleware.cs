@@ -73,6 +73,8 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
 
     private static string GetErrorMessage(Exception ex, int statusCode)
     {
+        if (ex is Exceptions { StatusCode: 503, ErrorCode: "PAYMENT_GATEWAY_NOT_CONFIGURED" or "PAYMENT_GATEWAY_UNAVAILABLE" })
+            return "Payment gateway is not configured";
         if (statusCode == StatusCodes.Status409Conflict && ex is not Exceptions)
             return "The record changed. Reload it and try again.";
         return statusCode >= StatusCodes.Status500InternalServerError

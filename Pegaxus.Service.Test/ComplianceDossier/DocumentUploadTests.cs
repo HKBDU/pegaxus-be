@@ -20,6 +20,28 @@ namespace Pegaxus.Service.Test;
 public class DocumentUploadTests
 {
     [Fact]
+    public async Task Upload_NotifiesOnlyAssignedActiveTransportSpecialists()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, dossier, requirement) = await SeedAsync(db);
+        var (assigned, employee) = await TestSupport.AddLogisticsManagerAsync(db);
+        employee.Role = EmployeeRole.TRANSPORT_SPECIALIST;
+        var (_, unassigned) = await TestSupport.AddLogisticsManagerAsync(db);
+        unassigned.Role = EmployeeRole.TRANSPORT_SPECIALIST;
+        var plan = new TransportPlan
+        {
+            TransportPlanId = Guid.NewGuid(), Transport = dossier.Transport, PlanCode = "PLAN-UPLOAD"
+        };
+        db.EmployeeTransportPlans.Add(new() { TransportPlan = plan, Employee = employee });
+        await db.SaveChangesAsync();
+
+        await CreateService(db, new RecordingStorage()).UploadDocumentAsync(account.AccountId, dossier.ComplianceDossierId,
+            requirement.DossierRequirementId, ValidRequest(dossier));
+
+        Assert.Equal(assigned.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
+    }
+
+    [Fact]
     public async Task ClientMetadataAndUrls_AreIgnoredAndResolvedByPublicId()
     {
         await using var db = TestSupport.CreateDb();
@@ -417,7 +439,7 @@ public class DocumentUploadTests
     }
 
     internal static DossierService CreateService(AppDbContext db, RecordingStorage storage) => new(db, storage,
-        new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!, storage, NullLogger<DossierService>.Instance);
+        new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), TestSupport.CreateNotifications(db), storage, NullLogger<DossierService>.Instance);
 
     internal sealed class RecordingStorage : Pegaxus.Service.DocumentStorageService.IDocumentStorageService, Pegaxus.Service.MediaService.IMediaService
     {
