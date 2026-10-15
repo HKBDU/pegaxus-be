@@ -1,16 +1,221 @@
-# 🐎 Pegaxus Backend API (`pegaxus-be`)
+<div align="center">
 
-> **Racehorse Cross-Border Transport & Quarantine Logistics Management System**  
-> *Course Project: SWP391 (Software Development Project)*
+# Pegaxus Backend
 
-[![Quality CI](https://github.com/HKBDU/pegaxus-be/actions/workflows/quality.yml/badge.svg)](https://github.com/HKBDU/pegaxus-be/actions/workflows/quality.yml)
-[![.NET Version](https://img.shields.io/badge/.NET-8.0%20LTS-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
-[![C#](https://img.shields.io/badge/C%23-12.0-239120?logo=csharp&logoColor=white)](https://learn.microsoft.com/en-us/dotnet/csharp/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
-[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
+**Racehorse Transport & Cross-Border Compliance Management**
 
-### SePay checkout (UC-70 / IV11)
+ASP.NET Core API for coordinating bookings, transport plans, compliance dossiers, and invoicing.
+
+[![Quality](https://github.com/HKBDU/pegaxus-be/actions/workflows/quality.yml/badge.svg)](https://github.com/HKBDU/pegaxus-be/actions/workflows/quality.yml)
+[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?style=flat-square)](https://dotnet.microsoft.com/download/dotnet/8.0)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?style=flat-square)](https://www.postgresql.org/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-24292F?style=flat-square)](LICENSE)
+
+[Overview](#overview) · [Screenshots](#api-screenshots) · [Architecture](#architecture) · [Getting started](#getting-started) · [Configuration](#configuration) · [Verification](#verification)
+
+</div>
+
+---
+
+## Overview
+
+Pegaxus supports the operational workflow of domestic and cross-border racehorse transport. It brings customer bookings, transport coordination, veterinary documentation, and billing into a role-based API.
+
+| Area | Capabilities |
+| :--- | :--- |
+| Accounts and access | Customer registration, email verification, password recovery, Google sign-in, and role-based authorization |
+| Bookings and horses | Horse profiles, booking management, negotiated status, and booking assignments |
+| Transport operations | Transport plans, routes, personnel assignments, vehicles, and external transport providers |
+| Compliance | Dossier initialization, requirement checklists, document versions, reviews, authority submissions, and audit history |
+| Billing and payments | Booking invoices, invoice status history, receipts, and SePay checkout |
+| Notifications | Account notifications, SignalR updates, and missing-document reminders |
+
+## API screenshots
+
+The following Swagger captures appear in their original numbered order, from `01` through `06`. Each image shows a different part of the API.
+
+### 01 — API overview and accounts
+
+API description, authorization controls, and account profile endpoints.
+
+![Swagger API overview with authorization controls and account profile endpoints](screenshots/pegaxus-swagger-01.jpg)
+
+### 02 — Authentication and bookings
+
+Google sign-in, email and password authentication, account verification, token refresh, and booking endpoints.
+
+![Swagger authentication endpoints followed by the booking section](screenshots/pegaxus-swagger-02.jpg)
+
+### 03 — Compliance dossiers
+
+Booking invoices, dossier initialization, requirements, authority submissions, customs clearance, and audit history.
+
+![Swagger compliance dossier endpoints for requirements, submissions, customs clearance, and audits](screenshots/pegaxus-swagger-03.jpg)
+
+### 04 — Transport plans and providers
+
+Transport plan details, personnel assignments, provider management, and attachment upload endpoints.
+
+![Swagger transport planning, provider management, and upload endpoints](screenshots/pegaxus-swagger-04.jpg)
+
+### 05 — Locations and notifications
+
+Master locations, account notifications, the SePay webhook, deployment health, and personnel assignments.
+
+![Swagger location and notification endpoints with the payment webhook and deployment health check](screenshots/pegaxus-swagger-05.jpg)
+
+### 06 — Horses and invoices
+
+Horse profile management, online payments, invoice status history, receipts, and invoice lifecycle endpoints.
+
+![Swagger horse profile and invoice endpoints including online payments and receipts](screenshots/pegaxus-swagger-06.jpg)
+
+## Architecture
+
+The solution uses three application layers and a dedicated test project.
+
+```text
+pegaxus-be/
+├── Pegaxus.API/           Controllers, authorization, middleware, hubs, and workers
+├── Pegaxus.Service/       Business rules, use cases, DTOs, and validators
+├── Pegaxus.Repository/    EF Core context, entities, mappings, and migrations
+├── Pegaxus.Service.Test/  Service, HTTP contract, and PostgreSQL tests
+├── Pegaxus.Dbdiagram/     Database diagrams and data dictionary
+├── screenshots/          Swagger API captures
+├── .github/workflows/    Repository conventions, build, and test automation
+├── Directory.Build.props Shared .NET build settings
+├── docker-compose.yml    API, PostgreSQL, and Redis services
+├── Dockerfile            API container build
+└── Pegaxus.sln            Solution entry point
+```
+
+The API calls services; services use `AppDbContext` directly. Business logic stays in the service layer. Database mappings and migrations stay in the repository project.
+
+See [Coding conventions](CODING_CONVENTIONS.md) for module structure, transaction rules, API contracts, and test patterns.
+
+## Technology stack
+
+| Component | Technology |
+| :--- | :--- |
+| Runtime | .NET 8 and C# 12 |
+| HTTP API | ASP.NET Core Web API |
+| Persistence | Entity Framework Core 8, Npgsql, and PostgreSQL 16 |
+| Cache | Redis 7 |
+| Authentication | JWT Bearer and Google OAuth |
+| Validation | FluentValidation |
+| Real-time updates | ASP.NET Core SignalR |
+| API documentation | Swagger / OpenAPI with Swashbuckle |
+| Integrations | Cloudinary, Amazon S3, Brevo, Geoapify, and SePay |
+| Delivery and testing | Docker Compose, GitHub Actions, and xUnit |
+
+## Getting started
+
+### Prerequisites
+
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) with Docker Compose.
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) when running or testing the API outside Docker.
+
+### Run with Docker Compose
+
+Clone the repository and create the local configuration file:
+
+```powershell
+git clone https://github.com/HKBDU/pegaxus-be.git
+cd pegaxus-be
+Copy-Item .env.example .env
+```
+
+On Linux or macOS, use `cp .env.example .env` for the last command.
+
+Review the template values. Set `JWT_SECRET` to a private key of at least 32 characters, then configure the credentials needed by the integrations you intend to use.
+
+Start the API, PostgreSQL, and Redis:
+
+```bash
+docker compose up --build -d
+```
+
+| Resource | Default address |
+| :--- | :--- |
+| Swagger UI | [http://localhost:5000/swagger](http://localhost:5000/swagger) |
+| OpenAPI JSON | [http://localhost:5000/swagger/v1/swagger.json](http://localhost:5000/swagger/v1/swagger.json) |
+| Application health | [http://localhost:5000/health](http://localhost:5000/health) |
+| PostgreSQL | `localhost:5432` |
+| Redis | `localhost:6379` |
+
+Follow API logs with `docker compose logs -f api`. Stop the services with `docker compose down`.
+
+### Run the API locally
+
+Start the supporting services:
+
+```bash
+docker compose up -d postgres redis
+```
+
+In the root `.env`, set `ConnectionStrings__DefaultConnection` to a PostgreSQL connection string using `localhost`, the published database port, and credentials matching `POSTGRES_*`. Set `JwtOptions__SecretKey` for local JWT signing; `JWT_SECRET` is mapped by Docker Compose only. If Redis uses a different host port, also set `ConnectionStrings__Redis`.
+
+```bash
+dotnet restore Pegaxus.sln
+dotnet run --project Pegaxus.API --launch-profile http
+```
+
+The HTTP launch profile serves Swagger at [http://localhost:5001/swagger](http://localhost:5001/swagger). The `https` profile also serves [https://localhost:7001/swagger](https://localhost:7001/swagger).
+
+Startup applies EF Core migrations and seeds initial data. The application loads the nearest `.env` found by searching the working directory and its parents.
+
+## Configuration
+
+[.env.example](.env.example) lists the configuration template. ASP.NET Core settings use double underscores for nested keys.
+
+| Settings | Purpose |
+| :--- | :--- |
+| `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `POSTGRES_PORT` | Docker PostgreSQL credentials, database, and published port |
+| `API_PORT`, `REDIS_PORT` | Published Docker ports; defaults are `5000` and `6379` |
+| `ConnectionStrings__DefaultConnection`, `ConnectionStrings__Redis` | Database and cache connections for a locally running API |
+| `JWT_SECRET`, `JWT_ISSUER`, `JWT_AUDIENCE` | Docker Compose mappings for JWT settings |
+| `JwtOptions__SecretKey`, `JwtOptions__Issuer`, `JwtOptions__Audience` | Direct JWT configuration when running outside Docker |
+| `ALLOWED_ORIGINS` | Allowed frontend origins, separated by commas or semicolons |
+| `Google__ClientId`, `Google__ClientSecret` | Google OAuth credentials |
+| `Brevo__ApiKey`, `Brevo__SenderName`, `Brevo__SenderEmail` | Transactional email |
+| `CloudinaryOptions__CloudName`, `CloudinaryOptions__ApiKey`, `CloudinaryOptions__ApiSecret` | Media storage and signed uploads |
+| `DocumentStorageOptions__BucketName`, `DocumentStorageOptions__Region` | S3 document storage settings |
+| `Geoapify__ApiKey` | Location service credentials |
+| `SePayOptions__MerchantId`, `SePayOptions__SecretKey`, `SePayOptions__Environment`, `SePayOptions__InvoiceDetailsUrlTemplate` | SePay checkout configuration |
+| `SePayWebhookOptions__SecretKey` | SePay webhook authentication |
+
+Access tokens have a fixed 15-minute lifetime in application startup configuration. `JWT_EXPIRY_MINUTES` does not override that lifetime.
+
+Docker Compose forwards the settings declared in its `api.environment` block. Additional integration settings must be passed to the API container explicitly.
+
+## Verification
+
+Build and run the default test suite:
+
+```bash
+dotnet build Pegaxus.sln --configuration Release
+dotnet test Pegaxus.sln --configuration Release --no-build
+```
+
+PostgreSQL tests are enabled by `PEGAXUS_TEST_CONNECTION_STRING`. Use a PostgreSQL account with permission to create the temporary databases used by the suite:
+
+```powershell
+$env:PEGAXUS_TEST_CONNECTION_STRING = "Host=localhost;Port=5432;Username=<user>;Password=<password>;Database=postgres"
+dotnet test Pegaxus.sln --configuration Release --no-build
+```
+
+[Quality CI](.github/workflows/quality.yml) validates branch and PR conventions, builds the solution, and runs tests. The PostgreSQL integration job currently runs with `continue-on-error: true`.
+
+The `/health` endpoint reports application availability; it does not verify database or external service connectivity.
+
+## API integration notes
+
+Business endpoints use the `/api/v1` prefix. Identifiers are UUIDs; date-only values use `yyyy-MM-dd`. Use Swagger for request schemas and authorization requirements.
+
+The existing integration contracts and operational notes are retained below.
+
+<details>
+<summary>SePay checkout (UC-70 / IV11)</summary>
 
 `POST /api/v1/invoices/{invoiceId}/online-payments` requires the owning Customer and no body.
 Set the four `SePayOptions__*` variables in `.env.example`; use separate Sandbox and Production credentials.
@@ -31,173 +236,10 @@ References: [SePay checkout](https://developer.sepay.vn/vi/cong-thanh-toan/sdk/n
 [Sandbox](https://developer.sepay.vn/vi/cong-thanh-toan/sandbox),
 [official PHP currency/amount validation](https://github.com/sepayvn/sepay-pg-php/blob/main/src/Builders/CheckoutBuilder.php).
 
----
+</details>
 
-## 📖 1. Project Overview
-
-**Pegaxus Backend** is the core RESTful Web API powering the international racehorse transportation, veterinary compliance, and tracking platform. Built on **.NET 8** and **Clean Architecture**, it manages the end-to-end lifecycle of high-value equine cross-border transit:
-
-- **Transport Planning & Multimodal Routing**: Calculation of overland, sea, and air legs with mandatory rest stops and quarantine border checkpoints.
-- **Veterinary Compliance & Dossier System**: Verification and lifecycle management of veterinary health certificates, vaccination records, import/export permits, and customs declarations.
-- **Real-Time Voyage Tracking & Incident Management**: Secure telemetry reporting from transit vehicles, drivers, and veterinary handlers.
-- **Customer Portal, Quotations & Billing**: Role-based access control (RBAC), invoice generation, booking status transitions, and audit logs.
-
----
-
-## 🛠️ 2. Technology Stack
-
-| Category | Technology / Library | Version | Purpose |
-| :--- | :--- | :--- | :--- |
-| **Framework** | [ASP.NET Core Web API](https://dotnet.microsoft.com/) | `.NET 8.0 LTS` | High-performance, cross-platform RESTful API |
-| **Language** | [C#](https://learn.microsoft.com/en-us/dotnet/csharp/) | `12.0` | Modern type-safe backend programming |
-| **Database** | [PostgreSQL](https://www.postgresql.org/) | `16 Alpine` | Relational database management system |
-| **ORM** | [Entity Framework Core](https://learn.microsoft.com/en-us/ef/core/) | `8.0` (Npgsql) | Data modeling, migrations, and database access |
-| **Authentication** | JWT Bearer Tokens | System.IdentityModel | Secure stateless authentication and RBAC |
-| **API Documentation**| [Swagger / OpenAPI](https://swagger.io/) | Swashbuckle | Interactive API testing and schema documentation |
-| **CI / Automation** | [GitHub Actions](https://github.com/features/actions) | Workflow v4 | Automated branch/PR convention validation and build |
-| **Containerization** | [Docker](https://www.docker.com/) & Docker Compose | Multi-stage | Containerized deployment with health checks |
-
----
-
-## 📂 3. Solution Structure
-
-```text
-pegaxus-be/
-├── .github/
-│   ├── workflows/
-│   │   └── quality.yml             # CI Pipeline: validates PR metadata & solution build
-│   └── PULL_REQUEST_TEMPLATE.md    # Pull Request submission template
-├── Pegaxus.API/                    # [Presentation Layer] Web API controllers & endpoints
-│   ├── Constants/                  # System-wide constants & role definitions
-│   ├── Controllers/                # RESTful API Controllers
-│   ├── Extensions/                 # Service collection & middleware DI setup
-│   ├── Filters/                    # Action and authorization filters
-│   ├── Middleware/                 # Global exception handler, JWT, and logging
-│   ├── appsettings.json            # Base configuration
-│   ├── appsettings.Development.json# Local development configuration
-│   └── Program.cs                  # Application bootstrap entry point
-├── Pegaxus.Service/                # [Business Logic Layer] Application use cases
-│   ├── <Module>/                   # Feature-based folders (Booking, Transport, Dossier)
-│   │   ├── I<Module>Service.cs     # Service contract interface
-│   │   ├── Service.cs (+ partials) # Business logic, split by use case (Queries, Lifecycle, ...)
-│   │   ├── Request.cs / Response.cs# Inbound / outbound DTOs
-│   │   └── Validations/            # FluentValidation rules
-│   ├── Common/                     # Shared helpers (DbTime, Paging, Text, Validation)
-├── Pegaxus.Repository/             # [Data Access Layer] Persistence & database context
-│   ├── Configurations/             # One IEntityTypeConfiguration<T> per entity (applied by AppDbContext)
-│   ├── Entities/                   # Database POCO entities
-│   ├── Enum/                       # PostgreSQL enum types
-│   ├── Extensions/                 # Row-lock, serializable-transaction & Postgres error helpers
-│   ├── Migrations/                 # EF Core migrations (never edit applied ones)
-│   └── AppDbContext.cs             # DbContext (no repository / unit-of-work layer)
-├── Directory.Build.props           # Shared TargetFramework / ImplicitUsings / Nullable
-├── .dockerignore                   # Docker build context exclusion rules
-├── .env.example                    # Environment variables template
-├── docker-compose.yml              # Local multi-container orchestration (API + PostgreSQL)
-├── Dockerfile                      # Multi-stage production container build (.NET 8 + Alpine)
-├── Pegaxus.sln                     # Visual Studio / .NET Solution manifest
-└── RULESET.md                      # Branching strategy & GitHub branch protection rules
-```
-
----
-
-## 🚀 4. Getting Started
-
-### 4.1. Prerequisites
-- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
-- [Docker Desktop](https://www.docker.com/products/docker-desktop/) (or local PostgreSQL 16)
-- Optional: [Postman](https://www.postman.com/) or REST Client
-
-### 4.2. Local Environment Setup
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/HKBDU/pegaxus-be.git
-   cd pegaxus-be
-   ```
-
-2. **Configure environment variables**:
-   ```bash
-   # Windows PowerShell:
-   Copy-Item .env.example .env
-
-   # Linux/macOS:
-   cp .env.example .env
-   ```
-
-   For local `dotnet` / `dotnet ef`, set `ConnectionStrings__DefaultConnection` in `.env`
-   to your PostgreSQL connection string (host, port, database, username, password).
-   `POSTGRES_*` variables configure Docker Compose; they do not configure EF CLI directly.
-
-3. **Start PostgreSQL Database**:
-   ```bash
-   docker compose up postgres -d
-   ```
-
-4. **Restore & Build Solution**:
-   ```bash
-   dotnet restore Pegaxus.sln
-   dotnet build Pegaxus.sln
-   ```
-
-5. **Apply Database Migrations & Start API**:
-   ```bash
-   dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
-   dotnet run --project Pegaxus.API
-   ```
-   - Swagger Documentation: [http://localhost:5000/swagger](http://localhost:5000/swagger)
-   - Healthcheck Endpoint: [http://localhost:5000/health](http://localhost:5000/health)
-
----
-
-## 🐳 5. Running with Docker Compose
-
-To launch both **Pegaxus API** and **PostgreSQL 16** together in isolated containers:
-
-```bash
-# Start all containers in background
-docker compose up --build -d
-
-# View live API logs
-docker compose logs -f api
-
-# Stop all containers
-docker compose down
-```
-
----
-
-## 🌿 6. Branching Strategy & CI Ruleset
-
-To keep Git history clean and maintain software stability:
-- 🛡️ **Branching Model & Ruleset**: Refer to [RULESET.md](./RULESET.md).
-  - Core branches: **`main`** (production) and **`dev`** (integration).
-  - Feature branches: **`feat/<lowercase-name>`** (must use `feat/`, not `feature/`).
-  - Strict CI validation via [.github/workflows/quality.yml](./.github/workflows/quality.yml):
-    - **Branch regex**: `^(dev|(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[a-z0-9]+([._-][a-z0-9]+)*)$`
-    - **PR Title regex**: `^(dev|(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?!?: .+)`
-- 🤝 **Contributing Guidelines**: Refer to [CONTRIBUTING.md](./CONTRIBUTING.md).
-- 📋 **Pull Request Template**: Use [.github/PULL_REQUEST_TEMPLATE.md](./.github/PULL_REQUEST_TEMPLATE.md).
-
----
-
-## 🔐 7. Environment Variables
-
-| Variable Name | Default Value | Purpose |
-| :--- | :--- | :--- |
-| `POSTGRES_USER` | `pegaxus_user` | PostgreSQL database user |
-| `POSTGRES_PASSWORD` | `pegaxus_secret_password` | PostgreSQL database password |
-| `POSTGRES_DB` | `pegaxus_db` | Main database name |
-| `POSTGRES_PORT` | `5432` | Host port for PostgreSQL |
-| `API_PORT` | `5000` | Host port for Pegaxus Web API |
-| `JWT_SECRET` | *32+ char secret* | Key used for signing JWT access tokens |
-| `JWT_ISSUER` | `Pegaxus.API` | Token issuer identifier |
-| `JWT_AUDIENCE` | `Pegaxus.Client` | Token audience identifier |
-| `JWT_EXPIRY_MINUTES`| `1440` | Token expiration duration (in minutes) |
-
----
-
-## Manual DossierRequirement management (D3, D6)
+<details>
+<summary>Manual dossier requirements (D3, D6)</summary>
 
 Both endpoints require a Bearer token and `TransportSpecialistPolicy`. IDs use the existing UUID schema, not numeric IDs.
 
@@ -218,7 +260,10 @@ The trimmed reason, acting specialist, audit entry and Customer notification are
 | 400 | `HORSE_NOT_IN_BOOKING` | The horse does not belong to the dossier's booking |
 | 400 | `WAIVE_REASON_REQUIRED` | The waiver reason is missing or blank |
 
-## ComplianceDocument Upload (UC-21)
+</details>
+
+<details>
+<summary>Document upload (UC-21)</summary>
 
 For each PDF/JPG/JPEG/PNG file (up to 5 MiB), call POST `/api/v1/uploads/signature` with
 `entity: "attachment"`, `contentType`, and `sizeBytes`. Upload the binary directly to the returned Cloudinary URL
@@ -268,7 +313,10 @@ The DB write runs in a serializable transaction and revalidates ownership, statu
 No migration is needed: existing unique indexes protect one document per requirement and one version number per document.
 The 4-second/5-MB target needs measurement with real Cloudinary and PostgreSQL; unit tests do not establish throughput.
 
-## DocumentVersion Replacement (UC-22)
+</details>
+
+<details>
+<summary>Document replacement and version history (UC-22)</summary>
 
 POST `/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/document/versions` with a Customer token and the same JSON asset-reference contract.
 `files` replaces the entire current file set (1–10 ordered publicIds; the UC-21 verification and content-validation rules apply). Metadata fields and `uploadNote` are optional.
@@ -286,7 +334,10 @@ reviews attached to their own versions. Only the booking owner, Transport Specia
 Only the booking owner can submit or edit. SATISFIED requirements and dossiers sent to authorities are locked against both file and metadata edits.
 Every edit records its actor and changes in the dossier audit trail. Real PostgreSQL/Cloudinary/S3 measurement is needed to verify the 2-second DB-write target.
 
-## ComplianceDossier Viewing (UC-20)
+</details>
+
+<details>
+<summary>Dossier viewing and document previews (UC-20)</summary>
 
 All read endpoints require a Bearer token and the enum-backed `ComplianceDossierViewerPolicy` (Customer, Transport Specialist, Logistics Manager).
 Customers can read only dossiers belonging to their own bookings; other employee roles receive 403.
@@ -315,7 +366,10 @@ previously known public storage URLs. Sensitive documents must be uploaded with 
 assets migrated at the storage layer before claiming end-to-end file privacy. No storage migration is performed by this read-only feature.
 The 1.5-second response target still requires measurement against a real PostgreSQL database.
 
-## DocumentReview (UC-23)
+</details>
+
+<details>
+<summary>Document approval and readiness (UC-23)</summary>
 
 All mutation endpoints require a Bearer token, the enum-backed `TransportSpecialistPolicy`, and an active Transport Specialist account.
 
@@ -344,7 +398,10 @@ dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus
 The migration adds the native PostgreSQL REVOKED enum value; rollback deliberately refuses to remove immutable review history.
 The one-second API target still requires measurement against a real PostgreSQL database.
 
-## Document rejection and re-upload requests (UC-24)
+</details>
+
+<details>
+<summary>Document rejection and re-upload requests (UC-24)</summary>
 
 | Endpoint | Policy | Result |
 | :--- | :--- | :--- |
@@ -379,7 +436,10 @@ Apply migration `20261003000000_AddDocumentRequestRevisions` before using these 
 dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
 ```
 
-## Missing-document reminders (UC-25)
+</details>
+
+<details>
+<summary>Missing-document reminders (UC-25)</summary>
 
 Both endpoints require a Bearer token and the enum-backed `TransportSpecialistPolicy`; the service also requires an active TS account.
 
@@ -418,7 +478,20 @@ Apply migration `20261004100000_AddMissingDocumentReminders` before using the AP
 dotnet ef database update --project Pegaxus.Repository --startup-project Pegaxus.API
 ```
 
-## 👥 8. License & Academic Attribution
+</details>
 
-Developed as a capstone software engineering project for **SWP391** (Software Development Project).  
-Distributed under the [Apache-2.0 License](./LICENSE).
+## Development reference
+
+- [Coding conventions](CODING_CONVENTIONS.md): architecture, database access, validation, and tests.
+- [Seed data reference](SEED_DATA_REFERENCE.md): initial application data.
+- [Database dictionary](Pegaxus.Dbdiagram/dictionaryDB-Pegaxus/racehorse_transport_data_dictionary_v5.md): schema reference.
+- [Refactor log](REFACTOR_LOG.md): structural changes and retained behavior.
+- [Quality workflow](.github/workflows/quality.yml): CI checks and naming conventions.
+
+Use branch names such as `feat/transport-planning`, `fix/invoice-status`, or `docs/readme`. PR titles follow Conventional Commits, for example `docs(readme): refresh project overview`.
+
+## License and attribution
+
+Developed as a capstone software engineering project for **SWP391 — Software Development Project**.
+
+Distributed under the [Apache License 2.0](LICENSE).
