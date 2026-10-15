@@ -2,6 +2,7 @@
 @HEADROOM.md
 @CAVEMAN.md
 @PONYTAIL.md
+@CODING_CONVENTIONS.md
 
 @.agents/skills/caveman/SKILL.md
 
@@ -14,6 +15,13 @@
 - `AGENTS.md`: Global routing rules
 - `<agent>.md`: Agent-specific instructions
 - `skills/<skill>/SKILL.md`: Reusable skill instructions
+
+## Project Documentation
+
+| File | Load | Purpose |
+|------|------|---------|
+| `CODING_CONVENTIONS.md` | Always (`@` above) | Architecture, module layout, DB/transaction rules, API and test conventions. New code must follow it. |
+| `REFACTOR_LOG.md` | On demand (read it, do not `@`-load) | History of the `feat/refactor-system` refactor: what changed, why, and what was deliberately left alone. |
 
 ## Routing Rules
 

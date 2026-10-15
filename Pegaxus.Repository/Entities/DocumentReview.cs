@@ -1,0 +1,29 @@
+﻿using System.Collections.Generic;
+using Pegaxus.Repository.Enum;
+
+namespace Pegaxus.Repository.Entities;
+
+/// <summary>
+/// DocumentReview: Kết quả kiểm tra của một DocumentVersion cụ thể, 
+/// ví dụ APPROVED, REJECTED hoặc REVISION_REQUIRED.
+/// </summary>
+public partial class DocumentReview
+{
+    public Guid DocumentReviewId { get; set; }
+
+    public Guid DocumentVersionId { get; set; }
+
+    public Guid ReviewedByAccountId { get; set; }
+
+    public DocumentReviewResult Result { get; set; }
+
+    public string? ReviewComment { get; set; }
+
+    public DateTime ReviewedAt { get; set; }
+
+    public DateTime CreatedAt { get; set; }
+
+    public virtual DocumentVersion DocumentVersion { get; set; } = null!;
+
+    public virtual Account ReviewedByAccount { get; set; } = null!;
+}

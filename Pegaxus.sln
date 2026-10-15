@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pegaxus.Service", "Pegaxus.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pegaxus.API", "Pegaxus.API\Pegaxus.API.csproj", "{3ACEFFC5-D87C-42A7-8BE4-335DF15BF3B5}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Pegaxus.Service.Test", "Pegaxus.Service.Test\Pegaxus.Service.Test.csproj", "{6421754B-7833-49BB-9CC1-9D44F3731A64}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -55,6 +57,18 @@ Global
 		{3ACEFFC5-D87C-42A7-8BE4-335DF15BF3B5}.Release|x64.Build.0 = Release|Any CPU
 		{3ACEFFC5-D87C-42A7-8BE4-335DF15BF3B5}.Release|x86.ActiveCfg = Release|Any CPU
 		{3ACEFFC5-D87C-42A7-8BE4-335DF15BF3B5}.Release|x86.Build.0 = Release|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Debug|x64.Build.0 = Debug|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Debug|x86.Build.0 = Debug|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Release|x64.ActiveCfg = Release|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Release|x64.Build.0 = Release|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Release|x86.ActiveCfg = Release|Any CPU
+		{6421754B-7833-49BB-9CC1-9D44F3731A64}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -2,9 +2,9 @@ name: Quality
 
 on:
   pull_request:
-    branches: [main, dev]
+    branches: [main, pegaxus-dev]
   push:
-    branches: [main, dev]
+    branches: [main, pegaxus-dev]
 
 permissions:
   contents: read
@@ -21,7 +21,7 @@ jobs:
           BRANCH: ${{ github.head_ref }}
           TITLE: ${{ github.event.pull_request.title }}
         run: |
-          branch_pattern='^(dev|(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[a-z0-9]+([._-][a-z0-9]+)*)$'
+          branch_pattern='^(pegaxus-dev|dev|(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)/[a-z0-9]+([._-][a-z0-9]+)*)$'
           title_pattern='^(dev|(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z0-9._-]+\))?!?: .+)'
 
           [[ "$BRANCH" =~ $branch_pattern ]] || {
@@ -47,4 +47,35 @@ jobs:
       - name: Build solution
         run: dotnet build Pegaxus.sln --configuration Release --no-restore
       - name: Run tests
-        run: dotnet test Pegaxus.sln --configuration Release --no-build --verbosity normal || true
+        run: dotnet test Pegaxus.sln --configuration Release --no-build --verbosity normal
+
+  backend-postgres:
+    name: Backend PostgreSQL integration tests
+    runs-on: ubuntu-latest
+    # Informational until the PostgreSQL suite has a recorded green baseline in CI.
+    continue-on-error: true
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PEGAXUS_TEST_CONNECTION_STRING: Host=localhost;Port=5432;Username=postgres;Password=postgres;Database=postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Restore dependencies
+        run: dotnet restore Pegaxus.sln
+      - name: Build solution
+        run: dotnet build Pegaxus.sln --configuration Release --no-restore
+      - name: Run tests against PostgreSQL
+        run: dotnet test Pegaxus.sln --configuration Release --no-build --verbosity normal

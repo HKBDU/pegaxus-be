@@ -5,13 +5,13 @@ FROM mcr.microsoft.com/dotnet/sdk:8.0 AS build
 WORKDIR /src
 
 # Copy solution and project files first to leverage Docker layer caching
-COPY ["Pegaxus.sln", "./"]
+COPY ["Pegaxus.sln", "Directory.Build.props", "./"]
 COPY ["Pegaxus.API/Pegaxus.API.csproj", "Pegaxus.API/"]
 COPY ["Pegaxus.Service/Pegaxus.Service.csproj", "Pegaxus.Service/"]
 COPY ["Pegaxus.Repository/Pegaxus.Repository.csproj", "Pegaxus.Repository/"]
 
 # Restore dependencies
-RUN dotnet restore "Pegaxus.sln"
+RUN dotnet restore "Pegaxus.API/Pegaxus.API.csproj"
 
 # Copy the remaining source files
 COPY . .

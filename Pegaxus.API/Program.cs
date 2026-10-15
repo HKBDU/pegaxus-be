@@ -1,57 +1,97 @@
+using DotNetEnv;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.EntityFrameworkCore;
+using Pegaxus.API.Extensions;
+using Pegaxus.API.Hubs;
+using Pegaxus.API.Middleware;
+using Pegaxus.Repository;
+
+using CloudinaryService = Pegaxus.Service.CloudinaryService;
+
+var envDirectory = new DirectoryInfo(Directory.GetCurrentDirectory());
+while (envDirectory is not null)
+{
+    var envPath = Path.Combine(envDirectory.FullName, ".env");
+    if (File.Exists(envPath))
+    {
+        Env.Load(envPath);
+        break;
+    }
+
+    envDirectory = envDirectory.Parent;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-builder.Services.AddControllers();
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
-    {
-        Title = "Pegaxus API",
-        Version = "v1",
-        Description = "Racehorse Cross-Border Logistics & Quarantine Management System API"
-    });
-});
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".keys")))
+    .SetApplicationName("Pegaxus");
 
-// Configure CORS
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>()
-            ?? new[] { "http://localhost:3000", "http://localhost:5173" };
+// Keep issued access tokens at the 15-minute API contract lifetime in every environment.
+builder.Configuration["JwtOptions:ExpirationMinutes"] = "15";
 
-        policy.WithOrigins(allowedOrigins)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
-    });
-});
+builder.Services.AddApiControllers();
+builder.Services.AddFrontendCors();
+builder.Services.AddHttpContextAccessor();
+builder.Services.AddHttpClient();
+builder.Services.AddHttpClient(CloudinaryService.Service.PreviewHttpClient)
+    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+builder.Services.AddRealtime();
+builder.Services.AddPersistence(builder.Configuration);
+builder.Services.AddJwtServices(builder.Configuration);
+builder.Services.AddGoogleSignIn(builder.Configuration);
+builder.Services.AddSwaggerServices();
+builder.Services.AddRedisCache(builder.Configuration);
+builder.Services.AddErrorHandling();
 
-// Health Checks
-builder.Services.AddHealthChecks();
+builder.Services.AddAuthModule();
+builder.Services.AddAccountsModule();
+builder.Services.AddBookingModule();
+builder.Services.AddInvoicingModule(builder.Configuration);
+builder.Services.AddTransportPlanningModule();
+builder.Services.AddFleetModule();
+builder.Services.AddComplianceModule();
+builder.Services.AddMessagingModule();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment() || app.Environment.IsStaging())
+using (var scope = app.Services.CreateScope())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Pegaxus API v1");
-        c.RoutePrefix = "swagger";
-    });
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    await db.Database.MigrateAsync();
+    await Pegaxus.API.AppDbContextSeedData.SeedAsync(db);
 }
 
-app.UseHttpsRedirection();
+app.UseSwaggerAPI();
 
-app.UseCors("AllowFrontend");
+app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
 
+app.UseCors("Frontend");
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Equals("/api/v1/auth/google/callback", StringComparison.OrdinalIgnoreCase))
+    {
+        var logger = context.RequestServices
+            .GetRequiredService<ILoggerFactory>()
+            .CreateLogger("GoogleAuthentication");
+        logger.LogInformation(
+            "Google OAuth callback received. HasState={HasState}, CorrelationCookies={CorrelationCookies}",
+            context.Request.Query.ContainsKey("state"),
+            string.Join(", ", context.Request.Cookies.Keys
+                .Where(key => key.StartsWith("pegaxus.google.correlation", StringComparison.Ordinal))));
+    }
+
+    await next();
+});
+app.UseAuthentication();
 app.UseAuthorization();
 
-app.MapHealthChecks("/health");
-
+app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
+    .WithSummary("Check deployment health.")
+    .WithDescription("Reports application availability as JSON with status = healthy. Does not check databases or external services.");
 app.MapControllers();
+app.MapHub<NotificationHub>("/hubs/notifications");
+app.MapHub<ComplianceDossierHub>("/hubs/compliance-dossiers",
+    options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();
