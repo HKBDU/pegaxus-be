@@ -20,13 +20,14 @@ public class InvoiceOnlinePaymentTests
         internal string? ReceiptCode;
         internal decimal Amount;
         internal string? Currency;
+        internal Guid? BookingId;
         internal string PaymentUrl = "https://gateway.example/pay/test";
         internal Exception? Failure;
         internal Func<CancellationToken, Task<string>>? OnCreate;
         public async Task<Pegaxus.Service.PaymentGatewayService.Checkout> CreateCheckoutAsync(Guid invoiceId, string code,
-            decimal amount, string currency, CancellationToken token = default)
+            decimal amount, string currency, Guid? bookingId = null, CancellationToken token = default)
         {
-            Calls++; ReceiptCode = code; Amount = amount; Currency = currency;
+            Calls++; ReceiptCode = code; Amount = amount; Currency = currency; BookingId = bookingId;
             if (Failure is not null) throw Failure;
             var url = OnCreate is null ? PaymentUrl : await OnCreate(token);
             return new(url, new Dictionary<string, string>
@@ -89,6 +90,7 @@ public class InvoiceOnlinePaymentTests
         Assert.Matches("^RCP-20261110-[0-9]{4}$", result.Receipt.ReceiptCode);
         Assert.Equal(receipt.ReceiptCode, gateway.ReceiptCode); Assert.Equal(123.45m, gateway.Amount); Assert.Equal(currency, gateway.Currency);
         Assert.Equal(gateway.PaymentUrl, result.PaymentUrl); Assert.Equal(1, gateway.Calls);
+        Assert.Equal(invoice.BookingId, gateway.BookingId);
         Assert.Null(result.Receipt.TransactionReference); Assert.Null(result.Receipt.PaidAt);
         Assert.Null(result.Receipt.ConfirmedAt); Assert.Null(result.Receipt.RecordedBy); Assert.Null(result.Receipt.Note);
         Assert.Equal(status, invoice.Status); Assert.Null(invoice.PaidAt); Assert.Equal(Now.AddDays(-5), invoice.UpdatedAt);

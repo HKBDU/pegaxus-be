@@ -42,6 +42,20 @@ public class SePayCheckoutTests
         finally { CultureInfo.CurrentCulture = culture; }
     }
 
+    [Fact]
+    public async Task BookingPlaceholder_IsReplaced_AndRequiresTheBooking()
+    {
+        var settings = Settings();
+        settings.InvoiceDetailsUrlTemplate = "https://customer.example/bookings/{bookingId}/invoices/{invoiceId}";
+        var bookingId = Guid.Parse("66666666-7777-8888-9999-000000000000");
+        var service = new SePay.Service(Options.Create(settings));
+        var checkout = await service.CreateCheckoutAsync(InvoiceId, "RCP-20261110-0001", 100000m, "VND", bookingId);
+        foreach (var field in new[] { "success_url", "error_url", "cancel_url" })
+            Assert.Equal($"https://customer.example/bookings/{bookingId}/invoices/{InvoiceId}", checkout.Fields[field]);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            service.CreateCheckoutAsync(InvoiceId, "RCP-20261110-0001", 100000m, "VND"));
+    }
+
     [Theory]
     [InlineData("EUR")]
     [InlineData("USD")]

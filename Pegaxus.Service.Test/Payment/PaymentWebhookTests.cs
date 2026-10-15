@@ -107,7 +107,6 @@ public class PaymentWebhookTests
         payload.Transaction!.PaymentMethod = "CARD";
         await service.HandleWebhookAsync(payload, Secret);
         await service.HandleWebhookAsync(payload, Secret);
-        await service.HandleWebhookAsync(Payload(receipt, "TRANSACTION_VOID"), Secret);
         Assert.Equal(ReceiptStatus.CONFIRMED, receipt.Status);
         Assert.Equal(PaymentMethod.OTHER, receipt.PaymentMethod);
         Assert.Equal(payload.Transaction.Reference, receipt.TransactionReference);
@@ -131,6 +130,14 @@ public class PaymentWebhookTests
             Assert.Null(plan.ApprovedByEmployeeId);
             Assert.Equal(type == InvoiceType.DEPOSIT ? Now : (DateTime?)null, plan.ApprovedAt);
         }
+
+        // A void after confirmation leaves the invoice PAID and asks a Logistics Manager to reconcile it, once.
+        await service.HandleWebhookAsync(Payload(receipt, "TRANSACTION_VOID"), Secret);
+        await service.HandleWebhookAsync(Payload(receipt, "TRANSACTION_VOID"), Secret);
+        Assert.Equal(ReceiptStatus.CONFIRMED, receipt.Status); Assert.Equal(InvoiceStatus.PAID, receipt.Invoice.Status);
+        var flagged = await db.Notifications.SingleAsync(x => x.Title == "Payment needs reconciliation");
+        Assert.Equal(NotificationPriority.URGENT, flagged.Priority); Assert.Contains(receipt.ReceiptCode, flagged.Message);
+        Assert.Equal(2, await db.Notifications.CountAsync()); Assert.Equal(2, await db.OutboxMessages.CountAsync());
     }
 
     [Theory]
@@ -220,18 +227,45 @@ public class PaymentWebhookTests
         Assert.Empty(db.InvoiceStatusHistories); Assert.Empty(db.Notifications); Assert.Empty(db.OutboxMessages);
     }
 
-    [Theory]
-    [InlineData(InvoiceStatus.PAID, ReceiptStatus.PENDING)]
-    [InlineData(InvoiceStatus.CANCELLED, ReceiptStatus.PENDING)]
-    [InlineData(InvoiceStatus.ISSUED, ReceiptStatus.FAILED)]
-    [InlineData(InvoiceStatus.ISSUED, ReceiptStatus.REFUNDED)]
-    public async Task LatePayment_AcknowledgesWithoutEffects(InvoiceStatus status, ReceiptStatus receiptStatus)
+    [Fact]
+    public async Task RefundedReceipt_IsAcknowledgedWithoutEffects()
     {
         await using var db = TestSupport.CreateDb();
-        var receipt = await SeedAsync(db, status: status); receipt.Status = receiptStatus; await db.SaveChangesAsync();
+        var receipt = await SeedAsync(db); receipt.Status = ReceiptStatus.REFUNDED; await db.SaveChangesAsync();
         await CreateService(db).HandleWebhookAsync(Payload(receipt), Secret);
-        Assert.Equal(receiptStatus, receipt.Status); Assert.Equal(status, receipt.Invoice.Status);
+        Assert.Equal(ReceiptStatus.REFUNDED, receipt.Status); Assert.Equal(InvoiceStatus.ISSUED, receipt.Invoice.Status);
         Assert.Empty(db.InvoiceStatusHistories); Assert.Empty(db.Notifications); Assert.Empty(db.OutboxMessages);
+    }
+
+    [Theory]
+    [InlineData(InvoiceStatus.PAID)]
+    [InlineData(InvoiceStatus.CANCELLED)]
+    public async Task PaymentForClosedInvoice_IsAcknowledged_AndFlaggedForReconciliationOnce(InvoiceStatus status)
+    {
+        await using var db = TestSupport.CreateDb();
+        var receipt = await SeedAsync(db, status: status);
+        var service = CreateService(db);
+        await service.HandleWebhookAsync(Payload(receipt), Secret);
+        await service.HandleWebhookAsync(Payload(receipt), Secret);
+        Assert.Equal(ReceiptStatus.PENDING, receipt.Status); Assert.Equal(status, receipt.Invoice.Status);
+        Assert.Empty(db.InvoiceStatusHistories);
+        var flagged = Assert.Single(db.Notifications);
+        Assert.Equal("Payment needs reconciliation", flagged.Title); Assert.Equal(NotificationPriority.URGENT, flagged.Priority);
+        Assert.Equal(receipt.ReceiptId, flagged.ReferenceId); Assert.Contains(receipt.ReceiptCode, flagged.Message);
+        var manager = await db.Accounts.SingleAsync(x => x.AccountType == AccountType.EMPLOYEE);
+        Assert.Equal(manager.AccountId, Assert.Single(db.AccountNotifications).AccountId);
+        Assert.Equal(manager.Email, OutboxQueue.Deserialize<EmailPayload>(Assert.Single(db.OutboxMessages).Payload).To);
+    }
+
+    [Fact]
+    public async Task ReceiptReplacedByNewerCheckout_IsConfirmed_WhenTheOldCheckoutIsPaid()
+    {
+        await using var db = TestSupport.CreateDb();
+        var receipt = await SeedAsync(db); receipt.Status = ReceiptStatus.FAILED; await db.SaveChangesAsync();
+        await CreateService(db).HandleWebhookAsync(Payload(receipt), Secret);
+        Assert.Equal(ReceiptStatus.CONFIRMED, receipt.Status); Assert.Equal(InvoiceStatus.PAID, receipt.Invoice.Status);
+        Assert.Single(db.InvoiceStatusHistories);
+        Assert.Equal("Payment confirmed", Assert.Single(db.Notifications).Title);
     }
 
     [Theory]

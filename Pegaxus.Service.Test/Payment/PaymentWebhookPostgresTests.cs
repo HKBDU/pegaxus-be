@@ -65,7 +65,7 @@ public class PaymentWebhookPostgresTests : IAsyncLifetime
             };
             db.Receipts.Add(second); await db.SaveChangesAsync();
         }
-        await Race(first, second, expectedConfirmed: 1);
+        await Race(first, second, expectedConfirmed: 1, expectedFlagged: 1);
     }
 
     [PostgresFact]
@@ -95,7 +95,7 @@ public class PaymentWebhookPostgresTests : IAsyncLifetime
         Assert.Empty(await verify.AccountNotifications.ToListAsync()); Assert.Empty(await verify.OutboxMessages.ToListAsync());
     }
 
-    private async Task Race(Receipt firstReceipt, Receipt secondReceipt, int expectedConfirmed)
+    private async Task Race(Receipt firstReceipt, Receipt secondReceipt, int expectedConfirmed, int expectedFlagged = 0)
     {
         var gate = new ReceiptReadGate();
         await using var first = CreateDb(gate);
@@ -113,8 +113,9 @@ public class PaymentWebhookPostgresTests : IAsyncLifetime
         await using var verify = CreateDb();
         Assert.Equal(expectedConfirmed, await verify.Receipts.CountAsync(x => x.Status == ReceiptStatus.CONFIRMED));
         Assert.Equal(expectedConfirmed, await verify.InvoiceStatusHistories.CountAsync());
-        Assert.Equal(expectedConfirmed, await verify.Notifications.CountAsync());
-        Assert.Equal(expectedConfirmed, await verify.OutboxMessages.CountAsync(x => x.MessageType == MessageTypes.Email));
+        // A payment for an invoice that another receipt already paid is flagged once for a Logistics Manager.
+        Assert.Equal(expectedConfirmed + expectedFlagged, await verify.Notifications.CountAsync());
+        Assert.Equal(expectedConfirmed + expectedFlagged, await verify.OutboxMessages.CountAsync(x => x.MessageType == MessageTypes.Email));
     }
 
     private AppDbContext CreateDb(DbCommandInterceptor? interceptor = null)
