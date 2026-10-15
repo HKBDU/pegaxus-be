@@ -185,11 +185,16 @@ public class InvoiceOnlinePaymentPostgresTests
 
     private sealed class InvoiceUpdateSignal(TaskCompletionSource started) : DbCommandInterceptor
     {
-        public override ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
+        public override async ValueTask<InterceptionResult<int>> NonQueryExecutingAsync(DbCommand command,
             CommandEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
-            if (command.CommandText.Contains("UPDATE \"Invoice\"")) started.TrySetResult();
-            return ValueTask.FromResult(result);
+            if (command.CommandText.Contains("UPDATE \"Invoice\""))
+            {
+                // Pin the competing transaction's snapshot before the first checkout can commit.
+                await Assert.IsType<AppDbContext>(eventData.Context).Invoices.AnyAsync(cancellationToken);
+                started.TrySetResult();
+            }
+            return result;
         }
     }
     private sealed class EnumTranslator : INpgsqlNameTranslator
