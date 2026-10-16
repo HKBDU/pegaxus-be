@@ -71,6 +71,7 @@ public sealed partial class Service
         CancellationToken cancellationToken = default)
     {
         ValidateDates(request.RequestedDepartureDate, request.RequestedArrivalDate);
+        ValidateCoordinates(request.OriginLatitude, request.OriginLongitude, request.DestinationLatitude, request.DestinationLongitude, required: true);
         if (request.Horses is null || request.Horses.Count == 0)
             throw new BadRequestException("At least one horse is required", "BOOKING_HAS_NO_HORSE");
         if (request.Horses.Select(horse => horse.HorseId).Distinct().Count() != request.Horses.Count)
@@ -106,6 +107,10 @@ public sealed partial class Service
             OriginCountry = request.OriginCountry.Trim(),
             DestinationAddress = request.DestinationAddress.Trim(),
             DestinationCountry = request.DestinationCountry.Trim(),
+            OriginLatitude = request.OriginLatitude,
+            OriginLongitude = request.OriginLongitude,
+            DestinationLatitude = request.DestinationLatitude,
+            DestinationLongitude = request.DestinationLongitude,
             RequestedDepartureDate = request.RequestedDepartureDate,
             RequestedArrivalDate = request.RequestedArrivalDate,
             SpecialRequirements = EmptyToNull(request.SpecialRequirements),
@@ -151,6 +156,7 @@ public sealed partial class Service
                 "The booking was modified. Refresh and try again",
                 "BOOKING_MODIFIED");
 
+        ValidateCoordinates(request.OriginLatitude, request.OriginLongitude, request.DestinationLatitude, request.DestinationLongitude, required: false);
         var departureDate = request.RequestedDepartureDate ?? booking.RequestedDepartureDate;
         var arrivalDate = request.RequestedArrivalDate ?? booking.RequestedArrivalDate;
         ValidateDates(departureDate, arrivalDate);
@@ -166,6 +172,20 @@ public sealed partial class Service
         Set(request.OriginCountry, value => booking.OriginCountry = value, "originCountry", changedFields);
         Set(request.DestinationAddress, value => booking.DestinationAddress = value, "destinationAddress", changedFields);
         Set(request.DestinationCountry, value => booking.DestinationCountry = value, "destinationCountry", changedFields);
+        if (request.OriginLatitude.HasValue && request.OriginLongitude.HasValue)
+        {
+            booking.OriginLatitude = request.OriginLatitude;
+            booking.OriginLongitude = request.OriginLongitude;
+            changedFields.Add("originLatitude");
+            changedFields.Add("originLongitude");
+        }
+        if (request.DestinationLatitude.HasValue && request.DestinationLongitude.HasValue)
+        {
+            booking.DestinationLatitude = request.DestinationLatitude;
+            booking.DestinationLongitude = request.DestinationLongitude;
+            changedFields.Add("destinationLatitude");
+            changedFields.Add("destinationLongitude");
+        }
         if (request.RequestedDepartureDate.HasValue)
         {
             booking.RequestedDepartureDate = request.RequestedDepartureDate.Value;
@@ -393,6 +413,20 @@ public sealed partial class Service
             throw new BadRequestException(
                 "The arrival date cannot be before the departure date",
                 "ARRIVAL_DATE_INVALID");
+    }
+
+    private static void ValidateCoordinates(
+        decimal? originLatitude, decimal? originLongitude, decimal? destinationLatitude, decimal? destinationLongitude, bool required)
+    {
+        if (required && (!originLatitude.HasValue || !originLongitude.HasValue || !destinationLatitude.HasValue || !destinationLongitude.HasValue))
+            throw new BadRequestException("originLatitude, originLongitude, destinationLatitude and destinationLongitude are required");
+        if (originLatitude.HasValue != originLongitude.HasValue)
+            throw new BadRequestException("originLatitude and originLongitude must be sent together");
+        if (destinationLatitude.HasValue != destinationLongitude.HasValue)
+            throw new BadRequestException("destinationLatitude and destinationLongitude must be sent together");
+        if (originLatitude.HasValue && !Coordinates.IsValid(originLatitude.Value, originLongitude!.Value) ||
+            destinationLatitude.HasValue && !Coordinates.IsValid(destinationLatitude.Value, destinationLongitude!.Value))
+            throw new BadRequestException("Latitude/longitude is invalid", "INVALID_COORDINATES");
     }
 
     private static void Set(string? value, Action<string> setter, string field, ICollection<string> changedFields)

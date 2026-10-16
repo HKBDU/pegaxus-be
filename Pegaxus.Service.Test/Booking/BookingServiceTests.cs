@@ -36,13 +36,20 @@ public class BookingServiceTests
         {
             OriginAddress = "Paris",
             OriginCountry = "France",
+            OriginLatitude = 48.8566m,
+            OriginLongitude = 2.3522m,
             DestinationAddress = "Berlin",
             DestinationCountry = "Germany",
+            DestinationLatitude = 52.5200m,
+            DestinationLongitude = 13.4050m,
             RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(21),
             Horses = [new BookingRequest.BookingHorseRequest { HorseId = horse.HorseId }]
         });
 
-        Assert.Equal(result.BookingId, (await db.Bookings.SingleAsync()).BookingId);
+        var created = await db.Bookings.SingleAsync();
+        Assert.Equal(result.BookingId, created.BookingId);
+        Assert.Equal((48.8566m, 2.3522m, 52.5200m, 13.4050m),
+            (created.OriginLatitude, created.OriginLongitude, created.DestinationLatitude, created.DestinationLongitude));
         Assert.Equal(horse.HorseId, (await db.BookingHorses.SingleAsync()).HorseId);
         Assert.Equal(BookingStatus.PENDING, (await db.BookingStatusHistories.SingleAsync()).NewStatus);
         Assert.Equal(manager.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
@@ -266,7 +273,7 @@ public class BookingServiceTests
         Assert.Equal(customer.FullName, result.Customer.FullName);
         Assert.Equal(horse!.HorseId, Assert.Single(result.Horses).HorseId);
         Assert.Null(result.TransportPlan);
-        Assert.Null(result.ComplianceDossier);
+        Assert.Empty(result.ComplianceDossiers);
         Assert.Empty(result.RoutePlans);
     }
 

@@ -178,6 +178,36 @@ public class RouteChangePostgresTests
         Assert.True(Pegaxus.Repository.Extensions.PostgresErrors.IsWriteConflict(error));
     }
 
+    [PostgresFact]
+    public async Task TransportPlan_ResolvesBookingLocationsAndLoadsTheDetailOnPostgres()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        await using var db = scope.Db();
+        var (_, customer) = await TestSupport.AddCustomerAsync(db);
+        var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer, withHorse: true);
+        booking.Status = BookingStatus.APPROVED;
+        (booking.OriginLatitude, booking.OriginLongitude) = (49.1943m, 2.4716m);
+        (booking.DestinationLatitude, booking.DestinationLongitude) = (52.2455m, 0.4062m);
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var nearby = new Location { LocationId = Guid.NewGuid(), LocationName = "Nearby", Country = "France", Latitude = 49.1946m, Longitude = 2.4716m, CreatedAt = now, UpdatedAt = now };
+        db.Locations.Add(nearby);
+        db.Transports.Add(new Transport { TransportId = Guid.NewGuid(), TransportCode = "TR-PG", BookingId = booking.BookingId, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var plans = new Pegaxus.Service.TransportPlanService.Service(db, TestSupport.CreateNotifications(db));
+        var plan = await plans.CreateAsync(manager.AccountId, booking.BookingId,
+            new() { PlannedStartAt = DateTimeOffset.UtcNow.AddDays(21), PlannedEndAt = DateTimeOffset.UtcNow.AddDays(23) });
+
+        Assert.Equal(nearby.LocationId, plan.OriginLocationId);
+        Assert.Equal(LocationType.OTHER.ToString(), plan.DestinationLocation!.LocationType);
+        await using var check = scope.Db();
+        var detail = await new Pegaxus.Service.TransportPlanService.Service(check, TestSupport.CreateNotifications(check))
+            .GetByIdAsync(manager.AccountId, plan.TransportPlanId);
+        Assert.Equal(49.1943m, detail.Booking.OriginLatitude);
+        Assert.Empty(detail.ComplianceDossiers);
+    }
+
     private static async Task CheckOutboxClaimsAsync(DbContextOptions<AppDbContext> options)
     {
         await using var db = new AppDbContext(options);

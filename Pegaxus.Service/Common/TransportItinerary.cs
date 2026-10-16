@@ -30,6 +30,10 @@ public static class TransportItinerary
     public static bool IsReturnPlan(RoutePlan plan) =>
         !IsBackupPlan(plan) && plan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.RETURN);
 
+    /// <summary>BACKUP if any segment is BACKUP, RETURN if the plan is a return plan, otherwise PRIMARY.</summary>
+    public static RouteType PlanType(RoutePlan plan) =>
+        IsBackupPlan(plan) ? RouteType.BACKUP : IsReturnPlan(plan) ? RouteType.RETURN : RouteType.PRIMARY;
+
     /// <summary>Sequence number of the first BACKUP segment of a backup plan; its departure location is the branch point.</summary>
     public static int? BranchSequenceNo(RoutePlan plan)
     {
