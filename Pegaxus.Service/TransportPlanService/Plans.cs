@@ -1,5 +1,4 @@
 using System.Data;
-using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -377,7 +376,7 @@ public sealed partial class Service
             TransportId = booking.Transport.TransportId,
             OriginLocationId = originLocationId,
             DestinationLocationId = destinationLocationId,
-            PlanCode = await GenerateCodeAsync("TP", code =>
+            PlanCode = await CodeGeneration.NextAsync("TP", DateTime.UtcNow, code =>
                 db.TransportPlans.AnyAsync(plan => plan.PlanCode == code, cancellationToken)),
             Status = TransportPlanStatus.DRAFT,
             PlannedStartAt = Truncate(request.PlannedStartAt.UtcDateTime),
@@ -475,14 +474,4 @@ public sealed partial class Service
         };
     }
 
-    private static async Task<string> GenerateCodeAsync(string prefix, Func<string, Task<bool>> exists)
-    {
-        var date = DateTime.UtcNow.ToString("yyyyMMdd");
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            var code = $"{prefix}-{date}-{RandomNumberGenerator.GetInt32(10_000):D4}";
-            if (!await exists(code)) return code;
-        }
-        throw new InvalidOperationException($"Unable to generate a unique {prefix} code");
-    }
 }

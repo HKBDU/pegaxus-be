@@ -25,6 +25,7 @@ public class DocumentRejectionTests
             seed.Requirement.DossierRequirementId, seed.Version.DocumentVersionId, RejectRequest(seed.Version));
         var review = await db.DocumentReviews.SingleAsync();
         var request = await db.DocumentRequests.SingleAsync();
+        Assert.Matches(@"^DREQ-\d{8}-\d{4}$", request.RequestCode);
         Assert.Equal(DocumentReviewResult.REJECTED, review.Result);
         Assert.Equal(seed.Specialist, review.ReviewedByAccountId);
         Assert.Equal(seed.Version.DocumentVersionId, review.DocumentVersionId);

@@ -139,6 +139,7 @@ public class BookingServiceTests
         Assert.Equal(BookingStatus.APPROVED, booking.Status);
         Assert.Equal(TransportStatus.CREATED, result.Transport.Status);
         Assert.Equal(result.Transport.TransportId, (await db.Transports.SingleAsync()).TransportId);
+        Assert.Matches(@"^TR-\d{8}-\d{4}$", (await db.Transports.SingleAsync()).TransportCode);
         Assert.Equal(result.Transport.TransportId, (await db.Notifications.SingleAsync()).TransportId);
         Assert.Equal(1, mailService.Calls);
     }

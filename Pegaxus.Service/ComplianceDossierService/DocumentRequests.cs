@@ -77,7 +77,7 @@ public sealed partial class Service
                 var revision = new DocumentRequest
                 {
                     DocumentRequestId = Guid.NewGuid(), DocumentReviewId = review.DocumentReviewId,
-                    DossierRequirementId = requirementId, RequestedByAccountId = accountId, RequestCode = $"DRQ-{Guid.NewGuid():N}",
+                    DossierRequirementId = requirementId, RequestedByAccountId = accountId, RequestCode = await NextRequestCodeAsync(now, cancellationToken),
                     RequestType = DocumentRequestType.REUPLOAD, Status = DocumentRequestStatus.OPEN, ErrorCategory = request.ErrorCategory.ToString(),
                     Message = note, DueDate = request.RevisionDeadline, RequestedAt = now, CreatedAt = now, UpdatedAt = now
                 };

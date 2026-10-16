@@ -4,6 +4,7 @@ using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -57,7 +58,7 @@ public sealed partial class Service
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         var dossier = new ComplianceDossier
         {
-            ComplianceDossierId = Guid.NewGuid(), DossierCode = $"DOS-{now:yyyyMMdd}-{Guid.NewGuid():N}",
+            ComplianceDossierId = Guid.NewGuid(), DossierCode = await NextDossierCodeAsync(now, cancellationToken),
             TransportId = booking.Transport!.TransportId, DossierTemplateId = request.DossierTemplateId,
             Status = ComplianceDossierStatus.IN_PREPARATION, Note = request.Note?.Trim(),
             OpenedAt = now, CreatedAt = now, UpdatedAt = now

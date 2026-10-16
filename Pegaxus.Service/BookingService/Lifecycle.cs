@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -387,22 +386,11 @@ public sealed partial class Service
             throw new ConflictException("The action is not allowed in the current booking status", "INVALID_BOOKING_STATUS");
     }
 
-    private async Task<string> GenerateBookingCodeAsync(CancellationToken cancellationToken) =>
-        await GenerateCodeAsync("REQ", code => _db.Bookings.AnyAsync(booking => booking.BookingCode == code, cancellationToken));
+    private Task<string> GenerateBookingCodeAsync(CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("REQ", DateTime.UtcNow, code => _db.Bookings.AnyAsync(booking => booking.BookingCode == code, cancellationToken));
 
-    private async Task<string> GenerateTransportCodeAsync(CancellationToken cancellationToken) =>
-        await GenerateCodeAsync("TP", code => _db.Transports.AnyAsync(transport => transport.TransportCode == code, cancellationToken));
-
-    private static async Task<string> GenerateCodeAsync(string prefix, Func<string, Task<bool>> exists)
-    {
-        var date = DateTime.UtcNow.ToString("yyyyMMdd");
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            var code = $"{prefix}-{date}-{RandomNumberGenerator.GetInt32(10_000):D4}";
-            if (!await exists(code)) return code;
-        }
-        throw new InvalidOperationException($"Unable to generate a unique {prefix} code");
-    }
+    private Task<string> GenerateTransportCodeAsync(CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("TR", DateTime.UtcNow, code => _db.Transports.AnyAsync(transport => transport.TransportCode == code, cancellationToken));
 
     private static void ValidateDates(DateOnly departureDate, DateOnly? arrivalDate)
     {
