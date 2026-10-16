@@ -87,6 +87,21 @@ public sealed partial class Service : IComplianceDossierService
         });
     }
 
+    private Task<string> NextDossierCodeAsync(DateTime now, CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("CD", now, async code =>
+            _db.ComplianceDossiers.Local.Any(item => item.DossierCode == code) ||
+            await _db.ComplianceDossiers.AnyAsync(item => item.DossierCode == code, cancellationToken));
+
+    private Task<string> NextDocumentCodeAsync(DateTime now, CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("DOC", now, async code =>
+            _db.ComplianceDocuments.Local.Any(item => item.DocumentCode == code) ||
+            await _db.ComplianceDocuments.AnyAsync(item => item.DocumentCode == code, cancellationToken));
+
+    private Task<string> NextRequestCodeAsync(DateTime now, CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("DREQ", now, async code =>
+            _db.DocumentRequests.Local.Any(item => item.RequestCode == code) ||
+            await _db.DocumentRequests.AnyAsync(item => item.RequestCode == code, cancellationToken));
+
     private async Task NotifyEmployeesAsync(
         ComplianceDossier dossier,
         EmployeeRole[] roles,

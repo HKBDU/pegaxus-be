@@ -1,6 +1,4 @@
 using System.Data;
-using System.Globalization;
-using System.Security.Cryptography;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -203,13 +201,7 @@ public sealed partial class Service
         { throw new ConflictException("The record changed. Reload it and try again.", "CONCURRENT_UPDATE"); }
     }
 
-    private async Task<string> GenerateReceiptCodeAsync(DateTime now, CancellationToken cancellationToken)
-    {
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            var code = $"RCP-{now.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}-{RandomNumberGenerator.GetInt32(10_000):D4}";
-            if (!await db.Receipts.AnyAsync(x => x.ReceiptCode == code, cancellationToken)) return code;
-        }
-        throw new ConflictException("Unable to generate a unique receipt code. Please try again.", "CONCURRENT_UPDATE");
-    }
+    private Task<string> GenerateReceiptCodeAsync(DateTime now, CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("RCP", now, code => db.Receipts.AnyAsync(x => x.ReceiptCode == code, cancellationToken),
+            "CONCURRENT_UPDATE", "Unable to generate a unique receipt code. Please try again.");
 }

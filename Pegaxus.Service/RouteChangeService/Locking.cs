@@ -105,7 +105,8 @@ public sealed partial class Service
         var routeNote = await db.RoutePlans.AsNoTracking().Where(x => x.RoutePlanId == plan.RoutePlanId).Select(x => x.RouteNote).SingleAsync(token);
         var extra = new ComplianceDossier
         {
-            ComplianceDossierId = Guid.NewGuid(), DossierCode = $"DOS-{now:yyyyMMdd}-{Guid.NewGuid():N}",
+            ComplianceDossierId = Guid.NewGuid(), DossierCode = await CodeGeneration.NextAsync("CD", now, async code =>
+                db.ComplianceDossiers.Local.Any(x => x.DossierCode == code) || await db.ComplianceDossiers.AnyAsync(x => x.DossierCode == code, token)),
             TransportId = main.TransportId, DossierType = DossierType.EXTRA, DossierTemplateId = main.DossierTemplateId,
             Status = ComplianceDossierStatus.DRAFT, OpenedAt = now, Note = routeNote, CreatedAt = now, UpdatedAt = now
         };

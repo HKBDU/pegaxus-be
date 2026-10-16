@@ -30,6 +30,7 @@ public class DossierInitializationTests
         Assert.Equal("IN_PREPARATION", result.Status);
         Assert.Equal("MAIN", result.DossierType);
         Assert.Equal(DossierType.MAIN, (await db.ComplianceDossiers.SingleAsync()).DossierType);
+        Assert.Matches(@"^CD-\d{8}-\d{4}$", (await db.ComplianceDossiers.SingleAsync()).DossierCode);
         Assert.Equal(3, result.Requirements.Count);
         Assert.Equal(2, result.Requirements.Count(item => item.HorseId != null));
         Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30), result.Requirements.First().ValidUntil);
