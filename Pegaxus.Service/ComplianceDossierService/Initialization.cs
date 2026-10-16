@@ -82,7 +82,7 @@ public sealed partial class Service
             await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException exception) when (exception.InnerException is PostgresException
-            { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ComplianceDossier_transport_id_key" })
+            { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ComplianceDossier_transport_id_dossier_type_key" })
         {
             throw DossierAlreadyExists();
         }

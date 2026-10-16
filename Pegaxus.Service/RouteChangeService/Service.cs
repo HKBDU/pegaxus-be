@@ -31,10 +31,11 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         EnsureTypeStatus(plan, backup, "BACKUP", RoutePlanStatus.CONFIRMED);
         var primary = await PrimaryAsync(plan, cancellationToken);
         var active = await SegmentsAsync(primary.RoutePlanId, cancellationToken);
-        var range = ReplacementRange(active, backup);
-        if (range.Concat(backup).Any(x => !x.Route.DistanceKm.HasValue || x.Route.DistanceKm < 0))
+        var tail = BackupTail(backup);
+        var range = Replaceable(active);
+        if (range.Concat(tail).Any(x => !x.Route.DistanceKm.HasValue || x.Route.DistanceKm < 0))
             throw new ConflictException("Measured route distances are required for BR-036.", "ROUTE_DATA_INCOMPLETE");
-        var comparison = Compare(active, range, backup, request.NewEstimatedArrivalAt) with {
+        var comparison = Compare(active, range, tail, request.NewEstimatedArrivalAt) with {
             DelayMinutes = (decimal)(request.NewEstimatedArrivalAt - active[^1].PlannedArrivalAt).TotalMinutes };
         if (ApprovalReasons(comparison).Length == 0)
             throw new UnprocessableEntityException("The change is below the approval threshold (BR-036)", "APPROVAL_NOT_REQUIRED");
@@ -60,39 +61,38 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         EnsureInTransit(plan);
         CheckVersion(plan, request.LastUpdatedAt);
         var segments = await SegmentsAsync(routePlanId, cancellationToken);
-        var type = segments.Count > 0 ? segments[0].RouteType : "";
+        var type = PlanTypeOf(segments);
         EnsureTypeStatus(plan, segments, type, type == "BACKUP" ? RoutePlanStatus.CONFIRMED : RoutePlanStatus.DRAFT);
         if (type is not ("BACKUP" or "RETURN")) throw InvalidStatus(plan);
-        var dossier = plan.TransportPlan.Transport.MainDossier;
+        var transport = plan.TransportPlan.Transport;
+        var dossier = transport.MainDossier;
         if (type == "RETURN" && dossier?.Status != ComplianceDossierStatus.APPROVED)
             throw new ConflictException("The compliance dossier must be approved to approve a return route plan", "DOSSIER_NOT_APPROVED");
+        if (type == "RETURN" && request.Decision == "APPROVE" && transport.ExtraDossier is not null)
+            throw new ConflictException("An extra compliance dossier already exists for this transport", "EXTRA_DOSSIER_ALREADY_EXISTS");
         var now = NextVersion(plan);
+        Response.DossierBrief? extraBrief = null;
         if (request.Decision == "APPROVE")
         {
             if (type == "RETURN")
             {
-                dossier!.Status = ComplianceDossierStatus.DRAFT;
-                dossier.ApprovedAt = null;
-                dossier.UpdatedAt = now;
-                db.AuditDossiers.Add(new() { AuditDossierId = Guid.NewGuid(), ComplianceDossierId = dossier.ComplianceDossierId,
-                    ActorAccountId = accountId, ActionType = "RETURN_DOSSIER_REOPENED", TargetEntity = "RoutePlan", TargetId = routePlanId,
-                    Summary = request.Note ?? "Return route approved; dossier reopened for the assigned Transport Specialist.",
-                    Details = JsonSerializer.SerializeToDocument(new { before = "APPROVED", after = "DRAFT" }),
-                    Visibility = AuditVisibility.Internal, CreatedAt = now });
-                await NotifyAssignedAsync(plan, EmployeeRole.TRANSPORT_SPECIALIST, "Return dossier reopened", request.Note, NotificationPriority.HIGH, now, cancellationToken);
+                var extra = await CreateExtraDossierAsync(plan, dossier!, accountId, request.Note, now, cancellationToken);
+                extraBrief = new(extra.Dossier.ComplianceDossierId, extra.Dossier.DossierCode, extra.Dossier.DossierType.ToString(),
+                    extra.Dossier.Status.ToString(), extra.InheritedRequirementCount);
+                await NotifyAssignedAsync(plan, EmployeeRole.TRANSPORT_SPECIALIST, "Extra dossier ready for the return route",
+                    "A supplementary dossier was created for the return route. Add the necessary requirements and review the route plan.",
+                    NotificationPriority.URGENT, now, cancellationToken);
             }
             else
             {
                 var primary = await PrimaryAsync(plan, cancellationToken);
                 var active = await SegmentsAsync(primary.RoutePlanId, cancellationToken);
-                var range = ReplacementRange(active, segments);
-                EnsureUntravelled(range);
-                var effective = active.TakeWhile(x => x.RoutePlanRouteId != range[0].RoutePlanRouteId).Concat(segments)
-                    .Concat(active.SkipWhile(x => x.RoutePlanRouteId != range[^1].RoutePlanRouteId).Skip(1)).ToList();
-                CheckConnections(effective);
-                segments = InheritPersonnel(segments, range);
-                await ValidateResourcesAsync(segments, plan, range, true, cancellationToken);
-                foreach (var segment in segments)
+                var range = Replaceable(active);
+                var tail = BackupTail(segments);
+                CheckConnections(tail);
+                tail = InheritPersonnel(tail, range);
+                await ValidateResourcesAsync(tail, plan, active, true, cancellationToken);
+                foreach (var segment in tail)
                 {
                     var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == segment.RoutePlanRouteId, cancellationToken);
                     row.DriverEmployeeId = segment.Driver?.EmployeeId;
@@ -117,8 +117,9 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
-        return new(routePlanId, type, request.Decision, plan.Status.ToString(),
-            type == "RETURN" ? new(dossier!.ComplianceDossierId, dossier.Status.ToString()) : null, AsUtc(now));
+        var branch = type == "BACKUP" ? segments.FirstOrDefault(x => x.RouteType == "BACKUP") : null;
+        return new(routePlanId, type, request.Decision, plan.Status.ToString(), extraBrief,
+            branch?.SequenceNo, branch?.FromLocation, AsUtc(now));
     }
 
     public async Task<Response.ActivationResult> ActivateReturnAsync(Guid routePlanId, Guid accountId, Request.ActivationRequest request, CancellationToken cancellationToken = default)
@@ -133,13 +134,9 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         EnsureTypeStatus(plan, segments, "RETURN", RoutePlanStatus.CONFIRMED);
         if (plan.TransportPlan.Transport.MainDossier?.Status != ComplianceDossierStatus.APPROVED)
             throw new ConflictException("The reviewed compliance dossier must be approved.", "DOSSIER_NOT_APPROVED");
-        var primary = await PrimaryAsync(plan, cancellationToken);
-        var active = await SegmentsAsync(primary.RoutePlanId, cancellationToken);
-        var alternateIds = await db.RoutePlans.AsNoTracking().Where(x => x.TransportPlanId == plan.TransportPlanId &&
-            x.Status == RoutePlanStatus.ACTIVE && x.RoutePlanId != primary.RoutePlanId)
-            .Select(x => x.RoutePlanId).ToArrayAsync(cancellationToken);
-        foreach (var alternateId in alternateIds) active.AddRange(await SegmentsAsync(alternateId, cancellationToken));
-        active = active.OrderBy(x => x.PlannedDepartureAt).ThenBy(x => x.SequenceNo).ToList();
+        if (plan.TransportPlan.Transport.ExtraDossier?.Status != ComplianceDossierStatus.APPROVED)
+            throw new UnprocessableEntityException("The extra compliance dossier must be approved before the return route can be activated", "RETURN_DOSSIER_NOT_APPROVED");
+        var active = await EffectiveSegmentsAsync(plan, cancellationToken);
         var remaining = active.Where(x => !x.ActualArrivalAt.HasValue).ToList();
         EnsureUntravelled(remaining);
         if (segments[0].FromLocation.LocationId != remaining[0].FromLocation.LocationId ||
@@ -207,15 +204,17 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         return new(routePlanId, "RETURN", "ACTIVE", detail.Segments, AsUtc(now));
     }
 
-    private static List<Response.Segment> ReplacementRange(List<Response.Segment> primary, List<Response.Segment> backup)
+    private static List<Response.Segment> BackupTail(List<Response.Segment> backup)
     {
         if (backup.Count == 0) throw new BadRequestException("Backup itinerary is empty.");
-        var start = primary.FindIndex(x => x.FromLocation.LocationId == backup[0].FromLocation.LocationId);
-        var end = primary.FindLastIndex(x => x.ToLocation.LocationId == backup[^1].ToLocation.LocationId);
-        if (start < 0 || end < start) throw new ConflictException("Backup overlaps an active replacement or is not anchored to PRIMARY.", "BACKUP_RANGE_CONFLICT");
-        var range = primary.GetRange(start, end - start + 1);
-        if (range.Zip(range.Skip(1), (a, b) => a.ToLocation.LocationId == b.FromLocation.LocationId).Any(x => !x))
-            throw new ConflictException("Backup overlaps an active replacement.", "BACKUP_RANGE_CONFLICT");
+        var branch = backup.Where(x => x.RouteType == "BACKUP").Select(x => x.SequenceNo).DefaultIfEmpty(int.MaxValue).Min();
+        return backup.Where(x => x.SequenceNo >= branch).ToList();
+    }
+
+    private static List<Response.Segment> Replaceable(List<Response.Segment> active)
+    {
+        var range = active.Where(x => !x.ActualDepartureAt.HasValue).ToList();
+        if (range.Count == 0) throw new ConflictException("Only untravelled segments can be replaced.", "SEGMENT_LOCKED");
         return range;
     }
 
@@ -260,8 +259,11 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
 
     private static void EnsureTypeStatus(RoutePlan plan, List<Response.Segment> segments, string type, RoutePlanStatus status)
     {
-        if (plan.Status != status || segments.Count == 0 || segments.Any(x => x.RouteType != type)) throw InvalidStatus(plan);
+        if (plan.Status != status || segments.Count == 0 || PlanTypeOf(segments) != type) throw InvalidStatus(plan);
     }
+
+    private static string PlanTypeOf(List<Response.Segment> segments) =>
+        segments.Any(x => x.RouteType == "BACKUP") ? "BACKUP" : segments.Count > 0 && segments.All(x => x.RouteType == "RETURN") ? "RETURN" : "PRIMARY";
 
     private static ConflictException InvalidStatus(RoutePlan plan) =>
         new($"This action cannot be performed while the route plan is in {plan.Status} status", "INVALID_ROUTE_PLAN_STATUS");

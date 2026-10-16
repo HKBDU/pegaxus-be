@@ -32,7 +32,7 @@ public class RouteChangePostgresTests
             new() { Decision = "APPROVE", LastUpdatedAt = RouteChangeTests.Fixture.Version(backup) });
         Assert.Equal("ACTIVE", result.Status);
         await using var check = scope.Db();
-        Assert.Equal(3, await check.RoutePlanRoutes.CountAsync());
+        Assert.Equal(4, await check.RoutePlanRoutes.CountAsync());
         Assert.Null((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Completed.RoutePlanRouteId)).SupersededAt);
         Assert.NotNull((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Current.RoutePlanRouteId)).SupersededAt);
         Assert.Equal(4, await check.Notifications.CountAsync());

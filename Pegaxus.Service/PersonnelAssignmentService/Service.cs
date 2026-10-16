@@ -164,6 +164,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 var conflict = segments.FirstOrDefault(x => x.RoutePlanRouteId != segment.RoutePlanRouteId && !x.TransportProviderId.HasValue &&
                     (x.DriverEmployeeId == employeeId || x.EscortEmployeeId == employeeId) && x.ActualArrivalAt == null && Overlaps(segment, x));
                 var external = await db.RoutePlanRoutes.AsNoTracking().Where(x => x.RoutePlanId != routePlanId &&
+                    (x.RoutePlan.TransportPlanId != planId || x.RouteType == RouteType.RETURN) &&
                     (x.DriverEmployeeId == employeeId || x.EscortEmployeeId == employeeId) && x.ActualArrivalAt == null &&
                     (x.RoutePlan.Status == RoutePlanStatus.CONFIRMED || x.RoutePlan.Status == RoutePlanStatus.ACTIVE) &&
                     x.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED && x.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED &&

@@ -18,15 +18,10 @@ public static class Response
         public int EstimatedDurationMinutes { get; init; }
         public int SegmentCount { get; init; }
         public bool IsPersonnelComplete { get; init; }
-        public SequenceRangeResponse? ReplacesSequenceNo { get; init; }
+        public int? BranchSequenceNo { get; init; }
+        public LocationResponse? BranchLocation { get; init; }
         public string? RouteNote { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
-    }
-
-    public sealed class SequenceRangeResponse
-    {
-        public int From { get; init; }
-        public int To { get; init; }
     }
 
     public sealed class UpdateResponse
@@ -37,6 +32,8 @@ public static class Response
         public int EstimatedDurationMinutes { get; init; }
         public int SegmentCount { get; init; }
         public bool IsPersonnelComplete { get; init; }
+        public int? BranchSequenceNo { get; init; }
+        public LocationResponse? BranchLocation { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }
 
@@ -64,6 +61,8 @@ public static class Response
         public DateTimeOffset? PlannedArrivalAt { get; init; }
         public required IReadOnlyList<SegmentResponse> Segments { get; init; }
         public bool IsPersonnelComplete { get; init; }
+        public int? BranchSequenceNo { get; init; }
+        public LocationResponse? BranchLocation { get; init; }
         public LegalReviewResponse? LegalReview { get; init; }
         public string? RouteNote { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
@@ -152,9 +151,19 @@ public static class Response
         public Guid RoutePlanId { get; init; }
         public required string Status { get; init; }
         public required LegalReviewResponse LegalReview { get; init; }
+        public DossierResponse? ComplianceDossier { get; init; }
+        public required IReadOnlyList<Guid> ConfirmedBackupRoutePlanIds { get; init; }
         public bool CustomerUploadEnabled { get; init; }
         public bool PersonnelAssignmentPhase2Enabled { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
+    }
+
+    public sealed class DossierResponse
+    {
+        public Guid ComplianceDossierId { get; init; }
+        public required string DossierCode { get; init; }
+        public required string DossierType { get; init; }
+        public required string Status { get; init; }
     }
 
     public sealed class LegalReviewResponse

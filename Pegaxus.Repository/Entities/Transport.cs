@@ -37,6 +37,8 @@ public partial class Transport
 
     public ComplianceDossier? MainDossier => ComplianceDossiers.FirstOrDefault(item => item.DossierType == DossierType.MAIN);
 
+    public ComplianceDossier? ExtraDossier => ComplianceDossiers.FirstOrDefault(item => item.DossierType == DossierType.EXTRA);
+
     public virtual FinancialReport? FinancialReport { get; set; }
 
     public virtual ICollection<HandoverRecord> HandoverRecords { get; set; } = new List<HandoverRecord>();

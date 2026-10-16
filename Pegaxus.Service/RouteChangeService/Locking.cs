@@ -1,10 +1,13 @@
 using System.Data;
+using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
+
+using Pegaxus.Service.Common;
 
 using static Pegaxus.Service.Common.DbTime;
 using static Pegaxus.Service.Common.Validation;
@@ -84,5 +87,43 @@ public sealed partial class Service
     {
         var rows = await SegmentQuery().Where(x => x.RoutePlanId == planId && x.SupersededAt == null).OrderBy(x => x.SequenceNo).ToListAsync(token);
         return rows.Select((x, i) => Segment(x, i + 1 < rows.Count ? rows[i + 1].PlannedDepartureAt : null)).ToList();
+    }
+
+    private async Task<List<Response.Segment>> EffectiveSegmentsAsync(RoutePlan plan, CancellationToken token)
+    {
+        var plans = await db.RoutePlans.AsNoTracking().Include(x => x.RoutePlanRoutes)
+            .Where(x => x.TransportPlanId == plan.TransportPlanId).ToListAsync(token);
+        var ids = TransportItinerary.Effective(plans).Select(x => x.Route.RoutePlanRouteId).ToArray();
+        var rows = await SegmentQuery().Where(x => ids.Contains(x.RoutePlanRouteId)).ToListAsync(token);
+        var ordered = ids.Select(id => rows.Single(x => x.RoutePlanRouteId == id)).ToList();
+        return ordered.Select((x, i) => Segment(x, i + 1 < ordered.Count ? ordered[i + 1].PlannedDepartureAt : null)).ToList();
+    }
+
+    private async Task<(ComplianceDossier Dossier, int InheritedRequirementCount)> CreateExtraDossierAsync(
+        RoutePlan plan, ComplianceDossier main, Guid accountId, string? note, DateTime now, CancellationToken token)
+    {
+        var routeNote = await db.RoutePlans.AsNoTracking().Where(x => x.RoutePlanId == plan.RoutePlanId).Select(x => x.RouteNote).SingleAsync(token);
+        var extra = new ComplianceDossier
+        {
+            ComplianceDossierId = Guid.NewGuid(), DossierCode = $"DOS-{now:yyyyMMdd}-{Guid.NewGuid():N}",
+            TransportId = main.TransportId, DossierType = DossierType.EXTRA, DossierTemplateId = main.DossierTemplateId,
+            Status = ComplianceDossierStatus.DRAFT, OpenedAt = now, Note = routeNote, CreatedAt = now, UpdatedAt = now
+        };
+        var inherited = await db.DossierRequirements.AsNoTracking()
+            .Where(x => x.ComplianceDossierId == main.ComplianceDossierId && !x.IsDeleted).ToListAsync(token);
+        foreach (var item in inherited)
+            extra.DossierRequirements.Add(new DossierRequirement
+            {
+                DossierRequirementId = Guid.NewGuid(), ComplianceRequirementId = item.ComplianceRequirementId, HorseId = item.HorseId,
+                IsMandatory = item.IsMandatory, Instruction = item.Instruction, ValidUntil = item.ValidUntil,
+                Status = DossierRequirementStatus.PENDING, CreatedAt = now, UpdatedAt = now
+            });
+        db.ComplianceDossiers.Add(extra);
+        db.AuditDossiers.Add(new() { AuditDossierId = Guid.NewGuid(), ComplianceDossierId = extra.ComplianceDossierId,
+            ActorAccountId = accountId, ActionType = "EXTRA_DOSSIER_CREATED", TargetEntity = "RoutePlan", TargetId = plan.RoutePlanId,
+            Summary = note ?? "Return route approved; an extra compliance dossier was created.",
+            Details = JsonSerializer.SerializeToDocument(new { dossierType = "EXTRA", inheritedRequirementCount = inherited.Count }),
+            Visibility = AuditVisibility.Internal, CreatedAt = now });
+        return (extra, inherited.Count);
     }
 }
