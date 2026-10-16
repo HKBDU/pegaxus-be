@@ -17,7 +17,7 @@ namespace Pegaxus.Service.Test;
 public class RouteChangeTests
 {
     [Fact]
-    public async Task Backup_SummaryReportsPrimaryReplacementSequence_NotBackupSequence()
+    public async Task Backup_SummaryReportsTheBranchPoint_AndNoReplacementRange()
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db);
@@ -25,12 +25,14 @@ public class RouteChangeTests
         db.ChangeTracker.Clear();
         var result = await TestSupport.CreateRoutePlans(db).GetListAsync(f.Manager.AccountId, f.Plan.TransportPlanId, new());
         var summary = Assert.Single(result.Items, item => item.RoutePlanId == backup.RoutePlanId);
-        Assert.Equal(2, summary.ReplacesSequenceNo!.From);
-        Assert.Equal(2, summary.ReplacesSequenceNo.To);
+        Assert.Equal("BACKUP", summary.RouteType);
+        Assert.Equal(2, summary.BranchSequenceNo);
+        Assert.Equal(f.Start.LocationId, summary.BranchLocation!.LocationId);
+        Assert.Null(Assert.Single(result.Items, item => item.RoutePlanId == f.Plan.RoutePlanId).BranchSequenceNo);
     }
 
     [Fact]
-    public async Task Return_ApprovedDraftCannotBeCancelled_LeavesReopenedDossierIntact()
+    public async Task Return_ApprovedDraftCannotBeCancelled_LeavesBothDossiersIntact()
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db);
@@ -41,7 +43,8 @@ public class RouteChangeTests
             f.Coordinator.AccountId, returning.RoutePlanId, new() { LastUpdatedAt = decision.UpdatedAt, Reason = "Cancel return itinerary" }));
         Assert.Equal("RETURN_ALREADY_APPROVED", error.ErrorCode);
         Assert.Equal(RoutePlanStatus.DRAFT, returning.Status);
-        Assert.Equal(ComplianceDossierStatus.DRAFT, f.Transport.ComplianceDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.DRAFT, f.Transport.ExtraDossier!.Status);
     }
 
     [Fact]
@@ -53,7 +56,7 @@ public class RouteChangeTests
         var result = await TestSupport.CreateRoutePlans(db).CancelAsync(f.Coordinator.AccountId, returning.RoutePlanId,
             new() { LastUpdatedAt = Fixture.Version(returning), Reason = "Cancel return itinerary" });
         Assert.Equal("CANCELLED", result.Status);
-        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
     }
 
     [Fact]
@@ -132,7 +135,7 @@ public class RouteChangeTests
             var notification = Assert.Single(db.Notifications);
             Assert.Equal(NotificationPriority.URGENT, notification.Priority); Assert.Equal("RoutePlan", notification.ReferenceType);
             Assert.Equal(backup.RoutePlanId, notification.ReferenceId);
-            Assert.Contains("1800 EUR", notification.Message);
+            Assert.Contains("1,800 VND", notification.Message);
             Assert.Contains(FormattableString.Invariant($"ETA: {f.Proposal(delay).NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC"), notification.Message);
         }
         else
@@ -154,17 +157,17 @@ public class RouteChangeTests
             LocationType = rest ? LocationType.REST_STOP : LocationType.BORDER_GATE };
         var first = f.NewRoute(f.Start, middle, 50);
         var second = f.NewRoute(middle, f.End, 50);
-        var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanId == backup.RoutePlanId);
+        var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanId == backup.RoutePlanId && x.RouteType == RouteType.BACKUP);
         row.Route = first; row.RouteId = first.RouteId; row.PlannedArrivalAt = Fixture.StartAt.AddHours(1).UtcDateTime;
         db.Add(new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlanId = backup.RoutePlanId, Route = second,
-            SequenceNo = 2, RouteType = RouteType.BACKUP, PlannedDepartureAt = Fixture.StartAt.AddHours(rest ? 25 : 1).UtcDateTime,
+            SequenceNo = 3, RouteType = RouteType.BACKUP, PlannedDepartureAt = Fixture.StartAt.AddHours(rest ? 25 : 1).UtcDateTime,
             PlannedArrivalAt = Fixture.StartAt.AddHours(rest ? 26 : 2).UtcDateTime });
         await db.SaveChangesAsync();
         Assert.Equal("CONFIRMED", (await f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal(0))).Status);
     }
 
     [Fact]
-    public async Task Backup_ApprovePreservesPrimaryHistory_ReplacesOnlyAnchoredRange_RejectsOverlappingBackup()
+    public async Task Backup_ApproveKeepsDepartedPrimarySegments_SupersedesTheRest_AndRejectsASecondBackup()
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db);
@@ -173,6 +176,9 @@ public class RouteChangeTests
         var suffix = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = f.Plan, Route = suffixRoute,
             SequenceNo = 3, PlannedDepartureAt = Fixture.StartAt.AddHours(3).UtcDateTime, PlannedArrivalAt = Fixture.StartAt.AddHours(4).UtcDateTime };
         db.Add(suffix);
+        db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = suffix.RoutePlanRouteId,
+            VehicleId = await db.Vehicles.Select(x => x.VehicleId).SingleAsync(), AssignedAt = DateTime.SpecifyKind(Fixture.StartAt.UtcDateTime, DateTimeKind.Unspecified) });
+        await db.SaveChangesAsync();
         var backup = await f.AlternateAsync();
         var overlap = await f.AlternateAsync();
         // A second confirmed fallback uses a different vehicle; only active alternatives reserve the replacement range.
@@ -181,13 +187,14 @@ public class RouteChangeTests
         var result = await f.Service.DecideAsync(backup.RoutePlanId, f.Manager.AccountId,
             new() { Decision = "APPROVE", LastUpdatedAt = Fixture.Version(backup) });
         Assert.Equal("ACTIVE", result.Status); Assert.Null(result.ComplianceDossier);
+        Assert.Equal((2, f.Start.LocationId), (result.BranchSequenceNo, result.BranchLocation!.LocationId));
         Assert.Equal(RoutePlanStatus.ACTIVE, f.Plan.Status);
-        Assert.Null(f.Completed.SupersededAt); Assert.Null(suffix.SupersededAt); Assert.NotNull(f.Current.SupersededAt);
+        Assert.Null(f.Completed.SupersededAt); Assert.NotNull(suffix.SupersededAt); Assert.NotNull(f.Current.SupersededAt);
         var detail = await TestSupport.CreateRoutePlans(db).GetByIdAsync(f.Manager.AccountId, f.Plan.RoutePlanId);
         Assert.Equal(new[] { f.Completed.RouteId, f.Alternative.RouteId, suffix.RouteId }, detail.Segments.Select(x => x.Route.RouteId));
         Assert.Equal(f.Driver.EmployeeId, detail.Segments[1].Driver!.EmployeeId);
         Assert.Equal(205m, detail.TotalDistanceKm); Assert.Equal(420, detail.EstimatedDurationMinutes);
-        Assert.Equal("BACKUP_RANGE_CONFLICT", (await Assert.ThrowsAsync<ConflictException>(() =>
+        Assert.Equal("SEGMENT_LOCKED", (await Assert.ThrowsAsync<ConflictException>(() =>
             f.Service.DecideAsync(overlap.RoutePlanId, f.Manager.AccountId, new() { Decision = "APPROVE", LastUpdatedAt = Fixture.Version(overlap) }))).ErrorCode);
         Assert.Equal(3, await db.Notifications.CountAsync());
         Assert.DoesNotContain(await db.AccountNotifications.ToListAsync(), x => x.AccountId ==
@@ -205,14 +212,14 @@ public class RouteChangeTests
         var result = await f.Service.DecideAsync(plan.RoutePlanId, f.Manager.AccountId, new() {
             Decision = "REJECT", LastUpdatedAt = Fixture.Version(plan), Note = "Choose a safer itinerary" });
         Assert.Equal(type == RouteType.BACKUP ? "CONFIRMED" : "CANCELLED", result.Status);
-        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
         if (type == RouteType.RETURN) Assert.Equal("Choose a safer itinerary", plan.RouteNote);
         Assert.Equal(f.Coordinator.AccountId, Assert.Single(db.AccountNotifications).AccountId);
         Assert.Null(f.Current.SupersededAt);
     }
 
     [Fact]
-    public async Task Return_Lifecycle_ReopensDossier_RequiresTsReview_ActivatesOwnInUseVehicle_NotifiesDrivers()
+    public async Task Return_Lifecycle_CreatesExtraDossier_RequiresTsReview_AndApprovedExtra_ActivatesOwnInUseVehicle_NotifiesDrivers()
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db); var plan = await f.AlternateAsync(RouteType.RETURN);
@@ -221,15 +228,25 @@ public class RouteChangeTests
             new() { LastUpdatedAt = Fixture.Version(plan) }));
         var decision = await f.Service.DecideAsync(plan.RoutePlanId, f.Manager.AccountId,
             new() { Decision = "APPROVE", LastUpdatedAt = Fixture.Version(plan) });
-        Assert.Equal("DRAFT", decision.Status); Assert.Equal("DRAFT", decision.ComplianceDossier!.Status);
+        Assert.Equal("DRAFT", decision.Status);
+        Assert.Equal(("EXTRA", "DRAFT"), (decision.ComplianceDossier!.DossierType, decision.ComplianceDossier.Status));
+        Assert.Equal(0, decision.ComplianceDossier.InheritedRequirementCount);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
         Assert.Single(db.AuditDossiers); Assert.Equal(2, await db.Notifications.CountAsync());
         var specialist = await db.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST);
         var reviewed = await TestSupport.CreateRoutePlans(db).ReviewLegalAsync(specialist.AccountId, plan.RoutePlanId,
             new() { LastUpdatedAt = decision.UpdatedAt, IsFeasible = true });
-        Assert.Equal("CONFIRMED", reviewed.Status); Assert.False(reviewed.CustomerUploadEnabled);
+        Assert.Equal("CONFIRMED", reviewed.Status); Assert.True(reviewed.CustomerUploadEnabled);
         Assert.False(reviewed.PersonnelAssignmentPhase2Enabled);
-        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier!.Status);
+        Assert.Equal(("EXTRA", "IN_PREPARATION"), (reviewed.ComplianceDossier!.DossierType, reviewed.ComplianceDossier.Status));
+        Assert.Empty(reviewed.ConfirmedBackupRoutePlanIds);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.IN_PREPARATION, f.Transport.ExtraDossier!.Status);
         Assert.Equal(TransportStatus.IN_TRANSIT, f.Transport.Status);
+        var blocked = await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.ActivateReturnAsync(plan.RoutePlanId, f.Manager.AccountId,
+            new() { LastUpdatedAt = reviewed.UpdatedAt }));
+        Assert.Equal("RETURN_DOSSIER_NOT_APPROVED", blocked.ErrorCode);
+        f.Transport.ExtraDossier!.Status = ComplianceDossierStatus.APPROVED; await db.SaveChangesAsync();
         var vehicle = await db.Vehicles.SingleAsync(); vehicle.Status = VehicleStatus.IN_USE; await db.SaveChangesAsync();
         var result = await f.Service.ActivateReturnAsync(plan.RoutePlanId, f.Manager.AccountId, new() {
             LastUpdatedAt = reviewed.UpdatedAt, Segments = [new() { RoutePlanRouteId = row.RoutePlanRouteId, VehicleIds = [vehicle.VehicleId] }] });
@@ -265,7 +282,7 @@ public class RouteChangeTests
             Segments = [new() { SequenceNo = 1, RouteId = back.RouteId,
                 PlannedDepartureAt = Fixture.StartAt, PlannedArrivalAt = Fixture.StartAt.AddHours(2) }] });
         Assert.Equal("DRAFT", draft.Status);
-        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
         var specialist = await db.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST);
         Assert.DoesNotContain(await db.AccountNotifications.ToArrayAsync(), x => x.AccountId == specialist.AccountId);
         var change = new Pegaxus.Service.RoutePlanService.Request.UpdateRequest {
@@ -281,10 +298,11 @@ public class RouteChangeTests
         var updated = await routes.UpdateAsync(f.Coordinator.AccountId, draft.RoutePlanId, change);
         Assert.Equal("DRAFT", updated.Status); Assert.True(updated.UpdatedAt > approved.UpdatedAt);
         Assert.Contains(await db.Notifications.ToListAsync(), notification =>
-            notification.Title == "Route plan waiting for legal review" && notification.Priority == NotificationPriority.HIGH);
+            notification.Title == "Route plan needs another legal review" && notification.Priority == NotificationPriority.HIGH);
         await routes.ReviewLegalAsync(specialist.AccountId, draft.RoutePlanId,
             new() { LastUpdatedAt = updated.UpdatedAt, IsFeasible = true });
-        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier.Status);
+        Assert.Equal(ComplianceDossierStatus.IN_PREPARATION, f.Transport.ExtraDossier!.Status);
     }
 
     [Theory]
@@ -294,6 +312,7 @@ public class RouteChangeTests
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db); var plan = await f.AlternateAsync(RouteType.RETURN, RoutePlanStatus.CONFIRMED);
+        await f.AddExtraAsync();
         var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanId == plan.RoutePlanId);
         if (unmeasured) row.Route.DistanceKm = null;
         var provider = new TransportProvider { TransportProviderId = Guid.NewGuid(), ProviderCode = "P1", ProviderName = "Provider",
@@ -322,6 +341,7 @@ public class RouteChangeTests
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db); var plan = await f.AlternateAsync(RouteType.RETURN, RoutePlanStatus.CONFIRMED);
+        await f.AddExtraAsync();
         var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanId == plan.RoutePlanId);
         var vehicle = await db.Vehicles.SingleAsync();
         var change = new Request.SegmentRequest { RoutePlanRouteId = row.RoutePlanRouteId, VehicleIds = [vehicle.VehicleId] };
@@ -448,22 +468,41 @@ public class RouteChangeTests
                 PrimaryRoutePlanId = Plan.RoutePlanId, RoutePlanCode = type + "-" + Guid.NewGuid().ToString("N"),
                 Status = status ?? (type == RouteType.RETURN ? RoutePlanStatus.DRAFT : RoutePlanStatus.CONFIRMED),
                 CreatedAt = DbTime(StartAt), UpdatedAt = DbTime(StartAt), RouteNote = "Emergency route planning" };
-            var route = type == RouteType.RETURN ? NewRoute(Start, Origin, 70) : Alternative;
-            var row = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = plan, Route = route, SequenceNo = 1,
-                RouteType = type, PlannedDepartureAt = DbTime(StartAt), PlannedArrivalAt = DbTime(StartAt.AddHours(2)) };
-            db.Add(row);
-            if (type == RouteType.BACKUP)
+            if (type == RouteType.RETURN)
             {
-                var vehicleId = await db.RoutePlanRouteVehicles.Where(x => x.RoutePlanRouteId == Current.RoutePlanRouteId).Select(x => x.VehicleId).SingleAsync();
-                db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = row.RoutePlanRouteId, VehicleId = vehicleId, AssignedAt = DbTime(StartAt) });
+                db.Add(new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = plan, Route = NewRoute(Start, Origin, 70), SequenceNo = 1,
+                    RouteType = type, PlannedDepartureAt = DbTime(StartAt), PlannedArrivalAt = DbTime(StartAt.AddHours(2)) });
+            }
+            else
+            {
+                var primary = await db.RoutePlanRoutes.Include(x => x.Route).Include(x => x.RoutePlanRouteVehicles)
+                    .Where(x => x.RoutePlanId == Plan.RoutePlanId).OrderBy(x => x.SequenceNo).ToListAsync();
+                foreach (var source in primary)
+                {
+                    var isDetour = source.RoutePlanRouteId == Current.RoutePlanRouteId;
+                    var row = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = plan, Route = isDetour ? Alternative : source.Route,
+                        SequenceNo = source.SequenceNo, RouteType = isDetour ? RouteType.BACKUP : RouteType.PRIMARY,
+                        PlannedDepartureAt = source.PlannedDepartureAt, PlannedArrivalAt = source.PlannedArrivalAt };
+                    db.Add(row);
+                    foreach (var vehicle in source.RoutePlanRouteVehicles)
+                        db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = row.RoutePlanRouteId, VehicleId = vehicle.VehicleId, AssignedAt = DbTime(StartAt) });
+                }
             }
             await db.SaveChangesAsync();
             return plan;
         }
+        internal async Task<ComplianceDossier> AddExtraAsync(ComplianceDossierStatus status = ComplianceDossierStatus.APPROVED)
+        {
+            var extra = new ComplianceDossier { ComplianceDossierId = Guid.NewGuid(), TransportId = Transport.TransportId, DossierCode = "CD-EXTRA",
+                DossierType = DossierType.EXTRA, Status = status, CreatedAt = DbTime(StartAt), UpdatedAt = DbTime(StartAt) };
+            db.Add(extra);
+            await db.SaveChangesAsync();
+            return extra;
+        }
         internal Request.CreateRequest Proposal(int delay = 60) => new()
         {
             Reason = "Road blocked by severe weather", NewEstimatedArrivalAt = StartAt.AddHours(2).AddMinutes(delay),
-            EstimatedExtraCost = 1800, Currency = "EUR"
+            EstimatedExtraCost = 1800
         };
         private static DateTime DbTime(DateTimeOffset value) => DateTime.SpecifyKind(value.UtcDateTime, DateTimeKind.Unspecified);
         internal sealed class FixedClock : TimeProvider { public override DateTimeOffset GetUtcNow() => StartAt.AddHours(-1); }

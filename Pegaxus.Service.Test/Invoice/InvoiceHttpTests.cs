@@ -87,13 +87,13 @@ public class InvoiceHttpTests
         var preview = (await suggestion.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
         Assert.False(preview.GetProperty("isPaymentRequired").GetBoolean());
         Assert.Equal(0, preview.GetProperty("items").GetArrayLength());
-        request.Items = [InvoiceTests.Fixture.Item(0, 1)];
+        request.Items = [InvoiceTests.Fixture.Item(0, 5)];
         var invalid = await client.PostAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
         var error = await invalid.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("VALIDATION_ERROR", error.GetProperty("errorCode").GetString());
         Assert.Equal("items[0].quantity", error.GetProperty("errors")[0].GetProperty("field").GetString());
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, new { type = "QUOTATION", currency = "VND", dueDate = "bad", items = Array.Empty<object>() })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, new { type = "QUOTATION", dueDate = "bad", items = Array.Empty<object>() })).StatusCode);
         request.Items[0].Quantity = 1;
         request.Items[0].HorseId = f.Horse.HorseId;
         var created = await client.PostAsJsonAsync(path, request);
@@ -107,7 +107,7 @@ public class InvoiceHttpTests
         Assert.False(value.GetProperty("isPaymentRequired").GetBoolean());
         Assert.Equal("2026-10-12", value.GetProperty("dueDate").GetString());
         Assert.Equal(f.Horse.HorseId, value.GetProperty("items")[0].GetProperty("horse").GetProperty("horseId").GetGuid());
-        Assert.Equal(1.2m, value.GetProperty("summary").GetProperty("grandTotal").GetDecimal());
+        Assert.Equal("6", value.GetProperty("summary").GetProperty("grandTotal").GetRawText());
         foreach (var field in new[] { "payment", "issuedAt", "paidAt", "cancelledAt", "cancellationReason" })
             Assert.Equal(JsonValueKind.Null, value.GetProperty(field).ValueKind);
         Assert.Equal(4, value.GetProperty("availableActions").GetArrayLength());
@@ -118,7 +118,7 @@ public class InvoiceHttpTests
         item.Quantity = 2;
         var updateRequest = new Request.UpdateRequest
         {
-            LastUpdatedAt = value.GetProperty("updatedAt").GetDateTimeOffset(), Currency = request.Currency,
+            LastUpdatedAt = value.GetProperty("updatedAt").GetDateTimeOffset(),
             DueDate = request.DueDate, Items = [item]
         };
         var updated = await client.PutAsJsonAsync($"/api/v1/invoices/{invoiceId}", updateRequest);
@@ -126,7 +126,7 @@ public class InvoiceHttpTests
         var edited = (await updated.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
         Assert.Equal(invoiceId, edited.GetProperty("invoiceId").GetGuid());
         Assert.Equal(item.InvoiceItemId, edited.GetProperty("items")[0].GetProperty("invoiceItemId").GetGuid());
-        Assert.Equal(2.4m, edited.GetProperty("summary").GetProperty("grandTotal").GetDecimal());
+        Assert.Equal("12", edited.GetProperty("summary").GetProperty("grandTotal").GetRawText());
         Assert.True(edited.GetProperty("updatedAt").GetDateTimeOffset() > updateRequest.LastUpdatedAt);
         Assert.Single(await db.InvoiceStatusHistories.ToListAsync());
         var historyPath = $"/api/v1/invoices/{invoiceId}/status-history";
@@ -141,20 +141,20 @@ public class InvoiceHttpTests
         Assert.Equal(1, list.GetProperty("totalItems").GetInt32());
         Assert.Equal(1, list.GetProperty("items").GetArrayLength());
         Assert.Equal(invoiceId, list.GetProperty("items")[0].GetProperty("invoiceId").GetGuid());
-        Assert.Equal(2.4m, list.GetProperty("items")[0].GetProperty("totalAmount").GetDecimal());
+        Assert.Equal("12", list.GetProperty("items")[0].GetProperty("totalAmount").GetRawText());
         var bookingList = await client.GetAsync(path);
         Assert.Equal(HttpStatusCode.OK, bookingList.StatusCode);
         var bookingInvoices = (await bookingList.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
         Assert.Equal(1, bookingInvoices.GetProperty("totalItems").GetInt32());
         Assert.Equal(invoiceId, bookingInvoices.GetProperty("items")[0].GetProperty("invoiceId").GetGuid());
-        Assert.Equal(2.4m, bookingInvoices.GetProperty("items")[0].GetProperty("totalAmount").GetDecimal());
+        Assert.Equal("12", bookingInvoices.GetProperty("items")[0].GetProperty("totalAmount").GetRawText());
         var detailResponse = await client.GetAsync($"/api/v1/invoices/{invoiceId}");
         Assert.Equal(HttpStatusCode.OK, detailResponse.StatusCode);
         var detail = (await detailResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
         Assert.Equal(invoiceId, detail.GetProperty("invoiceId").GetGuid());
         Assert.Equal("DRAFT", detail.GetProperty("status").GetString());
         Assert.Equal(item.InvoiceItemId, detail.GetProperty("items")[0].GetProperty("invoiceItemId").GetGuid());
-        Assert.Equal(2.4m, detail.GetProperty("summary").GetProperty("grandTotal").GetDecimal());
+        Assert.Equal("12", detail.GetProperty("summary").GetProperty("grandTotal").GetRawText());
         Assert.Equal(edited.GetProperty("updatedAt").GetDateTimeOffset(), detail.GetProperty("updatedAt").GetDateTimeOffset());
         SignIn("Customer", f.Booking.Customer.AccountId);
         var customerList = await client.GetAsync(path);
@@ -179,7 +179,7 @@ public class InvoiceHttpTests
         var issued = (await issuedResponse.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
         Assert.Equal(invoiceId, issued.GetProperty("invoiceId").GetGuid());
         Assert.Equal("ISSUED", issued.GetProperty("status").GetString());
-        Assert.Equal(2.4m, issued.GetProperty("grandTotal").GetDecimal());
+        Assert.Equal("12", issued.GetProperty("grandTotal").GetRawText());
         Assert.Equal(2, await db.InvoiceStatusHistories.CountAsync());
         Assert.Single(await db.OutboxMessages.ToListAsync());
         SignIn("Customer", f.Booking.Customer.AccountId);

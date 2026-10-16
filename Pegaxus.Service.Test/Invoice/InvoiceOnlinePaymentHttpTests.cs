@@ -93,7 +93,7 @@ public class InvoiceOnlinePaymentHttpTests
         var cancelPath = detailPath + "/cancel";
         var paymentPath = detailPath + "/receipts";
         var payment = new Invoices.Request.RecordPaymentRequest
-        { Amount = invoice.TotalAmount, Currency = invoice.Currency, PaymentMethod = "BANK_TRANSFER" };
+        { Amount = (long)invoice.TotalAmount, PaymentMethod = "BANK_TRANSFER" };
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(cancelPath, InvoiceCancellationTests.ValidRequest())).StatusCode);
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(paymentPath, payment)).StatusCode);
         gateway.Failure = new HttpRequestException("Gateway unavailable");

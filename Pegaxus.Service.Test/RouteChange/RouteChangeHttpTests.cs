@@ -85,6 +85,7 @@ public class RouteChangeHttpTests
         Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(decisionPath, decision)).StatusCode);
         f.Manager.EmployeeAccount.Role = EmployeeRole.LOGISTICS_MANAGER; await db.SaveChangesAsync();
         var returning = await f.AlternateAsync(RouteType.RETURN, RoutePlanStatus.CONFIRMED);
+        await f.AddExtraAsync();
         var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanId == returning.RoutePlanId);
         var vehicle = await db.Vehicles.SingleAsync();
         // Return begins at the current safe stop; this test uses a separate confirmed route before backup execution.

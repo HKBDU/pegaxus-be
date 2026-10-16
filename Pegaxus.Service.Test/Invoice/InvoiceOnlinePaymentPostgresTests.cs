@@ -165,7 +165,7 @@ public class InvoiceOnlinePaymentPostgresTests
                 var gateway = new InvoiceOnlinePaymentTests.Gateway();
                 var service = InvoiceOnlinePaymentTests.CreateService(db, gateway);
                 await service.RecordPaymentAsync(invoice.InvoiceId, new()
-                { Amount = invoice.TotalAmount, Currency = invoice.Currency, PaymentMethod = "BANK_TRANSFER" }, manager.AccountId);
+                { Amount = (long)invoice.TotalAmount, PaymentMethod = "BANK_TRANSFER" }, manager.AccountId);
                 Assert.Equal("INVALID_INVOICE_STATUS", (await Assert.ThrowsAsync<ConflictException>(() => service
                     .InitiateOnlinePaymentAsync(invoice.InvoiceId, customer.AccountId))).ErrorCode);
                 Assert.Equal(0, gateway.Calls);

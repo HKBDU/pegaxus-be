@@ -32,7 +32,7 @@ public sealed partial class Service
             .Include(item => item.BookingHorses)
                 .ThenInclude(item => item.Horse)
             .Include(item => item.Transport)
-                .ThenInclude(item => item!.ComplianceDossier)
+                .ThenInclude(item => item!.ComplianceDossiers)
             .Include(item => item.Transport)
                 .ThenInclude(item => item!.TransportPlans)
                     .ThenInclude(item => item.EmployeeTransportPlans)
@@ -53,6 +53,10 @@ public sealed partial class Service
         var transportPlan = booking.Transport?.TransportPlans
             .OrderByDescending(item => item.CreatedAt)
             .FirstOrDefault();
+        var planLocationIds = new[] { transportPlan?.OriginLocationId, transportPlan?.DestinationLocationId }.OfType<Guid>().Distinct().ToArray();
+        var planLocations = planLocationIds.Length == 0
+            ? []
+            : await _db.Locations.AsNoTracking().Where(item => planLocationIds.Contains(item.LocationId)).ToDictionaryAsync(item => item.LocationId, cancellationToken);
 
         if (employee.Role is EmployeeRole.TRANSPORT_SPECIALIST or EmployeeRole.FLEET_ROUTE_COORDINATOR &&
             (transportPlan is null || transportPlan.Status != TransportPlanStatus.APPROVED ||
@@ -77,6 +81,10 @@ public sealed partial class Service
             OriginCountry = booking.OriginCountry,
             DestinationAddress = booking.DestinationAddress,
             DestinationCountry = booking.DestinationCountry,
+            OriginLatitude = booking.OriginLatitude,
+            OriginLongitude = booking.OriginLongitude,
+            DestinationLatitude = booking.DestinationLatitude,
+            DestinationLongitude = booking.DestinationLongitude,
             IsInternational = booking.OriginCountry != booking.DestinationCountry,
             RequestedDepartureDate = booking.RequestedDepartureDate,
             RequestedArrivalDate = booking.RequestedArrivalDate,
@@ -103,39 +111,45 @@ public sealed partial class Service
                 },
             TransportPlan = transportPlan is null
                 ? null
-                : new Response.TransportPlanSummary
+                : new Response.ApprovedTransportPlanResponse
                 {
                     TransportPlanId = transportPlan.TransportPlanId,
                     PlanCode = transportPlan.PlanCode,
                     Status = transportPlan.Status.ToString(),
+                    OriginLocation = LocationBrief.From(PlanLocation(planLocations, transportPlan.OriginLocationId)),
+                    DestinationLocation = LocationBrief.From(PlanLocation(planLocations, transportPlan.DestinationLocationId)),
                     PlannedStartAt = AsUtc(transportPlan.PlannedStartAt),
                     PlannedEndAt = AsUtc(transportPlan.PlannedEndAt),
                     EstimatedDistanceKm = transportPlan.EstimatedDistanceKm,
                     EstimatedDurationMinutes = transportPlan.EstimatedDurationMinutes,
                     PlanningNote = transportPlan.PlanningNote
                 },
-            ComplianceDossier = booking.Transport?.ComplianceDossier is null
-                ? null
-                : new Response.ComplianceDossierSummary
+            ComplianceDossiers = (booking.Transport?.ComplianceDossiers ?? [])
+                .OrderBy(item => item.DossierType)
+                .ThenBy(item => item.CreatedAt)
+                .Select(item => new Response.ComplianceDossierItemResponse
                 {
-                    ComplianceDossierId = booking.Transport.ComplianceDossier.ComplianceDossierId,
-                    Status = booking.Transport.ComplianceDossier.Status.ToString()
-                },
+                    ComplianceDossierId = item.ComplianceDossierId,
+                    DossierCode = item.DossierCode,
+                    DossierType = item.DossierType.ToString(),
+                    Status = item.Status.ToString()
+                })
+                .ToList(),
             RoutePlans = transportPlan?.RoutePlans
                 .OrderBy(item => item.CreatedAt)
                 .Select(item => new Response.ApprovedRoutePlanResponse
                 {
                     RoutePlanId = item.RoutePlanId,
                     RoutePlanCode = item.RoutePlanCode,
-                    RouteType = item.RoutePlanRoutes
-                        .OrderBy(route => route.SequenceNo)
-                        .Select(route => route.RouteType.ToString())
-                        .FirstOrDefault() ?? RouteType.PRIMARY.ToString(),
+                    RouteType = TransportItinerary.PlanType(item).ToString(),
                     Status = item.Status.ToString()
                 })
                 .ToList() ?? []
         };
     }
+
+    private static Pegaxus.Repository.Entities.Location? PlanLocation(IReadOnlyDictionary<Guid, Pegaxus.Repository.Entities.Location> locations, Guid? locationId) =>
+        locationId.HasValue && locations.TryGetValue(locationId.Value, out var location) ? location : null;
 
     public async Task<Response.ApprovedBookingListResponse> GetApprovedListAsync(
         Guid accountId,
@@ -228,16 +242,17 @@ public sealed partial class Service
 
         if (request.HasComplianceDossier.HasValue)
             query = request.HasComplianceDossier.Value
-                ? query.Where(booking => booking.Transport != null && booking.Transport.ComplianceDossier != null)
-                : query.Where(booking => booking.Transport == null || booking.Transport.ComplianceDossier == null);
+                ? query.Where(booking => booking.Transport != null &&
+                    booking.Transport.ComplianceDossiers.Any(dossier => dossier.DossierType == DossierType.MAIN))
+                : query.Where(booking => booking.Transport == null ||
+                    !booking.Transport.ComplianceDossiers.Any(dossier => dossier.DossierType == DossierType.MAIN));
 
         if (!string.IsNullOrWhiteSpace(request.ComplianceDossierStatus))
         {
             if (!Enum.TryParse<ComplianceDossierStatus>(request.ComplianceDossierStatus.Trim(), true, out var status))
                 throw new BadRequestException("Compliance dossier status is invalid", "INVALID_COMPLIANCE_DOSSIER_STATUS");
             query = query.Where(booking => booking.Transport != null &&
-                booking.Transport.ComplianceDossier != null &&
-                booking.Transport.ComplianceDossier.Status == status);
+                booking.Transport.ComplianceDossiers.Any(dossier => dossier.DossierType == DossierType.MAIN && dossier.Status == status));
         }
 
         query = ApplyApprovedBookingSorting(query, request.SortBy);
@@ -280,13 +295,16 @@ public sealed partial class Service
                             PlanningNote = plan.PlanningNote
                         })
                         .FirstOrDefault(),
-                ComplianceDossier = booking.Transport != null && booking.Transport.ComplianceDossier != null
-                    ? new Response.ComplianceDossierSummary
-                    {
-                        ComplianceDossierId = booking.Transport.ComplianceDossier.ComplianceDossierId,
-                        Status = booking.Transport.ComplianceDossier.Status.ToString()
-                    }
-                    : null,
+                ComplianceDossier = booking.Transport == null
+                    ? null
+                    : booking.Transport.ComplianceDossiers
+                        .Where(dossier => dossier.DossierType == DossierType.MAIN)
+                        .Select(dossier => new Response.ComplianceDossierSummary
+                        {
+                            ComplianceDossierId = dossier.ComplianceDossierId,
+                            Status = dossier.Status.ToString()
+                        })
+                        .FirstOrDefault(),
                 RoutePlan = booking.Transport == null
                     ? null
                     : booking.Transport.TransportPlans

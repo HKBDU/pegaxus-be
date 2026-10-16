@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 using static Pegaxus.Service.Common.DbTime;
@@ -96,10 +97,10 @@ public sealed partial class Service
                 Type = NotificationType.TRANSPORT,
                 Priority = NotificationPriority.HIGH,
                 Title = "You have been assigned to a Transport Plan",
-                Message = $"You have been assigned to Transport Plan {plan.PlanCode} as {employee.Role}.",
+                Message = $"You have been assigned to Transport Plan {plan.PlanCode} as {RoleLabel.Of(employee.Role)}. Open the plan to review the booking and plan the next steps.",
                 ReferenceType = "TransportPlan",
                 ReferenceId = plan.TransportPlanId,
-                ActionUrl = $"/admin/transport-plans/{plan.TransportPlanId}",
+                ActionUrl = NotificationLinks.TransportPlan(employee.Role, plan.TransportPlanId),
                 CreatedAt = now
             });
 
@@ -233,21 +234,21 @@ public sealed partial class Service
 
         foreach (var change in replacedAssignments)
         {
-            var recipientIds = new[] { change.OldEmployee.AccountId, change.NewEmployee.AccountId }
-                .Distinct()
-                .Where(item => item != accountId);
-            foreach (var recipientId in recipientIds)
+            var recipients = new[] { change.OldEmployee, change.NewEmployee }
+                .DistinctBy(item => item.AccountId)
+                .Where(item => item.AccountId != accountId);
+            foreach (var recipient in recipients)
                 notificationService.Queue(new NotificationService.NotificationCreateRequest
                 {
-                    AccountId = recipientId,
+                    AccountId = recipient.AccountId,
                     TransportId = plan.TransportId,
                     Type = NotificationType.TRANSPORT,
-                    Priority = recipientId == change.NewEmployee.AccountId ? NotificationPriority.HIGH : NotificationPriority.NORMAL,
+                    Priority = recipient.AccountId == change.NewEmployee.AccountId ? NotificationPriority.HIGH : NotificationPriority.NORMAL,
                     Title = "Transport Plan personnel assignment updated",
-                    Message = $"The {change.Responsibility} assignment for Transport Plan {plan.PlanCode} was changed. Reason: {request.Reason.Trim()}",
+                    Message = $"The {RoleLabel.Of(change.NewEmployee.Role)} for Transport Plan {plan.PlanCode} changed from {change.OldEmployee.FullName} to {change.NewEmployee.FullName}. Reason: {request.Reason.Trim()}",
                     ReferenceType = "TransportPlan",
                     ReferenceId = plan.TransportPlanId,
-                    ActionUrl = $"/admin/transport-plans/{plan.TransportPlanId}",
+                    ActionUrl = NotificationLinks.TransportPlan(recipient.Role, plan.TransportPlanId),
                     CreatedAt = now
                 });
         }

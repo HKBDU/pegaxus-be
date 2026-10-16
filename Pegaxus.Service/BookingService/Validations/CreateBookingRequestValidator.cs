@@ -21,6 +21,11 @@ public class CreateBookingRequestValidator : AbstractValidator<Request.CreateBoo
             .Must(country => CountryUtils.IsEuCountry(country) || CountryUtils.IsUnitedKingdom(country))
             .WithMessage("Destination country must be an accepted 27 EU member country or United Kingdom.");
 
+        RuleFor(x => x.OriginLatitude).NotNull().WithMessage("originLatitude is required.");
+        RuleFor(x => x.OriginLongitude).NotNull().WithMessage("originLongitude is required.");
+        RuleFor(x => x.DestinationLatitude).NotNull().WithMessage("destinationLatitude is required.");
+        RuleFor(x => x.DestinationLongitude).NotNull().WithMessage("destinationLongitude is required.");
+
         RuleFor(x => x)
             .Custom((request, context) =>
             {

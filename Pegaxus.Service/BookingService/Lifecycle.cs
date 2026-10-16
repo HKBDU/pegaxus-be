@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -59,7 +58,7 @@ public sealed partial class Service
                 : "Booking submitted for review",
             now);
         if (targetStatus == BookingStatus.PENDING)
-            await NotifyManagersAsync(booking, "Booking submitted for review", now, cancellationToken);
+            await NotifyManagersAsync(booking, "New booking to review", "submitted", " Review it and approve or reject the request.", now, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -71,6 +70,7 @@ public sealed partial class Service
         CancellationToken cancellationToken = default)
     {
         ValidateDates(request.RequestedDepartureDate, request.RequestedArrivalDate);
+        ValidateCoordinates(request.OriginLatitude, request.OriginLongitude, request.DestinationLatitude, request.DestinationLongitude, required: true);
         if (request.Horses is null || request.Horses.Count == 0)
             throw new BadRequestException("At least one horse is required", "BOOKING_HAS_NO_HORSE");
         if (request.Horses.Select(horse => horse.HorseId).Distinct().Count() != request.Horses.Count)
@@ -106,6 +106,10 @@ public sealed partial class Service
             OriginCountry = request.OriginCountry.Trim(),
             DestinationAddress = request.DestinationAddress.Trim(),
             DestinationCountry = request.DestinationCountry.Trim(),
+            OriginLatitude = request.OriginLatitude,
+            OriginLongitude = request.OriginLongitude,
+            DestinationLatitude = request.DestinationLatitude,
+            DestinationLongitude = request.DestinationLongitude,
             RequestedDepartureDate = request.RequestedDepartureDate,
             RequestedArrivalDate = request.RequestedArrivalDate,
             SpecialRequirements = EmptyToNull(request.SpecialRequirements),
@@ -125,7 +129,7 @@ public sealed partial class Service
             CreatedAt = now
         }));
         AddHistory(booking.BookingId, accountId, BookingHistoryType.SUBMIT, null, BookingStatus.PENDING, null, now);
-        await NotifyManagersAsync(booking, "Booking submitted for review", now, cancellationToken);
+        await NotifyManagersAsync(booking, "New booking to review", "submitted", " Review it and approve or reject the request.", now, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -151,6 +155,7 @@ public sealed partial class Service
                 "The booking was modified. Refresh and try again",
                 "BOOKING_MODIFIED");
 
+        ValidateCoordinates(request.OriginLatitude, request.OriginLongitude, request.DestinationLatitude, request.DestinationLongitude, required: false);
         var departureDate = request.RequestedDepartureDate ?? booking.RequestedDepartureDate;
         var arrivalDate = request.RequestedArrivalDate ?? booking.RequestedArrivalDate;
         ValidateDates(departureDate, arrivalDate);
@@ -166,6 +171,20 @@ public sealed partial class Service
         Set(request.OriginCountry, value => booking.OriginCountry = value, "originCountry", changedFields);
         Set(request.DestinationAddress, value => booking.DestinationAddress = value, "destinationAddress", changedFields);
         Set(request.DestinationCountry, value => booking.DestinationCountry = value, "destinationCountry", changedFields);
+        if (request.OriginLatitude.HasValue && request.OriginLongitude.HasValue)
+        {
+            booking.OriginLatitude = request.OriginLatitude;
+            booking.OriginLongitude = request.OriginLongitude;
+            changedFields.Add("originLatitude");
+            changedFields.Add("originLongitude");
+        }
+        if (request.DestinationLatitude.HasValue && request.DestinationLongitude.HasValue)
+        {
+            booking.DestinationLatitude = request.DestinationLatitude;
+            booking.DestinationLongitude = request.DestinationLongitude;
+            changedFields.Add("destinationLatitude");
+            changedFields.Add("destinationLongitude");
+        }
         if (request.RequestedDepartureDate.HasValue)
         {
             booking.RequestedDepartureDate = request.RequestedDepartureDate.Value;
@@ -210,7 +229,7 @@ public sealed partial class Service
         booking.CancellationReason = reason;
         booking.UpdatedAt = now;
         AddHistory(bookingId, accountId, BookingHistoryType.CANCEL, BookingStatus.PENDING, BookingStatus.CANCELLED, reason, now);
-        await NotifyManagersAsync(booking, "Booking cancelled by customer", now, cancellationToken);
+        await NotifyManagersAsync(booking, "Booking cancelled by customer", "cancelled", $" Reason: {reason}.", now, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -251,7 +270,8 @@ public sealed partial class Service
         booking.UpdatedAt = now;
         _db.Transports.Add(transport);
         AddHistory(bookingId, accountId, BookingHistoryType.APPROVE, BookingStatus.PENDING, BookingStatus.APPROVED, null, now);
-        AddNotification(booking.Customer.AccountId, transport.TransportId, booking, "Booking approved", now);
+        AddNotification(booking.Customer.AccountId, null, transport.TransportId, booking, "Booking approved",
+            $"Your booking {booking.BookingCode} ({RouteSummary(booking)}) has been approved. Our team will now prepare your transport plan and keep you updated.", now);
         var approvalMail = new MailService.MailContent
         {
             To = booking.Customer.Account.Email,
@@ -307,7 +327,8 @@ public sealed partial class Service
         booking.RejectionReason = reason;
         booking.UpdatedAt = now;
         AddHistory(bookingId, accountId, BookingHistoryType.REJECT, BookingStatus.PENDING, BookingStatus.REJECTED, reason, now);
-        AddNotification(booking.Customer.AccountId, null, booking, "Booking rejected", now);
+        AddNotification(booking.Customer.AccountId, null, null, booking, "Booking rejected",
+            $"Your booking {booking.BookingCode} ({RouteSummary(booking)}) was not approved. Reason: {reason}. You can edit the request and submit it again.", now, NotificationPriority.HIGH);
         var rejectionMail = new MailService.MailContent
         {
             To = booking.Customer.Account.Email,
@@ -365,22 +386,11 @@ public sealed partial class Service
             throw new ConflictException("The action is not allowed in the current booking status", "INVALID_BOOKING_STATUS");
     }
 
-    private async Task<string> GenerateBookingCodeAsync(CancellationToken cancellationToken) =>
-        await GenerateCodeAsync("REQ", code => _db.Bookings.AnyAsync(booking => booking.BookingCode == code, cancellationToken));
+    private Task<string> GenerateBookingCodeAsync(CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("REQ", DateTime.UtcNow, code => _db.Bookings.AnyAsync(booking => booking.BookingCode == code, cancellationToken));
 
-    private async Task<string> GenerateTransportCodeAsync(CancellationToken cancellationToken) =>
-        await GenerateCodeAsync("TP", code => _db.Transports.AnyAsync(transport => transport.TransportCode == code, cancellationToken));
-
-    private static async Task<string> GenerateCodeAsync(string prefix, Func<string, Task<bool>> exists)
-    {
-        var date = DateTime.UtcNow.ToString("yyyyMMdd");
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            var code = $"{prefix}-{date}-{RandomNumberGenerator.GetInt32(10_000):D4}";
-            if (!await exists(code)) return code;
-        }
-        throw new InvalidOperationException($"Unable to generate a unique {prefix} code");
-    }
+    private Task<string> GenerateTransportCodeAsync(CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("TR", DateTime.UtcNow, code => _db.Transports.AnyAsync(transport => transport.TransportCode == code, cancellationToken));
 
     private static void ValidateDates(DateOnly departureDate, DateOnly? arrivalDate)
     {
@@ -393,6 +403,20 @@ public sealed partial class Service
             throw new BadRequestException(
                 "The arrival date cannot be before the departure date",
                 "ARRIVAL_DATE_INVALID");
+    }
+
+    private static void ValidateCoordinates(
+        decimal? originLatitude, decimal? originLongitude, decimal? destinationLatitude, decimal? destinationLongitude, bool required)
+    {
+        if (required && (!originLatitude.HasValue || !originLongitude.HasValue || !destinationLatitude.HasValue || !destinationLongitude.HasValue))
+            throw new BadRequestException("originLatitude, originLongitude, destinationLatitude and destinationLongitude are required");
+        if (originLatitude.HasValue != originLongitude.HasValue)
+            throw new BadRequestException("originLatitude and originLongitude must be sent together");
+        if (destinationLatitude.HasValue != destinationLongitude.HasValue)
+            throw new BadRequestException("destinationLatitude and destinationLongitude must be sent together");
+        if (originLatitude.HasValue && !Coordinates.IsValid(originLatitude.Value, originLongitude!.Value) ||
+            destinationLatitude.HasValue && !Coordinates.IsValid(destinationLatitude.Value, destinationLongitude!.Value))
+            throw new BadRequestException("Latitude/longitude is invalid", "INVALID_COORDINATES");
     }
 
     private static void Set(string? value, Action<string> setter, string field, ICollection<string> changedFields)

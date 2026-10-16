@@ -4,6 +4,7 @@ using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -57,7 +58,7 @@ public sealed partial class Service
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         var dossier = new ComplianceDossier
         {
-            ComplianceDossierId = Guid.NewGuid(), DossierCode = $"DOS-{now:yyyyMMdd}-{Guid.NewGuid():N}",
+            ComplianceDossierId = Guid.NewGuid(), DossierCode = await NextDossierCodeAsync(now, cancellationToken),
             TransportId = booking.Transport!.TransportId, DossierTemplateId = request.DossierTemplateId,
             Status = ComplianceDossierStatus.IN_PREPARATION, Note = request.Note?.Trim(),
             OpenedAt = now, CreatedAt = now, UpdatedAt = now
@@ -74,15 +75,15 @@ public sealed partial class Service
             });
         }
         _db.ComplianceDossiers.Add(dossier);
-        AddNotification(booking.Customer.AccountId, dossier, "ComplianceDossier initialized", now,
-            message: "ComplianceDossier initialized successfully. DossierRequirements generated for customer.");
+        AddNotification(booking.Customer.AccountId, null, dossier, "Compliance dossier opened",
+            $"Compliance dossier {dossier.DossierCode} is ready for booking {booking.BookingCode}. Open it to see the documents you need to upload.", now);
         try
         {
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
         catch (DbUpdateException exception) when (exception.InnerException is PostgresException
-            { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ComplianceDossier_transport_id_key" })
+            { SqlState: PostgresErrorCodes.UniqueViolation, ConstraintName: "ComplianceDossier_transport_id_dossier_type_key" })
         {
             throw DossierAlreadyExists();
         }
@@ -151,7 +152,7 @@ public sealed partial class Service
         var booking = await _db.Bookings.AsNoTracking()
             .Include(value => value.Customer)
             .Include(value => value.BookingHorses).ThenInclude(value => value.Horse)
-            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossier)
+            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossiers)
             .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
             ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
         var transport = booking.Transport;
@@ -164,7 +165,7 @@ public sealed partial class Service
             throw new ConflictException("ComplianceDossier can only be initialized for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
         if (transport.Status is TransportStatus.CANCELLED or TransportStatus.COMPLETED)
             throw new ConflictException("The Transport is no longer active.", "TRANSPORT_NOT_ACTIVE");
-        if (transport.ComplianceDossier is not null)
+        if (transport.MainDossier is not null)
             throw DossierAlreadyExists();
         if (booking.BookingHorses.Count == 0 || booking.BookingHorses.Any(item => item.Horse.IsDeleted || item.Horse.CustomerId != booking.CustomerId))
             throw new BadRequestException("The booking must contain available horses owned by its customer.");
@@ -177,7 +178,7 @@ public sealed partial class Service
         var transport = await _db.Transports.AsNoTracking()
             .Include(value => value.Booking).ThenInclude(value => value.Customer)
             .Include(value => value.Booking).ThenInclude(value => value.BookingHorses).ThenInclude(value => value.Horse)
-            .Include(value => value.ComplianceDossier)
+            .Include(value => value.ComplianceDossiers)
             .SingleOrDefaultAsync(value => value.TransportId == transportId, cancellationToken);
         if (transport is null)
         {
@@ -193,7 +194,7 @@ public sealed partial class Service
             throw new ConflictException("ComplianceDossier can only be initialized for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
         if (transport.Status is TransportStatus.CANCELLED or TransportStatus.COMPLETED)
             throw new ConflictException("The Transport is no longer active.", "TRANSPORT_NOT_ACTIVE");
-        if (transport.ComplianceDossier is not null)
+        if (transport.MainDossier is not null)
             throw DossierAlreadyExists();
         if (booking.BookingHorses.Count == 0 || booking.BookingHorses.Any(item => item.Horse.IsDeleted || item.Horse.CustomerId != booking.CustomerId))
             throw new BadRequestException("The booking must contain available horses owned by its customer.");

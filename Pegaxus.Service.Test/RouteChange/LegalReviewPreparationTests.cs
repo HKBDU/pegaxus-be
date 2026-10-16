@@ -16,7 +16,7 @@ public class LegalReviewPreparationTests
         await using var db = TestSupport.CreateDb();
         var fixture = await RouteChangeTests.Fixture.CreateAsync(db);
         fixture.Plan.Status = RoutePlanStatus.DRAFT;
-        fixture.Transport.ComplianceDossier!.Status = status;
+        fixture.Transport.MainDossier!.Status = status;
         await db.SaveChangesAsync();
         var specialist = await db.Employees.SingleAsync(item => item.Role == EmployeeRole.TRANSPORT_SPECIALIST);
         var service = TestSupport.CreateRoutePlans(db);
@@ -27,7 +27,7 @@ public class LegalReviewPreparationTests
         if (allowed)
         {
             Assert.Equal("CONFIRMED", (await service.ReviewLegalAsync(specialist.AccountId, fixture.Plan.RoutePlanId, request)).Status);
-            Assert.Equal(ComplianceDossierStatus.IN_PREPARATION, fixture.Transport.ComplianceDossier.Status);
+            Assert.Equal(ComplianceDossierStatus.IN_PREPARATION, fixture.Transport.MainDossier.Status);
         }
         else
             Assert.Equal("INVALID_DOSSIER_STATUS", (await Assert.ThrowsAsync<ConflictException>(() => service.ReviewLegalAsync(specialist.AccountId, fixture.Plan.RoutePlanId, request))).ErrorCode);
