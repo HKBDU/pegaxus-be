@@ -12,7 +12,6 @@ public static class Request
     public sealed class RecordPaymentRequest
     {
         public decimal? Amount { get; set; }
-        public string Currency { get; set; } = "";
         public string PaymentMethod { get; set; } = "";
         public string? TransactionReference { get; set; }
         public DateTimeOffset? PaidAt { get; set; }
@@ -58,7 +57,6 @@ public static class Request
     public sealed class CreateRequest
     {
         public string Type { get; set; } = string.Empty;
-        public string Currency { get; set; } = string.Empty;
         public DateOnly? DueDate { get; set; }
         public string? Note { get; set; }
         public JsonElement? Payment { get; set; }
@@ -69,7 +67,6 @@ public static class Request
     {
         public DateTimeOffset? LastUpdatedAt { get; set; }
         public string? Type { get; set; }
-        public string Currency { get; set; } = string.Empty;
         public DateOnly? DueDate { get; set; }
         public string? Note { get; set; }
         public JsonElement? Payment { get; set; }

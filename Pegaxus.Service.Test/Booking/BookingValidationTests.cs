@@ -22,6 +22,32 @@ public class BookingValidationTests
     }
 
     [Fact]
+    public void CreateBooking_RequiresAllFourCoordinates()
+    {
+        var result = new CreateBookingRequestValidator().Validate(new BookingRequest.CreateBookingRequest());
+
+        foreach (var field in new[] { "OriginLatitude", "OriginLongitude", "DestinationLatitude", "DestinationLongitude" })
+            Assert.Contains(result.Errors, error => error.PropertyName == field);
+    }
+
+    [Fact]
+    public void UpdateBooking_RequiresCoordinatesInPairs()
+    {
+        var validator = new UpdateBookingRequestValidator();
+
+        var origin = validator.Validate(new BookingRequest.UpdateBookingRequest { LastUpdatedAt = DateTimeOffset.UtcNow, OriginLatitude = 1m });
+        var destination = validator.Validate(new BookingRequest.UpdateBookingRequest { LastUpdatedAt = DateTimeOffset.UtcNow, DestinationLongitude = 1m });
+        var both = validator.Validate(new BookingRequest.UpdateBookingRequest
+        {
+            LastUpdatedAt = DateTimeOffset.UtcNow, OriginLatitude = 1m, OriginLongitude = 2m, DestinationLatitude = 3m, DestinationLongitude = 4m
+        });
+
+        Assert.Contains(origin.Errors, error => error.ErrorMessage.Contains("originLatitude and originLongitude"));
+        Assert.Contains(destination.Errors, error => error.ErrorMessage.Contains("destinationLatitude and destinationLongitude"));
+        Assert.True(both.IsValid);
+    }
+
+    [Fact]
     public void CreateBooking_RejectsEmptyHorseList()
     {
         var result = new CreateBookingRequestValidator().Validate(new BookingRequest.CreateBookingRequest());
@@ -57,6 +83,10 @@ public class BookingValidationTests
         var validEuResult = validator.Validate(new BookingRequest.CreateBookingRequest
         {
             OriginAddress = "123 St",
+            OriginLatitude = 1m,
+            OriginLongitude = 2m,
+            DestinationLatitude = 3m,
+            DestinationLongitude = 4m,
             OriginCountry = "France",
             DestinationAddress = "456 St",
             DestinationCountry = "Germany",
@@ -68,6 +98,10 @@ public class BookingValidationTests
         var validUkResult = validator.Validate(new BookingRequest.CreateBookingRequest
         {
             OriginAddress = "London",
+            OriginLatitude = 1m,
+            OriginLongitude = 2m,
+            DestinationLatitude = 3m,
+            DestinationLongitude = 4m,
             OriginCountry = "United Kingdom",
             DestinationAddress = "Manchester",
             DestinationCountry = "United Kingdom",
@@ -79,6 +113,10 @@ public class BookingValidationTests
         var invalidSameCountryEuResult = validator.Validate(new BookingRequest.CreateBookingRequest
         {
             OriginAddress = "Paris",
+            OriginLatitude = 1m,
+            OriginLongitude = 2m,
+            DestinationLatitude = 3m,
+            DestinationLongitude = 4m,
             OriginCountry = "France",
             DestinationAddress = "Nice",
             DestinationCountry = "France",
@@ -91,6 +129,10 @@ public class BookingValidationTests
         var invalidNonEuResult = validator.Validate(new BookingRequest.CreateBookingRequest
         {
             OriginAddress = "Hanoi",
+            OriginLatitude = 1m,
+            OriginLongitude = 2m,
+            DestinationLatitude = 3m,
+            DestinationLongitude = 4m,
             OriginCountry = "Vietnam",
             DestinationAddress = "Paris",
             DestinationCountry = "France",

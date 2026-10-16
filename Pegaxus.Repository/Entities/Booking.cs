@@ -27,6 +27,14 @@ public partial class Booking
 
     public string DestinationCountry { get; set; } = null!;
 
+    public decimal? OriginLatitude { get; set; }
+
+    public decimal? OriginLongitude { get; set; }
+
+    public decimal? DestinationLatitude { get; set; }
+
+    public decimal? DestinationLongitude { get; set; }
+
     public DateOnly RequestedDepartureDate { get; set; }
 
     public DateOnly? RequestedArrivalDate { get; set; }

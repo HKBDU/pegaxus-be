@@ -76,7 +76,7 @@ public class InvoiceOnlinePaymentTests
     {
         await using var db = TestSupport.CreateDb();
         var (customer, _, invoice) = await SeedAsync(db);
-        invoice.Type = type; invoice.Status = status; invoice.Currency = currency; invoice.TotalAmount = 123.45m;
+        invoice.Type = type; invoice.Status = status; invoice.Currency = currency; invoice.TotalAmount = 12345;
         var previous = Receipt(invoice, ReceiptStatus.PENDING, "RCP-20261109-0001");
         var failed = Receipt(invoice, ReceiptStatus.FAILED, "RCP-20261109-0002");
         db.Receipts.AddRange(previous, failed); await db.SaveChangesAsync();
@@ -86,9 +86,9 @@ public class InvoiceOnlinePaymentTests
         Assert.Equal(Now.AddDays(-1), failed.UpdatedAt);
         var receipt = await db.Receipts.SingleAsync(x => x.ReceiptId == result.Receipt.ReceiptId);
         Assert.Equal(ReceiptStatus.PENDING, receipt.Status); Assert.Equal(PaymentMethod.BANK_TRANSFER, receipt.PaymentMethod);
-        Assert.Equal(123.45m, result.Receipt.Amount); Assert.Equal(currency, result.Receipt.Currency);
+        Assert.Equal(12345, result.Receipt.Amount); Assert.Equal(currency, result.Receipt.Currency);
         Assert.Matches("^RCP-20261110-[0-9]{4}$", result.Receipt.ReceiptCode);
-        Assert.Equal(receipt.ReceiptCode, gateway.ReceiptCode); Assert.Equal(123.45m, gateway.Amount); Assert.Equal(currency, gateway.Currency);
+        Assert.Equal(receipt.ReceiptCode, gateway.ReceiptCode); Assert.Equal(12345m, gateway.Amount); Assert.Equal(currency, gateway.Currency);
         Assert.Equal(gateway.PaymentUrl, result.PaymentUrl); Assert.Equal(1, gateway.Calls);
         Assert.Equal(invoice.BookingId, gateway.BookingId);
         Assert.Null(result.Receipt.TransactionReference); Assert.Null(result.Receipt.PaidAt);

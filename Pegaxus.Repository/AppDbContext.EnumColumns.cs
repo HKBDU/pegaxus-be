@@ -21,6 +21,7 @@ public partial class AppDbContext
         Configure<ClaimResolution>(modelBuilder, "resolution_type", "claim_resolution_type", nameof(ClaimResolution.ResolutionType), "ClaimResolution_resolution_type_idx");
         Configure<ComplianceDocument>(modelBuilder, "status", "compliance_document_status", nameof(ComplianceDocument.Status), "ComplianceDocument_status_idx", "PROVIDED");
         Configure<ComplianceDossier>(modelBuilder, "status", "compliance_dossier_status", nameof(ComplianceDossier.Status), "ComplianceDossier_status_idx", "DRAFT");
+        Configure<ComplianceDossier>(modelBuilder, "dossier_type", "dossier_type", nameof(ComplianceDossier.DossierType), defaultValue: "MAIN");
         Configure<ComplianceRequirement>(modelBuilder, "status", "compliance_requirement_status", nameof(ComplianceRequirement.Status), "ComplianceRequirement_status_idx", "ACTIVE");
         Configure<ComplianceRequirement>(modelBuilder, "category", "compliance_requirement_category", nameof(ComplianceRequirement.Category), "ComplianceRequirement_category_idx");
         Configure<CustomsClearanceProof>(modelBuilder, "customs_lane", "customs_lane", nameof(CustomsClearanceProof.CustomsLane), "CustomsClearanceProof_customs_lane_idx");
@@ -61,6 +62,7 @@ public partial class AppDbContext
         Configure<Receipt>(modelBuilder, "status", "receipt_status", nameof(Receipt.Status), "Receipt_status_idx", "PENDING");
         Configure<Route>(modelBuilder, "transport_mode", "transport_mode", nameof(Route.TransportMode), "Route_transport_mode_idx");
         Configure<RoutePlan>(modelBuilder, "status", "route_plan_status", nameof(RoutePlan.Status), "RoutePlan_status_idx", "DRAFT");
+        Configure<RoutePlanRoute>(modelBuilder, "status", "route_segment_status", nameof(RoutePlanRoute.Status), defaultValue: "PLANNED");
         Configure<RoutePlanRoute>(modelBuilder, "route_type", "route_type", nameof(RoutePlanRoute.RouteType), "RoutePlanRoute_route_type_idx", "PRIMARY");
         Configure<Transport>(modelBuilder, "status", "transport_status", nameof(Transport.Status), "Transport_status_idx", "CREATED");
         Configure<TransportPlan>(modelBuilder, "status", "transport_plan_status", nameof(TransportPlan.Status), "TransportPlan_status_idx", "DRAFT");

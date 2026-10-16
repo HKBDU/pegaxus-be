@@ -63,7 +63,7 @@ public class InvoicePostgresTests : IAsyncLifetime
         Task<Exception?> TryCreate(AppDbContext db) => Record.ExceptionAsync(async () =>
         {
             var request = InvoiceTests.Fixture.Request();
-            request.Items = [InvoiceTests.Fixture.Item(1.5m, 0.03m)];
+            request.Items = [InvoiceTests.Fixture.Item(1, 100)];
             await Service(db).CreateAsync(f.Account.AccountId, f.Booking.BookingId, request);
         });
     }
@@ -129,20 +129,20 @@ public class InvoicePostgresTests : IAsyncLifetime
     }
 
     [PostgresFact]
-    public async Task PostgreSql_PersistsRoundedMoneyAndUtcResponseTimestamp()
+    public async Task PostgreSql_PersistsWholeVndMoneyAndUtcResponseTimestamp()
     {
         await using var db = CreateDb();
         var f = await InvoiceTests.Fixture.CreateAsync(db);
         var request = InvoiceTests.Fixture.Request();
-        request.Currency = "EUR";
-        request.Items = [InvoiceTests.Fixture.Item(1.5m, 0.03m)];
+        request.Items = [InvoiceTests.Fixture.Item(2, 7)];
         request.Items[0].HorseId = f.Horse.HorseId;
         var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, request);
         await using var verification = CreateDb();
         var saved = await verification.Invoices.Include(item => item.InvoiceItems).SingleAsync();
-        Assert.Equal(0.05m, saved.Subtotal);
-        Assert.Equal(0.01m, saved.TaxAmount);
-        Assert.Equal(0.06m, saved.TotalAmount);
+        Assert.Equal(14m, saved.Subtotal);
+        Assert.Equal(3m, saved.TaxAmount);
+        Assert.Equal(17m, saved.TotalAmount);
+        Assert.Equal("VND", saved.Currency);
         Assert.Equal(result.CreatedAt.UtcDateTime.Ticks, saved.CreatedAt.Ticks);
         Assert.Equal(DateTimeKind.Unspecified, saved.CreatedAt.Kind);
         Assert.Equal(f.Horse.HorseId, Assert.Single(saved.InvoiceItems).HorseId);

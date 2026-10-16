@@ -35,9 +35,28 @@ public sealed partial class Service
             if (segment.Outsourcing is not null && segment.VehicleIds.Count > 0)
                 throw new UnprocessableEntityException("An outsourced segment cannot have vehicles, driver or escort", "OUTSOURCED_SEGMENT");
         }
+        var types = request.Segments.Select(segment => SegmentType(segment, routeType, null)).ToList();
+        var allowed = routeType switch
+        {
+            RouteType.PRIMARY => types.All(type => type == RouteType.PRIMARY),
+            RouteType.RETURN => types.All(type => type == RouteType.RETURN),
+            _ => types.All(type => type is RouteType.PRIMARY or RouteType.BACKUP) && types.Contains(RouteType.BACKUP)
+        };
+        if (!allowed)
+            throw new BadRequestException(routeType switch
+            {
+                RouteType.PRIMARY => "Every segment of a PRIMARY route plan must have routeType PRIMARY",
+                RouteType.RETURN => "Every segment of a RETURN route plan must have routeType RETURN",
+                _ => "A BACKUP route plan needs at least one BACKUP segment and every segment must be PRIMARY or BACKUP"
+            });
     }
 
-    private async Task<List<MaterializedSegment>> MaterializeSegmentsAsync(IReadOnlyCollection<Request.SegmentRequest> requests, RouteType routeType, TransportPlan plan, Guid? excludedRoutePlanId, CancellationToken cancellationToken)
+    private static RouteType SegmentType(Request.SegmentRequest segment, RouteType planType, IReadOnlyDictionary<int, RouteType>? existing) =>
+        !string.IsNullOrWhiteSpace(segment.RouteType) ? ParseRouteType(segment.RouteType)
+        : existing is not null && existing.TryGetValue(segment.SequenceNo, out var current) ? current
+        : planType;
+
+    private async Task<List<MaterializedSegment>> MaterializeSegmentsAsync(IReadOnlyCollection<Request.SegmentRequest> requests, RouteType routeType, TransportPlan plan, Guid? excludedRoutePlanId, Func<Request.SegmentRequest, RouteType> typeOf, CancellationToken cancellationToken)
     {
         var result = new List<MaterializedSegment>();
         foreach (var request in requests.OrderBy(item => item.SequenceNo))
@@ -79,13 +98,13 @@ public sealed partial class Service
                     route.EstimatedDurationMinutes = metrics.DurationMinutes;
                 }
             }
-            await ValidateVehicleAndProviderAsync(request, route, plan, excludedRoutePlanId, cancellationToken);
-            result.Add(new MaterializedSegment(request, route));
+            await ValidateVehicleAndProviderAsync(request, route, plan, excludedRoutePlanId, routeType, cancellationToken);
+            result.Add(new MaterializedSegment(request, route, typeOf(request)));
         }
         return result;
     }
 
-    private async Task ValidateVehicleAndProviderAsync(Request.SegmentRequest request, Route route, TransportPlan plan, Guid? excludedRoutePlanId, CancellationToken cancellationToken)
+    private async Task ValidateVehicleAndProviderAsync(Request.SegmentRequest request, Route route, TransportPlan plan, Guid? excludedRoutePlanId, RouteType routeType, CancellationToken cancellationToken)
     {
         if (request.Outsourcing is not null)
         {
@@ -113,6 +132,7 @@ public sealed partial class Service
             throw new UnprocessableEntityException("The vehicle registration or insurance is expired for this segment", "VEHICLE_DOCUMENT_EXPIRED");
 
         var vehicleIds = vehicles.Select(item => item.VehicleId).ToList();
+        var alternativesAreExclusive = routeType is RouteType.PRIMARY or RouteType.BACKUP;
         var departureAt = Truncate(request.PlannedDepartureAt);
         var arrivalAt = Truncate(request.PlannedArrivalAt);
         var overlappingAssignment = await db.RoutePlanRouteVehicles
@@ -121,6 +141,8 @@ public sealed partial class Service
             .Where(item => vehicleIds.Contains(item.VehicleId) &&
                 item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED &&
                 (!excludedRoutePlanId.HasValue || item.RoutePlanRoute.RoutePlanId != excludedRoutePlanId.Value) &&
+                (!alternativesAreExclusive || item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId ||
+                    item.RoutePlanRoute.RoutePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.RETURN)) &&
                 item.RoutePlanRoute.PlannedDepartureAt < arrivalAt &&
                 item.RoutePlanRoute.PlannedArrivalAt > departureAt)
             .Select(item => item.VehicleId)
@@ -165,19 +187,16 @@ public sealed partial class Service
         if (routeType == RouteType.BACKUP && primary is not null)
         {
             var primarySegments = primary.RoutePlanRoutes.OrderBy(item => item.SequenceNo).ToList();
-            var identical = primarySegments.Count == segments.Count && primarySegments.Zip(segments, (left, right) => left.RouteId == right.Route.RouteId && left.Route.FromLocationId == right.Route.FromLocationId && left.Route.ToLocationId == right.Route.ToLocationId).All(item => item);
-            if (identical)
+            if (primarySegments.Count > 0 &&
+                (segments[0].Route.FromLocationId != primarySegments[0].Route.FromLocationId ||
+                 segments[^1].Route.ToLocationId != primarySegments[^1].Route.ToLocationId))
+                throw new UnprocessableEntityException("The backup route must start and end at the same locations as the primary route", "BACKUP_NOT_ANCHORED");
+            var primaryRouteIds = primarySegments.Select(item => item.RouteId).ToHashSet();
+            if (segments.Any(item => item.Type == RouteType.PRIMARY && !primaryRouteIds.Contains(item.Route.RouteId)))
+                throw new UnprocessableEntityException("A primary segment in the backup route must match a segment of the primary route", "BACKUP_SEGMENT_MISMATCH");
+            if (primarySegments.Select(item => item.RouteId).SequenceEqual(segments.Select(item => item.Route.RouteId)))
                 throw new ConflictException("Contingency route cannot be identical to the primary route. Please select alternative waypoints or border checkpoints.", "IDENTICAL_CONTINGENCY_ROUTE");
-            var primaryLocations = primarySegments.SelectMany(item => new[] { item.Route.FromLocationId, item.Route.ToLocationId }).ToHashSet();
-            if (!primaryLocations.Contains(segments[0].Route.FromLocationId) || !primaryLocations.Contains(segments[^1].Route.ToLocationId))
-                throw new UnprocessableEntityException("The backup route must start and end on locations of the primary route (R16)", "BACKUP_NOT_ANCHORED");
         }
-    }
-
-    private static void EnsureDossierAllowsBackup(ComplianceDossier? dossier)
-    {
-        if (dossier is not null && dossier.Status > ComplianceDossierStatus.IN_PREPARATION)
-            throw new ConflictException("A backup route plan cannot be created once the compliance dossier is past IN_PREPARATION", "DOSSIER_LOCKED");
     }
 
     private static void EnsureWriteRole(EmployeeRole role, RouteType type)
@@ -216,5 +235,5 @@ public sealed partial class Service
 
     private static bool SupportsMode(string? supportedModes, TransportMode mode) => string.IsNullOrWhiteSpace(supportedModes) || supportedModes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).Any(item => item.Equals(mode.ToString(), StringComparison.OrdinalIgnoreCase));
 
-    private sealed record MaterializedSegment(Request.SegmentRequest Request, Route Route);
+    private sealed record MaterializedSegment(Request.SegmentRequest Request, Route Route, RouteType Type);
 }
