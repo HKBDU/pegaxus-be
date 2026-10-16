@@ -39,7 +39,6 @@ public static class Request
         public string Reason { get; set; } = "";
         public DateTimeOffset NewEstimatedArrivalAt { get; set; }
         public decimal? EstimatedExtraCost { get; set; }
-        public string? Currency { get; set; }
         public string? Note { get; set; }
     }
 

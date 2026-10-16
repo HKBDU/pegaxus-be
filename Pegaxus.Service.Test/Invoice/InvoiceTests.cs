@@ -93,15 +93,45 @@ public class InvoiceTests
     }
 
     [Fact]
-    public async Task Amounts_RoundEachLineThenTaxToTwoDecimals()
+    public async Task Amounts_AreWholeVnd_AndTaxIsRoundedHalfUpToAWholeVnd()
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db);
         var request = Fixture.Request();
-        request.Items = [Fixture.Item(1.5m, 0.03m), Fixture.Item(1.5m, 0.03m)];
+        request.Items = [Fixture.Item(3, 5), Fixture.Item(1, 5)];
         var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, request);
-        Assert.All(result.Items, item => Assert.Equal(0.05m, item.Total));
-        Assert.Equal(new Response.SummaryResponse(0.10m, 0.02m, 0, 0.12m), result.Summary);
+        Assert.Equal([15L, 5L], result.Items.Select(item => item.Total).ToArray());
+        Assert.Equal(new Response.SummaryResponse(20, 4, 0, 24), result.Summary);
+        Assert.Equal("VND", result.Currency);
+    }
+
+    [Theory]
+    [InlineData(2, 0)]
+    [InlineData(3, 1)]
+    [InlineData(7, 1)]
+    [InlineData(8, 2)]
+    [InlineData(12, 2)]
+    [InlineData(13, 3)]
+    public async Task Tax_IsTwentyPercentRoundedToAWholeVnd(int price, int expectedTax)
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        var request = Fixture.Request();
+        request.Items = [Fixture.Item(1, price)];
+        var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, request);
+        Assert.Equal(new Response.SummaryResponse(price, expectedTax, 0, price + expectedTax), result.Summary);
+    }
+
+    [Fact]
+    public async Task Create_IgnoresAnyCurrencyTheClientSends_BecauseEverythingIsVnd()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        var request = Fixture.Request();
+        request.Items = [Fixture.Item(1, 100)];
+        var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, request);
+        Assert.Equal("VND", result.Currency);
+        Assert.Equal("VND", (await db.Invoices.SingleAsync()).Currency);
     }
 
     [Fact]
@@ -186,20 +216,6 @@ public class InvoiceTests
             f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Fixture.Request("CREDIT_NOTE")))).ErrorCode);
     }
 
-    [Fact]
-    public async Task Final_RejectsAnyPaidDepositWithDifferentCurrency()
-    {
-        await using var db = TestSupport.CreateDb();
-        var f = await Fixture.CreateAsync(db);
-        var other = f.Invoice(InvoiceType.DEPOSIT, InvoiceStatus.PAID);
-        other.Currency = "EUR";
-        db.Invoices.AddRange(f.Invoice(InvoiceType.DEPOSIT, InvoiceStatus.PAID), other);
-        await db.SaveChangesAsync();
-        Assert.Equal("CURRENCY_MISMATCH", (await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
-            f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Fixture.Request("FINAL")))).ErrorCode);
-        Assert.Empty(await db.InvoiceItems.ToListAsync());
-    }
-
     [Theory]
     [InlineData("role")]
     [InlineData("employeeInactive")]
@@ -248,7 +264,6 @@ public class InvoiceTests
 
     [Theory]
     [InlineData("type", "type")]
-    [InlineData("currency", "currency")]
     [InlineData("dueDate", "dueDate")]
     [InlineData("missingDueDate", "dueDate")]
     [InlineData("missingItems", "items")]
@@ -274,7 +289,6 @@ public class InvoiceTests
         switch (problem)
         {
             case "type": request.Type = "1"; break;
-            case "currency": request.Currency = "USD"; break;
             case "dueDate": request.DueDate = request.DueDate!.Value.AddDays(-1); break;
             case "missingDueDate": request.DueDate = null; break;
             case "missingItems": request.Items = null; break;
@@ -283,14 +297,14 @@ public class InvoiceTests
             case "description": request.Items[0].Description = "  "; break;
             case "longDescription": request.Items[0].Description = new string('x', 501); break;
             case "quantity": request.Items[0].Quantity = 0; break;
-            case "quantityPrecision": request.Items[0].Quantity = 100_000_000; break;
+            case "quantityPrecision": request.Items[0].Quantity = 10_000_000_000; break;
             case "quantityScale": request.Items[0].Quantity = 1.001m; break;
             case "price": request.Items[0].Price = -1; break;
             case "pricePrecision": request.Items[0].Price = 10_000_000_000_000_000; break;
             case "priceScale": request.Items[0].Price = 1.001m; break;
             case "horse": request.Items[0].HorseId = Guid.NewGuid(); break;
-            case "overflow": request.Items[0].Quantity = 99_999_999.99m; request.Items[0].Price = 9_999_999_999_999_999.99m; break;
-            case "taxOverflow": request.Items[0].Price = 9_999_999_999_999_999.99m; break;
+            case "overflow": request.Items[0].Quantity = 99_999_999; request.Items[0].Price = 9_999_999_999_999_999; break;
+            case "taxOverflow": request.Items[0].Price = 9_999_999_999_999_999; break;
         }
         var error = await Assert.ThrowsAsync<FieldValidationException>(() =>
             f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, request));
@@ -324,7 +338,7 @@ public class InvoiceTests
         }
         internal static Request.CreateRequest Request(string type = "QUOTATION") => new()
         {
-            Type = type, Currency = "VND", DueDate = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime), Items = []
+            Type = type, DueDate = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime), Items = []
         };
         internal static Request.ItemRequest Item(decimal quantity, decimal price) => new()
         {

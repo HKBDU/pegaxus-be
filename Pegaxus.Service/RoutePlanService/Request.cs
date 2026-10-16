@@ -46,6 +46,7 @@ public static class Request
         public Guid? RouteId { get; set; }
         public Guid? FromLocationId { get; set; }
         public Guid? ToLocationId { get; set; }
+        public string? RouteType { get; set; }
         public string? TransportMode { get; set; }
         public DateTimeOffset PlannedDepartureAt { get; set; }
         public DateTimeOffset PlannedArrivalAt { get; set; }

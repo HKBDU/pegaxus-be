@@ -17,7 +17,9 @@ public sealed partial class Service
         CheckOwnership(viewer.CustomerId, booking.CustomerId);
         ValidateViewFilter(request);
         var dossier = await _db.ComplianceDossiers.AsNoTracking()
-            .SingleOrDefaultAsync(item => item.Transport.BookingId == bookingId, cancellationToken);
+            .SingleOrDefaultAsync(item => item.Transport.BookingId == bookingId && item.DossierType == DossierType.MAIN, cancellationToken);
+        if (dossier is not null && viewer.Role is null && dossier.Status == ComplianceDossierStatus.DRAFT)
+            dossier = null;
         if (dossier is null)
             return new Response.OverviewResponse
             {
@@ -135,6 +137,8 @@ public sealed partial class Service
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)
             ?? throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
         CheckOwnership(viewer.CustomerId, dossier.Transport.Booking.CustomerId);
+        if (viewer.Role is null && dossier.Status == ComplianceDossierStatus.DRAFT)
+            throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
         return (dossier, dossier.Transport.Booking, viewer.Role);
     }
 
@@ -164,13 +168,22 @@ public sealed partial class Service
             requirement.OpenDocumentRequest = latestRequests.GetValueOrDefault(requirement.DossierRequirementId);
         var fulfilled = requirements.Count(item => item.Status == nameof(DossierRequirementStatus.SATISFIED) ||
             item.Status == nameof(DossierRequirementStatus.WAIVED));
+        var siblings = await _db.ComplianceDossiers.AsNoTracking()
+            .Where(item => item.TransportId == dossier.TransportId && (role != null || item.Status != ComplianceDossierStatus.DRAFT))
+            .OrderBy(item => item.DossierType).ThenBy(item => item.CreatedAt)
+            .Select(item => new Response.DossierSummaryResponse
+            {
+                ComplianceDossierId = item.ComplianceDossierId, DossierCode = item.DossierCode,
+                DossierType = item.DossierType.ToString(), Status = item.Status.ToString()
+            }).ToListAsync(cancellationToken);
         var filtered = requirements.Where(item => (!status.HasValue || item.Status == status.Value.ToString()) &&
             (!request.HorseId.HasValue || item.HorseId == request.HorseId)).ToList();
         return new Response.OverviewResponse
         {
             IsInitialized = true, BookingId = booking.BookingId, BookingCode = booking.BookingCode,
             BookingSummary = await BuildBookingSummaryAsync(booking.BookingId, cancellationToken),
-            ComplianceDossierId = dossier.ComplianceDossierId, DossierCode = dossier.DossierCode, Status = dossier.Status.ToString(),
+            ComplianceDossierId = dossier.ComplianceDossierId, DossierCode = dossier.DossierCode,
+            DossierType = dossier.DossierType.ToString(), Status = dossier.Status.ToString(), ComplianceDossiers = siblings,
             FulfilledCount = fulfilled, RequirementCount = requirements.Count,
             CompletionPercent = requirements.Count == 0 ? 0 : 100m * fulfilled / requirements.Count,
             TripRequirements = filtered.Where(item => !item.HorseId.HasValue).ToList(),
