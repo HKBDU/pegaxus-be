@@ -16,7 +16,7 @@
 // - RoutePlan is an ordered collection of Route records via RoutePlanRoute.
 // - DRIVER and ESCORT are separate Employee roles.
 // - PENDING is the unified waiting/processing status where applicable.
-// - Incident category is simplified to VEHICLE / HORSE_HEALTH / BOTH.
+// - Incident category has four values: VEHICLE / HORSE_HEALTH / BOTH / ROUTE_CHANGE.
 // - Claim is intentionally simple; discussion/negotiation happens outside the system.
 // - FinancialReport has no draft/final status; it is a generated summary.
 // - Legal/compliance tables contain explicit Vietnamese notes to avoid terminology confusion.
@@ -1296,7 +1296,7 @@ Table HorseHealthLog {
 //////////////////////////////////////////////////////////////
 
 Table IncidentReport {
-  Note: 'IncidentReport: Báo cáo sự cố phát sinh trong quá trình vận chuyển. category gồm VEHICLE, HORSE_HEALTH hoặc BOTH.'
+  Note: 'IncidentReport: Báo cáo sự cố phát sinh trong quá trình vận chuyển. category gồm VEHICLE, HORSE_HEALTH, BOTH hoặc ROUTE_CHANGE.'
 
   incident_report_id uuid [pk]
 
