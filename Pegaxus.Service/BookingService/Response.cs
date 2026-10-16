@@ -1,4 +1,5 @@
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.BookingService;
 
@@ -42,6 +43,10 @@ public class Response
         public required string OriginCountry { get; init; }
         public required string DestinationAddress { get; init; }
         public required string DestinationCountry { get; init; }
+        public decimal? OriginLatitude { get; init; }
+        public decimal? OriginLongitude { get; init; }
+        public decimal? DestinationLatitude { get; init; }
+        public decimal? DestinationLongitude { get; init; }
         public DateOnly RequestedDepartureDate { get; init; }
         public DateOnly? RequestedArrivalDate { get; init; }
         public int TotalHorses { get; init; }
@@ -78,6 +83,10 @@ public class Response
         public required string OriginCountry { get; init; }
         public required string DestinationAddress { get; init; }
         public required string DestinationCountry { get; init; }
+        public decimal? OriginLatitude { get; init; }
+        public decimal? OriginLongitude { get; init; }
+        public decimal? DestinationLatitude { get; init; }
+        public decimal? DestinationLongitude { get; init; }
         public bool IsInternational { get; init; }
         public DateOnly RequestedDepartureDate { get; init; }
         public DateOnly? RequestedArrivalDate { get; init; }
@@ -86,8 +95,8 @@ public class Response
         public int TotalHorses { get; init; }
         public required IReadOnlyList<BookingHorseResponse> Horses { get; init; }
         public TransportDetailResponse? Transport { get; init; }
-        public TransportPlanSummary? TransportPlan { get; init; }
-        public ComplianceDossierSummary? ComplianceDossier { get; init; }
+        public ApprovedTransportPlanResponse? TransportPlan { get; init; }
+        public required IReadOnlyList<ComplianceDossierItemResponse> ComplianceDossiers { get; init; }
         public required IReadOnlyList<ApprovedRoutePlanResponse> RoutePlans { get; init; }
     }
 
@@ -191,6 +200,20 @@ public class Response
         public decimal? EstimatedDistanceKm { get; init; }
         public int? EstimatedDurationMinutes { get; init; }
         public string? PlanningNote { get; init; }
+    }
+
+    public sealed class ApprovedTransportPlanResponse : TransportPlanSummary
+    {
+        public LocationBrief? OriginLocation { get; init; }
+        public LocationBrief? DestinationLocation { get; init; }
+    }
+
+    public sealed class ComplianceDossierItemResponse
+    {
+        public Guid ComplianceDossierId { get; init; }
+        public required string DossierCode { get; init; }
+        public required string DossierType { get; init; }
+        public required string Status { get; init; }
     }
 
     public class ComplianceDossierSummary

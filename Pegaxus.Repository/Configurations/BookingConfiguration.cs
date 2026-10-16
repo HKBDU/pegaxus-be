@@ -46,6 +46,10 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
         entity.Property(e => e.DestinationCountry)
             .HasMaxLength(100)
             .HasColumnName("destination_country");
+        entity.Property(e => e.OriginLatitude).HasPrecision(10, 4).HasColumnName("origin_latitude");
+        entity.Property(e => e.OriginLongitude).HasPrecision(10, 4).HasColumnName("origin_longitude");
+        entity.Property(e => e.DestinationLatitude).HasPrecision(10, 4).HasColumnName("destination_latitude");
+        entity.Property(e => e.DestinationLongitude).HasPrecision(10, 4).HasColumnName("destination_longitude");
         entity.Property(e => e.OriginAddress)
             .HasMaxLength(500)
             .HasColumnName("origin_address");

@@ -12,7 +12,7 @@ public sealed class HandoverRecordConfiguration : IEntityTypeConfiguration<Hando
     {
         entity.HasKey(e => e.HandoverRecordId).HasName("HandoverRecord_pkey");
 
-        entity.ToTable("HandoverRecord", tb => tb.HasComment("HandoverRecord: Một lần bàn giao trong Transport. from_type/to_type xác định bên giao/nhận là CUSTOMER hay EMPLOYEE; from/to_route_plan_route_id xác định chặng vừa kết thúc và chặng tiếp theo."));
+        entity.ToTable("HandoverRecord", tb => tb.HasComment("HandoverRecord: Một lần bàn giao trong Transport. from_type/to_type xác định bên giao/nhận là CUSTOMER, EMPLOYEE hay PROVIDER (đối tác vận chuyển); from/to_route_plan_route_id xác định chặng vừa kết thúc và chặng tiếp theo."));
 
         entity.HasIndex(e => e.ActualHandoverAt, "HandoverRecord_actual_handover_at_idx");
 
@@ -23,6 +23,10 @@ public sealed class HandoverRecordConfiguration : IEntityTypeConfiguration<Hando
         entity.HasIndex(e => e.FromRoutePlanRouteId, "HandoverRecord_from_route_plan_route_id_idx");
 
         entity.HasIndex(e => e.HandoverCode, "HandoverRecord_handover_code_key").IsUnique();
+
+        entity.HasIndex(e => e.FromTransportProviderId, "HandoverRecord_from_transport_provider_id_idx");
+
+        entity.HasIndex(e => e.ToTransportProviderId, "HandoverRecord_to_transport_provider_id_idx");
 
         entity.HasIndex(e => e.ToCustomerId, "HandoverRecord_to_customer_id_idx");
 
@@ -65,6 +69,8 @@ public sealed class HandoverRecordConfiguration : IEntityTypeConfiguration<Hando
             .HasColumnName("from_contact_phone");
         entity.Property(e => e.FromCustomerId).HasColumnName("from_customer_id");
         entity.Property(e => e.FromEmployeeId).HasColumnName("from_employee_id");
+        entity.Property(e => e.FromTransportProviderId).HasColumnName("from_transport_provider_id");
+        entity.Property(e => e.ToTransportProviderId).HasColumnName("to_transport_provider_id");
         entity.Property(e => e.FromPartyName)
             .HasMaxLength(200)
             .HasColumnName("from_party_name");
@@ -126,6 +132,16 @@ public sealed class HandoverRecordConfiguration : IEntityTypeConfiguration<Hando
         entity.HasOne(d => d.ToRoutePlanRoute).WithMany(p => p.HandoverRecordToRoutePlanRoutes)
             .HasForeignKey(d => d.ToRoutePlanRouteId)
             .HasConstraintName("HandoverRecord_to_route_plan_route_id_fkey");
+
+        entity.HasOne(d => d.FromTransportProvider).WithMany(p => p.HandoverRecordFromProviders)
+            .HasForeignKey(d => d.FromTransportProviderId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("HandoverRecord_from_transport_provider_id_fkey");
+
+        entity.HasOne(d => d.ToTransportProvider).WithMany(p => p.HandoverRecordToProviders)
+            .HasForeignKey(d => d.ToTransportProviderId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("HandoverRecord_to_transport_provider_id_fkey");
 
         entity.HasOne(d => d.Transport).WithMany(p => p.HandoverRecords)
             .HasForeignKey(d => d.TransportId)
