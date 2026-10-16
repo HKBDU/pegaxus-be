@@ -7,6 +7,8 @@ public interface IMediaService
     public Task<string> UploadImageAsync(IFormFile file);
     Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file);
     Task DeleteFileAsync(string publicId);
+    Task<string> UploadPrivateImageAsync(Guid imageId, PreviewFile image, CancellationToken cancellationToken = default);
+    Task DeletePrivateImageAsync(Guid imageId, CancellationToken cancellationToken = default);
     Task<SignedUploadResult> CreateSignedUploadAsync(
         Guid accountId,
         string entity,
