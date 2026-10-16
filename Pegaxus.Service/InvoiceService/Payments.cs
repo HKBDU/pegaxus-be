@@ -1,6 +1,5 @@
 using System.Data;
 using System.Globalization;
-using System.Net;
 using System.Security.Cryptography;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -172,7 +171,7 @@ public sealed partial class Service
                 }
             }
             var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
-                .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email,
+                .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName,
                     TransportId = x.Transport == null ? (Guid?)null : x.Transport.TransportId }).SingleAsync(cancellationToken);
             var amount = receipt.Amount.ToString("0.00", CultureInfo.InvariantCulture) + " " + receipt.Currency;
             var message = $"{(invoice.Type == InvoiceType.CREDIT_NOTE ? "Payout" : "Payment")} for invoice {invoice.InvoiceCode} has been confirmed. Receipt: {receipt.ReceiptCode}. Amount: {amount}. Invoice status: PAID.";
@@ -183,7 +182,13 @@ public sealed partial class Service
                 ReferenceType = nameof(Invoice), ReferenceId = invoiceId,
                 ActionUrl = $"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoiceId}", CreatedAt = now
             });
-            OutboxQueue.AddEmail(db, new() { To = customer.Email, Subject = "Payment confirmed", Body = WebUtility.HtmlEncode(message) }, now);
+            var isPayout = invoice.Type == InvoiceType.CREDIT_NOTE;
+            OutboxQueue.AddEmail(db, new()
+            {
+                To = customer.Email, Subject = $"{(isPayout ? "Payout" : "Payment")} confirmed — {receipt.ReceiptCode}",
+                Body = MailService.EmailBodies.PaymentConfirmedBody(customer.FullName, invoice.InvoiceCode, receipt.ReceiptCode,
+                    receipt.Amount, receipt.Currency, isPayout, null)
+            }, now);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);
