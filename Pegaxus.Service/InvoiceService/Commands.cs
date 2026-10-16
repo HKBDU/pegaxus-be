@@ -1,6 +1,5 @@
 using System.Data;
 using System.Globalization;
-using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using FluentValidation;
@@ -69,7 +68,7 @@ public sealed partial class Service
             if (invoice.IssuedAt.HasValue)
             {
                 var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
-                    .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email,
+                    .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName,
                         TransportId = x.Transport == null ? (Guid?)null : x.Transport.TransportId }).SingleAsync(cancellationToken);
                 var message = $"Invoice {invoice.InvoiceCode} ({invoice.Type}) has been cancelled. Reason: {reason}. Please contact support if you need more information.";
                 notifications.Queue(new NotificationCreateRequest
@@ -79,7 +78,11 @@ public sealed partial class Service
                     ReferenceType = nameof(Invoice), ReferenceId = invoiceId,
                     ActionUrl = $"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoiceId}", CreatedAt = now
                 });
-                OutboxQueue.AddEmail(db, new() { To = customer.Email, Subject = "Invoice cancelled", Body = WebUtility.HtmlEncode(message) }, now);
+                OutboxQueue.AddEmail(db, new()
+                {
+                    To = customer.Email, Subject = $"Invoice cancelled — {invoice.InvoiceCode}",
+                    Body = MailService.EmailBodies.InvoiceCancelledBody(customer.FullName, invoice.InvoiceCode, invoice.Type.ToString(), reason, null)
+                }, now);
             }
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -139,7 +142,7 @@ public sealed partial class Service
             }
 
             var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
-                .Select(x => new { x.BookingCode, x.Customer.AccountId, x.Customer.Account.Email,
+                .Select(x => new { x.BookingCode, x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName,
                     TransportId = x.Transport == null ? (Guid?)null : x.Transport.TransportId }).SingleAsync(cancellationToken);
             var now = Truncate(clock.GetUtcNow().UtcDateTime);
             invoice.Status = InvoiceStatus.ISSUED;
@@ -165,7 +168,18 @@ public sealed partial class Service
                 Priority = priority, Title = title, Message = message, ReferenceType = nameof(Invoice), ReferenceId = invoiceId,
                 ActionUrl = $"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoiceId}", CreatedAt = now
             });
-            OutboxQueue.AddEmail(db, new() { To = customer.Email, Subject = title, Body = WebUtility.HtmlEncode(message) }, now);
+            var mailKind = invoice.Type switch
+            {
+                InvoiceType.QUOTATION => MailService.EmailBodies.InvoiceMailKind.Quotation,
+                InvoiceType.CREDIT_NOTE => MailService.EmailBodies.InvoiceMailKind.CreditNote,
+                _ => MailService.EmailBodies.InvoiceMailKind.Invoice
+            };
+            OutboxQueue.AddEmail(db, new()
+            {
+                To = customer.Email, Subject = $"{title} — {invoice.InvoiceCode}",
+                Body = MailService.EmailBodies.InvoiceIssuedBody(customer.FullName, invoice.InvoiceCode, invoice.Type.ToString(), customer.BookingCode,
+                    mailKind, invoice.TotalAmount, invoice.Currency, invoice.DueDate, null)
+            }, now);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);

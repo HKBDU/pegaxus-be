@@ -114,11 +114,11 @@ public class InvoiceIssueTests
         Assert.Equal(customer.AccountId, Assert.Single(realtime.Recipients));
         var mail = OutboxQueue.Deserialize<EmailPayload>(Assert.Single(db.OutboxMessages).Payload);
         Assert.Equal(customer.Email, mail.To);
-        Assert.Equal(notification.Title, mail.Subject);
+        Assert.StartsWith(notification.Title, mail.Subject); Assert.Contains(invoice.InvoiceCode, mail.Subject);
         Assert.Contains("120.00 EUR", mail.Body);
         if (type == InvoiceType.QUOTATION) Assert.Contains("No payment is required", mail.Body);
         else if (type == InvoiceType.CREDIT_NOTE) Assert.Contains("Payout or credit amount", mail.Body);
-        else Assert.Contains("2026-11-15", mail.Body);
+        else Assert.Contains("15/11/2026", mail.Body);
     }
 
     [Theory]

@@ -47,8 +47,8 @@ Tất cả booking demo đều được gắn horse thuộc đúng customer sở
 | `REQ-20261010-DEMO-0001` | Trinh Ng An Quan | `DRAFT` | C1-001, C1-002 | Test chỉnh sửa booking |
 | `REQ-20261010-DEMO-0002` | Bat Quy Quan | `PENDING` | C2-001, C2-002 | Test submit/approve/reject |
 | `REQ-20261010-DEMO-0003` | Kim Ve Tuan | `APPROVED` | C3-001, C3-002, C3-003 | Approved booking chưa có TransportPlan |
-| `REQ-20261010-DEMO-0004` | Khuyen Vkse200481 | `APPROVED` | C4-001, C4-002 | Approved booking có TransportPlan `DRAFT` |
-| `REQ-20261010-DEMO-0005` | Trinh Ng An Quan | `APPROVED` | C1-003, C1-004 | Approved booking đầy đủ plan, assignment, route và dossier |
+| `REQ-20261010-DEMO-0004` | Khuyen Vkse200481 | `APPROVED` | C4-001, C4-002 | Approved booking, transport `PLANNING`, chưa có TransportPlan |
+| `REQ-20261010-DEMO-0005` | Trinh Ng An Quan | `APPROVED` | C1-003, C1-004 | Approved booking, transport `READY`, có compliance dossier (chưa có plan, assignment, route) |
 | `REQ-20261010-DEMO-0006` | Bat Quy Quan | `REJECTED` | C2-003 | Test negative path và rejection |
 
 Booking có lịch sử trạng thái phù hợp cho các case `PENDING`, `APPROVED` và `REJECTED`.
@@ -61,23 +61,9 @@ Booking có lịch sử trạng thái phù hợp cho các case `PENDING`, `APPRO
 | `TR-20261010-DEMO-0004` | `REQ-20261010-DEMO-0004` | `PLANNING` |
 | `TR-20261010-DEMO-0005` | `REQ-20261010-DEMO-0005` | `READY` |
 
-## TransportPlan
+## TransportPlan, EmployeeTransportPlan và RoutePlan
 
-| Plan code | Transport | Booking | Status |
-|---|---|---|---|
-| `TP-20261010-DEMO-0004` | `TR-20261010-DEMO-0004` | `REQ-20261010-DEMO-0004` | `DRAFT` |
-| `TP-20261010-DEMO-0005` | `TR-20261010-DEMO-0005` | `REQ-20261010-DEMO-0005` | `APPROVED` |
-
-`TP-20261010-DEMO-0005` có thời gian, khoảng cách 920.5 km, thời lượng 1260 phút và planning note demo.
-
-## EmployeeTransportPlan
-
-Assignment dùng bảng `EmployeeTransportPlan`, không dùng bảng đã xóa `BookingEmployeeAssignment`.
-
-| Plan | Employee | Responsibility | Primary |
-|---|---|---|---|
-| `TP-20261010-DEMO-0005` | `huyvog6226@gmail.com` | Compliance dossier | `true` |
-| `TP-20261010-DEMO-0005` | `hoanguyen91011@gmail.com` | Route planning | `true` |
+Seed không tạo `TransportPlan`, `EmployeeTransportPlan` hay `RoutePlan`. Tạo kế hoạch vận chuyển, phân công nhân sự và route plan qua API để test luồng này. Transport `TR-20261010-DEMO-0003/0004/0005` vẫn được seed, nhưng chưa có plan.
 
 ## Location và Route
 
@@ -95,14 +81,6 @@ Assignment dùng bảng `EmployeeTransportPlan`, không dùng bảng đã xóa `
 |---|---|---|---:|---:|
 | `ROUTE-DEMO-FR-GB` | Paris Stable | London Stable | 920.5 km | 1260 phút |
 | `ROUTE-DEMO-DE-FR` | Berlin Stable | Paris Stable | 1050 km | 1440 phút |
-
-## RoutePlan
-
-| RoutePlan code | TransportPlan | Status | Route type |
-|---|---|---|---|
-| `RP-20261010-DEMO-0001` | `TP-20261010-DEMO-0005` | `DRAFT` | `PRIMARY` |
-
-RoutePlan có một chặng `ROUTE-DEMO-FR-GB`, được gắn Driver `duongngo2209@gmail.com` và Escort `quocbao.nguyen16102006@gmail.com`.
 
 ## Compliance
 

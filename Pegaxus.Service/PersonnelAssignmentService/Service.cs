@@ -1,5 +1,4 @@
 using System.Data;
-using System.Net;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -249,7 +248,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             notifications.Queue(new() { AccountId = employee.AccountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE,
                 Priority = newIds.Contains(employee.EmployeeId) ? NotificationPriority.HIGH : NotificationPriority.NORMAL, Title = reason is null ? "Personnel assigned" : "Personnel replaced", Message = message,
                 ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId, ActionUrl = $"/admin/route-plans/{routePlanId}", CreatedAt = now });
-            QueueEmail(employee.Account.Email, route.RoutePlanCode, message, now);
+            QueueEmail(employee, route.RoutePlanCode, reason, segments, now);
         }
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw new ConflictException("The route plan changed. Reload it and try again.", "ROUTE_PLAN_MODIFIED"); }
@@ -347,10 +346,24 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         if (!await db.Employees.AsNoTracking().Active().AnyAsync(x => x.AccountId == id && x.Account.AccountType == AccountType.EMPLOYEE && (x.Role == EmployeeRole.LOGISTICS_MANAGER || !write && (x.Role == EmployeeRole.TRANSPORT_SPECIALIST || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR || x.Role == EmployeeRole.DRIVER || x.Role == EmployeeRole.ESCORT)), cancellationToken))
             throw new ForbiddenException("The account cannot access personnel assignments.");
     }
-    private void QueueEmail(string? to, string subject, string message, DateTime now)
+    private void QueueEmail(Employee employee, string routePlanCode, string? replaceReason, IEnumerable<RoutePlanRoute> segments, DateTime now)
     {
-        if (!string.IsNullOrWhiteSpace(to)) OutboxQueue.AddEmail(db, new MailService.MailContent {
-            To = to, Subject = subject, Body = "<pre>" + WebUtility.HtmlEncode(message) + "</pre>" }, now);
+        if (string.IsNullOrWhiteSpace(employee.Account.Email)) return;
+        var isReplaced = replaceReason is not null;
+        OutboxQueue.AddEmail(db, new MailService.MailContent
+        {
+            To = employee.Account.Email,
+            Subject = isReplaced ? $"Route assignment updated — {routePlanCode}" : $"New route assignment — {routePlanCode}",
+            Body = MailService.EmailBodies.RouteAssignmentBody(
+                employeeName: employee.FullName,
+                routePlanCode: routePlanCode,
+                isReplaced: isReplaced,
+                replaceReason: replaceReason,
+                actionUrl: null,
+                segments: segments.OrderBy(x => x.SequenceNo).Select(x => new MailService.EmailBodies.RouteSegment(
+                    x.SequenceNo, x.PlannedDepartureAt, x.PlannedArrivalAt,
+                    x.DriverEmployee?.EmployeeCode, x.EscortEmployee?.EmployeeCode, x.TransportProvider?.ProviderName)))
+        }, now);
     }
     private static bool Overlaps(RoutePlanRoute a, RoutePlanRoute b) => !b.PlannedDepartureAt.HasValue || !b.PlannedArrivalAt.HasValue ||
         b.PlannedArrivalAt <= b.PlannedDepartureAt || a.PlannedDepartureAt <= b.PlannedArrivalAt && a.PlannedArrivalAt >= b.PlannedDepartureAt;
