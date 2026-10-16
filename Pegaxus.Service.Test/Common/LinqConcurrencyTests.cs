@@ -48,6 +48,7 @@ public class LinqConflictResponseTests
             3 => new InvalidOperationException("private execution details", error),
             _ => error
         };
+        Assert.True(Pegaxus.Repository.Extensions.PostgresErrors.IsWriteConflict(failure));
         await middleware.InvokeAsync(context, _ => Task.FromException(failure));
 
         Assert.Equal(409, context.Response.StatusCode);
