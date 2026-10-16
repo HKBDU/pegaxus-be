@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.API;
 
@@ -357,7 +358,7 @@ public static class AppDbContextSeedData
     private static async Task SeedDemoDossiersAsync(AppDbContext db, IReadOnlyDictionary<string, Transport> transports, IReadOnlyDictionary<string, DossierTemplate> templates, IReadOnlyDictionary<string, Horse> horses, DateTime now, CancellationToken cancellationToken)
     {
         var transport = transports["REQ-20261010-DEMO-0005"];
-        if (await db.ComplianceDossiers.AnyAsync(item => item.DossierCode == "CDOS-20261010-DEMO-0001", cancellationToken))
+        if (await db.ComplianceDossiers.AnyAsync(item => item.DossierCode == "CD-20261010-DEMO-0001", cancellationToken))
             return;
 
         var requirements = await db.ComplianceRequirements
@@ -365,8 +366,8 @@ public static class AppDbContextSeedData
             .ToDictionaryAsync(item => item.RequirementCode, cancellationToken);
         var dossier = new ComplianceDossier
         {
-            ComplianceDossierId = Guid.Parse("73000000-0000-0000-0000-000000000001"),
-            DossierCode = "CDOS-20261010-DEMO-0001",
+            ComplianceDossierId = StableGuid("CD-20261010-DEMO-0001"),
+            DossierCode = "CD-20261010-DEMO-0001",
             TransportId = transport.TransportId,
             DossierTemplateId = templates["TPL-DEMO-EU-GB"].DossierTemplateId,
             Status = ComplianceDossierStatus.IN_PREPARATION,
@@ -379,7 +380,7 @@ public static class AppDbContextSeedData
         db.DossierRequirements.AddRange(
             new DossierRequirement
             {
-                DossierRequirementId = Guid.Parse("74000000-0000-0000-0000-000000000001"),
+                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:EQUINE_PASSPORT"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["EQUINE_PASSPORT"].ComplianceRequirementId,
                 HorseId = horses["DEMO-C1-HORSE-003"].HorseId,
@@ -391,7 +392,7 @@ public static class AppDbContextSeedData
             },
             new DossierRequirement
             {
-                DossierRequirementId = Guid.Parse("74000000-0000-0000-0000-000000000002"),
+                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:EHC_EU_TO_GB"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["EHC_EU_TO_GB"].ComplianceRequirementId,
                 Status = DossierRequirementStatus.PENDING,
@@ -402,7 +403,7 @@ public static class AppDbContextSeedData
             },
             new DossierRequirement
             {
-                DossierRequirementId = Guid.Parse("74000000-0000-0000-0000-000000000003"),
+                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:IPAFFS_PRE_NOTIF"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["IPAFFS_PRE_NOTIF"].ComplianceRequirementId,
                 Status = DossierRequirementStatus.REQUESTED,
@@ -419,7 +420,7 @@ public static class AppDbContextSeedData
         var guidBytes = bytes[..16];
         guidBytes[6] = (byte)((guidBytes[6] & 0x0F) | 0x50);
         guidBytes[8] = (byte)((guidBytes[8] & 0x3F) | 0x80);
-        return new Guid(guidBytes);
+        return new Guid(guidBytes, bigEndian: true);
     }
 
     private static async Task SeedEmployeeAsync(
@@ -512,17 +513,10 @@ public static class AppDbContextSeedData
         });
     }
 
-    private static async Task<string> GenerateCustomerCodeAsync(AppDbContext db, CancellationToken cancellationToken)
-    {
-        for (var attempt = 0; attempt < 10; attempt++)
-        {
-            var code = $"CUS-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(0, 10_000):D4}";
-            if (!await db.Customers.AnyAsync(item => item.CustomerCode == code, cancellationToken))
-                return code;
-        }
-
-        throw new InvalidOperationException("Could not generate a unique customer code.");
-    }
+    private static Task<string> GenerateCustomerCodeAsync(AppDbContext db, CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("CUS", DateTime.UtcNow, async code =>
+            db.Customers.Local.Any(item => item.CustomerCode == code) ||
+            await db.Customers.AnyAsync(item => item.CustomerCode == code, cancellationToken));
 
     private static async Task SeedComplianceRequirementsAsync(
         AppDbContext db,
@@ -542,6 +536,7 @@ public static class AppDbContextSeedData
 
             db.ComplianceRequirements.Add(new ComplianceRequirement
             {
+                ComplianceRequirementId = StableGuid($"REQUIREMENT:{seed.RequirementCode}"),
                 RequirementCode = seed.RequirementCode,
                 RequirementName = seed.RequirementName,
                 Description = seed.Description,

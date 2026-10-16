@@ -68,7 +68,7 @@ public sealed partial class Service
                         revision = new DocumentRequest
                         {
                             DocumentRequestId = Guid.NewGuid(), DossierRequirementId = item.DossierRequirementId,
-                            RequestedByAccountId = accountId, RequestCode = $"DRQ-{Guid.NewGuid():N}",
+                            RequestedByAccountId = accountId, RequestCode = await NextRequestCodeAsync(now, cancellationToken),
                             RequestType = DocumentRequestType.MISSING_DOCUMENT, Status = DocumentRequestStatus.OPEN, CreatedAt = now
                         };
                         _db.DocumentRequests.Add(revision);

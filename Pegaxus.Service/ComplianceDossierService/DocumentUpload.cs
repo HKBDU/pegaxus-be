@@ -74,7 +74,7 @@ public sealed partial class Service
                         document = new ComplianceDocument
                         {
                             ComplianceDocumentId = Guid.NewGuid(), DossierRequirementId = requirementId,
-                            CreatedByAccountId = accountId, CreatedAt = now, DocumentCode = $"CDOC-{Guid.NewGuid():N}",
+                            CreatedByAccountId = accountId, CreatedAt = now, DocumentCode = await NextDocumentCodeAsync(now, cancellationToken),
                             DocumentName = requirement.ComplianceRequirement.RequirementName
                         };
                         _db.ComplianceDocuments.Add(document);
