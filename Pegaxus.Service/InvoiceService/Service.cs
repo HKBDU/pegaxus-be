@@ -23,5 +23,13 @@ public sealed partial class Service(AppDbContext db, PaymentGatewayService.IPaym
 
     private static DateTime NextVersion(DateTime previous, DateTime now) => now > previous ? now : Truncate(previous).AddTicks(10);
 
+    private static string InvoiceTypeLabel(InvoiceType type) => type switch
+    {
+        InvoiceType.DEPOSIT => "Deposit invoice",
+        InvoiceType.FINAL => "Final invoice",
+        InvoiceType.SUPPLEMENTARY => "Supplementary invoice",
+        _ => "Invoice"
+    };
+
     private static ConflictException Modified() => new("The invoice was just modified. Please reload the page", "INVOICE_MODIFIED");
 }

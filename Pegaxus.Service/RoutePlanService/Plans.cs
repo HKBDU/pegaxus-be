@@ -6,6 +6,8 @@ using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 using QuestPDF.Infrastructure;
 
+using Pegaxus.Service.Common;
+
 using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.RoutePlanService;
@@ -30,20 +32,18 @@ public sealed partial class Service
             throw new ConflictException("A primary route plan already exists for this transport plan", "PRIMARY_ROUTE_PLAN_EXISTS");
         if (routeType == RouteType.BACKUP && primary is null)
             throw new ConflictException("A backup route plan requires an existing primary route plan", "PRIMARY_ROUTE_PLAN_REQUIRED");
-        if (routeType == RouteType.BACKUP)
-            EnsureDossierAllowsBackup(plan.Transport.ComplianceDossier);
         if (routeType == RouteType.RETURN)
         {
             if (primary is null) throw new ConflictException("A return route requires an existing PRIMARY.", "PRIMARY_ROUTE_PLAN_REQUIRED");
             if (plan.Transport.Status != TransportStatus.IN_TRANSIT)
                 throw new ConflictException("A return route plan can only be created while the transport is in transit", "TRANSPORT_NOT_IN_TRANSIT");
-            if (plan.Transport.ComplianceDossier?.Status != ComplianceDossierStatus.APPROVED)
+            if (plan.Transport.MainDossier?.Status != ComplianceDossierStatus.APPROVED)
                 throw new ConflictException("A return route plan requires an approved compliance dossier (Transport is in transit)", "DOSSIER_NOT_APPROVED");
             if (plan.RoutePlans.Any(item => item.Status != RoutePlanStatus.CANCELLED && GetRouteType(item) == RouteType.RETURN))
                 throw new ConflictException("A return route plan already exists for this transport plan", "RETURN_ROUTE_PLAN_EXISTS");
         }
 
-        var materializedSegments = await MaterializeSegmentsAsync(request.Segments, routeType, plan, null, cancellationToken);
+        var materializedSegments = await MaterializeSegmentsAsync(request.Segments, routeType, plan, null, segment => SegmentType(segment, routeType, null), cancellationToken);
         ValidateRouteRules(materializedSegments, plan, routeType, primary);
         var now = UtcNowTruncated();
         var routePlan = new RoutePlan
@@ -69,7 +69,7 @@ public sealed partial class Service
                 RoutePlanId = routePlan.RoutePlanId,
                 RouteId = route.RouteId,
                 SequenceNo = item.Request.SequenceNo,
-                RouteType = routeType,
+                RouteType = item.Type,
                 PlannedDepartureAt = Truncate(item.Request.PlannedDepartureAt.UtcDateTime),
                 PlannedArrivalAt = Truncate(item.Request.PlannedArrivalAt.UtcDateTime),
                 TransportProviderId = item.Request.Outsourcing?.TransportProviderId,
@@ -86,12 +86,6 @@ public sealed partial class Service
                     AssignedAt = now,
                     Note = "Assigned by Route Plan seed/request."
                 });
-        }
-
-        if (routeType == RouteType.BACKUP && plan.Transport.ComplianceDossier is not null)
-        {
-            plan.Transport.ComplianceDossier.Status = ComplianceDossierStatus.DRAFT;
-            plan.Transport.ComplianceDossier.UpdatedAt = now;
         }
 
         QueueCreateNotifications(plan, routeType, request.Action, routePlan, now);
@@ -158,7 +152,7 @@ public sealed partial class Service
             throw new ConflictException("Transport is currently in transit. Please use Emergency Route Change (UC-48) for in-transit modifications.", "ROUTE_LOCKED");
         if (routePlan.Status != RoutePlanStatus.DRAFT)
             throw new ConflictException("Transport is currently in transit. Please use Emergency Route Change (UC-48) for in-transit modifications.", "ROUTE_LOCKED");
-        if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.ComplianceDossier?.Status != ComplianceDossierStatus.DRAFT)
+        if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.ExtraDossier?.Status != ComplianceDossierStatus.DRAFT)
             throw new ConflictException("RETURN must be approved by the Logistics Manager before editing.", "RETURN_NOT_APPROVED");
         EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
         if (string.IsNullOrWhiteSpace(request.UpdateReason))
@@ -172,7 +166,9 @@ public sealed partial class Service
         }, routeType, true);
 
         var primary = routePlan.TransportPlan.RoutePlans.FirstOrDefault(item => item.Status != RoutePlanStatus.CANCELLED && GetRouteType(item) == RouteType.PRIMARY);
-        var materializedSegments = await MaterializeSegmentsAsync(request.Segments, routeType, routePlan.TransportPlan, routePlan.RoutePlanId, cancellationToken);
+        var existingTypes = routePlan.RoutePlanRoutes.ToDictionary(item => item.SequenceNo, item => item.RouteType);
+        var materializedSegments = await MaterializeSegmentsAsync(request.Segments, routeType, routePlan.TransportPlan, routePlan.RoutePlanId,
+            segment => SegmentType(segment, routeType, existingTypes), cancellationToken);
         ValidateRouteRules(materializedSegments, routePlan.TransportPlan, routeType, primary, routePlan.RoutePlanId);
         db.RoutePlanRouteVehicles.RemoveRange(routePlan.RoutePlanRoutes.SelectMany(item => item.RoutePlanRouteVehicles));
         db.RoutePlanRoutes.RemoveRange(routePlan.RoutePlanRoutes);
@@ -185,7 +181,8 @@ public sealed partial class Service
                 RoutePlanId = routePlan.RoutePlanId,
                 RouteId = item.Route.RouteId,
                 SequenceNo = item.Request.SequenceNo,
-                RouteType = routeType,
+                RouteType = item.Type,
+                Route = item.Route,
                 PlannedDepartureAt = Truncate(item.Request.PlannedDepartureAt.UtcDateTime),
                 PlannedArrivalAt = Truncate(item.Request.PlannedArrivalAt.UtcDateTime),
                 TransportProviderId = item.Request.Outsourcing?.TransportProviderId,
@@ -216,6 +213,8 @@ public sealed partial class Service
             EstimatedDurationMinutes = routePlan.EstimatedDurationMinutes ?? 0,
             SegmentCount = segments.Count,
             IsPersonnelComplete = segments.Where(item => !item.TransportProviderId.HasValue).All(item => item.DriverEmployeeId.HasValue && item.EscortEmployeeId.HasValue),
+            BranchSequenceNo = TransportItinerary.BranchSequenceNo(routePlan),
+            BranchLocation = BranchLocation(routePlan),
             UpdatedAt = AsUtc(routePlan.UpdatedAt)
         };
     }
@@ -233,9 +232,7 @@ public sealed partial class Service
             throw new BadRequestException("lastUpdatedAt is required");
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new BadRequestException("reason is required");
-        if (routeType == RouteType.RETURN && await db.AuditDossiers.AnyAsync(audit =>
-                audit.TargetEntity == "RoutePlan" && audit.TargetId == routePlanId &&
-                audit.ActionType == "RETURN_DOSSIER_REOPENED", cancellationToken))
+        if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.ExtraDossier is not null)
             throw new ConflictException("The RETURN Route Plan has already been approved by the Logistics Manager and cannot be cancelled.", "RETURN_ALREADY_APPROVED");
         if (routePlan.Status != RoutePlanStatus.DRAFT)
             throw new ConflictException($"Cannot cancel a {routePlan.Status} Route Plan. Please contact Logistics Manager if a route change is required.", "INVALID_ROUTE_PLAN_STATUS");
@@ -262,10 +259,10 @@ public sealed partial class Service
     {
         if ((routeType is RouteType.PRIMARY or RouteType.BACKUP) && action == "SUBMIT_FOR_LEGAL_REVIEW")
             foreach (var accountId in plan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST).Select(item => item.Employee.AccountId).Distinct())
-                notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.COMPLIANCE, Priority = NotificationPriority.NORMAL, Title = "Backup route requires legal review", Message = $"Route Plan {routePlan.RoutePlanCode} requires compliance review.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}", CreatedAt = now });
+                notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.COMPLIANCE, Priority = NotificationPriority.NORMAL, Title = routeType == RouteType.BACKUP ? "Backup route requires legal review" : "Route plan requires legal review", Message = $"Route plan {routePlan.RoutePlanCode} for transport plan {plan.PlanCode} was submitted for legal review. Check that it is feasible, then confirm it or request changes.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.TRANSPORT_SPECIALIST, routePlan.RoutePlanId), CreatedAt = now });
         if (routeType == RouteType.RETURN)
             foreach (var accountId in db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted).Select(item => item.AccountId))
-                notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE, Priority = NotificationPriority.URGENT, Title = "Return route plan created", Message = $"Return Route Plan {routePlan.RoutePlanCode} requires your approval.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}", CreatedAt = now });
+                notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE, Priority = NotificationPriority.URGENT, Title = "Return route needs your approval", Message = $"Return route plan {routePlan.RoutePlanCode} for transport plan {plan.PlanCode} was created and needs your approval before the transport can head back.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.LOGISTICS_MANAGER, routePlan.RoutePlanId, "change-decision"), CreatedAt = now });
     }
 
     private void QueueUpdateNotifications(RoutePlan routePlan, string reason, DateTime now)
@@ -280,11 +277,11 @@ public sealed partial class Service
                 TransportId = routePlan.TransportPlan.TransportId,
                 Type = NotificationType.COMPLIANCE,
                 Priority = NotificationPriority.HIGH,
-                Title = "Route plan waiting for legal review",
-                Message = $"Route Plan {routePlan.RoutePlanCode} was updated. Reason: {reason}",
+                Title = "Route plan needs another legal review",
+                Message = $"Route plan {routePlan.RoutePlanCode} was updated and needs another legal review. Reason for the update: {reason}",
                 ReferenceType = "RoutePlan",
                 ReferenceId = routePlan.RoutePlanId,
-                ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}",
+                ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.TRANSPORT_SPECIALIST, routePlan.RoutePlanId),
                 CreatedAt = now
             });
     }

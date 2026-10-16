@@ -2,7 +2,8 @@ namespace Pegaxus.Repository.Enum;
 
 public enum HandoverPartyType {
     CUSTOMER = 1,
-    EMPLOYEE
+    EMPLOYEE,
+    PROVIDER
 }
 public enum HandoverStatus {
     PLANNED = 1,

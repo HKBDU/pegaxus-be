@@ -73,13 +73,17 @@ public sealed partial class Service
         if (customer && (invoice.IssuedAt is null || invoice.Status == InvoiceStatus.DRAFT))
             throw new ForbiddenException("Customer cannot view draft invoices");
 
-        var items = await db.InvoiceItems.AsNoTracking().Where(item => item.InvoiceId == invoiceId)
+        var itemRows = await db.InvoiceItems.AsNoTracking().Where(item => item.InvoiceId == invoiceId)
             .OrderBy(item => item.CreatedAt).ThenBy(item => item.InvoiceItemId)
-            .Select(item => new Response.InvoiceItemResponse(item.InvoiceItemId, item.ItemType.ToString(), item.Description,
-                item.Quantity, item.UnitPrice, item.LineAmount,
-                item.Horse == null ? null : new Response.HorseResponse(item.Horse.HorseId, item.Horse.HorseName),
-                invoice.Type == InvoiceType.FINAL && item.ItemType == InvoiceItemType.OTHER && item.LineAmount < 0, item.Note))
-            .ToListAsync(cancellationToken);
+            .Select(item => new
+            {
+                item.InvoiceItemId, item.ItemType, item.Description, item.Quantity, item.UnitPrice, item.LineAmount,
+                Horse = item.Horse == null ? null : new Response.HorseResponse(item.Horse.HorseId, item.Horse.HorseName),
+                IsDepositDeduction = invoice.Type == InvoiceType.FINAL && item.ItemType == InvoiceItemType.OTHER && item.LineAmount < 0,
+                item.Note
+            }).ToListAsync(cancellationToken);
+        var items = itemRows.Select(item => new Response.InvoiceItemResponse(item.InvoiceItemId, item.ItemType.ToString(), item.Description,
+            Vnd.ToInt(item.Quantity), Vnd.ToLong(item.UnitPrice), Vnd.ToLong(item.LineAmount), item.Horse, item.IsDepositDeduction, item.Note)).ToList();
         var receipts = await db.Receipts.AsNoTracking().Where(item => item.InvoiceId == invoiceId)
             .OrderBy(item => item.CreatedAt).ThenBy(item => item.ReceiptId)
             .Select(item => new
@@ -117,12 +121,12 @@ public sealed partial class Service
         return new(invoice.InvoiceId, invoice.InvoiceCode, invoice.Type.ToString(), invoice.Status.ToString(), invoice.Type != InvoiceType.QUOTATION,
             DateOnly.FromDateTime(invoice.IssuedAt ?? invoice.CreatedAt), invoice.DueDate, invoice.Currency, invoice.BillingNote,
             new(client.CustomerId, client.CustomerCode, client.FullName, client.Phone, client.Address, client.Account.Email), items,
-            new(invoice.Subtotal, invoice.TaxAmount, items.Where(item => item.IsDepositDeduction).Sum(item => item.Total), invoice.TotalAmount),
+            new(Vnd.ToLong(invoice.Subtotal), Vnd.ToLong(invoice.TaxAmount), items.Where(item => item.IsDepositDeduction).Sum(item => item.Total), Vnd.ToLong(invoice.TotalAmount)),
             new(contact.FullName, contact.Account.Email, contact.Phone), AsUtc(invoice.IssuedAt), AsUtc(invoice.PaidAt), AsUtc(invoice.CancelledAt),
             invoice.CancellationReason, new(booking.BookingId, booking.BookingCode, booking.Status.ToString(), booking.OriginAddress, booking.OriginCountry,
                 booking.DestinationAddress, booking.DestinationCountry, booking.RequestedDepartureDate),
             transport == null ? null : new(transport.TransportId, transport.TransportCode, transport.Status.ToString()), plan,
-            receipts.Select(item => new Response.ReceiptResponse(item.ReceiptId, item.ReceiptCode, item.Amount, item.Currency, item.PaymentMethod.ToString(),
+            receipts.Select(item => new Response.ReceiptResponse(item.ReceiptId, item.ReceiptCode, Vnd.ToLong(item.Amount), item.Currency, item.PaymentMethod.ToString(),
                 item.Status.ToString(), item.TransactionReference, AsUtc(item.PaidAt), AsUtc(item.ConfirmedAt), item.Note, item.RecordedBy)).ToArray(),
             actions, AsUtc(invoice.CreatedAt), AsUtc(invoice.UpdatedAt));
     }
@@ -183,7 +187,7 @@ public sealed partial class Service
                 item.IssuedAt, item.PaidAt, item.CreatedAt, item.UpdatedAt
             }).ToListAsync(cancellationToken);
         return new(rows.Select(item => new Response.InvoiceListItem(item.InvoiceId, item.InvoiceCode, item.Type.ToString(), item.Status.ToString(),
-                item.BookingId, item.BookingCode, item.TransportPlanId, item.CustomerName, item.TotalAmount, item.Currency,
+                item.BookingId, item.BookingCode, item.TransportPlanId, item.CustomerName, Vnd.ToLong(item.TotalAmount), item.Currency,
                 item.DueDate, AsUtc(item.IssuedAt), AsUtc(item.PaidAt), AsUtc(item.CreatedAt), AsUtc(item.UpdatedAt))).ToArray(),
             request.PageIndex, request.PageSize, total, Paging.TotalPages(total, request.PageSize));
     }
@@ -259,7 +263,7 @@ public sealed partial class Service
                 item.IssuedAt, item.PaidAt, item.CreatedAt, item.UpdatedAt
             }).ToListAsync(cancellationToken);
         return new(rows.Select(item => new Response.InvoiceListItem(item.InvoiceId, item.InvoiceCode, item.Type.ToString(), item.Status.ToString(),
-                item.BookingId, item.BookingCode, item.TransportPlanId, item.CustomerName, item.TotalAmount, item.Currency,
+                item.BookingId, item.BookingCode, item.TransportPlanId, item.CustomerName, Vnd.ToLong(item.TotalAmount), item.Currency,
                 item.DueDate, AsUtc(item.IssuedAt), AsUtc(item.PaidAt), AsUtc(item.CreatedAt), AsUtc(item.UpdatedAt))).ToArray(),
             request.PageIndex, request.PageSize, total, Paging.TotalPages(total, request.PageSize));
     }
@@ -311,15 +315,13 @@ public sealed partial class Service
                 "UNPAID_FINAL_INVOICE");
 
         var deposits = invoices.Where(invoice => invoice.Type == InvoiceType.DEPOSIT && invoice.Status == InvoiceStatus.PAID).ToArray();
-        if (type == InvoiceType.FINAL && deposits.Select(deposit => deposit.Currency).Distinct().Skip(1).Any())
-            throw new UnprocessableEntityException("Paid deposits must use the same currency for a FINAL invoice.", "CURRENCY_MISMATCH");
         var items = type == InvoiceType.FINAL
             ? deposits.Select(deposit => new Response.ItemResponse(null, nameof(InvoiceItemType.OTHER),
-                $"Deposit deduction ({deposit.InvoiceCode})", null, 1, -deposit.TotalAmount, -deposit.TotalAmount,
+                $"Deposit deduction ({deposit.InvoiceCode})", null, 1, -Vnd.ToLong(deposit.TotalAmount), -Vnd.ToLong(deposit.TotalAmount),
                 null, null, true, "Deposit is not refunded in cash; it is deducted from this final invoice.")).ToArray()
             : [];
         return new(booking.BookingId, booking.BookingCode, booking.Status.ToString(), booking.TransportId!.Value,
-            booking.TransportStatus!.Value.ToString(), type.ToString(), deposits.FirstOrDefault()?.Currency,
+            booking.TransportStatus!.Value.ToString(), type.ToString(), Vnd.Currency,
             type != InvoiceType.QUOTATION, items);
     }
 }

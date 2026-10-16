@@ -106,19 +106,19 @@ public sealed partial class Service
         var roles = request.IsHeld
             ? new[] { EmployeeRole.TRANSPORT_SPECIALIST, EmployeeRole.FLEET_ROUTE_COORDINATOR }
             : new[] { EmployeeRole.TRANSPORT_SPECIALIST };
-        var accountIds = await _db.Employees
+        var recipients = await _db.Employees
             .Active()
             .Where(employee => roles.Contains(employee.Role))
-            .Select(employee => employee.AccountId)
+            .Select(employee => new { employee.AccountId, employee.Role })
             .ToListAsync(cancellationToken);
-        var title = request.IsHeld ? "Customs clearance proof held" : "Customs clearance proof submitted";
+        var title = request.IsHeld ? "Customs is holding the transport" : "Customs clearance proof submitted";
         var message = request.IsHeld
-            ? "Customs is holding the transport for additional inspection."
-            : "A customs clearance proof is awaiting TS verification.";
+            ? $"Customs at {proof.CustomsPortName} is holding the transport for dossier {dossier.DossierCode} for additional inspection. Review the proof and plan the next steps."
+            : $"A customs clearance proof for dossier {dossier.DossierCode} ({proof.CustomsPortName}) is waiting for your verification.";
         var priority = request.IsHeld ? NotificationPriority.URGENT : NotificationPriority.NORMAL;
 
-        foreach (var accountIdToNotify in accountIds.Distinct())
-            AddNotification(accountIdToNotify, dossier, title, now, priority, message);
+        foreach (var recipient in recipients)
+            AddNotification(recipient.AccountId, recipient.Role, dossier, title, message, now, priority);
 
         await _db.SaveChangesAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -264,11 +264,12 @@ public sealed partial class Service
                 new { Action = action, proof.RejectionReason });
             AddNotification(
                 proof.SubmittedByEmployee.AccountId,
+                proof.SubmittedByEmployee.Role,
                 dossier,
                 "Customs clearance proof rejected",
+                $"Your customs clearance proof for dossier {dossier.DossierCode} ({proof.CustomsPortName}) was rejected. Reason: {proof.RejectionReason}. Please submit a new proof.",
                 now,
-                NotificationPriority.HIGH,
-                "The customs proof was rejected. Please submit a new proof.");
+                NotificationPriority.HIGH);
 
             await _db.SaveChangesAsync(cancellationToken);
             await _notificationService.FlushAsync(cancellationToken);
@@ -340,12 +341,12 @@ public sealed partial class Service
         var targetRoles = status == CustomsClearanceProofStatus.Held
             ? new[] { EmployeeRole.FLEET_ROUTE_COORDINATOR }
             : new[] { EmployeeRole.DRIVER, EmployeeRole.ESCORT, EmployeeRole.LOGISTICS_MANAGER, EmployeeRole.FLEET_ROUTE_COORDINATOR };
-        var accountIds = await _db.Employees
+        var recipients = await _db.Employees
             .Active()
             .Where(item => targetRoles.Contains(item.Role) && (item.Role == EmployeeRole.LOGISTICS_MANAGER ||
                     item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR ||
                     item.EmployeeTransportPlans.Any(plan => plan.TransportPlan.TransportId == dossier.TransportId)))
-            .Select(item => item.AccountId)
+            .Select(item => new { item.AccountId, item.Role })
             .ToListAsync(cancellationToken);
 
         var priority = status == CustomsClearanceProofStatus.Rejected
@@ -359,23 +360,24 @@ public sealed partial class Service
                 ? "Customs clearance held"
                 : "Customs clearance rejected";
         var message = status == CustomsClearanceProofStatus.Cleared
-            ? "Customs clearance was officially verified."
+            ? $"Customs at {proof.CustomsPortName} cleared the transport for dossier {dossier.DossierCode}."
             : status == CustomsClearanceProofStatus.Held
-                ? "Customs is holding the transport for inspection."
-                : "Customs clearance was rejected. Immediate action is required.";
+                ? $"Customs at {proof.CustomsPortName} is holding the transport for dossier {dossier.DossierCode} for inspection. Coordinate the next steps."
+                : $"Customs at {proof.CustomsPortName} rejected clearance for dossier {dossier.DossierCode}. Reason: {proof.RejectionReason ?? "not provided"}. Immediate action is required.";
 
-        foreach (var accountIdToNotify in accountIds.Distinct())
-            AddNotification(accountIdToNotify, dossier, title, now, priority, message);
+        foreach (var recipient in recipients)
+            AddNotification(recipient.AccountId, recipient.Role, dossier, title, message, now, priority);
 
         if (status == CustomsClearanceProofStatus.Rejected)
         {
             AddNotification(
                 dossier.Transport.Booking.Customer.AccountId,
+                null,
                 dossier,
                 title,
+                message,
                 now,
-                NotificationPriority.URGENT,
-                message);
+                NotificationPriority.URGENT);
         }
 
         await _db.SaveChangesAsync(cancellationToken);

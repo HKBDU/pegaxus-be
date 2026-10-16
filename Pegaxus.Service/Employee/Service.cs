@@ -1,4 +1,3 @@
-using System.Security.Cryptography;
 using ClosedXML.Excel;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -296,16 +295,9 @@ public sealed class Service : IEmployeeService
         return ordered!;
     }
 
-    private async Task<string> GenerateEmployeeCodeAsync(CancellationToken cancellationToken)
-    {
-        for (var attempt = 0; attempt < 10; attempt++)
-        {
-            var code = $"EMP-{DateTime.UtcNow:yyyyMMdd}-{RandomNumberGenerator.GetInt32(0, 10_000):D4}";
-            if (!await _db.Employees.AnyAsync(item => item.EmployeeCode == code, cancellationToken))
-                return code;
-        }
-        throw new ConflictException("Could not generate a unique employee code", "EMPLOYEE_CODE_GENERATION_FAILED");
-    }
+    private Task<string> GenerateEmployeeCodeAsync(CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("EMP", DateTime.UtcNow, code => _db.Employees.AnyAsync(item => item.EmployeeCode == code, cancellationToken),
+            "EMPLOYEE_CODE_GENERATION_FAILED", "Could not generate a unique employee code");
 
     private static Response.EmployeeDetailResponse ToDetail(Employee employee) => new()
     {

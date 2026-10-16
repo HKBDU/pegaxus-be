@@ -23,7 +23,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     public async Task<Response.AssignmentsResponse> GetAsync(Guid transportPlanId, Guid accountId, CancellationToken cancellationToken = default)
     {
         await AuthorizeAsync(accountId, false, cancellationToken);
-        var plan = await db.TransportPlans.AsNoTracking().Include(x => x.Transport).ThenInclude(x => x.ComplianceDossier)
+        var plan = await db.TransportPlans.AsNoTracking().Include(x => x.Transport).ThenInclude(x => x.ComplianceDossiers)
             .SingleOrDefaultAsync(x => x.TransportPlanId == transportPlanId, cancellationToken)
             ?? throw new NotFoundException("Transport plan not found", "TRANSPORT_PLAN_NOT_FOUND");
         var phase1 = await db.EmployeeTransportPlans.AsNoTracking().Include(x => x.Employee).ThenInclude(x => x.Account)
@@ -44,7 +44,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var segments = route is null ? [] : await LoadSegmentsAsync(route.RoutePlanId, false, cancellationToken);
         var specialist = phase1.FirstOrDefault(x => x.Responsibility == "TRANSPORT_SPECIALIST" && x.IsPrimary);
         var coordinator = phase1.FirstOrDefault(x => x.Responsibility == "FLEET_ROUTE_COORDINATOR" && x.IsPrimary);
-        var dossier = plan.Transport.ComplianceDossier;
+        var dossier = plan.Transport.MainDossier;
         return new(transportPlanId, new(
             specialist is not null && coordinator is not null, route is not null,
             Brief(specialist?.Employee, specialist?.AssignedAt),
@@ -164,6 +164,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 var conflict = segments.FirstOrDefault(x => x.RoutePlanRouteId != segment.RoutePlanRouteId && !x.TransportProviderId.HasValue &&
                     (x.DriverEmployeeId == employeeId || x.EscortEmployeeId == employeeId) && x.ActualArrivalAt == null && Overlaps(segment, x));
                 var external = await db.RoutePlanRoutes.AsNoTracking().Where(x => x.RoutePlanId != routePlanId &&
+                    (x.RoutePlan.TransportPlanId != planId || x.RouteType == RouteType.RETURN) &&
                     (x.DriverEmployeeId == employeeId || x.EscortEmployeeId == employeeId) && x.ActualArrivalAt == null &&
                     (x.RoutePlan.Status == RoutePlanStatus.CONFIRMED || x.RoutePlan.Status == RoutePlanStatus.ACTIVE) &&
                     x.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED && x.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED &&
@@ -242,12 +243,12 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var recipientEmployees = await db.Employees.AsNoTracking().Include(x => x.Account).Where(x => recipients.Contains(x.EmployeeId)).ToListAsync(cancellationToken);
         var schedule = string.Join("\n", segments.Select(x => $"Segment {x.SequenceNo}: {x.PlannedDepartureAt:O} - {x.PlannedArrivalAt:O}; " +
             $"Driver {x.DriverEmployee?.EmployeeCode ?? "-"}; Escort {x.EscortEmployee?.EmployeeCode ?? "-"}; Provider {x.TransportProvider?.ProviderName ?? "-"}"));
-        var message = $"{route.RoutePlanCode}: {(reason is null ? "Personnel assigned" : "Personnel replaced: " + reason)}\n{schedule}";
+        var message = $"Route plan {route.RoutePlanCode}: {(reason is null ? "personnel have been assigned." : "personnel were replaced. Reason: " + reason)}\nSchedule:\n{schedule}";
         foreach (var employee in recipientEmployees)
         {
             notifications.Queue(new() { AccountId = employee.AccountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE,
                 Priority = newIds.Contains(employee.EmployeeId) ? NotificationPriority.HIGH : NotificationPriority.NORMAL, Title = reason is null ? "Personnel assigned" : "Personnel replaced", Message = message,
-                ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId, ActionUrl = $"/admin/route-plans/{routePlanId}", CreatedAt = now });
+                ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId, ActionUrl = NotificationLinks.RoutePlan(employee.Role, routePlanId), CreatedAt = now });
             QueueEmail(employee, route.RoutePlanCode, reason, segments, now);
         }
         try { await db.SaveChangesAsync(cancellationToken); }

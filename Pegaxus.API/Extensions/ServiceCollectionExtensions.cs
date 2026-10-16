@@ -250,6 +250,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CompleteRequest>, Pegaxus.Service.HandoverService.Validator.CompleteRequestValidator>();
         services.AddScoped<TransportPlanService.ITransportPlanService, TransportPlanService.Service>();
         services.AddScoped<RoutePlanService.IRoutePlanService, RoutePlanService.Service>();
+        services.AddScoped<Pegaxus.Service.NotificationService.TransportNotifications>();
         services.AddScoped<LocationService.ILocationService, LocationService.Service>();
         services.AddScoped<RouteService.IRouteService, RouteService.Service>();
         services.AddScoped<Pegaxus.Service.RouteChangeService.IRouteChangeService, Pegaxus.Service.RouteChangeService.Service>();

@@ -123,13 +123,23 @@ public class Response
         public CustomerResponse Customer => new() { CustomerId = BookingSummary.CustomerId, FullName = BookingSummary.CustomerName };
         public Guid? ComplianceDossierId { get; init; }
         public string? DossierCode { get; init; }
+        public string? DossierType { get; init; }
         public string? Status { get; init; }
+        public IReadOnlyList<DossierSummaryResponse> ComplianceDossiers { get; init; } = [];
         public int FulfilledCount { get; init; }
         public int RequirementCount { get; init; }
         public decimal CompletionPercent { get; init; }
         public IReadOnlyList<RequirementResponse> TripRequirements { get; init; } = [];
         public IReadOnlyList<HorseRequirementsResponse> HorseRequirements { get; init; } = [];
         public ActionsResponse Actions { get; init; } = new();
+    }
+
+    public sealed class DossierSummaryResponse
+    {
+        public Guid ComplianceDossierId { get; init; }
+        public string DossierCode { get; init; } = string.Empty;
+        public string DossierType { get; init; } = string.Empty;
+        public string Status { get; init; } = string.Empty;
     }
 
     public sealed class BookingSummaryResponse
@@ -299,6 +309,7 @@ public class Response
     {
         public Guid? ComplianceDossierId { get; init; }
         public string? DossierCode { get; init; }
+        public string DossierType { get; init; } = nameof(Pegaxus.Repository.Enum.DossierType.MAIN);
         public Guid BookingId { get; init; }
         public DateTimeOffset BookingUpdatedAt { get; init; }
         public Guid TransportId { get; init; }
@@ -587,6 +598,10 @@ public class Response
     public class DashboardItemResponse
     {
         public Guid ComplianceDossierId { get; init; }
+
+        public string DossierCode { get; init; } = string.Empty;
+
+        public string DossierType { get; init; } = string.Empty;
 
         public string BookingCode { get; init; } = string.Empty;
 

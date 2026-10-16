@@ -63,14 +63,14 @@ public class InvoiceUpdatePostgresTests : IAsyncLifetime
         Assert.All(saved.InvoiceItems, item => Assert.Equal(saved.BillingNote, item.Note));
         Assert.Contains(saved.InvoiceItems, item => item.InvoiceItemId == keep.InvoiceItemId && item.CreatedAt == keep.CreatedAt);
         Assert.DoesNotContain(saved.InvoiceItems, item => item.InvoiceItemId == removed.InvoiceItemId);
-        Assert.Equal(1.32m, saved.TotalAmount);
+        Assert.Equal(18m, saved.TotalAmount);
         Assert.Single(await verification.InvoiceStatusHistories.ToListAsync());
 
         Task<Exception?> TryUpdate(AppDbContext db, string note) => Record.ExceptionAsync(async () =>
         {
             var request = f.Request();
             request.Note = note;
-            request.Items = [InvoiceUpdateTests.Fixture.Item(1, 1, keep.InvoiceItemId), InvoiceUpdateTests.Fixture.Item(1, 0.10m)];
+            request.Items = [InvoiceUpdateTests.Fixture.Item(1, 10, keep.InvoiceItemId), InvoiceUpdateTests.Fixture.Item(1, 5)];
             request.Items.ForEach(item => item.Note = note);
             await Service(db).UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, request);
         });

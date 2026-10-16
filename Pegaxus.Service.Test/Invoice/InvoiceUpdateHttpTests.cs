@@ -80,13 +80,13 @@ public class InvoiceUpdateHttpTests
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PutAsJsonAsync(path, request)).StatusCode);
         }
         SignIn(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER));
-        request.Items = [InvoiceUpdateTests.Fixture.Item(0, 1)];
+        request.Items = [InvoiceUpdateTests.Fixture.Item(0, 5)];
         var invalid = await client.PutAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.BadRequest, invalid.StatusCode);
         var error = await invalid.Content.ReadFromJsonAsync<JsonElement>();
         Assert.Equal("VALIDATION_ERROR", error.GetProperty("errorCode").GetString());
         Assert.Equal("items[0].quantity", error.GetProperty("errors")[0].GetProperty("field").GetString());
-        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync(path, new { lastUpdatedAt = "not-a-timestamp", currency = "VND", dueDate = "2026-10-12", items = Array.Empty<object>() })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PutAsJsonAsync(path, new { lastUpdatedAt = "not-a-timestamp", dueDate = "2026-10-12", items = Array.Empty<object>() })).StatusCode);
         request.Items[0].Quantity = 1;
         request.Items[0].InvoiceItemId = f.Invoice.InvoiceItems.First().InvoiceItemId;
         request.Items[0].HorseId = f.Horse.HorseId;
@@ -103,7 +103,7 @@ public class InvoiceUpdateHttpTests
         Assert.False(value.GetProperty("isPaymentRequired").GetBoolean());
         Assert.Equal(1, value.GetProperty("items").GetArrayLength());
         Assert.Equal(f.Horse.HorseId, value.GetProperty("items")[0].GetProperty("horse").GetProperty("horseId").GetGuid());
-        Assert.Equal(1.2m, value.GetProperty("summary").GetProperty("grandTotal").GetDecimal());
+        Assert.Equal("6", value.GetProperty("summary").GetProperty("grandTotal").GetRawText());
         Assert.Equal(InvoiceUpdateTests.Fixture.Clock.GetUtcNow(), value.GetProperty("updatedAt").GetDateTimeOffset());
         foreach (var field in new[] { "payment", "issuedAt", "paidAt", "cancelledAt", "cancellationReason" })
             Assert.Equal(JsonValueKind.Null, value.GetProperty(field).ValueKind);

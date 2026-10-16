@@ -204,8 +204,8 @@ public sealed partial class Service
         {
             var ownerAccountId = await _db.Customers.Where(customer => customer.CustomerId == dossier.Transport.Booking.CustomerId)
                 .Select(customer => customer.AccountId).SingleAsync(cancellationToken);
-            AddNotification(ownerAccountId, dossier, "Document approved", now,
-                message: $"{document.DocumentName} was approved for dossier {dossier.DossierCode}.");
+            AddNotification(ownerAccountId, null, dossier, "Document approved",
+                $"{document.DocumentName} was approved for dossier {dossier.DossierCode}.", now);
         }
         await _db.SaveChangesAsync(cancellationToken);
         return new Response.DocumentReviewResultResponse
