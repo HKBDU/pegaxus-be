@@ -115,6 +115,7 @@ public class DocumentUploadTests
         Assert.Equal("PROVIDED", result.Status);
         var document = Assert.Single(await db.ComplianceDocuments.ToListAsync());
         Assert.Equal("REF-100", document.DocumentNumber);
+        Assert.Matches(@"^DOC-\d{8}-\d{4}$", document.DocumentCode);
         Assert.Equal("Weatherbys", document.IssuingAuthority);
         Assert.Equal(account.AccountId, document.CreatedByAccountId);
         Assert.Equal(requirement.DossierRequirementId, document.DossierRequirementId);
