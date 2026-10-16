@@ -32,7 +32,7 @@ public sealed partial class Service
             .Include(item => item.BookingHorses)
                 .ThenInclude(item => item.Horse)
             .Include(item => item.Transport)
-                .ThenInclude(item => item!.ComplianceDossier)
+                .ThenInclude(item => item!.ComplianceDossiers)
             .Include(item => item.Transport)
                 .ThenInclude(item => item!.TransportPlans)
                     .ThenInclude(item => item.EmployeeTransportPlans)
@@ -114,12 +114,12 @@ public sealed partial class Service
                     EstimatedDurationMinutes = transportPlan.EstimatedDurationMinutes,
                     PlanningNote = transportPlan.PlanningNote
                 },
-            ComplianceDossier = booking.Transport?.ComplianceDossier is null
+            ComplianceDossier = booking.Transport?.MainDossier is not { } mainDossier
                 ? null
                 : new Response.ComplianceDossierSummary
                 {
-                    ComplianceDossierId = booking.Transport.ComplianceDossier.ComplianceDossierId,
-                    Status = booking.Transport.ComplianceDossier.Status.ToString()
+                    ComplianceDossierId = mainDossier.ComplianceDossierId,
+                    Status = mainDossier.Status.ToString()
                 },
             RoutePlans = transportPlan?.RoutePlans
                 .OrderBy(item => item.CreatedAt)
@@ -228,16 +228,17 @@ public sealed partial class Service
 
         if (request.HasComplianceDossier.HasValue)
             query = request.HasComplianceDossier.Value
-                ? query.Where(booking => booking.Transport != null && booking.Transport.ComplianceDossier != null)
-                : query.Where(booking => booking.Transport == null || booking.Transport.ComplianceDossier == null);
+                ? query.Where(booking => booking.Transport != null &&
+                    booking.Transport.ComplianceDossiers.Any(dossier => dossier.DossierType == DossierType.MAIN))
+                : query.Where(booking => booking.Transport == null ||
+                    !booking.Transport.ComplianceDossiers.Any(dossier => dossier.DossierType == DossierType.MAIN));
 
         if (!string.IsNullOrWhiteSpace(request.ComplianceDossierStatus))
         {
             if (!Enum.TryParse<ComplianceDossierStatus>(request.ComplianceDossierStatus.Trim(), true, out var status))
                 throw new BadRequestException("Compliance dossier status is invalid", "INVALID_COMPLIANCE_DOSSIER_STATUS");
             query = query.Where(booking => booking.Transport != null &&
-                booking.Transport.ComplianceDossier != null &&
-                booking.Transport.ComplianceDossier.Status == status);
+                booking.Transport.ComplianceDossiers.Any(dossier => dossier.DossierType == DossierType.MAIN && dossier.Status == status));
         }
 
         query = ApplyApprovedBookingSorting(query, request.SortBy);
@@ -280,13 +281,16 @@ public sealed partial class Service
                             PlanningNote = plan.PlanningNote
                         })
                         .FirstOrDefault(),
-                ComplianceDossier = booking.Transport != null && booking.Transport.ComplianceDossier != null
-                    ? new Response.ComplianceDossierSummary
-                    {
-                        ComplianceDossierId = booking.Transport.ComplianceDossier.ComplianceDossierId,
-                        Status = booking.Transport.ComplianceDossier.Status.ToString()
-                    }
-                    : null,
+                ComplianceDossier = booking.Transport == null
+                    ? null
+                    : booking.Transport.ComplianceDossiers
+                        .Where(dossier => dossier.DossierType == DossierType.MAIN)
+                        .Select(dossier => new Response.ComplianceDossierSummary
+                        {
+                            ComplianceDossierId = dossier.ComplianceDossierId,
+                            Status = dossier.Status.ToString()
+                        })
+                        .FirstOrDefault(),
                 RoutePlan = booking.Transport == null
                     ? null
                     : booking.Transport.TransportPlans

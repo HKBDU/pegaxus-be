@@ -63,7 +63,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         var type = segments.Count > 0 ? segments[0].RouteType : "";
         EnsureTypeStatus(plan, segments, type, type == "BACKUP" ? RoutePlanStatus.CONFIRMED : RoutePlanStatus.DRAFT);
         if (type is not ("BACKUP" or "RETURN")) throw InvalidStatus(plan);
-        var dossier = plan.TransportPlan.Transport.ComplianceDossier;
+        var dossier = plan.TransportPlan.Transport.MainDossier;
         if (type == "RETURN" && dossier?.Status != ComplianceDossierStatus.APPROVED)
             throw new ConflictException("The compliance dossier must be approved to approve a return route plan", "DOSSIER_NOT_APPROVED");
         var now = NextVersion(plan);
@@ -131,7 +131,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         CheckVersion(plan, request.LastUpdatedAt);
         var segments = await SegmentsAsync(routePlanId, cancellationToken);
         EnsureTypeStatus(plan, segments, "RETURN", RoutePlanStatus.CONFIRMED);
-        if (plan.TransportPlan.Transport.ComplianceDossier?.Status != ComplianceDossierStatus.APPROVED)
+        if (plan.TransportPlan.Transport.MainDossier?.Status != ComplianceDossierStatus.APPROVED)
             throw new ConflictException("The reviewed compliance dossier must be approved.", "DOSSIER_NOT_APPROVED");
         var primary = await PrimaryAsync(plan, cancellationToken);
         var active = await SegmentsAsync(primary.RoutePlanId, cancellationToken);

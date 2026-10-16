@@ -41,7 +41,7 @@ public class RouteChangeTests
             f.Coordinator.AccountId, returning.RoutePlanId, new() { LastUpdatedAt = decision.UpdatedAt, Reason = "Cancel return itinerary" }));
         Assert.Equal("RETURN_ALREADY_APPROVED", error.ErrorCode);
         Assert.Equal(RoutePlanStatus.DRAFT, returning.Status);
-        Assert.Equal(ComplianceDossierStatus.DRAFT, f.Transport.ComplianceDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.DRAFT, f.Transport.MainDossier!.Status);
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class RouteChangeTests
         var result = await TestSupport.CreateRoutePlans(db).CancelAsync(f.Coordinator.AccountId, returning.RoutePlanId,
             new() { LastUpdatedAt = Fixture.Version(returning), Reason = "Cancel return itinerary" });
         Assert.Equal("CANCELLED", result.Status);
-        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
     }
 
     [Fact]
@@ -205,7 +205,7 @@ public class RouteChangeTests
         var result = await f.Service.DecideAsync(plan.RoutePlanId, f.Manager.AccountId, new() {
             Decision = "REJECT", LastUpdatedAt = Fixture.Version(plan), Note = "Choose a safer itinerary" });
         Assert.Equal(type == RouteType.BACKUP ? "CONFIRMED" : "CANCELLED", result.Status);
-        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
         if (type == RouteType.RETURN) Assert.Equal("Choose a safer itinerary", plan.RouteNote);
         Assert.Equal(f.Coordinator.AccountId, Assert.Single(db.AccountNotifications).AccountId);
         Assert.Null(f.Current.SupersededAt);
@@ -228,7 +228,7 @@ public class RouteChangeTests
             new() { LastUpdatedAt = decision.UpdatedAt, IsFeasible = true });
         Assert.Equal("CONFIRMED", reviewed.Status); Assert.False(reviewed.CustomerUploadEnabled);
         Assert.False(reviewed.PersonnelAssignmentPhase2Enabled);
-        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
         Assert.Equal(TransportStatus.IN_TRANSIT, f.Transport.Status);
         var vehicle = await db.Vehicles.SingleAsync(); vehicle.Status = VehicleStatus.IN_USE; await db.SaveChangesAsync();
         var result = await f.Service.ActivateReturnAsync(plan.RoutePlanId, f.Manager.AccountId, new() {
@@ -265,7 +265,7 @@ public class RouteChangeTests
             Segments = [new() { SequenceNo = 1, RouteId = back.RouteId,
                 PlannedDepartureAt = Fixture.StartAt, PlannedArrivalAt = Fixture.StartAt.AddHours(2) }] });
         Assert.Equal("DRAFT", draft.Status);
-        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier!.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
         var specialist = await db.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST);
         Assert.DoesNotContain(await db.AccountNotifications.ToArrayAsync(), x => x.AccountId == specialist.AccountId);
         var change = new Pegaxus.Service.RoutePlanService.Request.UpdateRequest {
@@ -284,7 +284,7 @@ public class RouteChangeTests
             notification.Title == "Route plan waiting for legal review" && notification.Priority == NotificationPriority.HIGH);
         await routes.ReviewLegalAsync(specialist.AccountId, draft.RoutePlanId,
             new() { LastUpdatedAt = updated.UpdatedAt, IsFeasible = true });
-        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.ComplianceDossier.Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier.Status);
     }
 
     [Theory]

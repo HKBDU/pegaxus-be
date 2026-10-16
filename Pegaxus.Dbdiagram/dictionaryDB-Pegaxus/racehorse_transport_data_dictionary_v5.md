@@ -1,7 +1,7 @@
 # Racehorse Cross-Border Transport System
-## Data Dictionary V8 — Ý nghĩa từng bảng và từng field
+## Data Dictionary V9 — Ý nghĩa từng bảng và từng field
 
-> Tài liệu này được đối chiếu với `racehorse_transport_physical_erd_final_v8.dbml`.
+> Tài liệu này được đối chiếu với `racehorse_transport_physical_erd_final_v9.dbml`.
 > Mục tiêu: giải thích **từng field**, kiểu dữ liệu, PK/FK, bắt buộc/nullable và ý nghĩa nghiệp vụ.
 
 ### Quy ước
@@ -154,6 +154,10 @@
 | `origin_country` | `varchar(100)` |  | Yes | Quốc gia xuất phát theo Booking. |
 | `destination_address` | `varchar(500)` |  | Yes | Địa chỉ đích theo Booking. |
 | `destination_country` | `varchar(100)` |  | Yes | Quốc gia đích theo Booking. |
+| `origin_latitude` | `decimal(10,4)` |  | No | Vĩ độ điểm xuất phát Customer chọn trên bản đồ (V9). NULL với Booking tạo trước V9. |
+| `origin_longitude` | `decimal(10,4)` |  | No | Kinh độ điểm xuất phát; luôn đi cùng `origin_latitude`. |
+| `destination_latitude` | `decimal(10,4)` |  | No | Vĩ độ điểm đích Customer chọn trên bản đồ (V9). |
+| `destination_longitude` | `decimal(10,4)` |  | No | Kinh độ điểm đích; luôn đi cùng `destination_latitude`. |
 | `requested_departure_date` | `date` |  | Yes | Ngày Customer mong muốn khởi hành. |
 | `requested_arrival_date` | `date` |  | No | Ngày Customer mong muốn đến nơi. |
 | `special_requirements` | `text` |  | No | Các yêu cầu vận chuyển đặc biệt của Booking. |
@@ -228,6 +232,8 @@
 | `planning_note` | `text` |  | No | Ghi chú trong quá trình lập TransportPlan. |
 | `estimated_duration_minutes` | `int` |  | No | Thời lượng ước tính, tính bằng phút. |
 | `estimated_distance_km` | `decimal(10,2)` |  | No | Tổng khoảng cách ước tính của TransportPlan, đơn vị km. |
+| `origin_location_id` | `uuid` | FK | No | Location điểm đi của plan (V9); khớp từ toạ độ Booking hoặc LM chọn. NULL nếu chưa xác định. |
+| `destination_location_id` | `uuid` | FK | No | Location điểm đến của plan (V9). |
 | `approved_by_employee_id` | `uuid` | FK | No | Employee đã phê duyệt TransportPlan. |
 | `approved_at` | `timestamp` |  | No | Thời điểm được phê duyệt. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
@@ -302,7 +308,7 @@
 
 # 14. `RoutePlanRoute`
 
-**Cập nhật BE:** bổ sung `service_type`, `provider_reference`, `outsourcing_cost_amount`, `outsourcing_currency` và `superseded_at` để lưu outsource và route change.
+**Cập nhật BE:** bổ sung `service_type`, `provider_reference`, `outsourcing_cost_amount`, `outsourcing_currency` và `superseded_at` để lưu outsource và route change. **V9:** bổ sung `status` (`route_segment_status`); dữ liệu cũ được backfill từ `actual_departure_at`/`actual_arrival_at`.
 
 **Ý nghĩa bảng:** RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver/Escort phụ trách, provider thuê ngoài và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.
 
@@ -320,6 +326,7 @@
 | `route_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Route.route_id`. |
 | `sequence_no` | `int` |  | Yes | Thứ tự chặng trong RoutePlan; duy nhất trong cùng một RoutePlan. |
 | `route_type` | `route_type` |  | Yes | Vai trò của Route trong RoutePlanRoute. Enum `route_type`: PRIMARY, BACKUP, RETURN. `RETURN` dùng cho chặng quay về. |
+| `status` | `route_segment_status` |  | Yes | Tiến độ chặng (V9). Enum `route_segment_status`: PLANNED, IN_TRANSIT, COMPLETED. Mặc định PLANNED; ghi cùng lúc với `actual_departure_at` (IN_TRANSIT) và `actual_arrival_at` (COMPLETED). |
 | `driver_employee_id` | `uuid` | FK | No | Driver phụ trách chặng này. Có thể NULL khi RoutePlan còn DRAFT; phải là Employee có role=DRIVER trước CONFIRMED/ACTIVE. |
 | `escort_employee_id` | `uuid` | FK | No | Escort phụ trách chặng này. Phải là Employee có role=ESCORT khi chặng nội bộ được phân công. |
 | `transport_provider_id` | `uuid` | FK | No | Provider thực hiện chặng thuê ngoài. NULL nghĩa là chặng nội bộ; có giá trị thì không gán vehicle/driver/escort nội bộ. |
@@ -426,12 +433,13 @@
 
 # 20. `HandoverRecord`
 
-**Ý nghĩa bảng:** HandoverRecord: Một lần bàn giao trong Transport. from_type/to_type xác định bên giao/nhận là CUSTOMER hay EMPLOYEE; from/to_route_plan_route_id xác định chặng vừa kết thúc và chặng tiếp theo.
+**Ý nghĩa bảng:** HandoverRecord: Một lần bàn giao trong Transport. from_type/to_type xác định bên giao/nhận là CUSTOMER, EMPLOYEE hay PROVIDER (đối tác vận chuyển); from/to_route_plan_route_id xác định chặng vừa kết thúc và chặng tiếp theo.
 
 **Business rule quan trọng:**
 
 - `from_type = CUSTOMER` ⇒ `from_customer_id` có giá trị và `from_employee_id = NULL`; nếu `EMPLOYEE` thì ngược lại.
 - `to_type = CUSTOMER` ⇒ `to_customer_id` có giá trị và `to_employee_id = NULL`; nếu `EMPLOYEE` thì ngược lại.
+- **V9:** `from_type`/`to_type = PROVIDER` ⇒ chỉ `from_transport_provider_id`/`to_transport_provider_id` có giá trị (mỗi bên đúng một trong ba id: customer, employee, provider). Quy tắc XOR do backend kiểm tra.
 - Nếu cả `from_route_plan_route_id` và `to_route_plan_route_id` đều có giá trị: hai chặng phải thuộc cùng `RoutePlan` và `to.sequence_no = from.sequence_no + 1`.
 - Với bàn giao Employee → Employee, Employee bên giao/nhận phải khớp Driver của chặng from/to tương ứng.
 
@@ -445,12 +453,14 @@
 | `status` | `handover_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `handover_status`: PLANNED, IN_PROGRESS, COMPLETED, CANCELLED. |
 | `planned_handover_at` | `timestamp` |  | No | Thời điểm dự kiến thực hiện bàn giao. |
 | `actual_handover_at` | `timestamp` |  | No | Thời điểm bàn giao thực tế. |
-| `from_type` | `handover_party_type` |  | Yes | Loại bên giao: CUSTOMER hoặc EMPLOYEE. Enum `handover_party_type`: CUSTOMER, EMPLOYEE. |
-| `to_type` | `handover_party_type` |  | Yes | Loại bên nhận: CUSTOMER hoặc EMPLOYEE. Enum `handover_party_type`: CUSTOMER, EMPLOYEE. |
+| `from_type` | `handover_party_type` |  | Yes | Loại bên giao: CUSTOMER, EMPLOYEE hoặc PROVIDER (V9). Enum `handover_party_type`: CUSTOMER, EMPLOYEE, PROVIDER. |
+| `to_type` | `handover_party_type` |  | Yes | Loại bên nhận: CUSTOMER, EMPLOYEE hoặc PROVIDER (V9). Enum `handover_party_type`: CUSTOMER, EMPLOYEE, PROVIDER. |
 | `from_customer_id` | `uuid` | FK | No | Customer bên giao; chỉ dùng khi from_type=CUSTOMER. |
 | `from_employee_id` | `uuid` | FK | No | Employee bên giao; chỉ dùng khi from_type=EMPLOYEE. |
 | `to_customer_id` | `uuid` | FK | No | Customer bên nhận; chỉ dùng khi to_type=CUSTOMER. |
 | `to_employee_id` | `uuid` | FK | No | Employee bên nhận; chỉ dùng khi to_type=EMPLOYEE. |
+| `from_transport_provider_id` | `uuid` | FK | No | TransportProvider bên giao; chỉ dùng khi from_type=PROVIDER (V9). |
+| `to_transport_provider_id` | `uuid` | FK | No | TransportProvider bên nhận; chỉ dùng khi to_type=PROVIDER (V9). |
 | `from_route_plan_route_id` | `uuid` | FK | No | Chặng vừa kết thúc trước bàn giao. NULL ở pickup đầu chuyến. |
 | `to_route_plan_route_id` | `uuid` | FK | No | Chặng tiếp theo sau bàn giao. NULL ở delivery cuối chuyến. |
 | `from_party_name` | `varchar(200)` |  | No | Tên hiển thị/snapshot của bên giao tại thời điểm bàn giao. |
@@ -828,7 +838,7 @@
 
 # 37. `ComplianceDossier`
 
-**Cập nhật BE:** bổ sung `dossier_template_id uuid` nullable, liên kết tới `DossierTemplate`; `transport_id` vẫn unique và quan hệ 1-1 với `Transport`.
+**Cập nhật BE:** bổ sung `dossier_template_id uuid` nullable, liên kết tới `DossierTemplate`; **V9:** thêm `dossier_type`; `transport_id` không còn unique riêng mà unique theo cặp `(transport_id, dossier_type)`, nên một `Transport` có tối đa một hồ sơ `MAIN` và một hồ sơ `EXTRA`.
 
 **Ý nghĩa bảng:** ComplianceDossier: Bộ hồ sơ pháp lý do Transport Specialist lập và chịu trách nhiệm hoàn thiện trước khi Transport xuất phát.
 
@@ -838,7 +848,8 @@
 |---|---|---|---|---|
 | `compliance_dossier_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `ComplianceDossier`. |
 | `dossier_code` | `varchar(50)` |  | Yes | Mã bộ hồ sơ pháp lý thực tế. |
-| `transport_id` | `uuid` | FK | Yes | Transport sở hữu bộ hồ sơ pháp lý thực tế này; quan hệ 1-1. |
+| `transport_id` | `uuid` | FK | Yes | Transport sở hữu bộ hồ sơ pháp lý thực tế này; quan hệ 1-N (tối đa một hồ sơ cho mỗi `dossier_type`). |
+| `dossier_type` | `dossier_type` |  | Yes | Loại hồ sơ (V9). Enum `dossier_type`: MAIN, EXTRA. `MAIN` là hồ sơ của chuyến; `EXTRA` là hồ sơ bổ sung mở khi LM duyệt RoutePlan RETURN (BR-048). Mặc định MAIN. |
 | `dossier_template_id` | `uuid` | FK | No | Template dùng làm cơ sở sinh các yêu cầu pháp lý cho dossier; có thể NULL. |
 | `status` | `compliance_dossier_status` |  | Yes | Trạng thái vòng đời bộ hồ sơ trước chuyến/AuthoritySubmission. Enum: DRAFT, IN_PREPARATION, READY_FOR_SUBMISSION, SUBMITTED, PENDING, APPROVED, REJECTED, CLOSED. Không cập nhật field này từ kết quả BCP/Hải quan. |
 | `opened_at` | `timestamp` |  | Yes | Thời điểm bộ hồ sơ thực tế được mở/tạo để xử lý. |

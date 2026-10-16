@@ -23,7 +23,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     public async Task<Response.AssignmentsResponse> GetAsync(Guid transportPlanId, Guid accountId, CancellationToken cancellationToken = default)
     {
         await AuthorizeAsync(accountId, false, cancellationToken);
-        var plan = await db.TransportPlans.AsNoTracking().Include(x => x.Transport).ThenInclude(x => x.ComplianceDossier)
+        var plan = await db.TransportPlans.AsNoTracking().Include(x => x.Transport).ThenInclude(x => x.ComplianceDossiers)
             .SingleOrDefaultAsync(x => x.TransportPlanId == transportPlanId, cancellationToken)
             ?? throw new NotFoundException("Transport plan not found", "TRANSPORT_PLAN_NOT_FOUND");
         var phase1 = await db.EmployeeTransportPlans.AsNoTracking().Include(x => x.Employee).ThenInclude(x => x.Account)
@@ -44,7 +44,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var segments = route is null ? [] : await LoadSegmentsAsync(route.RoutePlanId, false, cancellationToken);
         var specialist = phase1.FirstOrDefault(x => x.Responsibility == "TRANSPORT_SPECIALIST" && x.IsPrimary);
         var coordinator = phase1.FirstOrDefault(x => x.Responsibility == "FLEET_ROUTE_COORDINATOR" && x.IsPrimary);
-        var dossier = plan.Transport.ComplianceDossier;
+        var dossier = plan.Transport.MainDossier;
         return new(transportPlanId, new(
             specialist is not null && coordinator is not null, route is not null,
             Brief(specialist?.Employee, specialist?.AssignedAt),

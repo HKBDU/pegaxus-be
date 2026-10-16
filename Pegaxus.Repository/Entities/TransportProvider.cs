@@ -48,4 +48,8 @@ public partial class TransportProvider
     public virtual ICollection<TransportPlanProvider> TransportPlanProviders { get; set; } = new List<TransportPlanProvider>();
 
     public virtual ICollection<RoutePlanRoute> RoutePlanRoutes { get; set; } = new List<RoutePlanRoute>();
+
+    public virtual ICollection<HandoverRecord> HandoverRecordFromProviders { get; set; } = new List<HandoverRecord>();
+
+    public virtual ICollection<HandoverRecord> HandoverRecordToProviders { get; set; } = new List<HandoverRecord>();
 }

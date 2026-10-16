@@ -52,12 +52,12 @@ public sealed partial class Service
             await LockSegmentsAsync(routePlanId, token);
         }
         var plan = await db.RoutePlans.Include(x => x.TransportPlan).ThenInclude(x => x.Transport).ThenInclude(x => x.Booking).ThenInclude(x => x.Customer).ThenInclude(x => x.Account)
-            .Include(x => x.TransportPlan).ThenInclude(x => x.Transport).ThenInclude(x => x.ComplianceDossier)
+            .Include(x => x.TransportPlan).ThenInclude(x => x.Transport).ThenInclude(x => x.ComplianceDossiers)
             .SingleAsync(x => x.RoutePlanId == routePlanId, token);
         await db.Entry(plan).ReloadAsync(token);
         await db.Entry(plan.TransportPlan).ReloadAsync(token);
         await db.Entry(plan.TransportPlan.Transport).ReloadAsync(token);
-        var dossier = plan.TransportPlan.Transport.ComplianceDossier;
+        var dossier = plan.TransportPlan.Transport.MainDossier;
         if (dossier is not null && db.Database.IsRelational())
         {
             await db.LockRowsAsync(db.ComplianceDossiers.Where(x => x.ComplianceDossierId == dossier.ComplianceDossierId), x => x.ComplianceDossierId, token);

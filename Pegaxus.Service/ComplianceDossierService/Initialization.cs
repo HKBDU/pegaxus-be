@@ -151,7 +151,7 @@ public sealed partial class Service
         var booking = await _db.Bookings.AsNoTracking()
             .Include(value => value.Customer)
             .Include(value => value.BookingHorses).ThenInclude(value => value.Horse)
-            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossier)
+            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossiers)
             .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
             ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
         var transport = booking.Transport;
@@ -164,7 +164,7 @@ public sealed partial class Service
             throw new ConflictException("ComplianceDossier can only be initialized for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
         if (transport.Status is TransportStatus.CANCELLED or TransportStatus.COMPLETED)
             throw new ConflictException("The Transport is no longer active.", "TRANSPORT_NOT_ACTIVE");
-        if (transport.ComplianceDossier is not null)
+        if (transport.MainDossier is not null)
             throw DossierAlreadyExists();
         if (booking.BookingHorses.Count == 0 || booking.BookingHorses.Any(item => item.Horse.IsDeleted || item.Horse.CustomerId != booking.CustomerId))
             throw new BadRequestException("The booking must contain available horses owned by its customer.");
@@ -177,7 +177,7 @@ public sealed partial class Service
         var transport = await _db.Transports.AsNoTracking()
             .Include(value => value.Booking).ThenInclude(value => value.Customer)
             .Include(value => value.Booking).ThenInclude(value => value.BookingHorses).ThenInclude(value => value.Horse)
-            .Include(value => value.ComplianceDossier)
+            .Include(value => value.ComplianceDossiers)
             .SingleOrDefaultAsync(value => value.TransportId == transportId, cancellationToken);
         if (transport is null)
         {
@@ -193,7 +193,7 @@ public sealed partial class Service
             throw new ConflictException("ComplianceDossier can only be initialized for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
         if (transport.Status is TransportStatus.CANCELLED or TransportStatus.COMPLETED)
             throw new ConflictException("The Transport is no longer active.", "TRANSPORT_NOT_ACTIVE");
-        if (transport.ComplianceDossier is not null)
+        if (transport.MainDossier is not null)
             throw DossierAlreadyExists();
         if (booking.BookingHorses.Count == 0 || booking.BookingHorses.Any(item => item.Horse.IsDeleted || item.Horse.CustomerId != booking.CustomerId))
             throw new BadRequestException("The booking must contain available horses owned by its customer.");

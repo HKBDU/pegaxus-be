@@ -31,13 +31,13 @@ public sealed partial class Service
         if (routeType == RouteType.BACKUP && primary is null)
             throw new ConflictException("A backup route plan requires an existing primary route plan", "PRIMARY_ROUTE_PLAN_REQUIRED");
         if (routeType == RouteType.BACKUP)
-            EnsureDossierAllowsBackup(plan.Transport.ComplianceDossier);
+            EnsureDossierAllowsBackup(plan.Transport.MainDossier);
         if (routeType == RouteType.RETURN)
         {
             if (primary is null) throw new ConflictException("A return route requires an existing PRIMARY.", "PRIMARY_ROUTE_PLAN_REQUIRED");
             if (plan.Transport.Status != TransportStatus.IN_TRANSIT)
                 throw new ConflictException("A return route plan can only be created while the transport is in transit", "TRANSPORT_NOT_IN_TRANSIT");
-            if (plan.Transport.ComplianceDossier?.Status != ComplianceDossierStatus.APPROVED)
+            if (plan.Transport.MainDossier?.Status != ComplianceDossierStatus.APPROVED)
                 throw new ConflictException("A return route plan requires an approved compliance dossier (Transport is in transit)", "DOSSIER_NOT_APPROVED");
             if (plan.RoutePlans.Any(item => item.Status != RoutePlanStatus.CANCELLED && GetRouteType(item) == RouteType.RETURN))
                 throw new ConflictException("A return route plan already exists for this transport plan", "RETURN_ROUTE_PLAN_EXISTS");
@@ -88,10 +88,10 @@ public sealed partial class Service
                 });
         }
 
-        if (routeType == RouteType.BACKUP && plan.Transport.ComplianceDossier is not null)
+        if (routeType == RouteType.BACKUP && plan.Transport.MainDossier is not null)
         {
-            plan.Transport.ComplianceDossier.Status = ComplianceDossierStatus.DRAFT;
-            plan.Transport.ComplianceDossier.UpdatedAt = now;
+            plan.Transport.MainDossier.Status = ComplianceDossierStatus.DRAFT;
+            plan.Transport.MainDossier.UpdatedAt = now;
         }
 
         QueueCreateNotifications(plan, routeType, request.Action, routePlan, now);
@@ -158,7 +158,7 @@ public sealed partial class Service
             throw new ConflictException("Transport is currently in transit. Please use Emergency Route Change (UC-48) for in-transit modifications.", "ROUTE_LOCKED");
         if (routePlan.Status != RoutePlanStatus.DRAFT)
             throw new ConflictException("Transport is currently in transit. Please use Emergency Route Change (UC-48) for in-transit modifications.", "ROUTE_LOCKED");
-        if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.ComplianceDossier?.Status != ComplianceDossierStatus.DRAFT)
+        if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.MainDossier?.Status != ComplianceDossierStatus.DRAFT)
             throw new ConflictException("RETURN must be approved by the Logistics Manager before editing.", "RETURN_NOT_APPROVED");
         EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
         if (string.IsNullOrWhiteSpace(request.UpdateReason))

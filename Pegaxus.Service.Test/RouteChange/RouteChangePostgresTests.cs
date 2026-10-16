@@ -141,6 +141,43 @@ public class RouteChangePostgresTests
         Assert.Equal([4, 4], scales);
     }
 
+    [PostgresFact]
+    public async Task Flow4Schema_BackfillsSegmentStatus_AndAllowsOneDossierPerType()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        await using var db = scope.Db();
+        var f = await RouteChangeTests.Fixture.CreateAsync(db);
+        f.Current.ActualDepartureAt = f.Current.PlannedDepartureAt;
+        var upcoming = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlanId = f.Plan.RoutePlanId, RouteId = f.Alternative.RouteId,
+            SequenceNo = 3, PlannedDepartureAt = f.Current.PlannedArrivalAt, PlannedArrivalAt = f.Current.PlannedArrivalAt!.Value.AddHours(1) };
+        db.Add(upcoming);
+        await db.SaveChangesAsync();
+
+        var migrator = db.GetInfrastructure().GetRequiredService<IMigrator>();
+        await migrator.MigrateAsync("20261015090000_AddTransportPlanLocations");
+        await migrator.MigrateAsync();
+
+        await using var check = scope.Db();
+        Assert.False(check.Database.HasPendingModelChanges());
+        var statuses = await check.RoutePlanRoutes.ToDictionaryAsync(x => x.RoutePlanRouteId, x => x.Status);
+        Assert.Equal(RouteSegmentStatus.COMPLETED, statuses[f.Completed.RoutePlanRouteId]);
+        Assert.Equal(RouteSegmentStatus.IN_TRANSIT, statuses[f.Current.RoutePlanRouteId]);
+        Assert.Equal(RouteSegmentStatus.PLANNED, statuses[upcoming.RoutePlanRouteId]);
+        Assert.Equal(DossierType.MAIN, (await check.ComplianceDossiers.SingleAsync()).DossierType);
+
+        var dossier = (Func<DossierType, string, ComplianceDossier>)((type, code) => new()
+        {
+            ComplianceDossierId = Guid.NewGuid(), TransportId = f.Transport.TransportId, DossierCode = code, DossierType = type,
+            CreatedAt = DateTime.SpecifyKind(RouteChangeTests.Fixture.StartAt.UtcDateTime, DateTimeKind.Unspecified), UpdatedAt = DateTime.SpecifyKind(RouteChangeTests.Fixture.StartAt.UtcDateTime, DateTimeKind.Unspecified)
+        });
+        check.Add(dossier(DossierType.EXTRA, "CD-EXTRA"));
+        await check.SaveChangesAsync();
+        await using var duplicate = scope.Db();
+        duplicate.Add(dossier(DossierType.MAIN, "CD-MAIN-2"));
+        var error = await Assert.ThrowsAsync<DbUpdateException>(() => duplicate.SaveChangesAsync());
+        Assert.True(Pegaxus.Repository.Extensions.PostgresErrors.IsWriteConflict(error));
+    }
+
     private static async Task CheckOutboxClaimsAsync(DbContextOptions<AppDbContext> options)
     {
         await using var db = new AppDbContext(options);

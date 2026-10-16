@@ -41,7 +41,7 @@ public sealed partial class Service
         {
             await db.Entry(routePlan).ReloadAsync(cancellationToken);
             await db.Entry(routePlan.TransportPlan.Transport).ReloadAsync(cancellationToken);
-            if (routePlan.TransportPlan.Transport.ComplianceDossier is { } currentDossier)
+            if (routePlan.TransportPlan.Transport.MainDossier is { } currentDossier)
                 await db.Entry(currentDossier).ReloadAsync(cancellationToken);
         }
         if (GetRouteType(routePlan) == RouteType.RETURN && routePlan.TransportPlan.Transport.Status != TransportStatus.IN_TRANSIT)
@@ -56,7 +56,7 @@ public sealed partial class Service
         if (request.BlockedSegments.Any(sequence => !validSequences.Contains(sequence)))
             throw new BadRequestException("blockedSegments contains an unknown sequenceNo");
 
-        var dossier = routePlan.TransportPlan.Transport.ComplianceDossier;
+        var dossier = routePlan.TransportPlan.Transport.MainDossier;
         if (dossier is null)
             throw new ConflictException("Compliance Dossier must be initialized before legal review", "DOSSIER_NOT_INITIALIZED");
         if (routeType == RouteType.RETURN && dossier.Status != ComplianceDossierStatus.DRAFT)

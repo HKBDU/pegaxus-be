@@ -21,7 +21,7 @@ public partial class Service
             // Updating the key to itself holds a row lock until the transaction ends.
         await _db.LockRowsAsync(_db.Bookings.Where(item => item.BookingId == bookingId), item => item.BookingId, cancellationToken);
         var booking = await _db.Bookings.Include(value => value.Customer)
-            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossier).ThenInclude(value => value!.DossierRequirements)
+            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossiers).ThenInclude(value => value!.DossierRequirements)
             .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
             ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
         await _db.Entry(booking).ReloadAsync(cancellationToken);
@@ -47,7 +47,7 @@ public partial class Service
             }
         }
 
-        var dossier = booking.Transport?.ComplianceDossier;
+        var dossier = booking.Transport?.MainDossier;
         if (dossier is not null)
         {
             dossier.Status = status == BookingStatus.CANCELLED ? ComplianceDossierStatus.CLOSED : ComplianceDossierStatus.DRAFT;
