@@ -122,6 +122,8 @@ public sealed partial class Service
             .Select(item => new Response.DashboardItemResponse
             {
                 ComplianceDossierId = item.Dossier.ComplianceDossierId,
+                DossierCode = item.Dossier.DossierCode,
+                DossierType = item.Dossier.DossierType.ToString(),
                 BookingCode = item.Dossier.Transport.Booking.BookingCode,
                 CustomerName = item.Dossier.Transport.Booking.Customer.FullName,
                 OriginCountry = item.Dossier.Transport.Booking.OriginCountry,

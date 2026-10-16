@@ -51,8 +51,8 @@ public sealed partial class Service
         AuditRequirement(dossierId, item.DossierRequirementId, accountId, "ADDED",
             string.IsNullOrWhiteSpace(request.Reason) ? "DossierRequirement added" : request.Reason, now,
             new { item.ComplianceRequirementId, item.HorseId, item.IsMandatory, item.DueDate, item.Instruction });
-        AddNotification(booking.Customer.AccountId, dossier, "DossierRequirement added", now,
-            message: $"A new DossierRequirement ({requirement.RequirementName}) was added to your ComplianceDossier.");
+        AddNotification(booking.Customer.AccountId, null, dossier, "New document required",
+            $"A new document is required for dossier {dossier.DossierCode}: {requirement.RequirementName}{(item.DueDate is null ? "" : $", due {item.DueDate:yyyy-MM-dd}")}. Please upload it.", now);
         try
         {
             await _db.SaveChangesAsync(cancellationToken);
@@ -91,8 +91,8 @@ public sealed partial class Service
         dossier.UpdatedAt = now;
         AuditRequirement(dossierId, requirementId, accountId, "WAIVED", item.WaivedReason, now,
             new { Before = before, After = new { item.Status, item.WaivedReason, item.SatisfiedAt } });
-        AddNotification(dossier.Transport.Booking.Customer.AccountId, dossier, "DossierRequirement waived", now,
-            message: $"DossierRequirement ({item.ComplianceRequirement.RequirementName}) was waived.");
+        AddNotification(dossier.Transport.Booking.Customer.AccountId, null, dossier, "Document requirement waived",
+            $"{item.ComplianceRequirement.RequirementName} is no longer required for dossier {dossier.DossierCode}. No action is needed from you.", now);
         await _db.SaveChangesAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
         return MapRequirement(item, dossier.Transport.Booking.RequestedDepartureDate);
@@ -127,8 +127,8 @@ public sealed partial class Service
         item.UpdatedAt = now;
         AuditRequirement(dossierId, requirementId, accountId, "UPDATED", request.Reason, now,
             new { Before = before, After = new { item.IsMandatory, item.DueDate, item.Instruction } });
-        AddNotification(dossier.Transport.Booking.Customer.AccountId, dossier, "DossierRequirement updated", now,
-            message: $"DossierRequirement ({item.ComplianceRequirement.RequirementName}) was updated.");
+        AddNotification(dossier.Transport.Booking.Customer.AccountId, null, dossier, "Document requirement updated",
+            $"The requirement {item.ComplianceRequirement.RequirementName} for dossier {dossier.DossierCode} was updated. Please check its details and instructions.", now);
         await _db.SaveChangesAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
         return MapRequirement(item, dossier.Transport.Booking.RequestedDepartureDate);
@@ -153,8 +153,8 @@ public sealed partial class Service
         item.UpdatedAt = now;
         AuditRequirement(dossierId, requirementId, accountId, "REMOVED", request.Reason, now,
             new { item.ComplianceRequirementId, item.HorseId });
-        AddNotification(dossier.Transport.Booking.Customer.AccountId, dossier, "DossierRequirement removed", now,
-            message: $"DossierRequirement ({item.ComplianceRequirement.RequirementName}) was removed.");
+        AddNotification(dossier.Transport.Booking.Customer.AccountId, null, dossier, "Document requirement removed",
+            $"{item.ComplianceRequirement.RequirementName} was removed from dossier {dossier.DossierCode}. No action is needed from you.", now);
         await _db.SaveChangesAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
         var statuses = await _db.DossierRequirements.AsNoTracking()

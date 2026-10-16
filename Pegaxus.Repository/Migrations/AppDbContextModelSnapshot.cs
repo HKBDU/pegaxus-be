@@ -43,10 +43,11 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "document_review_result", new[] { "APPROVED", "REJECTED", "REVISION_REQUIRED", "REVOKED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "dossier_requirement_status", new[] { "PENDING", "REQUESTED", "PROVIDED", "SATISFIED", "REJECTED", "WAIVED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "dossier_template_status", new[] { "DRAFT", "ACTIVE", "INACTIVE" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "dossier_type", new[] { "MAIN", "EXTRA" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "emergency_cost_category", new[] { "VETERINARY", "MEDICATION", "VEHICLE_REPAIR", "TOWING", "REPLACEMENT_VEHICLE", "EMERGENCY_STABLE", "ROUTE_CHANGE", "ACCOMMODATION", "OTHER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "emergency_cost_status", new[] { "PENDING", "APPROVED", "REJECTED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "employee_role", new[] { "LOGISTICS_MANAGER", "TRANSPORT_SPECIALIST", "FLEET_ROUTE_COORDINATOR", "DRIVER", "ESCORT" });
-            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "handover_party_type", new[] { "CUSTOMER", "EMPLOYEE" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "handover_party_type", new[] { "CUSTOMER", "EMPLOYEE", "PROVIDER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "handover_status", new[] { "PLANNED", "IN_PROGRESS", "COMPLETED", "CANCELLED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "handover_type", new[] { "PICKUP", "TRANSFER", "BORDER_HANDOVER", "CARRIER_HANDOVER", "DELIVERY", "OTHER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "horse_health_log_type", new[] { "PRE_TRIP_CHECK", "ROUTINE_CHECK", "BORDER_CHECK", "REST_STOP_CHECK", "INCIDENT_FOLLOWUP", "POST_TRIP_CHECK", "OTHER" });
@@ -70,6 +71,7 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "receipt_status", new[] { "PENDING", "CONFIRMED", "FAILED", "REFUNDED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "recipient_status", new[] { "PENDING", "DELIVERED", "READ", "FAILED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_plan_status", new[] { "DRAFT", "CONFIRMED", "ACTIVE", "COMPLETED", "CANCELLED", "PENDING_LEGAL_REVIEW", "PENDING_MANAGER_APPROVAL", "REJECTED_BY_MANAGER", "APPROVED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_segment_status", new[] { "PLANNED", "IN_TRANSIT", "COMPLETED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "route_type", new[] { "PRIMARY", "BACKUP", "RETURN" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_mode", new[] { "ROAD", "SEA", "AIR" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "transport_plan_status", new[] { "DRAFT", "PENDING", "APPROVED", "IN_PROGRESS", "COMPLETED", "CANCELLED" });
@@ -487,6 +489,16 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("destination_country");
 
+                    b.Property<decimal?>("DestinationLatitude")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("destination_latitude");
+
+                    b.Property<decimal?>("DestinationLongitude")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("destination_longitude");
+
                     b.Property<string>("OriginAddress")
                         .IsRequired()
                         .HasMaxLength(500)
@@ -498,6 +510,16 @@ namespace Pegaxus.Repository.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
                         .HasColumnName("origin_country");
+
+                    b.Property<decimal?>("OriginLatitude")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("origin_latitude");
+
+                    b.Property<decimal?>("OriginLongitude")
+                        .HasPrecision(10, 4)
+                        .HasColumnType("numeric(10,4)")
+                        .HasColumnName("origin_longitude");
 
                     b.Property<DateTime?>("RejectedAt")
                         .HasColumnType("timestamp without time zone")
@@ -993,6 +1015,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("dossier_template_id");
 
+                    b.Property<DossierType>("DossierType")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("dossier_type")
+                        .HasColumnName("dossier_type")
+                        .HasDefaultValueSql("'MAIN'::dossier_type");
+
                     b.Property<string>("Note")
                         .HasColumnType("text")
                         .HasColumnName("note");
@@ -1038,8 +1066,10 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex(new[] { "DossierTemplateId" }, "ComplianceDossier_dossier_template_id_idx");
 
-                    b.HasIndex(new[] { "TransportId" }, "ComplianceDossier_transport_id_key")
+                    b.HasIndex(new[] { "TransportId", "DossierType" }, "ComplianceDossier_transport_id_dossier_type_key")
                         .IsUnique();
+
+                    b.HasIndex(new[] { "TransportId" }, "ComplianceDossier_transport_id_idx");
 
                     b.ToTable("ComplianceDossier", null, t =>
                         {
@@ -2336,6 +2366,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("from_route_plan_route_id");
 
+                    b.Property<Guid?>("FromTransportProviderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("from_transport_provider_id");
+
                     b.Property<HandoverPartyType>("FromType")
                         .HasColumnType("handover_party_type")
                         .HasColumnName("from_type");
@@ -2410,6 +2444,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("to_route_plan_route_id");
 
+                    b.Property<Guid?>("ToTransportProviderId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("to_transport_provider_id");
+
                     b.Property<HandoverPartyType>("ToType")
                         .HasColumnType("handover_party_type")
                         .HasColumnName("to_type");
@@ -2442,6 +2480,8 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex(new[] { "FromRoutePlanRouteId" }, "HandoverRecord_from_route_plan_route_id_idx");
 
+                    b.HasIndex(new[] { "FromTransportProviderId" }, "HandoverRecord_from_transport_provider_id_idx");
+
                     b.HasIndex(new[] { "HandoverCode" }, "HandoverRecord_handover_code_key")
                         .IsUnique();
 
@@ -2451,6 +2491,8 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex(new[] { "ToRoutePlanRouteId" }, "HandoverRecord_to_route_plan_route_id_idx");
 
+                    b.HasIndex(new[] { "ToTransportProviderId" }, "HandoverRecord_to_transport_provider_id_idx");
+
                     b.HasIndex(new[] { "TransportId" }, "HandoverRecord_transport_id_idx");
 
                     b.HasIndex(new[] { "TransportId", "SequenceNo" }, "HandoverRecord_transport_id_sequence_no_idx")
@@ -2458,7 +2500,7 @@ namespace Pegaxus.Repository.Migrations
 
                     b.ToTable("HandoverRecord", null, t =>
                         {
-                            t.HasComment("HandoverRecord: Một lần bàn giao trong Transport. from_type/to_type xác định bên giao/nhận là CUSTOMER hay EMPLOYEE; from/to_route_plan_route_id xác định chặng vừa kết thúc và chặng tiếp theo.");
+                            t.HasComment("HandoverRecord: Một lần bàn giao trong Transport. from_type/to_type xác định bên giao/nhận là CUSTOMER, EMPLOYEE hay PROVIDER (đối tác vận chuyển); from/to_route_plan_route_id xác định chặng vừa kết thúc và chặng tiếp theo.");
                         });
                 });
 
@@ -4004,6 +4046,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("service_type");
 
+                    b.Property<RouteSegmentStatus>("Status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("route_segment_status")
+                        .HasColumnName("status")
+                        .HasDefaultValueSql("'PLANNED'::route_segment_status");
+
                     b.Property<DateTime?>("SupersededAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("superseded_at");
@@ -4791,8 +4839,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasConstraintName("ComplianceDossier_dossier_template_id_fkey");
 
                     b.HasOne("Pegaxus.Repository.Entities.Transport", "Transport")
-                        .WithOne("ComplianceDossier")
-                        .HasForeignKey("Pegaxus.Repository.Entities.ComplianceDossier", "TransportId")
+                        .WithMany("ComplianceDossiers")
+                        .HasForeignKey("TransportId")
                         .IsRequired()
                         .HasConstraintName("ComplianceDossier_transport_id_fkey");
 
@@ -5114,6 +5162,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasForeignKey("FromRoutePlanRouteId")
                         .HasConstraintName("HandoverRecord_from_route_plan_route_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.TransportProvider", "FromTransportProvider")
+                        .WithMany("HandoverRecordFromProviders")
+                        .HasForeignKey("FromTransportProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("HandoverRecord_from_transport_provider_id_fkey");
+
                     b.HasOne("Pegaxus.Repository.Entities.Customer", "ToCustomer")
                         .WithMany("HandoverRecordToCustomers")
                         .HasForeignKey("ToCustomerId")
@@ -5129,6 +5183,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasForeignKey("ToRoutePlanRouteId")
                         .HasConstraintName("HandoverRecord_to_route_plan_route_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.TransportProvider", "ToTransportProvider")
+                        .WithMany("HandoverRecordToProviders")
+                        .HasForeignKey("ToTransportProviderId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("HandoverRecord_to_transport_provider_id_fkey");
+
                     b.HasOne("Pegaxus.Repository.Entities.Transport", "Transport")
                         .WithMany("HandoverRecords")
                         .HasForeignKey("TransportId")
@@ -5141,11 +5201,15 @@ namespace Pegaxus.Repository.Migrations
 
                     b.Navigation("FromRoutePlanRoute");
 
+                    b.Navigation("FromTransportProvider");
+
                     b.Navigation("ToCustomer");
 
                     b.Navigation("ToEmployee");
 
                     b.Navigation("ToRoutePlanRoute");
+
+                    b.Navigation("ToTransportProvider");
 
                     b.Navigation("Transport");
                 });
@@ -5841,7 +5905,7 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Transport", b =>
                 {
-                    b.Navigation("ComplianceDossier");
+                    b.Navigation("ComplianceDossiers");
 
                     b.Navigation("FinancialReport");
 
@@ -5865,6 +5929,10 @@ namespace Pegaxus.Repository.Migrations
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.TransportProvider", b =>
                 {
+                    b.Navigation("HandoverRecordFromProviders");
+
+                    b.Navigation("HandoverRecordToProviders");
+
                     b.Navigation("RoutePlanRoutes");
 
                     b.Navigation("TransportPlanProviders");

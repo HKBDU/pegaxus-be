@@ -37,8 +37,6 @@ public class InvoicePaymentHttpTests
         var url = $"/api/v1/invoices/{invoice.InvoiceId}/receipts";
         var partial = InvoicePaymentTests.ValidRequest(); partial.Amount = 119;
         await Error(await client.PostAsJsonAsync(url, partial), 422, "PARTIAL_PAYMENT_NOT_SUPPORTED");
-        partial = InvoicePaymentTests.ValidRequest(); partial.Currency = "VND";
-        await Error(await client.PostAsJsonAsync(url, partial), 422, "CURRENCY_MISMATCH");
         await Error(await client.PostAsJsonAsync($"/api/v1/invoices/{Guid.NewGuid()}/receipts", InvoicePaymentTests.ValidRequest()), 404, "INVOICE_NOT_FOUND");
         invoice.Type = InvoiceType.QUOTATION; invoice.Status = InvoiceStatus.DRAFT; await db.SaveChangesAsync();
         await Error(await client.PostAsJsonAsync(url, InvoicePaymentTests.ValidRequest()), 422, "UNPAYABLE_INVOICE_TYPE");
@@ -52,7 +50,7 @@ public class InvoicePaymentHttpTests
         var value = body.GetProperty("value"); var receipt = value.GetProperty("receipt");
         Assert.NotEqual(Guid.Empty, receipt.GetProperty("receiptId").GetGuid());
         Assert.Matches("^RCP-20261110-[0-9]{4}$", receipt.GetProperty("receiptCode").GetString());
-        Assert.Equal(120, receipt.GetProperty("amount").GetDecimal()); Assert.Equal("EUR", receipt.GetProperty("currency").GetString());
+        Assert.Equal(120, receipt.GetProperty("amount").GetDecimal()); Assert.Equal("VND", receipt.GetProperty("currency").GetString());
         Assert.Equal("BANK_TRANSFER", receipt.GetProperty("paymentMethod").GetString()); Assert.Equal("CONFIRMED", receipt.GetProperty("status").GetString());
         Assert.Equal("FT26314123456", receipt.GetProperty("transactionReference").GetString()); Assert.Equal("Matched statement", receipt.GetProperty("note").GetString());
         Assert.Equal(request.PaidAt, receipt.GetProperty("paidAt").GetDateTimeOffset());
@@ -95,8 +93,7 @@ public class InvoicePaymentHttpTests
     [InlineData("negativeAmount", "amount")]
     [InlineData("precision", "amount")]
     [InlineData("overflow", "amount")]
-    [InlineData("missingCurrency", "currency")]
-    [InlineData("unsupportedCurrency", "currency")]
+    [InlineData("decimalZero", "amount")]
     [InlineData("missingMethod", "paymentMethod")]
     [InlineData("unknownMethod", "paymentMethod")]
     [InlineData("numericMethod", "paymentMethod")]
@@ -115,8 +112,7 @@ public class InvoicePaymentHttpTests
             case "negativeAmount": request.Amount = -1; break;
             case "precision": request.Amount = 120.001m; break;
             case "overflow": request.Amount = 10000000000000000m; break;
-            case "missingCurrency": request.Currency = ""; break;
-            case "unsupportedCurrency": request.Currency = "USD"; break;
+            case "decimalZero": request.Amount = 120.0m; break;
             case "missingMethod": request.PaymentMethod = ""; break;
             case "unknownMethod": request.PaymentMethod = "CARD"; break;
             case "numericMethod": request.PaymentMethod = "1"; break;

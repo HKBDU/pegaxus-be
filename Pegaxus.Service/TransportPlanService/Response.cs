@@ -1,3 +1,5 @@
+using Pegaxus.Service.Common;
+
 namespace Pegaxus.Service.TransportPlanService;
 
 public static class Response
@@ -29,6 +31,8 @@ public static class Response
         public Guid TransportPlanId { get; init; }
         public Guid? OriginLocationId { get; init; }
         public Guid? DestinationLocationId { get; init; }
+        public LocationBrief? OriginLocation { get; init; }
+        public LocationBrief? DestinationLocation { get; init; }
         public required string PlanCode { get; init; }
         public required string Status { get; init; }
         public required BookingResponse Booking { get; init; }
@@ -41,8 +45,26 @@ public static class Response
         public required IReadOnlyList<global::Pegaxus.Service.BookingService.Response.BookingAssignmentResponse> AssignedEmployees { get; init; }
         public ApprovedByResponse? ApprovedBy { get; init; }
         public DateTimeOffset? ApprovedAt { get; init; }
+        public required IReadOnlyList<ComplianceDossierResponse> ComplianceDossiers { get; init; }
+        public required IReadOnlyList<RoutePlanResponse> RoutePlans { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
+    }
+
+    public sealed class ComplianceDossierResponse
+    {
+        public Guid ComplianceDossierId { get; init; }
+        public required string DossierCode { get; init; }
+        public required string DossierType { get; init; }
+        public required string Status { get; init; }
+    }
+
+    public sealed class RoutePlanResponse
+    {
+        public Guid RoutePlanId { get; init; }
+        public required string RoutePlanCode { get; init; }
+        public required string RouteType { get; init; }
+        public required string Status { get; init; }
     }
 
     public sealed class BookingResponse
@@ -56,6 +78,10 @@ public static class Response
         public required string OriginCountry { get; init; }
         public required string DestinationAddress { get; init; }
         public required string DestinationCountry { get; init; }
+        public decimal? OriginLatitude { get; init; }
+        public decimal? OriginLongitude { get; init; }
+        public decimal? DestinationLatitude { get; init; }
+        public decimal? DestinationLongitude { get; init; }
         public int TotalHorses { get; init; }
         public DateOnly RequestedDepartureDate { get; init; }
         public DateOnly? RequestedArrivalDate { get; init; }

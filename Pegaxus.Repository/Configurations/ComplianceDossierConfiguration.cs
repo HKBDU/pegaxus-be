@@ -16,7 +16,9 @@ public sealed class ComplianceDossierConfiguration : IEntityTypeConfiguration<Co
 
         entity.HasIndex(e => e.DossierCode, "ComplianceDossier_dossier_code_key").IsUnique();
 
-        entity.HasIndex(e => e.TransportId, "ComplianceDossier_transport_id_key").IsUnique();
+        entity.HasIndex(e => new { e.TransportId, e.DossierType }, "ComplianceDossier_transport_id_dossier_type_key").IsUnique();
+
+        entity.HasIndex(e => e.TransportId, "ComplianceDossier_transport_id_idx");
 
         entity.HasIndex(e => e.DossierTemplateId, "ComplianceDossier_dossier_template_id_idx");
         entity.Property(e => e.DossierTemplateId).HasColumnName("dossier_template_id");
@@ -54,8 +56,8 @@ public sealed class ComplianceDossierConfiguration : IEntityTypeConfiguration<Co
             .HasColumnType("timestamp without time zone")
             .HasColumnName("updated_at");
 
-        entity.HasOne(d => d.Transport).WithOne(p => p.ComplianceDossier)
-            .HasForeignKey<ComplianceDossier>(d => d.TransportId)
+        entity.HasOne(d => d.Transport).WithMany(p => p.ComplianceDossiers)
+            .HasForeignKey(d => d.TransportId)
             .OnDelete(DeleteBehavior.ClientSetNull)
             .HasConstraintName("ComplianceDossier_transport_id_fkey");
     }

@@ -3,9 +3,10 @@ namespace Pegaxus.Service.RouteChangeService;
 public static class Response
 {
     public sealed record Created(Guid RoutePlanId, string RouteType, string Status, DateTimeOffset RequestedAt);
-    public sealed record DossierBrief(Guid ComplianceDossierId, string Status);
+    public sealed record DossierBrief(Guid ComplianceDossierId, string DossierCode, string DossierType, string Status,
+        int? InheritedRequirementCount);
     public sealed record DecisionResult(Guid RoutePlanId, string RouteType, string Decision, string Status,
-        DossierBrief? ComplianceDossier, DateTimeOffset UpdatedAt);
+        DossierBrief? ComplianceDossier, int? BranchSequenceNo, LocationBrief? BranchLocation, DateTimeOffset UpdatedAt);
     public sealed record ActivationResult(Guid RoutePlanId, string RouteType, string Status,
         IReadOnlyList<RoutePlanService.Response.SegmentResponse> Segments, DateTimeOffset UpdatedAt);
     public sealed record DriverNoticeResult(Guid RoutePlanId, IReadOnlyList<EmployeeBrief> NotifiedDrivers, DateTimeOffset SentAt);

@@ -16,7 +16,7 @@ public sealed class InvoicesController(InvoiceService.IInvoiceService service) :
     /// <remarks>Customers can pay only their own issued DEPOSIT, FINAL or SUPPLEMENTARY invoices in ISSUED or OVERDUE status. Creates a PENDING receipt and replaces older pending receipts. SePay supports whole VND amounts: submit checkoutFields in their returned order as a browser POST to paymentUrl; a GET redirect alone cannot start checkout. Configuration and signing failures roll back receipt changes. Payment confirmation belongs to the webhook.</remarks>
     /// <param name="invoiceId">The invoice identifier (UUID).</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
-    /// <returns>201 with the pending receipt, payment URL and signed checkoutFields; 401 for an invalid session, 403 for a disallowed role, 404 for an unavailable invoice, 409 for an invalid status or concurrent changes, 422 for an unpayable type or unsupported currency/amount, or 502 when checkout preparation fails.</returns>
+    /// <returns>201 with the pending receipt, payment URL and signed checkoutFields; 401 for an invalid session, 403 for a disallowed role, 404 for an unavailable invoice, 409 for an invalid status or concurrent changes, 422 for an unpayable type, a non-VND or fractional amount, or 502 when checkout preparation fails.</returns>
     [HttpPost("{invoiceId:guid}/online-payments")]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> InitiateOnlinePayment(Guid invoiceId, CancellationToken cancellationToken)
@@ -55,9 +55,9 @@ public sealed class InvoicesController(InvoiceService.IInvoiceService service) :
     /// <summary>Record full manual payment or a credit note payout.</summary>
     /// <remarks>Requires an active Logistics Manager. Confirms one receipt, fails pending receipts, marks the invoice PAID and records history and customer notifications atomically. A deposit approves the latest eligible transport plan; a paid FINAL unlocks credit notes.</remarks>
     /// <param name="invoiceId">The invoice identifier (UUID).</param>
-    /// <param name="request">The full amount, matching currency, payment method and optional transaction details.</param>
+    /// <param name="request">The full whole-VND amount, payment method and optional transaction details.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
-    /// <returns>201 Created with receipt, invoice and effects; 400 for invalid input, 401 or 403 for unauthorized access, 404 for a missing invoice, 409 for status or concurrent changes, or 422 for an unpayable type, partial payment or currency mismatch.</returns>
+    /// <returns>201 Created with receipt, invoice and effects; 400 for invalid input, 401 or 403 for unauthorized access, 404 for a missing invoice, 409 for status or concurrent changes, or 422 for an unpayable type or partial payment.</returns>
     [HttpPost("{invoiceId:guid}/receipts")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> RecordPayment(Guid invoiceId, [FromBody] InvoiceService.Request.RecordPaymentRequest request, CancellationToken cancellationToken)
@@ -119,14 +119,13 @@ public sealed class InvoicesController(InvoiceService.IInvoiceService service) :
     /// </summary>
     /// <remarks>Only active Logistics Managers may edit DRAFT invoices. Supply the latest lastUpdatedAt; type is immutable. Items replace the complete list: existing identifiers keep their rows, missing rows are deleted and rows without identifiers are added. The server recalculates fixed 20 percent tax and regenerates FINAL paid-deposit deductions atomically. Empty drafts are allowed. Payment and itemDate are ignored pending database support. No status history or notifications are created.</remarks>
     /// <param name="invoiceId">The invoice identifier (UUID).</param>
-    /// <param name="request">The latest invoice timestamp, EUR or VND currency, due date, note and replacement items.</param>
+    /// <param name="request">The latest invoice timestamp, due date, note and replacement items with whole-VND prices and whole quantities.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the complete updated draft invoice and its new updatedAt.</returns>
-    /// <exception cref="BadRequestException">Request fields, immutable type, item identifiers or horse references are invalid.</exception>
+    /// <exception cref="BadRequestException">Request fields, a fractional VND amount or quantity, immutable type, item identifiers or horse references are invalid.</exception>
     /// <exception cref="ForbiddenException">The caller is not an active Logistics Manager.</exception>
     /// <exception cref="NotFoundException">The invoice does not exist.</exception>
     /// <exception cref="ConflictException">The invoice is locked, the timestamp is stale or data changed concurrently.</exception>
-    /// <exception cref="UnprocessableEntityException">FINAL currency differs from a paid deposit's currency.</exception>
     [HttpPut("{invoiceId:guid}")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Update(Guid invoiceId, [FromBody] InvoiceService.Request.UpdateRequest request,

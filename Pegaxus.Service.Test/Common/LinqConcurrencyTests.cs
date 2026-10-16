@@ -95,6 +95,20 @@ public class LinqConcurrencyTests : IAsyncLifetime
     }
 
     [PostgresFact]
+    public async Task TransportHelpers_TranslateToSql()
+    {
+        await using var db = CreateDb();
+        var transportId = Guid.NewGuid();
+        Assert.Empty(await Pegaxus.Service.Common.TransportSummaries.LatestPerHorse(db.HorseHealthLogs).ToListAsync());
+        Assert.Empty(await Pegaxus.Service.Common.TransportSummaries.Active(db.IncidentReports, transportId).ToListAsync());
+
+        var notifications = new Pegaxus.Service.NotificationService.TransportNotifications(db);
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        Assert.Empty(await notifications.GpsSharingDisabledAsync(transportId, now));
+        Assert.Empty(await notifications.HandoverCancelledAsync(new() { TransportId = transportId, FromEmployeeId = Guid.NewGuid() }, now));
+    }
+
+    [PostgresFact]
     public async Task CompetingOutboxWorkers_SendEligibleMessagesOnce()
     {
         await using var db = CreateDb();

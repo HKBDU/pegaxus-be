@@ -25,7 +25,7 @@ public class InvoicePaymentTests
         new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(TestClock), new CancelRequestValidator(),
         new Pegaxus.Service.NotificationService.Service(db, realtime ?? new NoopNotificationRealtimeService()));
     internal static Request.RecordPaymentRequest ValidRequest() => new()
-    { Amount = 120, Currency = "EUR", PaymentMethod = "BANK_TRANSFER", TransactionReference = " FT26314123456 ", Note = " Matched statement " };
+    { Amount = 120, PaymentMethod = "BANK_TRANSFER", TransactionReference = " FT26314123456 ", Note = " Matched statement " };
 
     internal static async Task<(Account Actor, Account Customer, Invoice Invoice, TransportPlan Plan)> SeedAsync(AppDbContext db, InvoiceType type = InvoiceType.DEPOSIT)
     {
@@ -39,7 +39,7 @@ public class InvoicePaymentTests
         var plan = new TransportPlan { TransportPlanId = Guid.NewGuid(), TransportId = transport.TransportId, Transport = transport,
             PlanCode = "TP-" + Guid.NewGuid().ToString("N"), Status = TransportPlanStatus.PENDING, CreatedAt = time, UpdatedAt = time };
         var invoice = new Invoice { InvoiceId = Guid.NewGuid(), InvoiceCode = "INV-" + Guid.NewGuid().ToString("N"),
-            BookingId = booking.BookingId, EmployeeId = issuer.EmployeeId, Type = type, Status = InvoiceStatus.ISSUED, Currency = "EUR",
+            BookingId = booking.BookingId, EmployeeId = issuer.EmployeeId, Type = type, Status = InvoiceStatus.ISSUED, Currency = "VND",
             Subtotal = 100, TaxAmount = 20, TotalAmount = 120, IssuedAt = time, DueDate = new(2026, 11, 15),
             BillingNote = "Preserve note", CreatedAt = time, UpdatedAt = time };
         db.AddRange(transport, plan, invoice);
@@ -78,7 +78,7 @@ public class InvoicePaymentTests
         var receipt = Assert.Single(db.Receipts.Where(x => x.Status == ReceiptStatus.CONFIRMED));
         Assert.Matches("^RCP-20261110-[0-9]{4}$", receipt.ReceiptCode);
         Assert.Equal(receipt.ReceiptId, result.Receipt.ReceiptId); Assert.Equal(receipt.ReceiptCode, result.Receipt.ReceiptCode);
-        Assert.Equal(120, result.Receipt.Amount); Assert.Equal("EUR", result.Receipt.Currency);
+        Assert.Equal(120, result.Receipt.Amount); Assert.Equal("VND", result.Receipt.Currency);
         Assert.Equal(method, result.Receipt.PaymentMethod); Assert.Equal("CONFIRMED", result.Receipt.Status);
         Assert.Equal("FT26314123456", result.Receipt.TransactionReference); Assert.Equal("Matched statement", result.Receipt.Note);
         Assert.Equal(request.PaidAt.Value.ToUniversalTime(), result.Receipt.PaidAt);
@@ -105,10 +105,10 @@ public class InvoicePaymentTests
         Assert.Equal(NotificationType.PAYMENT, notification.NotificationType); Assert.Equal(NotificationPriority.NORMAL, notification.Priority);
         Assert.Equal(plan.TransportId, notification.TransportId); Assert.Equal("Invoice", notification.ReferenceType);
         Assert.Equal(invoice.InvoiceId, notification.ReferenceId);
-        Assert.Equal($"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoice.InvoiceId}", notification.ActionUrl);
+        Assert.Equal($"/bookings/{invoice.BookingId}/invoices/{invoice.InvoiceId}", notification.ActionUrl);
         Assert.Equal(customer.AccountId, Assert.Single(db.AccountNotifications).AccountId); Assert.Equal(customer.AccountId, Assert.Single(realtime.Recipients));
         var email = OutboxQueue.Deserialize<EmailPayload>(Assert.Single(db.OutboxMessages).Payload);
-        Assert.Equal(customer.Email, email.To); Assert.Contains(receipt.ReceiptCode, email.Body); Assert.Contains("120.00 EUR", email.Body);
+        Assert.Equal(customer.Email, email.To); Assert.Contains(receipt.ReceiptCode, email.Body); Assert.Contains("120 VND", email.Body);
         if (type == InvoiceType.CREDIT_NOTE) Assert.Contains("Payout", email.Body);
         Assert.Equal("INVALID_INVOICE_STATUS", (await Assert.ThrowsAsync<ConflictException>(() =>
             CreateService(db).RecordPaymentAsync(invoice.InvoiceId, ValidRequest(), actor.AccountId))).ErrorCode);
@@ -137,7 +137,6 @@ public class InvoicePaymentTests
     [InlineData("missing", 404, "INVOICE_NOT_FOUND", "Invoice not found")]
     [InlineData("partial", 422, "PARTIAL_PAYMENT_NOT_SUPPORTED", "Only full payment of the invoice total is accepted")]
     [InlineData("excess", 422, "PARTIAL_PAYMENT_NOT_SUPPORTED", "Only full payment of the invoice total is accepted")]
-    [InlineData("currency", 422, "CURRENCY_MISMATCH", "Payment currency must match the invoice currency")]
     [InlineData("confirmed", 409, "INVALID_INVOICE_STATUS", "Cannot pay an invoice in status ISSUED")]
     public async Task InvalidPayment_IsRejectedWithoutChangingPendingReceipts(string scenario, int status, string code, string message)
     {
@@ -147,9 +146,8 @@ public class InvoicePaymentTests
         if (scenario == "confirmed") AddReceipt(db, invoice, ReceiptStatus.CONFIRMED);
         await db.SaveChangesAsync();
         var request = ValidRequest();
-        if (scenario == "partial") request.Amount = 119.99m;
-        if (scenario == "excess") request.Amount = 120.01m;
-        if (scenario == "currency") request.Currency = "VND";
+        if (scenario == "partial") request.Amount = 119;
+        if (scenario == "excess") request.Amount = 121;
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => CreateService(db)
             .RecordPaymentAsync(scenario == "missing" ? Guid.NewGuid() : invoice.InvoiceId, request, actor.AccountId));
         Assert.Equal(status, error.StatusCode); Assert.Equal(code, error.ErrorCode); Assert.Equal(message, error.Message);
@@ -207,7 +205,7 @@ public class InvoicePaymentTests
         var (actor, _, invoice, plan) = await SeedAsync(db); db.TransportPlans.Remove(plan);
         invoice.InvoiceCode = "INV-<script>"; invoice.UpdatedAt = TestClock.GetUtcNow().UtcDateTime.AddTicks(3);
         await db.SaveChangesAsync();
-        var request = ValidRequest(); request.Currency = " eur "; request.PaymentMethod = " cash "; request.Note = " "; request.TransactionReference = null;
+        var request = ValidRequest(); request.PaymentMethod = " cash "; request.Note = " "; request.TransactionReference = null;
         var result = await CreateService(db).RecordPaymentAsync(invoice.InvoiceId, request, actor.AccountId);
         Assert.Null(result.Effects.TransportPlanStatus); Assert.False(result.Effects.CreditNoteUnlocked);
         Assert.Equal(TestClock.GetUtcNow(), result.Receipt.PaidAt); Assert.Null(result.Receipt.Note); Assert.Null(result.Receipt.TransactionReference);

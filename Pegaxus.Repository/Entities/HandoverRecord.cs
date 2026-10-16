@@ -5,7 +5,7 @@ namespace Pegaxus.Repository.Entities;
 
 /// <summary>
 /// HandoverRecord: Một lần bàn giao trong Transport. 
-/// from_type/to_type xác định bên giao/nhận là CUSTOMER hay EMPLOYEE; 
+/// from_type/to_type xác định bên giao/nhận là CUSTOMER, EMPLOYEE hay PROVIDER (đối tác vận chuyển); 
 /// from/to_route_plan_route_id xác định chặng vừa kết thúc và chặng tiếp theo.
 /// </summary>
 public partial class HandoverRecord
@@ -32,11 +32,15 @@ public partial class HandoverRecord
 
     public Guid? FromEmployeeId { get; set; }
 
+    public Guid? FromTransportProviderId { get; set; }
+
     public HandoverPartyType ToType { get; set; }
 
     public Guid? ToCustomerId { get; set; }
 
     public Guid? ToEmployeeId { get; set; }
+
+    public Guid? ToTransportProviderId { get; set; }
 
     public Guid? FromRoutePlanRouteId { get; set; }
 
@@ -90,11 +94,15 @@ public partial class HandoverRecord
 
     public virtual RoutePlanRoute? FromRoutePlanRoute { get; set; }
 
+    public virtual TransportProvider? FromTransportProvider { get; set; }
+
     public virtual Customer? ToCustomer { get; set; }
 
     public virtual Employee? ToEmployee { get; set; }
 
     public virtual RoutePlanRoute? ToRoutePlanRoute { get; set; }
+
+    public virtual TransportProvider? ToTransportProvider { get; set; }
 
     public virtual Transport Transport { get; set; } = null!;
 }

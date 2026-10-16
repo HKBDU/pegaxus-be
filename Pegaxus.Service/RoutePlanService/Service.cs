@@ -35,7 +35,7 @@ public sealed partial class Service : IRoutePlanService
         var plan = await db.TransportPlans
             .Include(item => item.Transport).ThenInclude(item => item.Booking).ThenInclude(item => item.Customer)
             .Include(item => item.Transport).ThenInclude(item => item.Booking).ThenInclude(item => item.BookingHorses)
-            .Include(item => item.Transport).ThenInclude(item => item.ComplianceDossier)
+            .Include(item => item.Transport).ThenInclude(item => item.ComplianceDossiers)
             .Include(item => item.EmployeeTransportPlans).ThenInclude(item => item.Employee)
             .Include(item => item.RoutePlans).ThenInclude(item => item.RoutePlanRoutes).ThenInclude(item => item.Route).ThenInclude(item => item.FromLocation)
             .Include(item => item.RoutePlans).ThenInclude(item => item.RoutePlanRoutes).ThenInclude(item => item.Route).ThenInclude(item => item.ToLocation)
@@ -48,7 +48,7 @@ public sealed partial class Service : IRoutePlanService
     private async Task<RoutePlan?> LoadRoutePlanAsync(Guid routePlanId, CancellationToken cancellationToken) =>
         await db.RoutePlans
             .Include(item => item.TransportPlan).ThenInclude(item => item.Transport).ThenInclude(item => item.Booking).ThenInclude(item => item.Customer)
-            .Include(item => item.TransportPlan).ThenInclude(item => item.Transport).ThenInclude(item => item.ComplianceDossier)
+            .Include(item => item.TransportPlan).ThenInclude(item => item.Transport).ThenInclude(item => item.ComplianceDossiers)
             .Include(item => item.TransportPlan).ThenInclude(item => item.EmployeeTransportPlans).ThenInclude(item => item.Employee)
             .Include(item => item.TransportPlan).ThenInclude(item => item.RoutePlans).ThenInclude(item => item.RoutePlanRoutes).ThenInclude(item => item.Route).ThenInclude(item => item.FromLocation)
             .Include(item => item.TransportPlan).ThenInclude(item => item.RoutePlans).ThenInclude(item => item.RoutePlanRoutes).ThenInclude(item => item.Route).ThenInclude(item => item.ToLocation)

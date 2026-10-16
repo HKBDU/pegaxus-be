@@ -6,6 +6,8 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 
+using Pegaxus.Service.Common;
+
 using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.RouteChangeService;
@@ -27,7 +29,7 @@ public sealed partial class Service
         return new(x.RoutePlanRouteId, x.SequenceNo, x.RouteType.ToString(),
             new(x.RouteId, x.Route.RouteCode, x.Route.RouteName, x.Route.TransportMode.ToString(), x.Route.DistanceKm, x.Route.EstimatedDurationMinutes),
             Location(x.Route.FromLocation), Location(x.Route.ToLocation), AsUtc(x.PlannedDepartureAt.Value), AsUtc(x.PlannedArrivalAt.Value),
-            AsUtc(x.ActualDepartureAt), AsUtc(x.ActualArrivalAt), x.ActualArrivalAt.HasValue ? "COMPLETED" : x.ActualDepartureAt.HasValue ? "IN_PROGRESS" : "PLANNED",
+            AsUtc(x.ActualDepartureAt), AsUtc(x.ActualArrivalAt), TransportItinerary.StatusOf(x).ToString(),
             nextDeparture.HasValue ? (decimal)(nextDeparture.Value - x.PlannedArrivalAt.Value).TotalMinutes : null,
             x.TransportProviderId.HasValue ? "OUTSOURCED" : "INTERNAL", x.RoutePlanRouteVehicles.OrderBy(v => v.VehicleId).Select(v => Vehicle(v.Vehicle)).ToList(),
             x.TransportProvider is { } p ? new(new(p.TransportProviderId, p.ProviderCode, p.ProviderName, p.Status.ToString(), Modes(p.SupportedModes)), x.ServiceType, x.ProviderReference) : null,
