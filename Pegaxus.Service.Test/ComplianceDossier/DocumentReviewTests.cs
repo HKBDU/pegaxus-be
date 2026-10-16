@@ -39,6 +39,7 @@ public class DocumentReviewTests
         Assert.Equal("DOCUMENT_REVIEW_APPROVED", audit.ActionType);
         Assert.Equal(specialist, audit.ActorAccountId);
         Assert.Equal(review.DocumentReviewId, audit.TargetId);
+        Assert.Equal(dossier.Transport.Booking.Customer.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
     }
 
     [Fact]
@@ -342,7 +343,7 @@ public class DocumentReviewTests
             new Request.RevokeDocumentReviewRequest { Status = DossierRequirementStatus.PROVIDED, Reason = "Replace incorrect file" });
         var storage = new DocumentUploadTests.RecordingStorage();
         service = new DossierService(db, storage, new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(),
-            null!, storage, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance);
+            TestSupport.CreateNotifications(db), storage, Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance);
         var customerId = version.UploadedByAccountId;
         var metadata = await service.UpdateDocumentMetadataAsync(customerId, dossier.ComplianceDossierId,
             requirement.DossierRequirementId, new Request.DocumentMetadataRequest { DocumentNumber = "EHC-101" });
@@ -413,6 +414,6 @@ public class DocumentReviewTests
     }
 
     private static DossierService CreateService(AppDbContext db) => new(db, null!,
-        new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), null!, null!,
+        new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), TestSupport.CreateNotifications(db), null!,
         Microsoft.Extensions.Logging.Abstractions.NullLogger<DossierService>.Instance);
 }

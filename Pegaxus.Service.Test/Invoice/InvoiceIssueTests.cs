@@ -40,7 +40,7 @@ public class InvoiceIssueTests
         var plan = new TransportPlan { TransportPlanId = Guid.NewGuid(), TransportId = transport.TransportId, Transport = transport,
             PlanCode = "TP-" + Guid.NewGuid().ToString("N"), Status = TransportPlanStatus.PENDING, CreatedAt = time, UpdatedAt = time };
         var invoice = new Invoice { InvoiceId = Guid.NewGuid(), InvoiceCode = "INV-" + Guid.NewGuid().ToString("N"),
-            BookingId = booking.BookingId, EmployeeId = creator.EmployeeId, Type = type, Currency = "EUR",
+            BookingId = booking.BookingId, EmployeeId = creator.EmployeeId, Type = type, Currency = "VND",
             Subtotal = 100, TaxAmount = 20, TotalAmount = 120, DueDate = type == InvoiceType.CREDIT_NOTE ? null : new DateOnly(2026, 11, 15),
             BillingNote = "Keep this note", CreatedAt = time, UpdatedAt = time };
         db.AddRange(transport, plan, invoice);
@@ -86,7 +86,7 @@ public class InvoiceIssueTests
         Assert.Equal(TestClock.GetUtcNow(), result.IssuedAt);
         Assert.Equal(result.IssuedAt, result.UpdatedAt);
         Assert.Equal(120, result.GrandTotal);
-        Assert.Equal("EUR", result.Currency);
+        Assert.Equal("VND", result.Currency);
         Assert.Equal(invoice.DueDate, result.DueDate);
         Assert.Equal(type == InvoiceType.QUOTATION ? ["CANCEL", "CREATE_ANOTHER"] : new[] { "RECORD_PAYMENT", "CANCEL", "CREATE_ANOTHER" }, result.AvailableActions);
         Assert.Equal((await db.Employees.SingleAsync(x => x.AccountId == actor.AccountId)).EmployeeId, invoice.EmployeeId);
@@ -109,16 +109,16 @@ public class InvoiceIssueTests
         Assert.Equal(plan.TransportId, notification.TransportId);
         Assert.Equal("Invoice", notification.ReferenceType);
         Assert.Equal(invoice.InvoiceId, notification.ReferenceId);
-        Assert.Equal($"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoice.InvoiceId}", notification.ActionUrl);
+        Assert.Equal($"/bookings/{invoice.BookingId}/invoices/{invoice.InvoiceId}", notification.ActionUrl);
         Assert.Equal(customer.AccountId, Assert.Single(db.AccountNotifications).AccountId);
         Assert.Equal(customer.AccountId, Assert.Single(realtime.Recipients));
         var mail = OutboxQueue.Deserialize<EmailPayload>(Assert.Single(db.OutboxMessages).Payload);
         Assert.Equal(customer.Email, mail.To);
-        Assert.Equal(notification.Title, mail.Subject);
-        Assert.Contains("120.00 EUR", mail.Body);
+        Assert.StartsWith(notification.Title, mail.Subject); Assert.Contains(invoice.InvoiceCode, mail.Subject);
+        Assert.Contains("120 VND", mail.Body);
         if (type == InvoiceType.QUOTATION) Assert.Contains("No payment is required", mail.Body);
         else if (type == InvoiceType.CREDIT_NOTE) Assert.Contains("Payout or credit amount", mail.Body);
-        else Assert.Contains("2026-11-15", mail.Body);
+        else Assert.Contains("15/11/2026", mail.Body);
     }
 
     [Theory]
@@ -153,7 +153,6 @@ public class InvoiceIssueTests
     [InlineData("removed")]
     [InlineData("replaced")]
     [InlineData("amount")]
-    [InlineData("currency")]
     [InlineData("quantity")]
     [InlineData("unitPrice")]
     [InlineData("description")]
@@ -170,7 +169,6 @@ public class InvoiceIssueTests
             case "removed": deposit.Status = InvoiceStatus.CANCELLED; break;
             case "replaced": deposit.Status = InvoiceStatus.CANCELLED; AddDeposit(db, invoice, 30, false); break;
             case "amount": deposit.TotalAmount = 31; break;
-            case "currency": deposit.Currency = "USD"; break;
             case "quantity": line.Quantity = 2; break;
             case "unitPrice": line.UnitPrice = -29; break;
             case "description": line.Description = "Deposit deduction (INV-wrong)"; break;

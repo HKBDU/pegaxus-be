@@ -74,7 +74,7 @@ public sealed partial class Service
                         document = new ComplianceDocument
                         {
                             ComplianceDocumentId = Guid.NewGuid(), DossierRequirementId = requirementId,
-                            CreatedByAccountId = accountId, CreatedAt = now, DocumentCode = $"CDOC-{Guid.NewGuid():N}",
+                            CreatedByAccountId = accountId, CreatedAt = now, DocumentCode = await NextDocumentCodeAsync(now, cancellationToken),
                             DocumentName = requirement.ComplianceRequirement.RequirementName
                         };
                         _db.ComplianceDocuments.Add(document);
@@ -125,6 +125,13 @@ public sealed partial class Service
                         Visibility = AuditVisibility.Public, CreatedAt = now,
                         Details = JsonSerializer.SerializeToDocument(new { document.ComplianceDocumentId, requirementId, version.VersionNo, FileCount = uploaded.Count, version.UploadNote })
                     });
+                    var recipients = await _db.Employees.Active()
+                        .Where(employee => employee.Role == EmployeeRole.TRANSPORT_SPECIALIST &&
+                            employee.EmployeeTransportPlans.Any(assignment => assignment.TransportPlan.TransportId == dossier.TransportId))
+                        .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
+                    foreach (var recipient in recipients)
+                        AddNotification(recipient, EmployeeRole.TRANSPORT_SPECIALIST, dossier, "Document submitted for review",
+                            $"{requirement.ComplianceRequirement.RequirementName} was uploaded for dossier {dossier.DossierCode} and is waiting for your review.", now);
                     await _db.SaveChangesAsync(cancellationToken);
                     commitAttempted = true;
                     await transaction.CommitAsync(cancellationToken);
@@ -143,6 +150,7 @@ public sealed partial class Service
                     throw;
                 }
             }
+            await _notificationService.FlushAsync(cancellationToken);
             await CleanupDocumentFilesAsync(supersededUrls, storageId);
             return new Response.DocumentUploadResponse
             {

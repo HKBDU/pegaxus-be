@@ -24,6 +24,7 @@ public class DossierTemplateServiceTests
         Assert.Equal("ACTIVE", created.Status);
         Assert.Equal(1, created.VersionNo);
         Assert.Equal(new[] { 1, 2, 3 }, created.Items.Select(item => item.SequenceNo));
+        Assert.Equal(3, Assert.Single((await service.GetListAsync(new())).Items).ItemCount);
         Assert.True(created.CanDelete);
 
         request.Items.Reverse();

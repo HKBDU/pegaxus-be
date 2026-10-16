@@ -122,6 +122,8 @@ public sealed partial class Service
             .Select(item => new Response.DashboardItemResponse
             {
                 ComplianceDossierId = item.Dossier.ComplianceDossierId,
+                DossierCode = item.Dossier.DossierCode,
+                DossierType = item.Dossier.DossierType.ToString(),
                 BookingCode = item.Dossier.Transport.Booking.BookingCode,
                 CustomerName = item.Dossier.Transport.Booking.Customer.FullName,
                 OriginCountry = item.Dossier.Transport.Booking.OriginCountry,
@@ -348,10 +350,16 @@ public sealed partial class Service
         }
 
         if (request.From.HasValue)
-            query = query.Where(audit => audit.CreatedAt >= request.From.Value.UtcDateTime);
+        {
+            var from = Truncate(request.From.Value);
+            query = query.Where(audit => audit.CreatedAt >= from);
+        }
 
         if (request.To.HasValue)
-            query = query.Where(audit => audit.CreatedAt <= request.To.Value.UtcDateTime);
+        {
+            var to = Truncate(request.To.Value);
+            query = query.Where(audit => audit.CreatedAt <= to);
+        }
 
         if (!string.IsNullOrWhiteSpace(request.Search))
         {

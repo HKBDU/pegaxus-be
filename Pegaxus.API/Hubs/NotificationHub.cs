@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
+using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
 
 namespace Pegaxus.API.Hubs;
@@ -14,11 +15,18 @@ public sealed class NotificationHub : Hub<INotificationClient>
         _notificationService = notificationService;
     }
 
-    public Task AcknowledgeDelivered(Guid notificationId)
+    public async Task AcknowledgeDelivered(Guid notificationId)
     {
         if (!Guid.TryParse(Context.UserIdentifier, out var accountId))
             throw new HubException("The authenticated account identifier is invalid");
 
-        return _notificationService.AcknowledgeDeliveredAsync(accountId, notificationId);
+        try
+        {
+            await _notificationService.AcknowledgeDeliveredAsync(accountId, notificationId, Context.ConnectionAborted);
+        }
+        catch (NotFoundException)
+        {
+            throw new HubException("NOTIFICATION_NOT_FOUND: Notification not found");
+        }
     }
 }

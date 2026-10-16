@@ -31,7 +31,7 @@ builder.Services.AddDataProtection()
 builder.Configuration["JwtOptions:ExpirationMinutes"] = "15";
 
 builder.Services.AddApiControllers();
-builder.Services.AddFrontendCors();
+builder.Services.AddFrontendCors(builder.Configuration);
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddHttpClient();
 builder.Services.AddHttpClient(CloudinaryService.Service.PreviewHttpClient)

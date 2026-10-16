@@ -109,10 +109,10 @@ public class InvoiceCancellationTests
             Assert.Equal(NotificationType.PAYMENT, notification.NotificationType); Assert.Equal(NotificationPriority.NORMAL, notification.Priority);
             Assert.Equal("Invoice cancelled", notification.Title); Assert.Contains(result.CancellationReason, notification.Message);
             Assert.Equal(plan.TransportId, notification.TransportId); Assert.Equal("Invoice", notification.ReferenceType); Assert.Equal(invoice.InvoiceId, notification.ReferenceId);
-            Assert.Equal($"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoice.InvoiceId}", notification.ActionUrl);
+            Assert.Equal($"/bookings/{invoice.BookingId}/invoices/{invoice.InvoiceId}", notification.ActionUrl);
             Assert.Equal(customer.AccountId, Assert.Single(db.AccountNotifications).AccountId); Assert.Equal(customer.AccountId, Assert.Single(realtime.Recipients));
             var email = OutboxQueue.Deserialize<EmailPayload>(Assert.Single(db.OutboxMessages).Payload);
-            Assert.Equal(customer.Email, email.To); Assert.Equal(notification.Title, email.Subject); Assert.Contains(result.CancellationReason, email.Body);
+            Assert.Equal(customer.Email, email.To); Assert.StartsWith(notification.Title, email.Subject); Assert.Contains(invoice.InvoiceCode, email.Subject); Assert.Contains(result.CancellationReason, email.Body);
         }
     }
 

@@ -64,14 +64,17 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
-    public static IServiceCollection AddFrontendCors(this IServiceCollection services)
+    public static IServiceCollection AddFrontendCors(this IServiceCollection services, IConfiguration configuration)
     {
+        var origins = (configuration["ALLOWED_ORIGINS"] ??
+                       "http://localhost:5173;https://pegaxus-fe.vercel.app;https://pegaxus-fe-git-dev-pegaxus.vercel.app")
+            .Split([';', ','], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         services.AddCors(options =>
         {
             options.AddPolicy("Frontend", policy =>
             {
                 policy
-                    .WithOrigins("http://localhost:5173")
+                    .WithOrigins(origins)
                     .AllowAnyHeader()
                     .AllowAnyMethod()
                     .AllowCredentials();
@@ -243,6 +246,7 @@ public static class ServiceCollectionExtensions
     {
         services.AddScoped<TransportPlanService.ITransportPlanService, TransportPlanService.Service>();
         services.AddScoped<RoutePlanService.IRoutePlanService, RoutePlanService.Service>();
+        services.AddScoped<Pegaxus.Service.NotificationService.TransportNotifications>();
         services.AddScoped<LocationService.ILocationService, LocationService.Service>();
         services.AddScoped<RouteService.IRouteService, RouteService.Service>();
         services.AddScoped<Pegaxus.Service.RouteChangeService.IRouteChangeService, Pegaxus.Service.RouteChangeService.Service>();

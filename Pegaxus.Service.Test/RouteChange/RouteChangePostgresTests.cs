@@ -32,7 +32,7 @@ public class RouteChangePostgresTests
             new() { Decision = "APPROVE", LastUpdatedAt = RouteChangeTests.Fixture.Version(backup) });
         Assert.Equal("ACTIVE", result.Status);
         await using var check = scope.Db();
-        Assert.Equal(3, await check.RoutePlanRoutes.CountAsync());
+        Assert.Equal(4, await check.RoutePlanRoutes.CountAsync());
         Assert.Null((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Completed.RoutePlanRouteId)).SupersededAt);
         Assert.NotNull((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Current.RoutePlanRouteId)).SupersededAt);
         Assert.Equal(4, await check.Notifications.CountAsync());
@@ -141,6 +141,127 @@ public class RouteChangePostgresTests
         Assert.Equal([4, 4], scales);
     }
 
+    [PostgresFact]
+    public async Task Flow4Schema_BackfillsSegmentStatus_AndAllowsOneDossierPerType()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        await using var db = scope.Db();
+        var f = await RouteChangeTests.Fixture.CreateAsync(db);
+        f.Current.ActualDepartureAt = f.Current.PlannedDepartureAt;
+        var upcoming = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlanId = f.Plan.RoutePlanId, RouteId = f.Alternative.RouteId,
+            SequenceNo = 3, PlannedDepartureAt = f.Current.PlannedArrivalAt, PlannedArrivalAt = f.Current.PlannedArrivalAt!.Value.AddHours(1) };
+        db.Add(upcoming);
+        await db.SaveChangesAsync();
+
+        var migrator = db.GetInfrastructure().GetRequiredService<IMigrator>();
+        await migrator.MigrateAsync("20261015090000_AddTransportPlanLocations");
+        await migrator.MigrateAsync();
+
+        await using var check = scope.Db();
+        Assert.False(check.Database.HasPendingModelChanges());
+        var statuses = await check.RoutePlanRoutes.ToDictionaryAsync(x => x.RoutePlanRouteId, x => x.Status);
+        Assert.Equal(RouteSegmentStatus.COMPLETED, statuses[f.Completed.RoutePlanRouteId]);
+        Assert.Equal(RouteSegmentStatus.IN_TRANSIT, statuses[f.Current.RoutePlanRouteId]);
+        Assert.Equal(RouteSegmentStatus.PLANNED, statuses[upcoming.RoutePlanRouteId]);
+        Assert.Equal(DossierType.MAIN, (await check.ComplianceDossiers.SingleAsync()).DossierType);
+
+        var dossier = (Func<DossierType, string, ComplianceDossier>)((type, code) => new()
+        {
+            ComplianceDossierId = Guid.NewGuid(), TransportId = f.Transport.TransportId, DossierCode = code, DossierType = type,
+            CreatedAt = DateTime.SpecifyKind(RouteChangeTests.Fixture.StartAt.UtcDateTime, DateTimeKind.Unspecified), UpdatedAt = DateTime.SpecifyKind(RouteChangeTests.Fixture.StartAt.UtcDateTime, DateTimeKind.Unspecified)
+        });
+        check.Add(dossier(DossierType.EXTRA, "CD-EXTRA"));
+        await check.SaveChangesAsync();
+        await using var duplicate = scope.Db();
+        duplicate.Add(dossier(DossierType.MAIN, "CD-MAIN-2"));
+        var error = await Assert.ThrowsAsync<DbUpdateException>(() => duplicate.SaveChangesAsync());
+        Assert.True(Pegaxus.Repository.Extensions.PostgresErrors.IsWriteConflict(error));
+    }
+
+    [PostgresFact]
+    public async Task ReturnApproval_CreatesOneExtraDossierAndKeepsTheMainOnPostgres()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        await using var db = scope.Db();
+        var f = await RouteChangeTests.Fixture.CreateAsync(db);
+        var returning = await f.AlternateAsync(RouteType.RETURN);
+
+        var decision = await Service(db).DecideAsync(returning.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = RouteChangeTests.Fixture.Version(returning) });
+
+        await using var check = scope.Db();
+        Assert.Equal(ComplianceDossierStatus.DRAFT, (await check.ComplianceDossiers.SingleAsync(x => x.DossierType == DossierType.EXTRA)).Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, (await check.ComplianceDossiers.SingleAsync(x => x.DossierType == DossierType.MAIN)).Status);
+        await using var again = scope.Db();
+        var twice = await Assert.ThrowsAsync<ConflictException>(() => Service(again).DecideAsync(returning.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = decision.UpdatedAt }));
+        Assert.Equal("EXTRA_DOSSIER_ALREADY_EXISTS", twice.ErrorCode);
+    }
+
+    [PostgresFact]
+    public async Task ConcurrentLegalReviews_ConfirmThePrimaryAndItsDraftBackupsOnce()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        Guid primaryId, backupId, specialistId; DateTimeOffset version;
+        await using (var setup = scope.Db())
+        {
+            var f = await RouteChangeTests.Fixture.CreateAsync(setup);
+            f.Plan.Status = RoutePlanStatus.DRAFT;
+            f.Transport.MainDossier!.Status = ComplianceDossierStatus.DRAFT;
+            await setup.SaveChangesAsync();
+            var backup = await f.AlternateAsync(RouteType.BACKUP, RoutePlanStatus.DRAFT);
+            primaryId = f.Plan.RoutePlanId; backupId = backup.RoutePlanId; version = RouteChangeTests.Fixture.Version(f.Plan);
+            specialistId = (await setup.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST)).AccountId;
+        }
+        async Task<string> Review()
+        {
+            await using var db = scope.Db();
+            try
+            {
+                var result = await TestSupport.CreateRoutePlans(db).ReviewLegalAsync(specialistId, primaryId, new() { LastUpdatedAt = version, IsFeasible = true });
+                return string.Join(',', result.ConfirmedBackupRoutePlanIds);
+            }
+            catch (ConflictException error) { return error.ErrorCode!; }
+            catch (Exception error) when (error.GetBaseException() is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure }) { return "CONFLICT"; }
+        }
+        var results = await Task.WhenAll(Review(), Review());
+        Assert.Single(results, x => x == backupId.ToString());
+        Assert.Single(results, x => x != backupId.ToString());
+        await using var check = scope.Db();
+        Assert.Equal(RoutePlanStatus.CONFIRMED, (await check.RoutePlans.SingleAsync(x => x.RoutePlanId == backupId)).Status);
+        Assert.Equal(RoutePlanStatus.CONFIRMED, (await check.RoutePlans.SingleAsync(x => x.RoutePlanId == primaryId)).Status);
+    }
+
+    [PostgresFact]
+    public async Task TransportPlan_ResolvesBookingLocationsAndLoadsTheDetailOnPostgres()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        await using var db = scope.Db();
+        var (_, customer) = await TestSupport.AddCustomerAsync(db);
+        var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer, withHorse: true);
+        booking.Status = BookingStatus.APPROVED;
+        (booking.OriginLatitude, booking.OriginLongitude) = (49.1943m, 2.4716m);
+        (booking.DestinationLatitude, booking.DestinationLongitude) = (52.2455m, 0.4062m);
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var nearby = new Location { LocationId = Guid.NewGuid(), LocationName = "Nearby", Country = "France", Latitude = 49.1946m, Longitude = 2.4716m, CreatedAt = now, UpdatedAt = now };
+        db.Locations.Add(nearby);
+        db.Transports.Add(new Transport { TransportId = Guid.NewGuid(), TransportCode = "TR-PG", BookingId = booking.BookingId, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var plans = new Pegaxus.Service.TransportPlanService.Service(db, TestSupport.CreateNotifications(db));
+        var plan = await plans.CreateAsync(manager.AccountId, booking.BookingId,
+            new() { PlannedStartAt = DateTimeOffset.UtcNow.AddDays(21), PlannedEndAt = DateTimeOffset.UtcNow.AddDays(23) });
+
+        Assert.Equal(nearby.LocationId, plan.OriginLocationId);
+        Assert.Equal(LocationType.OTHER.ToString(), plan.DestinationLocation!.LocationType);
+        await using var check = scope.Db();
+        var detail = await new Pegaxus.Service.TransportPlanService.Service(check, TestSupport.CreateNotifications(check))
+            .GetByIdAsync(manager.AccountId, plan.TransportPlanId);
+        Assert.Equal(49.1943m, detail.Booking.OriginLatitude);
+        Assert.Empty(detail.ComplianceDossiers);
+    }
+
     private static async Task CheckOutboxClaimsAsync(DbContextOptions<AppDbContext> options)
     {
         await using var db = new AppDbContext(options);
@@ -245,7 +366,7 @@ public class RouteChangePostgresTests
 
     private static RouteChange.Service Service(AppDbContext db) => new(db,
         new Pegaxus.Service.NotificationService.Service(db, new NoopNotificationRealtimeService()), new RouteChangeTests.Fixture.FixedClock(),
-        new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db)));
+        TestSupport.CreateRoutePlans(db));
 
 
     private sealed class EnumNames : INpgsqlNameTranslator

@@ -21,7 +21,7 @@ public partial class Service
             // Updating the key to itself holds a row lock until the transaction ends.
         await _db.LockRowsAsync(_db.Bookings.Where(item => item.BookingId == bookingId), item => item.BookingId, cancellationToken);
         var booking = await _db.Bookings.Include(value => value.Customer)
-            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossier).ThenInclude(value => value!.DossierRequirements)
+            .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossiers).ThenInclude(value => value!.DossierRequirements)
             .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
             ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
         await _db.Entry(booking).ReloadAsync(cancellationToken);
@@ -47,7 +47,7 @@ public partial class Service
             }
         }
 
-        var dossier = booking.Transport?.ComplianceDossier;
+        var dossier = booking.Transport?.MainDossier;
         if (dossier is not null)
         {
             dossier.Status = status == BookingStatus.CANCELLED ? ComplianceDossierStatus.CLOSED : ComplianceDossierStatus.DRAFT;
@@ -63,11 +63,16 @@ public partial class Service
         }
         AddHistory(bookingId, accountId, status == BookingStatus.CANCELLED ? BookingHistoryType.CANCEL : BookingHistoryType.SUBMIT,
             BookingStatus.APPROVED, status, reason, now);
-        var recipients = await _db.Employees.Active().Where(employee => employee.Role == EmployeeRole.TRANSPORT_SPECIALIST)
-            .Select(employee => employee.AccountId).ToListAsync(cancellationToken);
-        recipients.Add(booking.Customer.AccountId);
-        foreach (var recipient in recipients.Distinct())
-            AddNotification(recipient, booking.Transport?.TransportId, booking, $"Booking {status}; dossier operations suspended", now);
+        var specialists = await _db.Employees.Active().Where(employee => employee.Role == EmployeeRole.TRANSPORT_SPECIALIST &&
+                employee.EmployeeTransportPlans.Any(assignment => assignment.TransportPlan.Transport.BookingId == bookingId))
+            .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
+        var (title, outcome) = status == BookingStatus.CANCELLED
+            ? ("Booking cancelled", "has been cancelled")
+            : ("Booking returned to draft", "was returned to draft for changes");
+        var message = $"Booking {booking.BookingCode} ({RouteSummary(booking)}) {outcome}. Reason: {reason}. Work on its compliance dossier is suspended.";
+        foreach (var recipient in specialists)
+            AddNotification(recipient, EmployeeRole.TRANSPORT_SPECIALIST, booking.Transport?.TransportId, booking, title, message, now);
+        AddNotification(booking.Customer.AccountId, null, booking.Transport?.TransportId, booking, title, message, now, NotificationPriority.HIGH);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);

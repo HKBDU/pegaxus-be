@@ -116,14 +116,16 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         var status = Enum.Parse<ProviderStatus>(request.Status.Trim(), true);
         if (item.Status != status)
         {
-            var recipients = await db.Employees.AsNoTracking().Active().Where(employee => employee.Account.AccountType == AccountType.EMPLOYEE && (employee.Role == EmployeeRole.LOGISTICS_MANAGER || employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
-                .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
+            var recipients = await db.Employees.AsNoTracking().Active().Where(employee => employee.AccountId != accountId && employee.Account.AccountType == AccountType.EMPLOYEE && (employee.Role == EmployeeRole.LOGISTICS_MANAGER || employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
+                .Select(employee => new { employee.AccountId, employee.Role }).Distinct().ToListAsync(cancellationToken);
+            var reason = EmptyToNull(request.Reason);
             foreach (var recipient in recipients)
                 notifications.Queue(new NotificationCreateRequest
                 {
-                    AccountId = recipient, Type = NotificationType.SYSTEM, Title = "Transport provider status changed",
-                    Message = $"{item.ProviderCode}: {item.Status} to {status}. {EmptyToNull(request.Reason)}".TrimEnd(),
-                    ReferenceType = nameof(TransportProvider), ReferenceId = id, CreatedAt = UtcNowTruncated()
+                    AccountId = recipient.AccountId, Type = NotificationType.SYSTEM, Title = "Transport provider status changed",
+                    Message = $"{item.ProviderName} ({item.ProviderCode}) changed from {item.Status} to {status}.{(reason is null ? "" : " Reason: " + reason)}",
+                    ReferenceType = nameof(TransportProvider), ReferenceId = id,
+                    ActionUrl = NotificationLinks.TransportProviders(recipient.Role), CreatedAt = UtcNowTruncated()
                 });
         }
         item.Status = status;

@@ -6,6 +6,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.NotificationService;
 
@@ -118,12 +119,14 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
         });
         var recipients = await db.Employees.Active().Where(employee => employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && db.EmployeeTransportPlans.Any(assignment => assignment.TransportPlanId == planId && assignment.EmployeeId == employee.EmployeeId))
             .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
+        var handledBy = provider is null ? "handled by our own fleet" : $"outsourced to {provider.ProviderName}";
         foreach (var recipient in recipients)
             notifications.Queue(new NotificationCreateRequest
             {
                 AccountId = recipient, TransportId = plan.TransportId, Type = NotificationType.ROUTE,
-                Title = "Segment outsourced to a transport provider", Message = $"{route.RoutePlanCode}, segment {segment.SequenceNo}: {(provider is null ? "INTERNAL" : provider.ProviderName)}",
-                ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId, CreatedAt = now
+                Title = "Segment outsourcing updated", Message = $"Segment {segment.SequenceNo} of route plan {route.RoutePlanCode} is now {handledBy}.",
+                ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId,
+                ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.FLEET_ROUTE_COORDINATOR, routePlanId), CreatedAt = now
             });
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw Modified(); }

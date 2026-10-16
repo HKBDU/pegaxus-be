@@ -55,48 +55,13 @@ public class PersonnelAssignmentTests
         ProviderName = "Outsource Air", Email = "provider@example.com", Status = ProviderStatus.ACTIVE, SupportedModes = "AIR" };
 
     [Fact]
-    public async Task DemoSeed_UsesCanonicalPhase1Roles_RepairsLegacyLabelsWithoutDuplicatingAssignments()
+    public async Task DemoSeed_DoesNotCreateTransportPlansOrAssignments()
     {
         await using var db = TestSupport.CreateDb();
         await Pegaxus.API.AppDbContextSeedData.SeedAsync(db);
-        var plan = await db.TransportPlans.SingleAsync(x => x.PlanCode == "TP-20261010-DEMO-0005");
-        var manager = await db.Employees.SingleAsync(x => x.Role == EmployeeRole.LOGISTICS_MANAGER);
-        var assignments = await db.EmployeeTransportPlans.Include(x => x.Employee)
-            .Where(x => x.TransportPlanId == plan.TransportPlanId).ToArrayAsync();
-        Assert.Equal(2, assignments.Length);
-        Assert.All(assignments, x => Assert.Equal(x.Employee.Role.ToString(), x.Responsibility));
-        Assert.True((await CreateService(db).GetAsync(plan.TransportPlanId, manager.AccountId)).Phase1.IsAssigned);
-        var specialist = assignments.Single(x => x.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST);
-        var coordinator = assignments.Single(x => x.Employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR);
-        var error = await Assert.ThrowsAsync<ConflictException>(() => new Pegaxus.Service.TransportPlanService.Service(db, TestSupport.CreateNotifications(db))
-            .AssignPhase1Async(manager.AccountId, plan.TransportPlanId, new() {
-                TransportSpecialistId = specialist.EmployeeId, RouteCoordinatorId = coordinator.EmployeeId }));
-        Assert.Equal("PHASE1_ALREADY_ASSIGNED", error.ErrorCode);
-        specialist.Responsibility = "Compliance dossier";
-        coordinator.Responsibility = "Route planning";
-        specialist.Note = "Keep this note";
-        var assignedAt = assignments.ToDictionary(x => x.EmployeeId, x => x.AssignedAt);
-        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
-        await Pegaxus.API.AppDbContextSeedData.SeedAsync(db);
-        await Pegaxus.API.AppDbContextSeedData.SeedAsync(db);
-        db.ChangeTracker.Clear();
-        var repaired = await db.EmployeeTransportPlans.Include(x => x.Employee)
-            .Where(x => x.TransportPlanId == plan.TransportPlanId).ToArrayAsync();
-        Assert.Equal(2, repaired.Length);
-        Assert.All(repaired, x => {
-            Assert.Equal(x.Employee.Role.ToString(), x.Responsibility);
-            Assert.Equal(assignedAt[x.EmployeeId], x.AssignedAt);
-        });
-        Assert.Equal("Keep this note", repaired.Single(x => x.EmployeeId == specialist.EmployeeId).Note);
-        Assert.True((await CreateService(db).GetAsync(plan.TransportPlanId, manager.AccountId)).Phase1.IsAssigned);
-        var replacement = await EmployeeAsync(db, EmployeeRole.FLEET_ROUTE_COORDINATOR);
-        db.EmployeeTransportPlans.Remove(repaired.Single(x => x.EmployeeId == coordinator.EmployeeId));
-        db.EmployeeTransportPlans.Add(new() { EmployeeId = replacement.EmployeeId, TransportPlanId = plan.TransportPlanId,
-            Responsibility = "FLEET_ROUTE_COORDINATOR", IsPrimary = true, AssignedAt = Now });
-        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
-        await Pegaxus.API.AppDbContextSeedData.SeedAsync(db);
-        Assert.Equal(2, await db.EmployeeTransportPlans.CountAsync(x => x.TransportPlanId == plan.TransportPlanId));
-        Assert.Equal(replacement.EmployeeId, (await CreateService(db).GetAsync(plan.TransportPlanId, manager.AccountId)).Phase1.RouteCoordinator!.EmployeeId);
+        Assert.DoesNotContain(await db.TransportPlans.ToListAsync(), x =>
+            x.PlanCode is "TP-20261010-DEMO-0004" or "TP-20261010-DEMO-0005");
+        Assert.Empty(await db.EmployeeTransportPlans.ToListAsync());
     }
 
     [Fact]

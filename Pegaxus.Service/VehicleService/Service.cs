@@ -226,12 +226,19 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         db.CatalogAuditLogs.Add(new CatalogAuditLog { CatalogAuditLogId = Guid.NewGuid(), EntityType = nameof(Vehicle),
             EntityId = vehicle.VehicleId, ActionType = action, ActorAccountId = accountId, Summary = reason,
             BeforeData = before, AfterData = Snapshot(vehicle), CreatedAt = vehicle.UpdatedAt });
-        var recipients = await db.Employees.AsNoTracking().Active().Where(x => x.Account.AccountType == AccountType.EMPLOYEE && (x.Role == EmployeeRole.LOGISTICS_MANAGER || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
-            .Select(x => x.AccountId).Distinct().ToListAsync(cancellationToken);
+        var recipients = await db.Employees.AsNoTracking().Active().Where(x => x.AccountId != accountId && x.Account.AccountType == AccountType.EMPLOYEE && (x.Role == EmployeeRole.LOGISTICS_MANAGER || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR))
+            .Select(x => new { x.AccountId, x.Role }).Distinct().ToListAsync(cancellationToken);
+        var (title, outcome) = action switch
+        {
+            "CREATE" => ("Vehicle added", "was added to the catalog"),
+            "STATUS_CHANGE" => ("Vehicle status changed", $"changed status to {vehicle.Status}"),
+            _ => ("Vehicle updated", "was updated")
+        };
+        var message = $"Vehicle {vehicle.VehicleCode} ({vehicle.LicensePlate}) {outcome}.{(string.IsNullOrWhiteSpace(reason) ? "" : " Reason: " + reason)}";
         foreach (var recipient in recipients)
-            notifications.Queue(new NotificationCreateRequest { AccountId = recipient, Type = NotificationType.SYSTEM,
-                Title = "Vehicle catalog updated", Message = $"Vehicle {vehicle.VehicleCode} ({vehicle.LicensePlate}): {action}. {reason}",
-                ReferenceType = nameof(Vehicle), ReferenceId = vehicle.VehicleId, CreatedAt = vehicle.UpdatedAt });
+            notifications.Queue(new NotificationCreateRequest { AccountId = recipient.AccountId, Type = NotificationType.SYSTEM,
+                Title = title, Message = message, ReferenceType = nameof(Vehicle), ReferenceId = vehicle.VehicleId,
+                ActionUrl = NotificationLinks.Vehicle(recipient.Role, vehicle.VehicleId), CreatedAt = vehicle.UpdatedAt });
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw Modified(); }
         catch (Exception ex) when (ex.GetBaseException() is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected })

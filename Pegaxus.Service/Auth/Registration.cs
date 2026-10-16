@@ -1,6 +1,5 @@
 using System.Net;
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
@@ -8,6 +7,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.OutboxService;
 
 using static Pegaxus.Service.Common.DbTime;
@@ -122,15 +122,7 @@ public sealed partial class Service
         };
     }
 
-    private async Task<string> GenerateCustomerCodeAsync(CancellationToken cancellationToken)
-    {
-        for (var attempt = 0; attempt < 10; attempt++)
-        {
-            var code = $"CUS-{DateTime.UtcNow:yyyyMMdd}-{RandomNumberGenerator.GetInt32(0, 10_000):D4}";
-            if (!await _db.Customers.AnyAsync(item => item.CustomerCode == code, cancellationToken))
-                return code;
-        }
-
-        throw new AppException("Could not generate a unique customer code", 409, "CUSTOMER_CODE_GENERATION_FAILED");
-    }
+    private Task<string> GenerateCustomerCodeAsync(CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("CUS", DateTime.UtcNow, code => _db.Customers.AnyAsync(item => item.CustomerCode == code, cancellationToken),
+            "CUSTOMER_CODE_GENERATION_FAILED", "Could not generate a unique customer code");
 }

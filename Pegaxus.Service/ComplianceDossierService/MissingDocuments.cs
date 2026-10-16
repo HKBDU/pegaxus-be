@@ -1,5 +1,4 @@
 using System.Data;
-using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -69,7 +68,7 @@ public sealed partial class Service
                         revision = new DocumentRequest
                         {
                             DocumentRequestId = Guid.NewGuid(), DossierRequirementId = item.DossierRequirementId,
-                            RequestedByAccountId = accountId, RequestCode = $"DRQ-{Guid.NewGuid():N}",
+                            RequestedByAccountId = accountId, RequestCode = await NextRequestCodeAsync(now, cancellationToken),
                             RequestType = DocumentRequestType.MISSING_DOCUMENT, Status = DocumentRequestStatus.OPEN, CreatedAt = now
                         };
                         _db.DocumentRequests.Add(revision);
@@ -206,8 +205,16 @@ public sealed partial class Service
             {
                 await mail.SendMail(new MailService.MailContent
                 {
-                    To = recipient.Email, Subject = $"Nhắc nộp giấy tờ - {dossier.DossierCode}",
-                    Body = $"<p>{WebUtility.HtmlEncode(MissingReminderMessage(dossier, missing, reminder.DueDate, reminder.Note)).Replace("\n", "<br>")}</p>"
+                    To = recipient.Email,
+                    Subject = $"Missing documents reminder — {dossier.DossierCode}",
+                    Body = MailService.EmailBodies.MissingDocumentsBody(
+                        dossierCode: dossier.DossierCode,
+                        bookingCode: dossier.Transport.Booking.BookingCode,
+                        generalDueDate: reminder.DueDate,
+                        note: reminder.Note,
+                        actionUrl: null,
+                        missingItems: missing.Select(item => new MailService.EmailBodies.MissingItem(
+                            item.ComplianceRequirement.RequirementName, item.Horse?.HorseName, item.DueDate)))
                 }, timeout.Token);
                 reminder.EmailSentAt = ReminderNow();
             }
@@ -231,8 +238,8 @@ public sealed partial class Service
             DueDate = dueDate, Note = note?.Trim(), AutomaticDate = automaticDate, CreatedAt = now
         };
         _db.MissingDocumentReminders.Add(reminder);
-        AddNotification(reminder.RecipientAccountId, dossier, "Nhắc nộp bổ sung giấy tờ còn thiếu", now,
-            message: MissingReminderMessage(dossier, requirements, dueDate, note));
+        AddNotification(reminder.RecipientAccountId, null, dossier, "Missing document reminder",
+            MissingReminderMessage(dossier, requirements, dueDate, note), now);
         return reminder;
     }
 
@@ -272,9 +279,9 @@ public sealed partial class Service
     }
 
     private static string MissingReminderMessage(ComplianceDossier dossier, List<DossierRequirement> requirements, DateOnly dueDate, string? note) =>
-        $"Hồ sơ {dossier.DossierCode}: vui lòng nộp bổ sung các giấy tờ còn thiếu.\n" +
+        $"Dossier {dossier.DossierCode}: please submit the missing documents.\n" +
         string.Join("\n", requirements.Select(item => $"- {item.ComplianceRequirement.RequirementName}" +
-            (item.Horse is null ? "" : $" ({item.Horse.HorseName})") + $"; hạn nộp: {item.DueDate ?? dueDate:yyyy-MM-dd}")) +
+            (item.Horse is null ? "" : $" ({item.Horse.HorseName})") + $"; due date: {item.DueDate ?? dueDate:yyyy-MM-dd}")) +
         (string.IsNullOrWhiteSpace(note) ? "" : $"\n{note.Trim()}");
 
     private DateTime ReminderNow() => DateTime.SpecifyKind(_reminderClock.GetUtcNow().UtcDateTime, DateTimeKind.Unspecified);

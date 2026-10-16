@@ -1,5 +1,4 @@
 using System.Data;
-using System.Security.Cryptography;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -54,12 +53,16 @@ public sealed partial class Service
                 "The Transport Plan has been modified by another request. Please reload and try again.",
                 "TRANSPORT_PLAN_CONCURRENCY_CONFLICT");
 
+        await ValidateLocationsAsync(request.OriginLocationId, request.DestinationLocationId, cancellationToken);
+
         var start = request.PlannedStartAt ?? plan.PlannedStartAt;
         var end = request.PlannedEndAt ?? plan.PlannedEndAt;
         if (start.HasValue && end.HasValue && end <= start)
             throw new BadRequestException("plannedEndAt must be after plannedStartAt");
 
         var now = UtcNowTruncated();
+        plan.OriginLocationId = request.OriginLocationId ?? plan.OriginLocationId;
+        plan.DestinationLocationId = request.DestinationLocationId ?? plan.DestinationLocationId;
         plan.PlannedStartAt = request.PlannedStartAt.HasValue
             ? Truncate(request.PlannedStartAt.Value.UtcDateTime)
             : plan.PlannedStartAt;
@@ -77,15 +80,15 @@ public sealed partial class Service
         var reason = EmptyToNull(request.UpdateReason);
         var message = $"Transport Plan {plan.PlanCode} was updated" +
             (reason is null ? "." : $". Reason: {reason}");
-        var recipientAccountIds = plan.EmployeeTransportPlans
-            .Select(item => item.Employee.AccountId)
-            .Append(plan.Transport.Booking.Customer.AccountId)
-            .Distinct()
+        var recipients = plan.EmployeeTransportPlans
+            .Select(item => (item.Employee.AccountId, Url: NotificationLinks.TransportPlan(item.Employee.Role, plan.TransportPlanId)))
+            .Append((plan.Transport.Booking.Customer.AccountId, Url: NotificationLinks.Booking(null, plan.Transport.BookingId)))
+            .DistinctBy(item => item.AccountId)
             .ToList();
-        foreach (var recipientAccountId in recipientAccountIds)
+        foreach (var recipient in recipients)
             notificationService.Queue(new NotificationService.NotificationCreateRequest
             {
-                AccountId = recipientAccountId,
+                AccountId = recipient.AccountId,
                 TransportId = plan.TransportId,
                 Type = NotificationType.TRANSPORT,
                 Priority = NotificationPriority.NORMAL,
@@ -93,7 +96,7 @@ public sealed partial class Service
                 Message = message,
                 ReferenceType = "TransportPlan",
                 ReferenceId = plan.TransportPlanId,
-                ActionUrl = $"/transport-plans/{plan.TransportPlanId}",
+                ActionUrl = recipient.Url,
                 CreatedAt = now
             });
 
@@ -127,6 +130,10 @@ public sealed partial class Service
             .Include(item => item.Transport)
                 .ThenInclude(item => item.Booking)
                     .ThenInclude(item => item.BookingHorses)
+            .Include(item => item.Transport)
+                .ThenInclude(item => item.ComplianceDossiers)
+            .Include(item => item.RoutePlans)
+                .ThenInclude(item => item.RoutePlanRoutes)
             .Include(item => item.EmployeeTransportPlans)
                 .ThenInclude(item => item.Employee)
             .Include(item => item.ApprovedByEmployee)
@@ -139,9 +146,18 @@ public sealed partial class Service
             throw new ForbiddenException("You are not assigned to this Transport Plan");
 
         var booking = plan.Transport.Booking;
+        var locationIds = new[] { plan.OriginLocationId, plan.DestinationLocationId }.OfType<Guid>().Distinct().ToArray();
+        var locations = locationIds.Length == 0
+            ? []
+            : await db.Locations.AsNoTracking().Where(item => locationIds.Contains(item.LocationId))
+                .ToDictionaryAsync(item => item.LocationId, cancellationToken);
         return new Response.CreateResponse
         {
             TransportPlanId = plan.TransportPlanId,
+            OriginLocationId = plan.OriginLocationId,
+            DestinationLocationId = plan.DestinationLocationId,
+            OriginLocation = LocationBrief.From(Find(locations, plan.OriginLocationId)),
+            DestinationLocation = LocationBrief.From(Find(locations, plan.DestinationLocationId)),
             PlanCode = plan.PlanCode,
             Status = plan.Status.ToString(),
             Booking = new Response.BookingResponse
@@ -155,6 +171,10 @@ public sealed partial class Service
                 OriginCountry = booking.OriginCountry,
                 DestinationAddress = booking.DestinationAddress,
                 DestinationCountry = booking.DestinationCountry,
+                OriginLatitude = booking.OriginLatitude,
+                OriginLongitude = booking.OriginLongitude,
+                DestinationLatitude = booking.DestinationLatitude,
+                DestinationLongitude = booking.DestinationLongitude,
                 TotalHorses = booking.BookingHorses.Count,
                 RequestedDepartureDate = booking.RequestedDepartureDate,
                 RequestedArrivalDate = booking.RequestedArrivalDate,
@@ -196,6 +216,27 @@ public sealed partial class Service
                     FullName = plan.ApprovedByEmployee.FullName
                 },
             ApprovedAt = AsUtc(plan.ApprovedAt),
+            ComplianceDossiers = plan.Transport.ComplianceDossiers
+                .OrderBy(item => item.DossierType)
+                .ThenBy(item => item.CreatedAt)
+                .Select(item => new Response.ComplianceDossierResponse
+                {
+                    ComplianceDossierId = item.ComplianceDossierId,
+                    DossierCode = item.DossierCode,
+                    DossierType = item.DossierType.ToString(),
+                    Status = item.Status.ToString()
+                })
+                .ToList(),
+            RoutePlans = plan.RoutePlans
+                .OrderBy(item => item.CreatedAt)
+                .Select(item => new Response.RoutePlanResponse
+                {
+                    RoutePlanId = item.RoutePlanId,
+                    RoutePlanCode = item.RoutePlanCode,
+                    RouteType = TransportItinerary.PlanType(item).ToString(),
+                    Status = item.Status.ToString()
+                })
+                .ToList(),
             CreatedAt = AsUtc(plan.CreatedAt),
             UpdatedAt = AsUtc(plan.UpdatedAt)
         };
@@ -322,12 +363,20 @@ public sealed partial class Service
                 "Transport Plan already exists for this booking. Please edit the existing plan.",
                 "TRANSPORT_PLAN_EXISTS");
 
+        await ValidateLocationsAsync(request.OriginLocationId, request.DestinationLocationId, cancellationToken);
+
         var now = UtcNowTruncated();
+        var originLocationId = request.OriginLocationId ?? await ResolveLocationAsync(
+            booking.OriginLatitude, booking.OriginLongitude, booking.OriginAddress, booking.OriginCountry, now, cancellationToken);
+        var destinationLocationId = request.DestinationLocationId ?? await ResolveLocationAsync(
+            booking.DestinationLatitude, booking.DestinationLongitude, booking.DestinationAddress, booking.DestinationCountry, now, cancellationToken);
         var transportPlan = new TransportPlan
         {
             TransportPlanId = Guid.NewGuid(),
             TransportId = booking.Transport.TransportId,
-            PlanCode = await GenerateCodeAsync("TP", code =>
+            OriginLocationId = originLocationId,
+            DestinationLocationId = destinationLocationId,
+            PlanCode = await CodeGeneration.NextAsync("TP", DateTime.UtcNow, code =>
                 db.TransportPlans.AnyAsync(plan => plan.PlanCode == code, cancellationToken)),
             Status = TransportPlanStatus.DRAFT,
             PlannedStartAt = Truncate(request.PlannedStartAt.UtcDateTime),
@@ -346,44 +395,63 @@ public sealed partial class Service
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
 
-        return new Response.CreateResponse
+        return await GetByIdAsync(accountId, transportPlan.TransportPlanId, cancellationToken);
+    }
+
+    private const double LocationMatchRadiusMeters = 100;
+
+    private static Location? Find(IReadOnlyDictionary<Guid, Location> locations, Guid? locationId) =>
+        locationId.HasValue && locations.TryGetValue(locationId.Value, out var location) ? location : null;
+
+    /// <summary>
+    /// Nearest live Location within <see cref="LocationMatchRadiusMeters"/> of the booking point; when none exists a
+    /// Location of type OTHER is created from the booking. Returns null when the booking has no coordinates.
+    /// </summary>
+    private async Task<Guid?> ResolveLocationAsync(
+        decimal? latitude, decimal? longitude, string address, string country, DateTime now, CancellationToken cancellationToken)
+    {
+        if (!latitude.HasValue || !longitude.HasValue) return null;
+        var (lat, lon) = (latitude.Value, longitude.Value);
+        var latitudeDelta = (decimal)(LocationMatchRadiusMeters / 111_000 * 1.5);
+        var longitudeDelta = latitudeDelta / (decimal)Math.Max(Math.Cos((double)lat * Math.PI / 180), 0.01);
+        var candidates = await db.Locations.AsNoTracking()
+            .Where(item => !item.IsDeleted && item.Latitude != null && item.Longitude != null &&
+                item.Latitude >= lat - latitudeDelta && item.Latitude <= lat + latitudeDelta &&
+                item.Longitude >= lon - longitudeDelta && item.Longitude <= lon + longitudeDelta)
+            .ToListAsync(cancellationToken);
+        var nearest = candidates
+            .Select(item => (Location: item, Distance: Coordinates.DistanceMeters(lat, lon, item.Latitude!.Value, item.Longitude!.Value)))
+            .Where(item => item.Distance <= LocationMatchRadiusMeters)
+            .OrderBy(item => item.Distance)
+            .Select(item => item.Location)
+            .FirstOrDefault();
+        if (nearest is not null) return nearest.LocationId;
+
+        var trimmed = address.Trim();
+        var head = trimmed.Split(',')[0].Trim();
+        var created = new Location
         {
-            TransportPlanId = transportPlan.TransportPlanId,
-            PlanCode = transportPlan.PlanCode,
-            Status = transportPlan.Status.ToString(),
-            Booking = new Response.BookingResponse
-            {
-                BookingId = booking.BookingId,
-                BookingCode = booking.BookingCode,
-                Status = booking.Status.ToString(),
-                IsInternational = booking.OriginCountry != booking.DestinationCountry,
-                CustomerName = booking.Customer.FullName,
-                OriginAddress = booking.OriginAddress,
-                OriginCountry = booking.OriginCountry,
-                DestinationAddress = booking.DestinationAddress,
-                DestinationCountry = booking.DestinationCountry,
-                TotalHorses = booking.BookingHorses.Count,
-                RequestedDepartureDate = booking.RequestedDepartureDate,
-                RequestedArrivalDate = booking.RequestedArrivalDate,
-                SpecialRequirements = booking.SpecialRequirements
-            },
-            Transport = new Response.TransportResponse
-            {
-                TransportId = booking.Transport.TransportId,
-                TransportCode = booking.Transport.TransportCode,
-                Status = booking.Transport.Status.ToString()
-            },
-            PlannedStartAt = AsUtc(transportPlan.PlannedStartAt!.Value),
-            PlannedEndAt = AsUtc(transportPlan.PlannedEndAt!.Value),
-            PlanningNote = transportPlan.PlanningNote,
-            EstimatedDistanceKm = transportPlan.EstimatedDistanceKm,
-            EstimatedDurationMinutes = transportPlan.EstimatedDurationMinutes,
-            AssignedEmployees = [],
-            ApprovedBy = null,
-            ApprovedAt = null,
-            CreatedAt = AsUtc(transportPlan.CreatedAt),
-            UpdatedAt = AsUtc(transportPlan.UpdatedAt)
+            LocationId = Guid.NewGuid(),
+            LocationName = Truncated(head.Length > 0 ? head : trimmed, 200),
+            LocationType = LocationType.OTHER,
+            Address = Truncated(trimmed, 500),
+            Country = country,
+            Latitude = lat,
+            Longitude = lon,
+            CreatedAt = now,
+            UpdatedAt = now
         };
+        db.Locations.Add(created);
+        return created.LocationId;
+    }
+
+    private static string Truncated(string value, int maxLength) => value.Length <= maxLength ? value : value[..maxLength];
+
+    private async Task ValidateLocationsAsync(Guid? originId, Guid? destinationId, CancellationToken cancellationToken)
+    {
+        foreach (var locationId in new[] { originId, destinationId }.Where(id => id.HasValue).Distinct())
+            if (!await db.Locations.AnyAsync(location => location.LocationId == locationId && !location.IsDeleted, cancellationToken))
+                throw new NotFoundException("Location not found", "LOCATION_NOT_FOUND");
     }
 
     private static IQueryable<TransportPlan> ApplySorting(IQueryable<TransportPlan> query, string? sortBy)
@@ -406,14 +474,4 @@ public sealed partial class Service
         };
     }
 
-    private static async Task<string> GenerateCodeAsync(string prefix, Func<string, Task<bool>> exists)
-    {
-        var date = DateTime.UtcNow.ToString("yyyyMMdd");
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            var code = $"{prefix}-{date}-{RandomNumberGenerator.GetInt32(10_000):D4}";
-            if (!await exists(code)) return code;
-        }
-        throw new InvalidOperationException($"Unable to generate a unique {prefix} code");
-    }
 }

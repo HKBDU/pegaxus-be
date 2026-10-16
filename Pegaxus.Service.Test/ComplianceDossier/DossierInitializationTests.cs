@@ -28,6 +28,9 @@ public class DossierInitializationTests
 
         var result = await service.InitializeAsync(specialist, booking.BookingId, request);
         Assert.Equal("IN_PREPARATION", result.Status);
+        Assert.Equal("MAIN", result.DossierType);
+        Assert.Equal(DossierType.MAIN, (await db.ComplianceDossiers.SingleAsync()).DossierType);
+        Assert.Matches(@"^CD-\d{8}-\d{4}$", (await db.ComplianceDossiers.SingleAsync()).DossierCode);
         Assert.Equal(3, result.Requirements.Count);
         Assert.Equal(2, result.Requirements.Count(item => item.HorseId != null));
         Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30), result.Requirements.First().ValidUntil);
@@ -111,6 +114,15 @@ public class DossierInitializationTests
         var (booking, template, specialist) = await SeedAsync(db);
         await CreateService(db).InitializeAsync(specialist, booking.BookingId,
             new() { DossierTemplateId = template.DossierTemplateId });
+        var assignedEmployee = await db.Employees.SingleAsync(item => item.AccountId == specialist);
+        db.EmployeeTransportPlans.Add(new()
+        {
+            Employee = assignedEmployee,
+            TransportPlan = new TransportPlan { TransportPlanId = Guid.NewGuid(), Transport = booking.Transport!, PlanCode = "PLAN-NEGOTIATE" }
+        });
+        var (_, unassigned) = await TestSupport.AddLogisticsManagerAsync(db);
+        unassigned.Role = EmployeeRole.TRANSPORT_SPECIALIST;
+        await db.SaveChangesAsync();
         var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var realtime = new RecordingRealtimeService();
         var service = new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService(),
@@ -124,6 +136,7 @@ public class DossierInitializationTests
         Assert.Equal(2, realtime.Notifications.Count);
         Assert.Contains(realtime.Notifications, item => item.AccountId == specialist);
         Assert.Contains(realtime.Notifications, item => item.AccountId == booking.Customer.AccountId);
+        Assert.DoesNotContain(realtime.Notifications, item => item.AccountId == unassigned.AccountId);
         var error = await Assert.ThrowsAsync<ConflictException>(() => CreateService(db).InitializeAsync(
             specialist, booking.BookingId, new() { DossierTemplateId = template.DossierTemplateId, BookingUpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-1) }));
         Assert.Equal("BOOKING_STATUS_CHANGED", error.ErrorCode);

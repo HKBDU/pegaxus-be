@@ -90,7 +90,6 @@ public class SePayCheckoutTests
     {
         var invalid = new[]
         {
-            new SePay.SePayOptions(),
             new SePay.SePayOptions { MerchantId = "merchant", SecretKey = "secret", Environment = "unknown" },
             new SePay.SePayOptions { MerchantId = "merchant", SecretKey = "secret", InvoiceDetailsUrlTemplate = "https://customer.example/invoices" },
             new SePay.SePayOptions { MerchantId = "merchant", SecretKey = "secret", Environment = "production", InvoiceDetailsUrlTemplate = "http://localhost/invoices/{invoiceId}" },
@@ -103,5 +102,15 @@ public class SePayCheckoutTests
         var local = Settings(); local.InvoiceDetailsUrlTemplate = "http://localhost:3000/invoices/{invoiceId}";
         Assert.StartsWith("http://localhost:3000/", (await new SePay.Service(Options.Create(local))
             .CreateCheckoutAsync(InvoiceId, "RCP-20261110-0001", 100000m, "VND")).Fields["success_url"]);
+    }
+
+    [Fact]
+    public async Task MissingCredentials_ReturnsSpecificUnavailableError()
+    {
+        var error = await Assert.ThrowsAsync<Pegaxus.Service.Exceptions.Exceptions>(() =>
+            new SePay.Service(Options.Create(new SePay.SePayOptions()))
+                .CreateCheckoutAsync(InvoiceId, "RCP-20261110-0001", 100000m, "VND"));
+        Assert.Equal(503, error.StatusCode);
+        Assert.Equal("PAYMENT_GATEWAY_NOT_CONFIGURED", error.ErrorCode);
     }
 }

@@ -25,6 +25,7 @@ public static class Response
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
         public required IReadOnlyList<ItemResponse> Items { get; init; }
+        public int ItemCount => Items.Count;
     }
 
     public sealed class ItemResponse

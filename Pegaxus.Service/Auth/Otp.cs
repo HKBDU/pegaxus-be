@@ -1,4 +1,3 @@
-using System.Net;
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.AspNetCore.Identity;
@@ -19,6 +18,8 @@ namespace Pegaxus.Service.Auth;
 
 public sealed partial class Service
 {
+    private const int OtpLifetimeMinutes = 5;
+
     private async Task<DateTimeOffset> SendOtpAsync(
         string email,
         string purpose,
@@ -26,7 +27,7 @@ public sealed partial class Service
         CancellationToken cancellationToken)
     {
         var otp = RandomNumberGenerator.GetInt32(0, 1_000_000).ToString("D6");
-        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(5);
+        var expiresAt = DateTimeOffset.UtcNow.AddMinutes(OtpLifetimeMinutes);
         await _cache.SetStringAsync(
             OtpKey(email, purpose),
             JsonSerializer.Serialize(new OtpCacheEntry(Hash(otp), 0, expiresAt)),
@@ -41,32 +42,7 @@ public sealed partial class Service
             {
                 To = email,
                 Subject = isVerification ? "Verify your Pegaxus account" : "Reset your Pegaxus password",
-                Body = $"""
-                    <!doctype html>
-                    <html lang="en">
-                    <body style="margin:0;background:#f3f5f7;font-family:Arial,sans-serif;color:#17202a;">
-                      <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:32px 16px;">
-                        <tr>
-                          <td align="center">
-                            <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#ffffff;border-radius:16px;overflow:hidden;box-shadow:0 8px 24px rgba(23,32,42,.08);">
-                              <tr><td style="background:#12344d;padding:24px 32px;color:#ffffff;font-size:24px;font-weight:700;">PEGAXUS</td></tr>
-                              <tr>
-                                <td style="padding:32px;">
-                                  <h1 style="margin:0 0 16px;font-size:24px;">{(isVerification ? "Verify your email" : "Reset your password")}</h1>
-                                  <p style="margin:0 0 12px;line-height:1.6;">Hello {WebUtility.HtmlEncode(fullName)},</p>
-                                  <p style="margin:0 0 24px;line-height:1.6;">{(isVerification ? "Use this code to verify your Pegaxus account." : "Use this code to reset your Pegaxus password.")}</p>
-                                  <div style="padding:18px;text-align:center;background:#fff4e6;border:1px solid #f5a623;border-radius:12px;font-size:32px;font-weight:700;letter-spacing:8px;color:#12344d;">{otp}</div>
-                                  <p style="margin:24px 0 0;line-height:1.6;color:#5d6d7e;">This code expires in 5 minutes. Never share it with anyone.</p>
-                                  <p style="margin:12px 0 0;line-height:1.6;color:#5d6d7e;">If you did not request this, you can safely ignore this email.</p>
-                                </td>
-                              </tr>
-                            </table>
-                          </td>
-                        </tr>
-                      </table>
-                    </body>
-                    </html>
-                    """
+                Body = MailService.EmailBodies.OtpBody(isVerification, fullName, otp, OtpLifetimeMinutes)
             };
             if (OutboxQueue.IsEnabled(_db))
             {

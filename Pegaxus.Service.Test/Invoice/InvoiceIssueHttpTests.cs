@@ -57,7 +57,8 @@ public class InvoiceIssueHttpTests
         Assert.Equal("2026-11-05", value.GetProperty("invoiceDate").GetString());
         Assert.Equal(InvoiceIssueTests.TestClock.GetUtcNow(), value.GetProperty("issuedAt").GetDateTimeOffset());
         Assert.Equal(InvoiceIssueTests.TestClock.GetUtcNow(), value.GetProperty("updatedAt").GetDateTimeOffset());
-        Assert.Equal(120, value.GetProperty("grandTotal").GetDecimal()); Assert.Equal("EUR", value.GetProperty("currency").GetString());
+        Assert.Equal(120, value.GetProperty("grandTotal").GetInt64()); Assert.Equal("VND", value.GetProperty("currency").GetString());
+        Assert.Equal("120", value.GetProperty("grandTotal").GetRawText());
         Assert.Equal("2026-11-15", value.GetProperty("dueDate").GetString());
         Assert.Equal(new[] { "RECORD_PAYMENT", "CANCEL", "CREATE_ANOTHER" }, value.GetProperty("availableActions").EnumerateArray().Select(x => x.GetString()));
         await Error(await client.PostAsJsonAsync(url, InvoiceIssueTests.Version(invoice)), 409, "INVALID_INVOICE_STATUS");

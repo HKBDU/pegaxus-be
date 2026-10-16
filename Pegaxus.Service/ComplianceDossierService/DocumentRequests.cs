@@ -1,5 +1,4 @@
 using System.Data;
-using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -20,7 +19,8 @@ public sealed partial class Service
         ValidateRejection(request);
         var mailService = _mailService ?? throw new InvalidOperationException("MailService must be configured for DocumentRequests.");
         Response.DocumentRejectionResponse response;
-        string customerEmail;
+        string customerEmail, requirementName;
+        string? horseName;
         await using (var transaction = await _db.Database.BeginSerializableAsync(cancellationToken))
         {
             try
@@ -77,7 +77,7 @@ public sealed partial class Service
                 var revision = new DocumentRequest
                 {
                     DocumentRequestId = Guid.NewGuid(), DocumentReviewId = review.DocumentReviewId,
-                    DossierRequirementId = requirementId, RequestedByAccountId = accountId, RequestCode = $"DRQ-{Guid.NewGuid():N}",
+                    DossierRequirementId = requirementId, RequestedByAccountId = accountId, RequestCode = await NextRequestCodeAsync(now, cancellationToken),
                     RequestType = DocumentRequestType.REUPLOAD, Status = DocumentRequestStatus.OPEN, ErrorCategory = request.ErrorCategory.ToString(),
                     Message = note, DueDate = request.RevisionDeadline, RequestedAt = now, CreatedAt = now, UpdatedAt = now
                 };
@@ -103,15 +103,27 @@ public sealed partial class Service
                 };
                 AddDocumentRequestAudit(dossierId, accountId, "DOCUMENT_REVIEW_REJECTED", nameof(DocumentReview), review.DocumentReviewId, note, now, details);
                 AddDocumentRequestAudit(dossierId, accountId, "DOCUMENT_REQUEST_CREATED", nameof(DocumentRequest), revision.DocumentRequestId, note, now, details);
-                AddNotification(dossier.Transport.Booking.Customer.AccountId, dossier, "DocumentRequest: re-upload required", now,
-                    message: $"{revision.RequestCode}: {note} Revision deadline: {request.RevisionDeadline:yyyy-MM-dd}.");
+                AddNotification(dossier.Transport.Booking.Customer.AccountId, null, dossier, "Document re-upload required",
+                    $"A document for dossier {dossier.DossierCode} needs to be replaced ({revision.RequestCode}). {note} Please upload a corrected document by {request.RevisionDeadline:yyyy-MM-dd}.", now);
                 customerEmail = dossier.Transport.Booking.Customer.Account.Email;
+                var target = await _db.DossierRequirements.AsNoTracking().Where(item => item.DossierRequirementId == requirementId)
+                    .Select(item => new { item.ComplianceRequirement.RequirementName, HorseName = item.Horse != null ? item.Horse.HorseName : null })
+                    .SingleAsync(cancellationToken);
+                requirementName = target.RequirementName;
+                horseName = target.HorseName;
                 if (OutboxQueue.IsEnabled(_db))
                     OutboxQueue.AddEmail(_db, new MailService.MailContent
                     {
                         To = customerEmail,
-                        Subject = $"DocumentRequest {revision.RequestCode}: re-upload required",
-                        Body = $"<p>{WebUtility.HtmlEncode(note)}</p><p>{WebUtility.HtmlEncode(note).Replace("\n", "<br>")}</p><p>Revision deadline: {request.RevisionDeadline:yyyy-MM-dd}</p>"
+                        Subject = $"Document re-upload required — {revision.RequestCode}",
+                        Body = MailService.EmailBodies.DocumentReuploadBody(
+                            requestCode: revision.RequestCode,
+                            requirementName: requirementName,
+                            horseName: horseName,
+                            errorCategory: revision.ErrorCategory ?? "",
+                            note: note,
+                            revisionDeadline: request.RevisionDeadline,
+                            actionUrl: null)
                     }, now);
                 await _db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
@@ -142,8 +154,16 @@ public sealed partial class Service
             var revision = response.DocumentRequest;
             await mailService.SendMail(new MailService.MailContent
             {
-                To = customerEmail, Subject = $"DocumentRequest {revision.RequestCode}: re-upload required",
-                Body = $"<p>{WebUtility.HtmlEncode(revision.ErrorCategory)}</p><p>{WebUtility.HtmlEncode(revision.Message).Replace("\n", "<br>")}</p><p>Revision deadline: {revision.DueDate:yyyy-MM-dd}</p>"
+                To = customerEmail,
+                Subject = $"Document re-upload required — {revision.RequestCode}",
+                Body = MailService.EmailBodies.DocumentReuploadBody(
+                    requestCode: revision.RequestCode,
+                    requirementName: requirementName,
+                    horseName: horseName,
+                    errorCategory: revision.ErrorCategory ?? "",
+                    note: revision.Message,
+                    revisionDeadline: revision.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                    actionUrl: null)
             }).WaitAsync(TimeSpan.FromSeconds(2));
             response.EmailSent = true;
         }
@@ -184,7 +204,8 @@ public sealed partial class Service
                 comment.DocumentRequestCommentId, "Comment added to DocumentRequest.", now, new { DocumentRequestId = requestId });
             var recipientId = role is null ? revision.RequestedByAccountId : customerAccountId;
             if (recipientId != accountId)
-                AddNotification(recipientId, dossier, "New DocumentRequest comment", now, message: $"{revision.RequestCode}: {comment.Message}");
+                AddNotification(recipientId, role is null ? EmployeeRole.TRANSPORT_SPECIALIST : null, dossier, "New comment on a document request",
+                    $"New comment on {revision.RequestCode} (dossier {dossier.DossierCode}): {comment.Message}", now);
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await _notificationService.FlushAsync(CancellationToken.None);

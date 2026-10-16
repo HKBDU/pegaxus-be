@@ -1,6 +1,5 @@
 using System.Data;
 using System.Globalization;
-using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -10,6 +9,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MailService;
 using Pegaxus.Service.NotificationService;
@@ -157,20 +157,22 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
         }
 
         var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
-            .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, TransportId = (Guid?)x.Transport!.TransportId })
+            .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName, TransportId = (Guid?)x.Transport!.TransportId })
             .SingleAsync(cancellationToken);
         var message = $"Online payment for invoice {invoice.InvoiceCode} has been confirmed. Receipt: {receipt.ReceiptCode}. " +
-            $"Amount: {receipt.Amount.ToString("0.##", CultureInfo.InvariantCulture)} {receipt.Currency}. Invoice status: PAID.";
+            $"Amount: {Vnd.Format(receipt.Amount, receipt.Currency)}. Invoice status: PAID.";
         notifications.Queue(new NotificationCreateRequest
         {
             AccountId = customer.AccountId, TransportId = customer.TransportId, Type = NotificationType.PAYMENT,
             Priority = NotificationPriority.NORMAL, Title = "Payment confirmed", Message = message,
             ReferenceType = "Invoice", ReferenceId = invoice.InvoiceId,
-            ActionUrl = $"/bookings/{invoice.BookingId}?invoiceId={invoice.InvoiceId}", CreatedAt = now
+            ActionUrl = NotificationLinks.Invoice(null, invoice.BookingId, invoice.InvoiceId), CreatedAt = now
         });
         OutboxQueue.AddEmail(db, new MailContent
         {
-            To = customer.Email, Subject = "Payment confirmed", Body = $"<p>{WebUtility.HtmlEncode(message)}</p>"
+            To = customer.Email, Subject = $"Payment confirmed — {receipt.ReceiptCode}",
+            Body = EmailBodies.PaymentConfirmedBody(customer.FullName, invoice.InvoiceCode, receipt.ReceiptCode,
+                receipt.Amount, receipt.Currency, isPayout: false, actionUrl: null)
         }, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -187,7 +189,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             return;
 
         var managers = await db.Employees.AsNoTracking().Active().Where(x => x.Role == EmployeeRole.LOGISTICS_MANAGER)
-            .Select(x => new { x.AccountId, x.Account.Email }).ToListAsync(cancellationToken);
+            .Select(x => new { x.AccountId, x.Account.Email, x.FullName }).ToListAsync(cancellationToken);
         if (managers.Count == 0)
         {
             logger.LogError("SePay payment {Reference} for receipt {ReceiptCode} needs reconciliation but no active Logistics Manager exists",
@@ -196,7 +198,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
         }
 
         var message = $"{reason}. Receipt: {receipt.ReceiptCode} ({receipt.Status}). Gateway reference: {reference}. " +
-            $"Amount: {receipt.Amount.ToString("0.##", CultureInfo.InvariantCulture)} {receipt.Currency}. " +
+            $"Amount: {Vnd.Format(receipt.Amount, receipt.Currency)}. " +
             $"Invoice: {invoice.InvoiceCode} ({invoice.Status}). Check the bank statement and refund or reconcile manually.";
         foreach (var manager in managers)
         {
@@ -204,9 +206,14 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             {
                 AccountId = manager.AccountId, Type = NotificationType.PAYMENT, Priority = NotificationPriority.URGENT,
                 Title = title, Message = message, ReferenceType = nameof(Receipt), ReferenceId = receipt.ReceiptId,
-                ActionUrl = $"/invoices/{invoice.InvoiceId}", CreatedAt = now
+                ActionUrl = NotificationLinks.Invoice(EmployeeRole.LOGISTICS_MANAGER, invoice.BookingId, invoice.InvoiceId), CreatedAt = now
             });
-            OutboxQueue.AddEmail(db, new MailContent { To = manager.Email, Subject = title, Body = WebUtility.HtmlEncode(message) }, now);
+            OutboxQueue.AddEmail(db, new MailContent
+            {
+                To = manager.Email, Subject = $"{title} — {receipt.ReceiptCode}",
+                Body = EmailBodies.PaymentReconciliationBody(manager.FullName, reason, receipt.ReceiptCode, receipt.Status.ToString(), reference,
+                    receipt.Amount, receipt.Currency, invoice.InvoiceCode, invoice.Status.ToString(), actionUrl: null)
+            }, now);
         }
     }
 

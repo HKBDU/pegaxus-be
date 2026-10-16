@@ -102,14 +102,15 @@ public sealed partial class Service
             .ToListAsync(cancellationToken);
 
         var title = request.IsHoldback
-            ? "BCP quarantine proof holdback reported"
+            ? "BCP is holding the transport"
             : "BCP quarantine proof submitted";
         var message = request.IsHoldback
-            ? "A BCP is holding the transport or horse for additional inspection."
-            : "A BCP quarantine proof is awaiting TS verification.";
+            ? $"{proof.BcpName} is holding the transport or a horse for dossier {dossier.DossierCode} for additional inspection. Review the proof and plan the next steps."
+            : $"A quarantine proof for dossier {dossier.DossierCode} ({proof.BcpName}) is waiting for your verification.";
 
         foreach (var tsAccountId in tsAccountIds)
-            AddNotification(tsAccountId, dossier, title, now, request.IsHoldback ? NotificationPriority.URGENT : NotificationPriority.NORMAL, message);
+            AddNotification(tsAccountId, EmployeeRole.TRANSPORT_SPECIALIST, dossier, title, message, now,
+                request.IsHoldback ? NotificationPriority.URGENT : NotificationPriority.NORMAL);
 
         await _db.SaveChangesAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -260,11 +261,12 @@ public sealed partial class Service
 
             AddNotification(
                 proof.SubmittedByEmployee.AccountId,
+                proof.SubmittedByEmployee.Role,
                 dossier,
                 "BCP quarantine proof rejected",
+                $"Your quarantine proof for dossier {dossier.DossierCode} ({proof.BcpName}) was rejected. Reason: {proof.RejectionReason}. Please submit a new proof.",
                 now,
-                NotificationPriority.HIGH,
-                "The BCP proof was rejected. Please submit a new proof.");
+                NotificationPriority.HIGH);
 
             await _db.SaveChangesAsync(cancellationToken);
             await _notificationService.FlushAsync(cancellationToken);
@@ -333,7 +335,7 @@ public sealed partial class Service
             now,
             new { Action = action, Status = status.Value.ToString(), proof.BcpReceiptNumber });
 
-        var accountIds = await _db.Employees
+        var recipients = await _db.Employees
             .Active()
             .Where(item => (item.Role == EmployeeRole.DRIVER ||
                     item.Role == EmployeeRole.ESCORT ||
@@ -341,7 +343,7 @@ public sealed partial class Service
                     item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR) && (item.Role == EmployeeRole.LOGISTICS_MANAGER ||
                     item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR ||
                     item.EmployeeTransportPlans.Any(plan => plan.TransportPlan.TransportId == dossier.TransportId)))
-            .Select(item => item.AccountId)
+            .Select(item => new { item.AccountId, item.Role })
             .ToListAsync(cancellationToken);
 
         var priority = status == QuarantineProofStatus.Failed
@@ -351,21 +353,22 @@ public sealed partial class Service
             ? "BCP quarantine inspection failed"
             : "BCP quarantine inspection verified";
         var message = status == QuarantineProofStatus.Failed
-            ? "The BCP quarantine proof was finalized as FAILED. Immediate action is required."
-            : $"The BCP quarantine proof was finalized as {status.Value.ToString().ToUpperInvariant()}.";
+            ? $"{proof.BcpName} failed the quarantine inspection for dossier {dossier.DossierCode}. Immediate action is required."
+            : $"{proof.BcpName} finished the quarantine inspection for dossier {dossier.DossierCode} with result {status.Value.ToString().ToUpperInvariant()}.";
 
-        foreach (var accountIdToNotify in accountIds.Distinct())
-            AddNotification(accountIdToNotify, dossier, title, now, priority, message);
+        foreach (var recipient in recipients)
+            AddNotification(recipient.AccountId, recipient.Role, dossier, title, message, now, priority);
 
         if (status == QuarantineProofStatus.Failed)
         {
             AddNotification(
                 dossier.Transport.Booking.Customer.AccountId,
+                null,
                 dossier,
                 title,
+                message,
                 now,
-                NotificationPriority.URGENT,
-                message);
+                NotificationPriority.URGENT);
         }
 
         await _db.SaveChangesAsync(cancellationToken);

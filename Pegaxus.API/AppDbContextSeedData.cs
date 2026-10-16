@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.API;
 
@@ -128,10 +129,6 @@ public static class AppDbContextSeedData
             .ToDictionaryAsync(item => item.BookingCode, cancellationToken);
         var transports = await SeedDemoTransportsAsync(db, bookings, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-
-        var plans = await SeedDemoTransportPlansAsync(db, transports, now, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-        await SeedDemoAssignmentsAsync(db, plans, employees, now, cancellationToken);
 
         var templates = await SeedDemoTemplatesAsync(db, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
@@ -312,84 +309,6 @@ public static class AppDbContextSeedData
         return result;
     }
 
-    private static async Task<Dictionary<string, TransportPlan>> SeedDemoTransportPlansAsync(
-        AppDbContext db,
-        IReadOnlyDictionary<string, Transport> transports,
-        DateTime now,
-        CancellationToken cancellationToken)
-    {
-        var seeds = new[]
-        {
-            new TransportPlanSeed("TP-20261010-DEMO-0004", "REQ-20261010-DEMO-0004", TransportPlanStatus.DRAFT),
-            new TransportPlanSeed("TP-20261010-DEMO-0005", "REQ-20261010-DEMO-0005", TransportPlanStatus.APPROVED)
-        };
-        var result = new Dictionary<string, TransportPlan>(StringComparer.OrdinalIgnoreCase);
-        foreach (var seed in seeds)
-        {
-            var plan = await db.TransportPlans.SingleOrDefaultAsync(item => item.PlanCode == seed.PlanCode, cancellationToken);
-            if (plan is null)
-            {
-                plan = new TransportPlan
-                {
-                    TransportPlanId = seed.Id,
-                    TransportId = transports[seed.BookingCode].TransportId,
-                    PlanCode = seed.PlanCode,
-                    Status = seed.Status,
-                    PlannedStartAt = now.AddDays(20),
-                    PlannedEndAt = now.AddDays(25),
-                    PlanningNote = "Seeded overall transport plan for Swagger testing.",
-                    EstimatedDistanceKm = 920.5m,
-                    EstimatedDurationMinutes = 1260,
-                    ApprovedAt = seed.Status == TransportPlanStatus.APPROVED ? now.AddDays(-1) : null,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                };
-                db.TransportPlans.Add(plan);
-            }
-            result[seed.BookingCode] = plan;
-        }
-        return result;
-    }
-
-    private static async Task SeedDemoAssignmentsAsync(
-        AppDbContext db,
-        IReadOnlyDictionary<string, TransportPlan> plans,
-        IReadOnlyDictionary<string, Employee> employees,
-        DateTime now,
-        CancellationToken cancellationToken)
-    {
-        var plan = plans["REQ-20261010-DEMO-0005"];
-        var assignments = new[]
-        {
-            (Email: "huyvog6226@gmail.com", Responsibility: EmployeeRole.TRANSPORT_SPECIALIST.ToString(), IsPrimary: true),
-            (Email: "hoanguyen91011@gmail.com", Responsibility: EmployeeRole.FLEET_ROUTE_COORDINATOR.ToString(), IsPrimary: true)
-        };
-        foreach (var assignment in assignments)
-        {
-            var employeeId = employees[assignment.Email].EmployeeId;
-            var existing = await db.EmployeeTransportPlans.SingleOrDefaultAsync(item =>
-                item.EmployeeId == employeeId && item.TransportPlanId == plan.TransportPlanId, cancellationToken);
-            if (existing is not null)
-            {
-                if (existing.Responsibility is "Compliance dossier" or "Route planning")
-                    existing.Responsibility = assignment.Responsibility;
-                continue;
-            }
-            if (await db.EmployeeTransportPlans.AnyAsync(item => item.TransportPlanId == plan.TransportPlanId &&
-                item.IsPrimary && item.Responsibility == assignment.Responsibility, cancellationToken))
-                continue;
-            db.EmployeeTransportPlans.Add(new EmployeeTransportPlan
-            {
-                EmployeeId = employeeId,
-                TransportPlanId = plan.TransportPlanId,
-                Responsibility = assignment.Responsibility,
-                AssignedAt = now.AddDays(-1),
-                IsPrimary = assignment.IsPrimary,
-                Note = "Seeded demo assignment."
-            });
-        }
-    }
-
     private static async Task<Dictionary<string, DossierTemplate>> SeedDemoTemplatesAsync(AppDbContext db, DateTime now, CancellationToken cancellationToken)
     {
         var requirementIds = await db.ComplianceRequirements.ToDictionaryAsync(item => item.RequirementCode, item => item.ComplianceRequirementId, cancellationToken);
@@ -439,7 +358,7 @@ public static class AppDbContextSeedData
     private static async Task SeedDemoDossiersAsync(AppDbContext db, IReadOnlyDictionary<string, Transport> transports, IReadOnlyDictionary<string, DossierTemplate> templates, IReadOnlyDictionary<string, Horse> horses, DateTime now, CancellationToken cancellationToken)
     {
         var transport = transports["REQ-20261010-DEMO-0005"];
-        if (await db.ComplianceDossiers.AnyAsync(item => item.DossierCode == "CDOS-20261010-DEMO-0001", cancellationToken))
+        if (await db.ComplianceDossiers.AnyAsync(item => item.DossierCode == "CD-20261010-DEMO-0001", cancellationToken))
             return;
 
         var requirements = await db.ComplianceRequirements
@@ -447,8 +366,8 @@ public static class AppDbContextSeedData
             .ToDictionaryAsync(item => item.RequirementCode, cancellationToken);
         var dossier = new ComplianceDossier
         {
-            ComplianceDossierId = Guid.Parse("73000000-0000-0000-0000-000000000001"),
-            DossierCode = "CDOS-20261010-DEMO-0001",
+            ComplianceDossierId = StableGuid("CD-20261010-DEMO-0001"),
+            DossierCode = "CD-20261010-DEMO-0001",
             TransportId = transport.TransportId,
             DossierTemplateId = templates["TPL-DEMO-EU-GB"].DossierTemplateId,
             Status = ComplianceDossierStatus.IN_PREPARATION,
@@ -461,7 +380,7 @@ public static class AppDbContextSeedData
         db.DossierRequirements.AddRange(
             new DossierRequirement
             {
-                DossierRequirementId = Guid.Parse("74000000-0000-0000-0000-000000000001"),
+                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:EQUINE_PASSPORT"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["EQUINE_PASSPORT"].ComplianceRequirementId,
                 HorseId = horses["DEMO-C1-HORSE-003"].HorseId,
@@ -473,7 +392,7 @@ public static class AppDbContextSeedData
             },
             new DossierRequirement
             {
-                DossierRequirementId = Guid.Parse("74000000-0000-0000-0000-000000000002"),
+                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:EHC_EU_TO_GB"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["EHC_EU_TO_GB"].ComplianceRequirementId,
                 Status = DossierRequirementStatus.PENDING,
@@ -484,7 +403,7 @@ public static class AppDbContextSeedData
             },
             new DossierRequirement
             {
-                DossierRequirementId = Guid.Parse("74000000-0000-0000-0000-000000000003"),
+                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:IPAFFS_PRE_NOTIF"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["IPAFFS_PRE_NOTIF"].ComplianceRequirementId,
                 Status = DossierRequirementStatus.REQUESTED,
@@ -501,7 +420,7 @@ public static class AppDbContextSeedData
         var guidBytes = bytes[..16];
         guidBytes[6] = (byte)((guidBytes[6] & 0x0F) | 0x50);
         guidBytes[8] = (byte)((guidBytes[8] & 0x3F) | 0x80);
-        return new Guid(guidBytes);
+        return new Guid(guidBytes, bigEndian: true);
     }
 
     private static async Task SeedEmployeeAsync(
@@ -594,17 +513,10 @@ public static class AppDbContextSeedData
         });
     }
 
-    private static async Task<string> GenerateCustomerCodeAsync(AppDbContext db, CancellationToken cancellationToken)
-    {
-        for (var attempt = 0; attempt < 10; attempt++)
-        {
-            var code = $"CUS-{DateTime.UtcNow:yyyyMMdd}-{Random.Shared.Next(0, 10_000):D4}";
-            if (!await db.Customers.AnyAsync(item => item.CustomerCode == code, cancellationToken))
-                return code;
-        }
-
-        throw new InvalidOperationException("Could not generate a unique customer code.");
-    }
+    private static Task<string> GenerateCustomerCodeAsync(AppDbContext db, CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("CUS", DateTime.UtcNow, async code =>
+            db.Customers.Local.Any(item => item.CustomerCode == code) ||
+            await db.Customers.AnyAsync(item => item.CustomerCode == code, cancellationToken));
 
     private static async Task SeedComplianceRequirementsAsync(
         AppDbContext db,
@@ -624,6 +536,7 @@ public static class AppDbContextSeedData
 
             db.ComplianceRequirements.Add(new ComplianceRequirement
             {
+                ComplianceRequirementId = StableGuid($"REQUIREMENT:{seed.RequirementCode}"),
                 RequirementCode = seed.RequirementCode,
                 RequirementName = seed.RequirementName,
                 Description = seed.Description,
@@ -699,14 +612,6 @@ public static class AppDbContextSeedData
         TransportStatus Status)
     {
         public Guid Id => StableGuid(TransportCode);
-    }
-
-    private sealed record TransportPlanSeed(
-        string PlanCode,
-        string BookingCode,
-        TransportPlanStatus Status)
-    {
-        public Guid Id => StableGuid(PlanCode);
     }
 
     private sealed record TemplateSeed(

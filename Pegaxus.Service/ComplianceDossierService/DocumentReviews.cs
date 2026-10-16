@@ -40,6 +40,7 @@ public sealed partial class Service
                     ExpiryExceptionReason = request.ExpiryExceptionReason?.Trim()
                 }, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
+            await _notificationService.FlushAsync(cancellationToken);
             return response;
         }
         catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
@@ -199,6 +200,13 @@ public sealed partial class Service
                 Confirmation = confirmation
             })
         });
+        if (result == DocumentReviewResult.APPROVED)
+        {
+            var ownerAccountId = await _db.Customers.Where(customer => customer.CustomerId == dossier.Transport.Booking.CustomerId)
+                .Select(customer => customer.AccountId).SingleAsync(cancellationToken);
+            AddNotification(ownerAccountId, null, dossier, "Document approved",
+                $"{document.DocumentName} was approved for dossier {dossier.DossierCode}.", now);
+        }
         await _db.SaveChangesAsync(cancellationToken);
         return new Response.DocumentReviewResultResponse
         {

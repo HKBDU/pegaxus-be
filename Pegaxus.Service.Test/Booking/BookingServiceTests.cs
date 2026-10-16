@@ -18,6 +18,7 @@ public class BookingServiceTests
     {
         await using var db = TestSupport.CreateDb();
         var (account, customer) = await TestSupport.AddCustomerAsync(db);
+        var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var horse = new Horse
         {
             HorseId = Guid.NewGuid(),
@@ -35,15 +36,23 @@ public class BookingServiceTests
         {
             OriginAddress = "Paris",
             OriginCountry = "France",
+            OriginLatitude = 48.8566m,
+            OriginLongitude = 2.3522m,
             DestinationAddress = "Berlin",
             DestinationCountry = "Germany",
+            DestinationLatitude = 52.5200m,
+            DestinationLongitude = 13.4050m,
             RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(21),
             Horses = [new BookingRequest.BookingHorseRequest { HorseId = horse.HorseId }]
         });
 
-        Assert.Equal(result.BookingId, (await db.Bookings.SingleAsync()).BookingId);
+        var created = await db.Bookings.SingleAsync();
+        Assert.Equal(result.BookingId, created.BookingId);
+        Assert.Equal((48.8566m, 2.3522m, 52.5200m, 13.4050m),
+            (created.OriginLatitude, created.OriginLongitude, created.DestinationLatitude, created.DestinationLongitude));
         Assert.Equal(horse.HorseId, (await db.BookingHorses.SingleAsync()).HorseId);
         Assert.Equal(BookingStatus.PENDING, (await db.BookingStatusHistories.SingleAsync()).NewStatus);
+        Assert.Equal(manager.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
     }
 
     [Fact]
@@ -101,6 +110,7 @@ public class BookingServiceTests
     {
         await using var db = TestSupport.CreateDb();
         var (account, customer) = await TestSupport.AddCustomerAsync(db);
+        var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer);
         var service = CreateService(db);
 
@@ -112,6 +122,7 @@ public class BookingServiceTests
         Assert.Equal(BookingStatus.CANCELLED, booking.Status);
         Assert.Equal("Event cancelled", booking.CancellationReason);
         Assert.Equal(BookingStatus.CANCELLED, (await db.BookingStatusHistories.SingleAsync()).NewStatus);
+        Assert.Equal(manager.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
     }
 
     [Fact]
@@ -128,6 +139,7 @@ public class BookingServiceTests
         Assert.Equal(BookingStatus.APPROVED, booking.Status);
         Assert.Equal(TransportStatus.CREATED, result.Transport.Status);
         Assert.Equal(result.Transport.TransportId, (await db.Transports.SingleAsync()).TransportId);
+        Assert.Matches(@"^TR-\d{8}-\d{4}$", (await db.Transports.SingleAsync()).TransportCode);
         Assert.Equal(result.Transport.TransportId, (await db.Notifications.SingleAsync()).TransportId);
         Assert.Equal(1, mailService.Calls);
     }
@@ -262,7 +274,7 @@ public class BookingServiceTests
         Assert.Equal(customer.FullName, result.Customer.FullName);
         Assert.Equal(horse!.HorseId, Assert.Single(result.Horses).HorseId);
         Assert.Null(result.TransportPlan);
-        Assert.Null(result.ComplianceDossier);
+        Assert.Empty(result.ComplianceDossiers);
         Assert.Empty(result.RoutePlans);
     }
 
@@ -447,6 +459,26 @@ public class BookingServiceTests
     }
 
     [Fact]
+    public async Task Resubmit_NotifiesManagerAfterReturningToDraft()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (customerAccount, customer) = await TestSupport.AddCustomerAsync(db);
+        var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer, withHorse: true);
+        var service = CreateService(db);
+        await service.ChangeStatusAsync(customerAccount.AccountId, booking.BookingId, new() { Status = "DRAFT" });
+        Assert.Empty(await db.Notifications.ToListAsync());
+        await service.ChangeStatusAsync(customerAccount.AccountId, booking.BookingId, new() { Status = "PENDING" });
+        Assert.Equal(manager.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
+        var notification = await db.Notifications.SingleAsync();
+        Assert.Equal("New booking to review", notification.Title);
+        Assert.Equal($"/admin/transport-requests/{booking.BookingId}", notification.ActionUrl);
+        Assert.Contains(customer.FullName, notification.Message);
+        Assert.Contains(booking.BookingCode, notification.Message);
+        Assert.Contains($"{booking.OriginCountry} to {booking.DestinationCountry}", notification.Message);
+    }
+
+    [Fact]
     public async Task Reject_SetsReasonNotificationAndEmail()
     {
         await using var db = TestSupport.CreateDb();
@@ -462,6 +494,8 @@ public class BookingServiceTests
 
         Assert.Equal(BookingStatus.REJECTED, booking.Status);
         Assert.Equal("No suitable transport", booking.RejectionReason);
+        Assert.Equal("REJECTED", (await service.GetAsync(customer.AccountId, booking.BookingId)).Status);
+        Assert.Contains(await service.GetHistoriesAsync(customer.AccountId, booking.BookingId), item => item.NewStatus == "REJECTED");
         Assert.Null((await db.Notifications.SingleAsync()).TransportId);
         Assert.Equal(1, mailService.Calls);
     }

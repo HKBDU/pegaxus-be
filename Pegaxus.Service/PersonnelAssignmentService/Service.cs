@@ -1,5 +1,4 @@
 using System.Data;
-using System.Net;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +23,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     public async Task<Response.AssignmentsResponse> GetAsync(Guid transportPlanId, Guid accountId, CancellationToken cancellationToken = default)
     {
         await AuthorizeAsync(accountId, false, cancellationToken);
-        var plan = await db.TransportPlans.AsNoTracking().Include(x => x.Transport).ThenInclude(x => x.ComplianceDossier)
+        var plan = await db.TransportPlans.AsNoTracking().Include(x => x.Transport).ThenInclude(x => x.ComplianceDossiers)
             .SingleOrDefaultAsync(x => x.TransportPlanId == transportPlanId, cancellationToken)
             ?? throw new NotFoundException("Transport plan not found", "TRANSPORT_PLAN_NOT_FOUND");
         var phase1 = await db.EmployeeTransportPlans.AsNoTracking().Include(x => x.Employee).ThenInclude(x => x.Account)
@@ -45,7 +44,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var segments = route is null ? [] : await LoadSegmentsAsync(route.RoutePlanId, false, cancellationToken);
         var specialist = phase1.FirstOrDefault(x => x.Responsibility == "TRANSPORT_SPECIALIST" && x.IsPrimary);
         var coordinator = phase1.FirstOrDefault(x => x.Responsibility == "FLEET_ROUTE_COORDINATOR" && x.IsPrimary);
-        var dossier = plan.Transport.ComplianceDossier;
+        var dossier = plan.Transport.MainDossier;
         return new(transportPlanId, new(
             specialist is not null && coordinator is not null, route is not null,
             Brief(specialist?.Employee, specialist?.AssignedAt),
@@ -165,6 +164,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 var conflict = segments.FirstOrDefault(x => x.RoutePlanRouteId != segment.RoutePlanRouteId && !x.TransportProviderId.HasValue &&
                     (x.DriverEmployeeId == employeeId || x.EscortEmployeeId == employeeId) && x.ActualArrivalAt == null && Overlaps(segment, x));
                 var external = await db.RoutePlanRoutes.AsNoTracking().Where(x => x.RoutePlanId != routePlanId &&
+                    (x.RoutePlan.TransportPlanId != planId || x.RouteType == RouteType.RETURN) &&
                     (x.DriverEmployeeId == employeeId || x.EscortEmployeeId == employeeId) && x.ActualArrivalAt == null &&
                     (x.RoutePlan.Status == RoutePlanStatus.CONFIRMED || x.RoutePlan.Status == RoutePlanStatus.ACTIVE) &&
                     x.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED && x.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED &&
@@ -243,13 +243,13 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var recipientEmployees = await db.Employees.AsNoTracking().Include(x => x.Account).Where(x => recipients.Contains(x.EmployeeId)).ToListAsync(cancellationToken);
         var schedule = string.Join("\n", segments.Select(x => $"Segment {x.SequenceNo}: {x.PlannedDepartureAt:O} - {x.PlannedArrivalAt:O}; " +
             $"Driver {x.DriverEmployee?.EmployeeCode ?? "-"}; Escort {x.EscortEmployee?.EmployeeCode ?? "-"}; Provider {x.TransportProvider?.ProviderName ?? "-"}"));
-        var message = $"{route.RoutePlanCode}: {(reason is null ? "Personnel assigned" : "Personnel replaced: " + reason)}\n{schedule}";
+        var message = $"Route plan {route.RoutePlanCode}: {(reason is null ? "personnel have been assigned." : "personnel were replaced. Reason: " + reason)}\nSchedule:\n{schedule}";
         foreach (var employee in recipientEmployees)
         {
             notifications.Queue(new() { AccountId = employee.AccountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE,
                 Priority = newIds.Contains(employee.EmployeeId) ? NotificationPriority.HIGH : NotificationPriority.NORMAL, Title = reason is null ? "Personnel assigned" : "Personnel replaced", Message = message,
-                ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId, ActionUrl = $"/admin/route-plans/{routePlanId}", CreatedAt = now });
-            QueueEmail(employee.Account.Email, route.RoutePlanCode, message, now);
+                ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId, ActionUrl = NotificationLinks.RoutePlan(employee.Role, routePlanId), CreatedAt = now });
+            QueueEmail(employee, route.RoutePlanCode, reason, segments, now);
         }
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw new ConflictException("The route plan changed. Reload it and try again.", "ROUTE_PLAN_MODIFIED"); }
@@ -347,10 +347,24 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         if (!await db.Employees.AsNoTracking().Active().AnyAsync(x => x.AccountId == id && x.Account.AccountType == AccountType.EMPLOYEE && (x.Role == EmployeeRole.LOGISTICS_MANAGER || !write && (x.Role == EmployeeRole.TRANSPORT_SPECIALIST || x.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR || x.Role == EmployeeRole.DRIVER || x.Role == EmployeeRole.ESCORT)), cancellationToken))
             throw new ForbiddenException("The account cannot access personnel assignments.");
     }
-    private void QueueEmail(string? to, string subject, string message, DateTime now)
+    private void QueueEmail(Employee employee, string routePlanCode, string? replaceReason, IEnumerable<RoutePlanRoute> segments, DateTime now)
     {
-        if (!string.IsNullOrWhiteSpace(to)) OutboxQueue.AddEmail(db, new MailService.MailContent {
-            To = to, Subject = subject, Body = "<pre>" + WebUtility.HtmlEncode(message) + "</pre>" }, now);
+        if (string.IsNullOrWhiteSpace(employee.Account.Email)) return;
+        var isReplaced = replaceReason is not null;
+        OutboxQueue.AddEmail(db, new MailService.MailContent
+        {
+            To = employee.Account.Email,
+            Subject = isReplaced ? $"Route assignment updated — {routePlanCode}" : $"New route assignment — {routePlanCode}",
+            Body = MailService.EmailBodies.RouteAssignmentBody(
+                employeeName: employee.FullName,
+                routePlanCode: routePlanCode,
+                isReplaced: isReplaced,
+                replaceReason: replaceReason,
+                actionUrl: null,
+                segments: segments.OrderBy(x => x.SequenceNo).Select(x => new MailService.EmailBodies.RouteSegment(
+                    x.SequenceNo, x.PlannedDepartureAt, x.PlannedArrivalAt,
+                    x.DriverEmployee?.EmployeeCode, x.EscortEmployee?.EmployeeCode, x.TransportProvider?.ProviderName)))
+        }, now);
     }
     private static bool Overlaps(RoutePlanRoute a, RoutePlanRoute b) => !b.PlannedDepartureAt.HasValue || !b.PlannedArrivalAt.HasValue ||
         b.PlannedArrivalAt <= b.PlannedDepartureAt || a.PlannedDepartureAt <= b.PlannedArrivalAt && a.PlannedArrivalAt >= b.PlannedDepartureAt;

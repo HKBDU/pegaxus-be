@@ -1,12 +1,10 @@
 using System.Data;
-using System.Globalization;
-using System.Net;
-using System.Security.Cryptography;
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Pegaxus.Repository.Entities;
+using Pegaxus.Service.Common;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
@@ -75,14 +73,14 @@ public sealed partial class Service
                 if (!Uri.TryCreate(checkout.PaymentUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps || uri.UserInfo.Length != 0)
                     throw new InvalidDataException("The gateway returned an invalid payment URL");
             }
-            catch (Exception exception) when (exception is not UnprocessableEntityException &&
+            catch (Exception exception) when (exception is not AppException &&
                 (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested))
             {
                 logger.LogWarning(exception, "Payment gateway failed for receipt {ReceiptCode}", receipt.ReceiptCode);
                 throw new AppException("Payment gateway is unavailable. Please try again later", 502, "PAYMENT_GATEWAY_ERROR");
             }
             await transaction.CommitAsync(cancellationToken);
-            return new(new(receipt.ReceiptId, receipt.ReceiptCode, receipt.Amount, receipt.Currency,
+            return new(new(receipt.ReceiptId, receipt.ReceiptCode, Vnd.ToLong(receipt.Amount), receipt.Currency,
                 receipt.PaymentMethod.ToString(), receipt.Status.ToString(), null, null, null, null, null), checkout.PaymentUrl, checkout.Fields);
         }
         catch (Exception ex) when (ex is DbUpdateConcurrencyException || ex.GetBaseException() is PostgresException
@@ -123,8 +121,6 @@ public sealed partial class Service
                 throw new ConflictException($"Cannot pay an invoice in status {invoice.Status}", "INVALID_INVOICE_STATUS");
             if (request.Amount != invoice.TotalAmount)
                 throw new UnprocessableEntityException("Only full payment of the invoice total is accepted", "PARTIAL_PAYMENT_NOT_SUPPORTED");
-            if (!string.Equals(request.Currency.Trim(), invoice.Currency, StringComparison.OrdinalIgnoreCase))
-                throw new UnprocessableEntityException("Payment currency must match the invoice currency", "CURRENCY_MISMATCH");
 
             var now = Truncate(clock.GetUtcNow().UtcDateTime);
             var receipt = new Receipt
@@ -172,22 +168,28 @@ public sealed partial class Service
                 }
             }
             var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
-                .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email,
+                .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName,
                     TransportId = x.Transport == null ? (Guid?)null : x.Transport.TransportId }).SingleAsync(cancellationToken);
-            var amount = receipt.Amount.ToString("0.00", CultureInfo.InvariantCulture) + " " + receipt.Currency;
+            var amount = Vnd.Format(receipt.Amount, receipt.Currency);
             var message = $"{(invoice.Type == InvoiceType.CREDIT_NOTE ? "Payout" : "Payment")} for invoice {invoice.InvoiceCode} has been confirmed. Receipt: {receipt.ReceiptCode}. Amount: {amount}. Invoice status: PAID.";
             notifications.Queue(new NotificationCreateRequest
             {
                 AccountId = customer.AccountId, TransportId = customer.TransportId, Type = NotificationType.PAYMENT,
                 Priority = NotificationPriority.NORMAL, Title = "Payment confirmed", Message = message,
                 ReferenceType = nameof(Invoice), ReferenceId = invoiceId,
-                ActionUrl = $"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoiceId}", CreatedAt = now
+                ActionUrl = NotificationLinks.Invoice(null, invoice.BookingId, invoiceId), CreatedAt = now
             });
-            OutboxQueue.AddEmail(db, new() { To = customer.Email, Subject = "Payment confirmed", Body = WebUtility.HtmlEncode(message) }, now);
+            var isPayout = invoice.Type == InvoiceType.CREDIT_NOTE;
+            OutboxQueue.AddEmail(db, new()
+            {
+                To = customer.Email, Subject = $"{(isPayout ? "Payout" : "Payment")} confirmed — {receipt.ReceiptCode}",
+                Body = MailService.EmailBodies.PaymentConfirmedBody(customer.FullName, invoice.InvoiceCode, receipt.ReceiptCode,
+                    receipt.Amount, receipt.Currency, isPayout, null)
+            }, now);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);
-            return new(new(receipt.ReceiptId, receipt.ReceiptCode, receipt.Amount, receipt.Currency, receipt.PaymentMethod.ToString(),
+            return new(new(receipt.ReceiptId, receipt.ReceiptCode, Vnd.ToLong(receipt.Amount), receipt.Currency, receipt.PaymentMethod.ToString(),
                     receipt.Status.ToString(), receipt.TransactionReference, AsUtc(receipt.PaidAt!.Value), AsUtc(now), receipt.Note,
                     new(accountId, account.EmployeeAccount!.FullName)),
                 new(invoiceId, invoice.InvoiceCode, invoice.Type.ToString(), invoice.Status.ToString(), AsUtc(now), ["CREATE_ANOTHER"], AsUtc(invoice.UpdatedAt)),
@@ -199,13 +201,7 @@ public sealed partial class Service
         { throw new ConflictException("The record changed. Reload it and try again.", "CONCURRENT_UPDATE"); }
     }
 
-    private async Task<string> GenerateReceiptCodeAsync(DateTime now, CancellationToken cancellationToken)
-    {
-        for (var attempt = 0; attempt < 20; attempt++)
-        {
-            var code = $"RCP-{now.ToString("yyyyMMdd", CultureInfo.InvariantCulture)}-{RandomNumberGenerator.GetInt32(10_000):D4}";
-            if (!await db.Receipts.AnyAsync(x => x.ReceiptCode == code, cancellationToken)) return code;
-        }
-        throw new ConflictException("Unable to generate a unique receipt code. Please try again.", "CONCURRENT_UPDATE");
-    }
+    private Task<string> GenerateReceiptCodeAsync(DateTime now, CancellationToken cancellationToken) =>
+        CodeGeneration.NextAsync("RCP", now, code => db.Receipts.AnyAsync(x => x.ReceiptCode == code, cancellationToken),
+            "CONCURRENT_UPDATE", "Unable to generate a unique receipt code. Please try again.");
 }

@@ -7,6 +7,8 @@ using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
 using QuestPDF.Infrastructure;
 
+using Pegaxus.Service.Common;
+
 using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.RoutePlanService;
@@ -31,7 +33,11 @@ public sealed partial class Service
                 ?? throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
             await db.LockRowsAsync(db.Transports.Where(x => x.TransportId == header.TransportId), x => x.TransportId, cancellationToken);
             await db.LockRowsAsync(db.TransportPlans.Where(x => x.TransportPlanId == header.TransportPlanId), x => x.TransportPlanId, cancellationToken);
-            await db.LockRowsAsync(db.RoutePlans.Where(x => x.RoutePlanId == routePlanId), x => x.RoutePlanId, cancellationToken);
+            // Confirming the primary also confirms its DRAFT backups, so every plan of the transport plan is locked in id order.
+            var planIds = await db.RoutePlans.Where(x => x.TransportPlanId == header.TransportPlanId)
+                .OrderBy(x => x.RoutePlanId).Select(x => x.RoutePlanId).ToArrayAsync(cancellationToken);
+            foreach (var id in planIds)
+                await db.LockRowsAsync(db.RoutePlans.Where(x => x.RoutePlanId == id), x => x.RoutePlanId, cancellationToken);
             await db.LockRowsAsync(db.ComplianceDossiers.Where(x => x.TransportId == header.TransportId), x => x.ComplianceDossierId, cancellationToken);
         }
         var routePlan = await LoadRoutePlanAsync(routePlanId, cancellationToken);
@@ -41,7 +47,7 @@ public sealed partial class Service
         {
             await db.Entry(routePlan).ReloadAsync(cancellationToken);
             await db.Entry(routePlan.TransportPlan.Transport).ReloadAsync(cancellationToken);
-            if (routePlan.TransportPlan.Transport.ComplianceDossier is { } currentDossier)
+            foreach (var currentDossier in routePlan.TransportPlan.Transport.ComplianceDossiers)
                 await db.Entry(currentDossier).ReloadAsync(cancellationToken);
         }
         if (GetRouteType(routePlan) == RouteType.RETURN && routePlan.TransportPlan.Transport.Status != TransportStatus.IN_TRANSIT)
@@ -56,48 +62,53 @@ public sealed partial class Service
         if (request.BlockedSegments.Any(sequence => !validSequences.Contains(sequence)))
             throw new BadRequestException("blockedSegments contains an unknown sequenceNo");
 
-        var dossier = routePlan.TransportPlan.Transport.ComplianceDossier;
-        if (dossier is null)
+        var transport = routePlan.TransportPlan.Transport;
+        var dossier = routeType == RouteType.RETURN ? transport.ExtraDossier : transport.MainDossier;
+        if (routeType == RouteType.PRIMARY && dossier is null)
             throw new ConflictException("Compliance Dossier must be initialized before legal review", "DOSSIER_NOT_INITIALIZED");
-        if (routeType == RouteType.RETURN && dossier.Status != ComplianceDossierStatus.DRAFT)
+        if (routeType == RouteType.RETURN && (dossier is null || dossier.Status != ComplianceDossierStatus.DRAFT))
             throw new ConflictException("Route Plan RETURN has not been approved by the Logistics Manager", "RETURN_NOT_APPROVED");
-        if (request.IsFeasible && dossier.Status != ComplianceDossierStatus.DRAFT)
+        if (routeType == RouteType.PRIMARY && request.IsFeasible && dossier!.Status is not (ComplianceDossierStatus.DRAFT or ComplianceDossierStatus.IN_PREPARATION))
             throw new ConflictException("Compliance Dossier must be in DRAFT before legal review", "INVALID_DOSSIER_STATUS");
 
         var now = new DateTime(Math.Max(UtcNowTruncated().Ticks, routePlan.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
-        AddDossierAudit(dossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW", routePlan, request, now, "Legal feasibility review recorded.");
+        var auditDossier = dossier ?? transport.MainDossier;
+        if (auditDossier is not null)
+            AddDossierAudit(auditDossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW", routePlan, request, now, "Legal feasibility review recorded.");
 
+        var confirmedBackups = new List<RoutePlan>();
         if (request.IsFeasible)
         {
             if (routeType == RouteType.RETURN)
             {
-                AddDossierAudit(dossier, reviewer, "ROUTE_RETURN_LEGAL_REVIEW", routePlan, request, now, "Return dossier review started.");
-                SetDossierStatus(dossier, ComplianceDossierStatus.IN_PREPARATION, now);
-                AddDossierAudit(dossier, reviewer, "COMPLIANCE_DOSSIER_IN_PREPARATION", routePlan, request, now, "Return dossier moved to IN_PREPARATION.");
-                SetDossierStatus(dossier, ComplianceDossierStatus.READY_FOR_SUBMISSION, now);
-                AddDossierAudit(dossier, reviewer, "COMPLIANCE_DOSSIER_READY_FOR_SUBMISSION", routePlan, request, now, "Return dossier marked ready for submission.");
-                SetDossierStatus(dossier, ComplianceDossierStatus.SUBMITTED, now);
-                AddDossierAudit(dossier, reviewer, "COMPLIANCE_DOSSIER_SUBMITTED", routePlan, request, now, "Return dossier submitted without customer upload.");
-                SetDossierStatus(dossier, ComplianceDossierStatus.APPROVED, now);
-                dossier.ApprovedAt = now;
-                AddDossierAudit(dossier, reviewer, "COMPLIANCE_DOSSIER_APPROVED", routePlan, request, now, "Return dossier approved.");
+                SetDossierStatus(dossier!, ComplianceDossierStatus.IN_PREPARATION, now);
+                AddDossierAudit(dossier!, reviewer, "ROUTE_RETURN_LEGAL_REVIEW", routePlan, request, now, "Extra dossier moved to IN_PREPARATION for the customer to upload documents.");
             }
-            else
+            else if (routeType == RouteType.PRIMARY)
             {
-                SetDossierStatus(dossier, ComplianceDossierStatus.IN_PREPARATION, now);
-                AddDossierAudit(dossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW_APPROVED", routePlan, request, now, "Route Plan is legally feasible.");
+                SetDossierStatus(dossier!, ComplianceDossierStatus.IN_PREPARATION, now);
+                AddDossierAudit(dossier!, reviewer, "ROUTE_PLAN_LEGAL_REVIEW_APPROVED", routePlan, request, now, "Route Plan is legally feasible.");
+                confirmedBackups = routePlan.TransportPlan.RoutePlans
+                    .Where(item => item.RoutePlanId != routePlan.RoutePlanId && item.Status == RoutePlanStatus.DRAFT && TransportItinerary.IsBackupPlan(item))
+                    .OrderBy(item => item.CreatedAt).ToList();
             }
             routePlan.Status = RoutePlanStatus.CONFIRMED;
-            foreach (var vehicle in routePlan.RoutePlanRoutes.SelectMany(item => item.RoutePlanRouteVehicles).Select(item => item.Vehicle).DistinctBy(item => item.VehicleId))
+            foreach (var backup in confirmedBackups)
+            {
+                backup.Status = RoutePlanStatus.CONFIRMED;
+                backup.UpdatedAt = now;
+            }
+            foreach (var vehicle in routePlan.RoutePlanRoutes.Concat(confirmedBackups.SelectMany(item => item.RoutePlanRoutes))
+                         .SelectMany(item => item.RoutePlanRouteVehicles).Select(item => item.Vehicle).DistinctBy(item => item.VehicleId))
                 if (vehicle.Status != VehicleStatus.IN_USE) vehicle.Status = VehicleStatus.ASSIGNED;
             if (routeType == RouteType.PRIMARY &&
                 routePlan.RoutePlanRoutes.Where(item => !item.TransportProviderId.HasValue)
                     .All(item => item.DriverEmployeeId.HasValue && item.EscortEmployeeId.HasValue))
-                routePlan.TransportPlan.Transport.Status = TransportStatus.READY;
+                transport.Status = TransportStatus.READY;
         }
-        else
+        else if (auditDossier is not null)
         {
-            AddDossierAudit(dossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW_REJECTED", routePlan, request, now, "Route Plan requires revision.");
+            AddDossierAudit(auditDossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW_REJECTED", routePlan, request, now, "Route Plan requires revision.");
         }
         routePlan.UpdatedAt = now;
         QueueLegalReviewNotifications(routePlan, reviewer, routeType, request, now);
@@ -111,7 +122,15 @@ public sealed partial class Service
             RoutePlanId = routePlan.RoutePlanId,
             Status = routePlan.Status.ToString(),
             LegalReview = CreateLegalReviewResponse(request, reviewer, now),
-            CustomerUploadEnabled = request.IsFeasible && routeType != RouteType.RETURN,
+            ComplianceDossier = routeType == RouteType.BACKUP || dossier is null ? null : new Response.DossierResponse
+            {
+                ComplianceDossierId = dossier.ComplianceDossierId,
+                DossierCode = dossier.DossierCode,
+                DossierType = dossier.DossierType.ToString(),
+                Status = dossier.Status.ToString()
+            },
+            ConfirmedBackupRoutePlanIds = confirmedBackups.Select(item => item.RoutePlanId).ToList(),
+            CustomerUploadEnabled = request.IsFeasible && routeType != RouteType.BACKUP,
             PersonnelAssignmentPhase2Enabled = request.IsFeasible && routeType == RouteType.PRIMARY,
             UpdatedAt = AsUtc(routePlan.UpdatedAt)
         };
@@ -198,26 +217,31 @@ public sealed partial class Service
 
     private void QueueLegalReviewNotifications(RoutePlan routePlan, Employee reviewer, RouteType routeType, Request.LegalReviewRequest request, DateTime now)
     {
-        var recipients = new HashSet<Guid>();
+        var staff = new Dictionary<Guid, EmployeeRole>();
+        var transport = routePlan.TransportPlan.Transport;
+        var customer = transport.Booking.Customer.AccountId;
+        var customerDossier = routeType == RouteType.RETURN ? transport.ExtraDossier : transport.MainDossier;
+        var customerUrl = customerDossier is null
+            ? NotificationLinks.Booking(null, transport.BookingId)
+            : NotificationLinks.Dossier(null, customerDossier.ComplianceDossierId);
+        var notifyCustomer = request.IsFeasible && routeType != RouteType.BACKUP;
         if (request.IsFeasible)
         {
-            if (routeType != RouteType.RETURN)
-                recipients.Add(routePlan.TransportPlan.Transport.Booking.Customer.AccountId);
             foreach (var employee in routePlan.TransportPlan.EmployeeTransportPlans
                          .Where(item => item.Employee.Role is EmployeeRole.FLEET_ROUTE_COORDINATOR or EmployeeRole.LOGISTICS_MANAGER)
                          .Select(item => item.Employee))
-                recipients.Add(employee.AccountId);
+                staff[employee.AccountId] = employee.Role;
             if (routeType == RouteType.RETURN)
                 foreach (var employee in db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted))
-                    recipients.Add(employee.AccountId);
+                    staff[employee.AccountId] = employee.Role;
         }
         else
         {
             foreach (var employee in routePlan.TransportPlan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR).Select(item => item.Employee))
-                recipients.Add(employee.AccountId);
+                staff[employee.AccountId] = employee.Role;
         }
 
-        foreach (var recipient in recipients.Where(item => item != reviewer.AccountId))
+        void Notify(Guid recipient, string? actionUrl, string message) =>
             notificationService.Queue(new NotificationService.NotificationCreateRequest
             {
                 AccountId = recipient,
@@ -225,16 +249,22 @@ public sealed partial class Service
                 Type = request.IsFeasible ? NotificationType.ROUTE : NotificationType.COMPLIANCE,
                 Priority = request.IsFeasible ? NotificationPriority.NORMAL : NotificationPriority.HIGH,
                 Title = request.IsFeasible ? "Route Plan legal review confirmed" : "Route Plan requires revision",
-                Message = request.IsFeasible
-                    ? routeType == RouteType.RETURN
-                        ? $"Return Route Plan {routePlan.RoutePlanCode} is legally feasible and requires Logistics Manager action."
-                        : "The route has been confirmed. Please upload the required legal documents."
-                    : $"Route Plan {routePlan.RoutePlanCode} requires revision. {request.Note}",
+                Message = message,
                 ReferenceType = "RoutePlan",
                 ReferenceId = routePlan.RoutePlanId,
-                ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}",
+                ActionUrl = actionUrl,
                 CreatedAt = now
             });
+
+        var staffMessage = request.IsFeasible
+            ? $"Route plan {routePlan.RoutePlanCode} passed legal review and is confirmed."
+            : $"Route plan {routePlan.RoutePlanCode} needs revision after legal review. Reviewer note: {request.Note}";
+        foreach (var recipient in staff.Where(item => item.Key != reviewer.AccountId && !(notifyCustomer && item.Key == customer)))
+            Notify(recipient.Key, NotificationLinks.RoutePlan(recipient.Value, routePlan.RoutePlanId), staffMessage);
+        if (notifyCustomer && customer != reviewer.AccountId)
+            Notify(customer, customerUrl, routeType == RouteType.RETURN
+                ? $"The return route for booking {transport.Booking.BookingCode} has been confirmed. Please upload the additional documents it requires."
+                : $"The route for booking {transport.Booking.BookingCode} has been confirmed. Please upload the required legal documents.");
     }
 
     private sealed class LegalReviewSnapshot

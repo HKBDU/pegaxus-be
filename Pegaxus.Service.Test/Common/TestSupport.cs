@@ -30,6 +30,15 @@ internal static class TestSupport
         new(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService());
     internal static JwtService.IJwtService CreateJwtService() => new StubJwtService();
 
+    internal static Pegaxus.Service.RoutePlanService.Service CreateRoutePlans(AppDbContext db) =>
+        new(db, CreateNotifications(db), new Pegaxus.Service.RouteService.Service(db,
+            new NoNetworkRouteClientFactory(), new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()));
+
+    private sealed class NoNetworkRouteClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => throw new InvalidOperationException("Route tests must provide a routing response before making HTTP calls.");
+    }
+
     internal static async Task<(Account Account, Customer Customer)> AddCustomerAsync(AppDbContext db)
     {
         var now = UtcNow();

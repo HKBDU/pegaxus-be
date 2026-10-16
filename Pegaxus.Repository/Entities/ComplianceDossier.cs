@@ -15,6 +15,8 @@ public partial class ComplianceDossier
 
     public Guid TransportId { get; set; }
 
+    public DossierType DossierType { get; set; } = DossierType.MAIN;
+
     public Guid? DossierTemplateId { get; set; }
 
     public virtual DossierTemplate? DossierTemplate { get; set; }
