@@ -103,8 +103,8 @@ public sealed partial class Service
                 };
                 AddDocumentRequestAudit(dossierId, accountId, "DOCUMENT_REVIEW_REJECTED", nameof(DocumentReview), review.DocumentReviewId, note, now, details);
                 AddDocumentRequestAudit(dossierId, accountId, "DOCUMENT_REQUEST_CREATED", nameof(DocumentRequest), revision.DocumentRequestId, note, now, details);
-                AddNotification(dossier.Transport.Booking.Customer.AccountId, dossier, "DocumentRequest: re-upload required", now,
-                    message: $"{revision.RequestCode}: {note} Revision deadline: {request.RevisionDeadline:yyyy-MM-dd}.");
+                AddNotification(dossier.Transport.Booking.Customer.AccountId, null, dossier, "Document re-upload required",
+                    $"A document for dossier {dossier.DossierCode} needs to be replaced ({revision.RequestCode}). {note} Please upload a corrected document by {request.RevisionDeadline:yyyy-MM-dd}.", now);
                 customerEmail = dossier.Transport.Booking.Customer.Account.Email;
                 var target = await _db.DossierRequirements.AsNoTracking().Where(item => item.DossierRequirementId == requirementId)
                     .Select(item => new { item.ComplianceRequirement.RequirementName, HorseName = item.Horse != null ? item.Horse.HorseName : null })
@@ -204,7 +204,8 @@ public sealed partial class Service
                 comment.DocumentRequestCommentId, "Comment added to DocumentRequest.", now, new { DocumentRequestId = requestId });
             var recipientId = role is null ? revision.RequestedByAccountId : customerAccountId;
             if (recipientId != accountId)
-                AddNotification(recipientId, dossier, "New DocumentRequest comment", now, message: $"{revision.RequestCode}: {comment.Message}");
+                AddNotification(recipientId, role is null ? EmployeeRole.TRANSPORT_SPECIALIST : null, dossier, "New comment on a document request",
+                    $"New comment on {revision.RequestCode} (dossier {dossier.DossierCode}): {comment.Message}", now);
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await _notificationService.FlushAsync(CancellationToken.None);

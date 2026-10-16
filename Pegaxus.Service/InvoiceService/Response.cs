@@ -18,7 +18,7 @@ public static class Response
     public sealed record PaymentEffects(string? TransportPlanStatus, bool CreditNoteUnlocked);
 
     public sealed record IssueResponse(Guid InvoiceId, string InvoiceNumber, string Type, string Status,
-        DateOnly InvoiceDate, DateTimeOffset IssuedAt, decimal GrandTotal, string Currency, DateOnly? DueDate,
+        DateOnly InvoiceDate, DateTimeOffset IssuedAt, long GrandTotal, string Currency, DateOnly? DueDate,
         IReadOnlyList<string> AvailableActions, DateTimeOffset UpdatedAt);
 
     public sealed record InvoiceResponse(Guid InvoiceId, string InvoiceNumber, string Type, string Status, bool IsPaymentRequired,
@@ -32,26 +32,26 @@ public static class Response
         public object? Payment => null;
     }
 
-    public sealed record InvoiceItemResponse(Guid InvoiceItemId, string ItemType, string Description, decimal Quantity,
-        decimal Price, decimal Total, HorseResponse? Horse, bool IsDepositDeduction, string? Note)
+    public sealed record InvoiceItemResponse(Guid InvoiceItemId, string ItemType, string Description, int Quantity,
+        long Price, long Total, HorseResponse? Horse, bool IsDepositDeduction, string? Note)
     {
         // shortcut: itemDate remains null until Flow 6 P-03 exists; R16 defers emergency cost links.
         public DateOnly? ItemDate => null;
         public Guid? EmergencyCostRequestId => null;
     }
-    public sealed record ReceiptResponse(Guid ReceiptId, string ReceiptCode, decimal Amount, string Currency, string PaymentMethod,
+    public sealed record ReceiptResponse(Guid ReceiptId, string ReceiptCode, long Amount, string Currency, string PaymentMethod,
         string Status, string? TransactionReference, DateTimeOffset? PaidAt, DateTimeOffset? ConfirmedAt, string? Note, RecordedByResponse? RecordedBy);
     public sealed record RecordedByResponse(Guid AccountId, string FullName);
 
 
     public sealed record ListResponse(IReadOnlyList<InvoiceListItem> Items, int PageIndex, int PageSize, int TotalItems, int TotalPages);
     public sealed record InvoiceListItem(Guid InvoiceId, string InvoiceNumber, string Type, string Status,
-        Guid BookingId, string BookingCode, Guid? TransportPlanId, string CustomerName, decimal TotalAmount,
+        Guid BookingId, string BookingCode, Guid? TransportPlanId, string CustomerName, long TotalAmount,
         string Currency, DateOnly? DueDate, DateTimeOffset? IssuedAt, DateTimeOffset? PaidAt,
         DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
 
     public sealed record SuggestionResponse(Guid BookingId, string BookingCode, string BookingStatus,
-        Guid TransportId, string TransportStatus, string Type, string? Currency, bool IsPaymentRequired,
+        Guid TransportId, string TransportStatus, string Type, string Currency, bool IsPaymentRequired,
         IReadOnlyList<ItemResponse> Items);
 
     public sealed class DraftResponse
@@ -91,9 +91,9 @@ public static class Response
     public sealed record PlanResponse(Guid TransportPlanId, string PlanCode, string Status);
     public sealed record HorseResponse(Guid HorseId, string HorseName);
     public sealed record ItemResponse(Guid? InvoiceItemId, string ItemType, string Description, DateOnly? ItemDate,
-        decimal Quantity, decimal Price, decimal Total, HorseResponse? Horse, Guid? EmergencyCostRequestId,
+        int Quantity, long Price, long Total, HorseResponse? Horse, Guid? EmergencyCostRequestId,
         bool IsDepositDeduction, string? Note);
-    public sealed record SummaryResponse(decimal Subtotal, decimal Tax, decimal DepositDeduction, decimal GrandTotal)
+    public sealed record SummaryResponse(long Subtotal, long Tax, long DepositDeduction, long GrandTotal)
     {
         public decimal Discount => 0;
         public decimal TaxRatePercent => 20;

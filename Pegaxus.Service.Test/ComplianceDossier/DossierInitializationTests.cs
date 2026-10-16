@@ -28,6 +28,8 @@ public class DossierInitializationTests
 
         var result = await service.InitializeAsync(specialist, booking.BookingId, request);
         Assert.Equal("IN_PREPARATION", result.Status);
+        Assert.Equal("MAIN", result.DossierType);
+        Assert.Equal(DossierType.MAIN, (await db.ComplianceDossiers.SingleAsync()).DossierType);
         Assert.Equal(3, result.Requirements.Count);
         Assert.Equal(2, result.Requirements.Count(item => item.HorseId != null));
         Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30), result.Requirements.First().ValidUntil);

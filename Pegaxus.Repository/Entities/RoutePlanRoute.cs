@@ -19,6 +19,8 @@ public partial class RoutePlanRoute
 
     public RouteType RouteType { get; set; } = RouteType.PRIMARY;
 
+    public RouteSegmentStatus Status { get; set; } = RouteSegmentStatus.PLANNED;
+
     public Guid? DriverEmployeeId { get; set; }
 
     public Guid? EscortEmployeeId { get; set; }

@@ -238,8 +238,8 @@ public sealed partial class Service
             DueDate = dueDate, Note = note?.Trim(), AutomaticDate = automaticDate, CreatedAt = now
         };
         _db.MissingDocumentReminders.Add(reminder);
-        AddNotification(reminder.RecipientAccountId, dossier, "Missing document reminder", now,
-            message: MissingReminderMessage(dossier, requirements, dueDate, note));
+        AddNotification(reminder.RecipientAccountId, null, dossier, "Missing document reminder",
+            MissingReminderMessage(dossier, requirements, dueDate, note), now);
         return reminder;
     }
 

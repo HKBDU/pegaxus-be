@@ -43,8 +43,8 @@ public sealed partial class BookingController
     /// <summary>
     /// Create a booking.
     /// </summary>
-    /// <remarks>Creates a transport request using horses owned by the authenticated customer.</remarks>
-    /// <param name="request">The route, dates, horses, notes, and initial booking status.</param>
+    /// <remarks>Creates a transport request using horses owned by the authenticated customer. The origin and destination each need an address, a country and a latitude/longitude pair; invalid coordinates return INVALID_COORDINATES.</remarks>
+    /// <param name="request">The route with origin and destination coordinates, dates, horses, notes, and initial booking status.</param>
     /// <param name="validator">The injected validator for the request.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>201 Created with the booking identifiers and status.</returns>
@@ -67,7 +67,7 @@ public sealed partial class BookingController
     /// <summary>
     /// Update a booking.
     /// </summary>
-    /// <remarks>Customers may update supplied fields only while the booking is DRAFT.</remarks>
+    /// <remarks>Customers may update supplied fields only while the booking is DRAFT. Origin and destination coordinates must be sent as latitude/longitude pairs.</remarks>
     /// <param name="bookingId">The booking identifier (UUID).</param>
     /// <param name="request">The booking fields to update.</param>
     /// <param name="validator">The injected validator for the request.</param>
