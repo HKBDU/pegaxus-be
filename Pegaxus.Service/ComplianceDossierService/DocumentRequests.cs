@@ -1,5 +1,4 @@
 using System.Data;
-using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -20,7 +19,8 @@ public sealed partial class Service
         ValidateRejection(request);
         var mailService = _mailService ?? throw new InvalidOperationException("MailService must be configured for DocumentRequests.");
         Response.DocumentRejectionResponse response;
-        string customerEmail;
+        string customerEmail, requirementName;
+        string? horseName;
         await using (var transaction = await _db.Database.BeginSerializableAsync(cancellationToken))
         {
             try
@@ -106,12 +106,24 @@ public sealed partial class Service
                 AddNotification(dossier.Transport.Booking.Customer.AccountId, dossier, "DocumentRequest: re-upload required", now,
                     message: $"{revision.RequestCode}: {note} Revision deadline: {request.RevisionDeadline:yyyy-MM-dd}.");
                 customerEmail = dossier.Transport.Booking.Customer.Account.Email;
+                var target = await _db.DossierRequirements.AsNoTracking().Where(item => item.DossierRequirementId == requirementId)
+                    .Select(item => new { item.ComplianceRequirement.RequirementName, HorseName = item.Horse != null ? item.Horse.HorseName : null })
+                    .SingleAsync(cancellationToken);
+                requirementName = target.RequirementName;
+                horseName = target.HorseName;
                 if (OutboxQueue.IsEnabled(_db))
                     OutboxQueue.AddEmail(_db, new MailService.MailContent
                     {
                         To = customerEmail,
-                        Subject = $"DocumentRequest {revision.RequestCode}: re-upload required",
-                        Body = $"<p>{WebUtility.HtmlEncode(note)}</p><p>{WebUtility.HtmlEncode(note).Replace("\n", "<br>")}</p><p>Revision deadline: {request.RevisionDeadline:yyyy-MM-dd}</p>"
+                        Subject = $"Document re-upload required — {revision.RequestCode}",
+                        Body = MailService.EmailBodies.DocumentReuploadBody(
+                            requestCode: revision.RequestCode,
+                            requirementName: requirementName,
+                            horseName: horseName,
+                            errorCategory: revision.ErrorCategory ?? "",
+                            note: note,
+                            revisionDeadline: request.RevisionDeadline,
+                            actionUrl: null)
                     }, now);
                 await _db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
@@ -142,8 +154,16 @@ public sealed partial class Service
             var revision = response.DocumentRequest;
             await mailService.SendMail(new MailService.MailContent
             {
-                To = customerEmail, Subject = $"DocumentRequest {revision.RequestCode}: re-upload required",
-                Body = $"<p>{WebUtility.HtmlEncode(revision.ErrorCategory)}</p><p>{WebUtility.HtmlEncode(revision.Message).Replace("\n", "<br>")}</p><p>Revision deadline: {revision.DueDate:yyyy-MM-dd}</p>"
+                To = customerEmail,
+                Subject = $"Document re-upload required — {revision.RequestCode}",
+                Body = MailService.EmailBodies.DocumentReuploadBody(
+                    requestCode: revision.RequestCode,
+                    requirementName: requirementName,
+                    horseName: horseName,
+                    errorCategory: revision.ErrorCategory ?? "",
+                    note: revision.Message,
+                    revisionDeadline: revision.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
+                    actionUrl: null)
             }).WaitAsync(TimeSpan.FromSeconds(2));
             response.EmailSent = true;
         }

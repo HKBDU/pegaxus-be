@@ -1,6 +1,5 @@
 using System.Data;
 using System.Globalization;
-using System.Net;
 using System.Security.Cryptography;
 using System.Text;
 using Microsoft.EntityFrameworkCore;
@@ -157,7 +156,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
         }
 
         var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
-            .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, TransportId = (Guid?)x.Transport!.TransportId })
+            .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName, TransportId = (Guid?)x.Transport!.TransportId })
             .SingleAsync(cancellationToken);
         var message = $"Online payment for invoice {invoice.InvoiceCode} has been confirmed. Receipt: {receipt.ReceiptCode}. " +
             $"Amount: {receipt.Amount.ToString("0.##", CultureInfo.InvariantCulture)} {receipt.Currency}. Invoice status: PAID.";
@@ -170,7 +169,9 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
         });
         OutboxQueue.AddEmail(db, new MailContent
         {
-            To = customer.Email, Subject = "Payment confirmed", Body = $"<p>{WebUtility.HtmlEncode(message)}</p>"
+            To = customer.Email, Subject = $"Payment confirmed — {receipt.ReceiptCode}",
+            Body = EmailBodies.PaymentConfirmedBody(customer.FullName, invoice.InvoiceCode, receipt.ReceiptCode,
+                receipt.Amount, receipt.Currency, isPayout: false, actionUrl: null)
         }, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -187,7 +188,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             return;
 
         var managers = await db.Employees.AsNoTracking().Active().Where(x => x.Role == EmployeeRole.LOGISTICS_MANAGER)
-            .Select(x => new { x.AccountId, x.Account.Email }).ToListAsync(cancellationToken);
+            .Select(x => new { x.AccountId, x.Account.Email, x.FullName }).ToListAsync(cancellationToken);
         if (managers.Count == 0)
         {
             logger.LogError("SePay payment {Reference} for receipt {ReceiptCode} needs reconciliation but no active Logistics Manager exists",
@@ -206,7 +207,12 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
                 Title = title, Message = message, ReferenceType = nameof(Receipt), ReferenceId = receipt.ReceiptId,
                 ActionUrl = $"/invoices/{invoice.InvoiceId}", CreatedAt = now
             });
-            OutboxQueue.AddEmail(db, new MailContent { To = manager.Email, Subject = title, Body = WebUtility.HtmlEncode(message) }, now);
+            OutboxQueue.AddEmail(db, new MailContent
+            {
+                To = manager.Email, Subject = $"{title} — {receipt.ReceiptCode}",
+                Body = EmailBodies.PaymentReconciliationBody(manager.FullName, reason, receipt.ReceiptCode, receipt.Status.ToString(), reference,
+                    receipt.Amount, receipt.Currency, invoice.InvoiceCode, invoice.Status.ToString(), actionUrl: null)
+            }, now);
         }
     }
 

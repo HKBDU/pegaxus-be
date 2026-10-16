@@ -1,5 +1,4 @@
 using System.Data;
-using System.Net;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
@@ -206,8 +205,16 @@ public sealed partial class Service
             {
                 await mail.SendMail(new MailService.MailContent
                 {
-                    To = recipient.Email, Subject = $"Missing document reminder - {dossier.DossierCode}",
-                    Body = $"<p>{WebUtility.HtmlEncode(MissingReminderMessage(dossier, missing, reminder.DueDate, reminder.Note)).Replace("\n", "<br>")}</p>"
+                    To = recipient.Email,
+                    Subject = $"Missing documents reminder — {dossier.DossierCode}",
+                    Body = MailService.EmailBodies.MissingDocumentsBody(
+                        dossierCode: dossier.DossierCode,
+                        bookingCode: dossier.Transport.Booking.BookingCode,
+                        generalDueDate: reminder.DueDate,
+                        note: reminder.Note,
+                        actionUrl: null,
+                        missingItems: missing.Select(item => new MailService.EmailBodies.MissingItem(
+                            item.ComplianceRequirement.RequirementName, item.Horse?.HorseName, item.DueDate)))
                 }, timeout.Token);
                 reminder.EmailSentAt = ReminderNow();
             }

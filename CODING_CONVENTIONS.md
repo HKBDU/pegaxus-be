@@ -41,6 +41,7 @@ Rules:
 4. Register the service in `Pegaxus.API/Extensions/ServiceCollectionExtensions.cs` inside the matching `Add<Group>Module` method (or add a new group and call it from `Program.cs`).
 5. Throw domain exceptions from `Pegaxus.Service.Exceptions` (section 5); never return HTTP results from the Service layer.
 6. Log with `ILogger<Service>`; never `Console.*`.
+7. Email bodies come from `Pegaxus.Service/MailService/EmailBodies*.cs` (one partial file per group: `Account`, `Booking`, `Compliance`, `Route`, `Invoice`). Never build HTML inline in a service. Pass plain text: the template HTML-encodes it. Add a new template there, with a test in `Pegaxus.Service.Test/Mail/EmailBodiesTests.cs`, before using it.
 
 ## 3. Database access rules
 
@@ -167,3 +168,4 @@ PEGAXUS_TEST_CONNECTION_STRING="Host=localhost;Port=5432;Username=postgres;Passw
 - Do not edit applied migrations or hand-edit the snapshot without a matching migration.
 - Do not mix refactor and bug-fix in one commit; fixes get their own `fix:` commit with a regression test.
 - Do not read or print `.env` (secrets).
+- Do not write HTML email strings inside services; use `EmailBodies` (section 2, rule 7).
