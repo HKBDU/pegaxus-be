@@ -128,6 +128,7 @@ public class AuthorizationPolicyTests
             [JwtExtensions.DriverPolicy] = ["Driver"],
             [JwtExtensions.EscortPolicy] = ["Escort"],
             [JwtExtensions.CustomerOrEmployeePolicy] = ["Customer", "Employee"],
+            [JwtExtensions.TransportProgressViewerPolicy] = ["Customer", "LogisticsManager", "TransportSpecialist", "FleetRouteCoordinator", "Driver", "Escort"],
             [JwtExtensions.CustomerOrLogisticsManagerPolicy] = ["Customer", "LogisticsManager"],
             [JwtExtensions.CustomerOrTransportSpecialistPolicy] = ["Customer", "TransportSpecialist"],
             [JwtExtensions.ComplianceDossierViewerPolicy] = ["Customer", "TransportSpecialist", "LogisticsManager"],

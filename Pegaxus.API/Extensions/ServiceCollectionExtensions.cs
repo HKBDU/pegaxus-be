@@ -244,6 +244,7 @@ public static class ServiceCollectionExtensions
     /// <summary>Transport plans, route plans, locations, routes, emergency route changes, outsourcing and personnel assignment.</summary>
     public static IServiceCollection AddTransportPlanningModule(this IServiceCollection services)
     {
+        services.AddScoped<Pegaxus.Service.TransportService.ITransportService, Pegaxus.Service.TransportService.Service>();
         services.AddScoped<TransportPlanService.ITransportPlanService, TransportPlanService.Service>();
         services.AddScoped<RoutePlanService.IRoutePlanService, RoutePlanService.Service>();
         services.AddScoped<LocationService.ILocationService, LocationService.Service>();
