@@ -60,12 +60,12 @@ public sealed partial class Service
         await db.Entry(plan).ReloadAsync(token);
         await db.Entry(plan.TransportPlan).ReloadAsync(token);
         await db.Entry(plan.TransportPlan.Transport).ReloadAsync(token);
-        var dossier = plan.TransportPlan.Transport.MainDossier;
-        if (dossier is not null && db.Database.IsRelational())
-        {
-            await db.LockRowsAsync(db.ComplianceDossiers.Where(x => x.ComplianceDossierId == dossier.ComplianceDossierId), x => x.ComplianceDossierId, token);
-            await db.Entry(dossier).ReloadAsync(token);
-        }
+        if (db.Database.IsRelational())
+            foreach (var current in plan.TransportPlan.Transport.ComplianceDossiers.OrderBy(x => x.ComplianceDossierId))
+            {
+                await db.LockRowsAsync(db.ComplianceDossiers.Where(x => x.ComplianceDossierId == current.ComplianceDossierId), x => x.ComplianceDossierId, token);
+                await db.Entry(current).ReloadAsync(token);
+            }
         return plan;
     }
 

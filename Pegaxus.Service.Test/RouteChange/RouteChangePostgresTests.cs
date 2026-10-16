@@ -179,6 +179,60 @@ public class RouteChangePostgresTests
     }
 
     [PostgresFact]
+    public async Task ReturnApproval_CreatesOneExtraDossierAndKeepsTheMainOnPostgres()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        await using var db = scope.Db();
+        var f = await RouteChangeTests.Fixture.CreateAsync(db);
+        var returning = await f.AlternateAsync(RouteType.RETURN);
+
+        var decision = await Service(db).DecideAsync(returning.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = RouteChangeTests.Fixture.Version(returning) });
+
+        await using var check = scope.Db();
+        Assert.Equal(ComplianceDossierStatus.DRAFT, (await check.ComplianceDossiers.SingleAsync(x => x.DossierType == DossierType.EXTRA)).Status);
+        Assert.Equal(ComplianceDossierStatus.APPROVED, (await check.ComplianceDossiers.SingleAsync(x => x.DossierType == DossierType.MAIN)).Status);
+        await using var again = scope.Db();
+        var twice = await Assert.ThrowsAsync<ConflictException>(() => Service(again).DecideAsync(returning.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = decision.UpdatedAt }));
+        Assert.Equal("EXTRA_DOSSIER_ALREADY_EXISTS", twice.ErrorCode);
+    }
+
+    [PostgresFact]
+    public async Task ConcurrentLegalReviews_ConfirmThePrimaryAndItsDraftBackupsOnce()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        Guid primaryId, backupId, specialistId; DateTimeOffset version;
+        await using (var setup = scope.Db())
+        {
+            var f = await RouteChangeTests.Fixture.CreateAsync(setup);
+            f.Plan.Status = RoutePlanStatus.DRAFT;
+            f.Transport.MainDossier!.Status = ComplianceDossierStatus.DRAFT;
+            await setup.SaveChangesAsync();
+            var backup = await f.AlternateAsync(RouteType.BACKUP, RoutePlanStatus.DRAFT);
+            primaryId = f.Plan.RoutePlanId; backupId = backup.RoutePlanId; version = RouteChangeTests.Fixture.Version(f.Plan);
+            specialistId = (await setup.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST)).AccountId;
+        }
+        async Task<string> Review()
+        {
+            await using var db = scope.Db();
+            try
+            {
+                var result = await TestSupport.CreateRoutePlans(db).ReviewLegalAsync(specialistId, primaryId, new() { LastUpdatedAt = version, IsFeasible = true });
+                return string.Join(',', result.ConfirmedBackupRoutePlanIds);
+            }
+            catch (ConflictException error) { return error.ErrorCode!; }
+            catch (Exception error) when (error.GetBaseException() is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure }) { return "CONFLICT"; }
+        }
+        var results = await Task.WhenAll(Review(), Review());
+        Assert.Single(results, x => x == backupId.ToString());
+        Assert.Single(results, x => x != backupId.ToString());
+        await using var check = scope.Db();
+        Assert.Equal(RoutePlanStatus.CONFIRMED, (await check.RoutePlans.SingleAsync(x => x.RoutePlanId == backupId)).Status);
+        Assert.Equal(RoutePlanStatus.CONFIRMED, (await check.RoutePlans.SingleAsync(x => x.RoutePlanId == primaryId)).Status);
+    }
+
+    [PostgresFact]
     public async Task TransportPlan_ResolvesBookingLocationsAndLoadsTheDetailOnPostgres()
     {
         await using var scope = await DatabaseScope.CreateAsync();

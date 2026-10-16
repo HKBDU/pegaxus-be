@@ -105,7 +105,7 @@ public class InvoicePaymentTests
         Assert.Equal(NotificationType.PAYMENT, notification.NotificationType); Assert.Equal(NotificationPriority.NORMAL, notification.Priority);
         Assert.Equal(plan.TransportId, notification.TransportId); Assert.Equal("Invoice", notification.ReferenceType);
         Assert.Equal(invoice.InvoiceId, notification.ReferenceId);
-        Assert.Equal($"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoice.InvoiceId}", notification.ActionUrl);
+        Assert.Equal($"/bookings/{invoice.BookingId}/invoices/{invoice.InvoiceId}", notification.ActionUrl);
         Assert.Equal(customer.AccountId, Assert.Single(db.AccountNotifications).AccountId); Assert.Equal(customer.AccountId, Assert.Single(realtime.Recipients));
         var email = OutboxQueue.Deserialize<EmailPayload>(Assert.Single(db.OutboxMessages).Payload);
         Assert.Equal(customer.Email, email.To); Assert.Contains(receipt.ReceiptCode, email.Body); Assert.Contains("120 VND", email.Body);

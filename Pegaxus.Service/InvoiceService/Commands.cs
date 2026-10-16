@@ -77,7 +77,7 @@ public sealed partial class Service
                     AccountId = customer.AccountId, TransportId = customer.TransportId, Type = NotificationType.PAYMENT,
                     Priority = NotificationPriority.NORMAL, Title = "Invoice cancelled", Message = message,
                     ReferenceType = nameof(Invoice), ReferenceId = invoiceId,
-                    ActionUrl = $"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoiceId}", CreatedAt = now
+                    ActionUrl = NotificationLinks.Invoice(null, invoice.BookingId, invoiceId), CreatedAt = now
                 });
                 OutboxQueue.AddEmail(db, new()
                 {
@@ -160,14 +160,14 @@ public sealed partial class Service
             var (title, message, priority) = invoice.Type switch
             {
                 InvoiceType.QUOTATION => ("Quotation issued", $"Quotation {invoice.InvoiceCode} for booking {customer.BookingCode} has been issued. Estimated total: {amount}. No payment is required.", NotificationPriority.NORMAL),
-                InvoiceType.CREDIT_NOTE => ("Credit note issued", $"Credit note {invoice.InvoiceCode} has been issued. Payout or credit amount: {amount}.", NotificationPriority.NORMAL),
-                _ => ("Invoice issued", $"Invoice {invoice.InvoiceCode} ({invoice.Type}) has been issued. Amount due: {amount}. Due date: {invoice.DueDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "Not specified"}.", NotificationPriority.HIGH)
+                InvoiceType.CREDIT_NOTE => ("Credit note issued", $"Credit note {invoice.InvoiceCode} for booking {customer.BookingCode} has been issued. Payout amount: {amount}.", NotificationPriority.NORMAL),
+                _ => ("Invoice issued", $"{InvoiceTypeLabel(invoice.Type)} {invoice.InvoiceCode} for booking {customer.BookingCode} has been issued. Amount due: {amount}. Please pay by {invoice.DueDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "the due date on the invoice"}.", NotificationPriority.HIGH)
             };
             notifications.Queue(new NotificationCreateRequest
             {
                 AccountId = customer.AccountId, TransportId = customer.TransportId, Type = NotificationType.PAYMENT,
                 Priority = priority, Title = title, Message = message, ReferenceType = nameof(Invoice), ReferenceId = invoiceId,
-                ActionUrl = $"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoiceId}", CreatedAt = now
+                ActionUrl = NotificationLinks.Invoice(null, invoice.BookingId, invoiceId), CreatedAt = now
             });
             var mailKind = invoice.Type switch
             {

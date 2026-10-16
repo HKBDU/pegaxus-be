@@ -243,12 +243,12 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var recipientEmployees = await db.Employees.AsNoTracking().Include(x => x.Account).Where(x => recipients.Contains(x.EmployeeId)).ToListAsync(cancellationToken);
         var schedule = string.Join("\n", segments.Select(x => $"Segment {x.SequenceNo}: {x.PlannedDepartureAt:O} - {x.PlannedArrivalAt:O}; " +
             $"Driver {x.DriverEmployee?.EmployeeCode ?? "-"}; Escort {x.EscortEmployee?.EmployeeCode ?? "-"}; Provider {x.TransportProvider?.ProviderName ?? "-"}"));
-        var message = $"{route.RoutePlanCode}: {(reason is null ? "Personnel assigned" : "Personnel replaced: " + reason)}\n{schedule}";
+        var message = $"Route plan {route.RoutePlanCode}: {(reason is null ? "personnel have been assigned." : "personnel were replaced. Reason: " + reason)}\nSchedule:\n{schedule}";
         foreach (var employee in recipientEmployees)
         {
             notifications.Queue(new() { AccountId = employee.AccountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE,
                 Priority = newIds.Contains(employee.EmployeeId) ? NotificationPriority.HIGH : NotificationPriority.NORMAL, Title = reason is null ? "Personnel assigned" : "Personnel replaced", Message = message,
-                ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId, ActionUrl = $"/admin/route-plans/{routePlanId}", CreatedAt = now });
+                ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId, ActionUrl = NotificationLinks.RoutePlan(employee.Role, routePlanId), CreatedAt = now });
             QueueEmail(employee, route.RoutePlanCode, reason, segments, now);
         }
         try { await db.SaveChangesAsync(cancellationToken); }

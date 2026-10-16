@@ -109,7 +109,7 @@ public class InvoiceIssueTests
         Assert.Equal(plan.TransportId, notification.TransportId);
         Assert.Equal("Invoice", notification.ReferenceType);
         Assert.Equal(invoice.InvoiceId, notification.ReferenceId);
-        Assert.Equal($"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoice.InvoiceId}", notification.ActionUrl);
+        Assert.Equal($"/bookings/{invoice.BookingId}/invoices/{invoice.InvoiceId}", notification.ActionUrl);
         Assert.Equal(customer.AccountId, Assert.Single(db.AccountNotifications).AccountId);
         Assert.Equal(customer.AccountId, Assert.Single(realtime.Recipients));
         var mail = OutboxQueue.Deserialize<EmailPayload>(Assert.Single(db.OutboxMessages).Payload);

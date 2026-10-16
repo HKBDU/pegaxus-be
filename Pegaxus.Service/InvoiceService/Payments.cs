@@ -179,7 +179,7 @@ public sealed partial class Service
                 AccountId = customer.AccountId, TransportId = customer.TransportId, Type = NotificationType.PAYMENT,
                 Priority = NotificationPriority.NORMAL, Title = "Payment confirmed", Message = message,
                 ReferenceType = nameof(Invoice), ReferenceId = invoiceId,
-                ActionUrl = $"/bookings/{invoice.BookingId}?tab=invoices&invoiceId={invoiceId}", CreatedAt = now
+                ActionUrl = NotificationLinks.Invoice(null, invoice.BookingId, invoiceId), CreatedAt = now
             });
             var isPayout = invoice.Type == InvoiceType.CREDIT_NOTE;
             OutboxQueue.AddEmail(db, new()

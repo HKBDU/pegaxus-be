@@ -300,7 +300,7 @@ public class HybridBackupTests
         var created = await f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal(0));
 
         Assert.Equal(("BACKUP", "CONFIRMED"), (created.RouteType, created.Status));
-        Assert.Contains("Emergency backup activation requested", (await db.Notifications.ToListAsync()).Select(x => x.Title));
+        Assert.Contains("Emergency backup route needs approval", (await db.Notifications.ToListAsync()).Select(x => x.Title));
     }
 
     [Fact]

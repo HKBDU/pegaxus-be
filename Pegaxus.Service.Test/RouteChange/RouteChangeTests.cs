@@ -298,7 +298,7 @@ public class RouteChangeTests
         var updated = await routes.UpdateAsync(f.Coordinator.AccountId, draft.RoutePlanId, change);
         Assert.Equal("DRAFT", updated.Status); Assert.True(updated.UpdatedAt > approved.UpdatedAt);
         Assert.Contains(await db.Notifications.ToListAsync(), notification =>
-            notification.Title == "Route plan waiting for legal review" && notification.Priority == NotificationPriority.HIGH);
+            notification.Title == "Route plan needs another legal review" && notification.Priority == NotificationPriority.HIGH);
         await routes.ReviewLegalAsync(specialist.AccountId, draft.RoutePlanId,
             new() { LastUpdatedAt = updated.UpdatedAt, IsFeasible = true });
         Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier.Status);

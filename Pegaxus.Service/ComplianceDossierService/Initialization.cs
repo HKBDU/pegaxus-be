@@ -74,8 +74,8 @@ public sealed partial class Service
             });
         }
         _db.ComplianceDossiers.Add(dossier);
-        AddNotification(booking.Customer.AccountId, dossier, "ComplianceDossier initialized", now,
-            message: "ComplianceDossier initialized successfully. DossierRequirements generated for customer.");
+        AddNotification(booking.Customer.AccountId, null, dossier, "Compliance dossier opened",
+            $"Compliance dossier {dossier.DossierCode} is ready for booking {booking.BookingCode}. Open it to see the documents you need to upload.", now);
         try
         {
             await _db.SaveChangesAsync(cancellationToken);

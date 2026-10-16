@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.MediaService;
 using QuestPDF.Fluent;
@@ -61,13 +62,15 @@ public sealed partial class Service : IComplianceDossierService
         _reminderClock = timeProvider ?? TimeProvider.System;
     }
 
+    /// <param name="role">The recipient employee role, or <c>null</c> for the booking customer.</param>
     private void AddNotification(
         Guid accountId,
+        EmployeeRole? role,
         ComplianceDossier dossier,
         string title,
+        string message,
         DateTime now,
-        NotificationPriority priority = NotificationPriority.NORMAL,
-        string? message = null)
+        NotificationPriority priority = NotificationPriority.NORMAL)
     {
         _notificationService.Queue(new NotificationService.NotificationCreateRequest
         {
@@ -76,10 +79,10 @@ public sealed partial class Service : IComplianceDossierService
             Type = NotificationType.COMPLIANCE,
             Priority = priority,
             Title = title,
-            Message = message ?? $"ComplianceDossier {dossier.DossierCode} has been submitted to an authority.",
+            Message = message,
             ReferenceType = "ComplianceDossier",
             ReferenceId = dossier.ComplianceDossierId,
-            ActionUrl = $"/compliance-dossiers/{dossier.ComplianceDossierId}",
+            ActionUrl = NotificationLinks.Dossier(role, dossier.ComplianceDossierId),
             CreatedAt = now
         });
     }
@@ -88,17 +91,18 @@ public sealed partial class Service : IComplianceDossierService
         ComplianceDossier dossier,
         EmployeeRole[] roles,
         string title,
+        string message,
         NotificationPriority priority,
         DateTime now,
         CancellationToken cancellationToken)
     {
-        var accountIds = await _db.Employees
+        var recipients = await _db.Employees
             .Active()
             .Where(employee => roles.Contains(employee.Role))
-            .Select(employee => employee.AccountId)
+            .Select(employee => new { employee.AccountId, employee.Role })
             .ToListAsync(cancellationToken);
 
-        foreach (var accountId in accountIds)
-            AddNotification(accountId, dossier, title, now, priority);
+        foreach (var recipient in recipients)
+            AddNotification(recipient.AccountId, recipient.Role, dossier, title, message, now, priority);
     }
 }

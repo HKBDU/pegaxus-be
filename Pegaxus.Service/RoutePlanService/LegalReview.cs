@@ -33,7 +33,11 @@ public sealed partial class Service
                 ?? throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
             await db.LockRowsAsync(db.Transports.Where(x => x.TransportId == header.TransportId), x => x.TransportId, cancellationToken);
             await db.LockRowsAsync(db.TransportPlans.Where(x => x.TransportPlanId == header.TransportPlanId), x => x.TransportPlanId, cancellationToken);
-            await db.LockRowsAsync(db.RoutePlans.Where(x => x.RoutePlanId == routePlanId), x => x.RoutePlanId, cancellationToken);
+            // Confirming the primary also confirms its DRAFT backups, so every plan of the transport plan is locked in id order.
+            var planIds = await db.RoutePlans.Where(x => x.TransportPlanId == header.TransportPlanId)
+                .OrderBy(x => x.RoutePlanId).Select(x => x.RoutePlanId).ToArrayAsync(cancellationToken);
+            foreach (var id in planIds)
+                await db.LockRowsAsync(db.RoutePlans.Where(x => x.RoutePlanId == id), x => x.RoutePlanId, cancellationToken);
             await db.LockRowsAsync(db.ComplianceDossiers.Where(x => x.TransportId == header.TransportId), x => x.ComplianceDossierId, cancellationToken);
         }
         var routePlan = await LoadRoutePlanAsync(routePlanId, cancellationToken);
@@ -213,26 +217,31 @@ public sealed partial class Service
 
     private void QueueLegalReviewNotifications(RoutePlan routePlan, Employee reviewer, RouteType routeType, Request.LegalReviewRequest request, DateTime now)
     {
-        var staff = new HashSet<Guid>();
-        var customer = routePlan.TransportPlan.Transport.Booking.Customer.AccountId;
+        var staff = new Dictionary<Guid, EmployeeRole>();
+        var transport = routePlan.TransportPlan.Transport;
+        var customer = transport.Booking.Customer.AccountId;
+        var customerDossier = routeType == RouteType.RETURN ? transport.ExtraDossier : transport.MainDossier;
+        var customerUrl = customerDossier is null
+            ? NotificationLinks.Booking(null, transport.BookingId)
+            : NotificationLinks.Dossier(null, customerDossier.ComplianceDossierId);
         var notifyCustomer = request.IsFeasible && routeType != RouteType.BACKUP;
         if (request.IsFeasible)
         {
             foreach (var employee in routePlan.TransportPlan.EmployeeTransportPlans
                          .Where(item => item.Employee.Role is EmployeeRole.FLEET_ROUTE_COORDINATOR or EmployeeRole.LOGISTICS_MANAGER)
                          .Select(item => item.Employee))
-                staff.Add(employee.AccountId);
+                staff[employee.AccountId] = employee.Role;
             if (routeType == RouteType.RETURN)
                 foreach (var employee in db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted))
-                    staff.Add(employee.AccountId);
+                    staff[employee.AccountId] = employee.Role;
         }
         else
         {
             foreach (var employee in routePlan.TransportPlan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR).Select(item => item.Employee))
-                staff.Add(employee.AccountId);
+                staff[employee.AccountId] = employee.Role;
         }
 
-        void Notify(Guid recipient, string message) =>
+        void Notify(Guid recipient, string? actionUrl, string message) =>
             notificationService.Queue(new NotificationService.NotificationCreateRequest
             {
                 AccountId = recipient,
@@ -243,19 +252,19 @@ public sealed partial class Service
                 Message = message,
                 ReferenceType = "RoutePlan",
                 ReferenceId = routePlan.RoutePlanId,
-                ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}",
+                ActionUrl = actionUrl,
                 CreatedAt = now
             });
 
         var staffMessage = request.IsFeasible
-            ? $"Route Plan {routePlan.RoutePlanCode} is legally feasible and confirmed."
-            : $"Route Plan {routePlan.RoutePlanCode} requires revision. {request.Note}";
-        foreach (var recipient in staff.Where(item => item != reviewer.AccountId && !(notifyCustomer && item == customer)))
-            Notify(recipient, staffMessage);
+            ? $"Route plan {routePlan.RoutePlanCode} passed legal review and is confirmed."
+            : $"Route plan {routePlan.RoutePlanCode} needs revision after legal review. Reviewer note: {request.Note}";
+        foreach (var recipient in staff.Where(item => item.Key != reviewer.AccountId && !(notifyCustomer && item.Key == customer)))
+            Notify(recipient.Key, NotificationLinks.RoutePlan(recipient.Value, routePlan.RoutePlanId), staffMessage);
         if (notifyCustomer && customer != reviewer.AccountId)
-            Notify(customer, routeType == RouteType.RETURN
-                ? "Please upload the additional documents for the return route."
-                : "The route has been confirmed. Please upload the required legal documents.");
+            Notify(customer, customerUrl, routeType == RouteType.RETURN
+                ? $"The return route for booking {transport.Booking.BookingCode} has been confirmed. Please upload the additional documents it requires."
+                : $"The route for booking {transport.Booking.BookingCode} has been confirmed. Please upload the required legal documents.");
     }
 
     private sealed class LegalReviewSnapshot

@@ -9,6 +9,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MailService;
 using Pegaxus.Service.NotificationService;
@@ -159,13 +160,13 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName, TransportId = (Guid?)x.Transport!.TransportId })
             .SingleAsync(cancellationToken);
         var message = $"Online payment for invoice {invoice.InvoiceCode} has been confirmed. Receipt: {receipt.ReceiptCode}. " +
-            $"Amount: {Pegaxus.Service.Common.Vnd.Format(receipt.Amount, receipt.Currency)}. Invoice status: PAID.";
+            $"Amount: {Vnd.Format(receipt.Amount, receipt.Currency)}. Invoice status: PAID.";
         notifications.Queue(new NotificationCreateRequest
         {
             AccountId = customer.AccountId, TransportId = customer.TransportId, Type = NotificationType.PAYMENT,
             Priority = NotificationPriority.NORMAL, Title = "Payment confirmed", Message = message,
             ReferenceType = "Invoice", ReferenceId = invoice.InvoiceId,
-            ActionUrl = $"/bookings/{invoice.BookingId}?invoiceId={invoice.InvoiceId}", CreatedAt = now
+            ActionUrl = NotificationLinks.Invoice(null, invoice.BookingId, invoice.InvoiceId), CreatedAt = now
         });
         OutboxQueue.AddEmail(db, new MailContent
         {
@@ -197,7 +198,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
         }
 
         var message = $"{reason}. Receipt: {receipt.ReceiptCode} ({receipt.Status}). Gateway reference: {reference}. " +
-            $"Amount: {Pegaxus.Service.Common.Vnd.Format(receipt.Amount, receipt.Currency)}. " +
+            $"Amount: {Vnd.Format(receipt.Amount, receipt.Currency)}. " +
             $"Invoice: {invoice.InvoiceCode} ({invoice.Status}). Check the bank statement and refund or reconcile manually.";
         foreach (var manager in managers)
         {
@@ -205,7 +206,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             {
                 AccountId = manager.AccountId, Type = NotificationType.PAYMENT, Priority = NotificationPriority.URGENT,
                 Title = title, Message = message, ReferenceType = nameof(Receipt), ReferenceId = receipt.ReceiptId,
-                ActionUrl = $"/invoices/{invoice.InvoiceId}", CreatedAt = now
+                ActionUrl = NotificationLinks.Invoice(EmployeeRole.LOGISTICS_MANAGER, invoice.BookingId, invoice.InvoiceId), CreatedAt = now
             });
             OutboxQueue.AddEmail(db, new MailContent
             {

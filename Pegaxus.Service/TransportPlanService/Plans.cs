@@ -81,15 +81,15 @@ public sealed partial class Service
         var reason = EmptyToNull(request.UpdateReason);
         var message = $"Transport Plan {plan.PlanCode} was updated" +
             (reason is null ? "." : $". Reason: {reason}");
-        var recipientAccountIds = plan.EmployeeTransportPlans
-            .Select(item => item.Employee.AccountId)
-            .Append(plan.Transport.Booking.Customer.AccountId)
-            .Distinct()
+        var recipients = plan.EmployeeTransportPlans
+            .Select(item => (item.Employee.AccountId, Url: NotificationLinks.TransportPlan(item.Employee.Role, plan.TransportPlanId)))
+            .Append((plan.Transport.Booking.Customer.AccountId, Url: NotificationLinks.Booking(null, plan.Transport.BookingId)))
+            .DistinctBy(item => item.AccountId)
             .ToList();
-        foreach (var recipientAccountId in recipientAccountIds)
+        foreach (var recipient in recipients)
             notificationService.Queue(new NotificationService.NotificationCreateRequest
             {
-                AccountId = recipientAccountId,
+                AccountId = recipient.AccountId,
                 TransportId = plan.TransportId,
                 Type = NotificationType.TRANSPORT,
                 Priority = NotificationPriority.NORMAL,
@@ -97,7 +97,7 @@ public sealed partial class Service
                 Message = message,
                 ReferenceType = "TransportPlan",
                 ReferenceId = plan.TransportPlanId,
-                ActionUrl = $"/transport-plans/{plan.TransportPlanId}",
+                ActionUrl = recipient.Url,
                 CreatedAt = now
             });
 

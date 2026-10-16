@@ -6,6 +6,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.RouteChangeService.Validator;
 
@@ -43,9 +44,10 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             .Select(x => x.AccountId).ToArrayAsync(cancellationToken);
         if (managers.Length == 0) throw new ConflictException("No active Logistics Manager can review this request.", "REVIEWER_UNAVAILABLE");
         var now = Now;
-        var message = FormattableString.Invariant($"{request.Reason.Trim()}\nETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC\nEstimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}\n{request.Note}");
+        var message = FormattableString.Invariant($"Backup route plan {plan.RoutePlanCode} is waiting for your decision.\nReason: {request.Reason.Trim()}\nNew ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC\nEstimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}{NoteSuffix(request.Note)}");
         foreach (var manager in managers)
-            Notify(manager, plan, "Emergency backup activation requested", message, NotificationPriority.URGENT, now);
+            Notify(manager, plan, "Emergency backup route needs approval", message, NotificationPriority.URGENT, now,
+                NotificationLinks.RoutePlan(EmployeeRole.LOGISTICS_MANAGER, plan.RoutePlanId, "change-decision"));
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
@@ -80,7 +82,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
                 extraBrief = new(extra.Dossier.ComplianceDossierId, extra.Dossier.DossierCode, extra.Dossier.DossierType.ToString(),
                     extra.Dossier.Status.ToString(), extra.InheritedRequirementCount);
                 await NotifyAssignedAsync(plan, EmployeeRole.TRANSPORT_SPECIALIST, "Extra dossier ready for the return route",
-                    "A supplementary dossier was created for the return route. Add the necessary requirements and review the route plan.",
+                    $"A supplementary dossier was created for return route plan {plan.RoutePlanCode}. Add the necessary requirements and review the route plan.",
                     NotificationPriority.URGENT, now, cancellationToken);
             }
             else
@@ -101,8 +103,11 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
                 }
                 await SupersedeAsync(range, now, cancellationToken);
                 plan.Status = RoutePlanStatus.ACTIVE;
-                Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Backup route activated", request.Note, NotificationPriority.URGENT, now);
-                await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Backup route activated", request.Note, now, cancellationToken);
+                Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Backup route activated",
+                    $"Your transport is now following a backup route (route plan {plan.RoutePlanCode}) because of an incident on the way.{NoteSuffix(request.Note)}",
+                    NotificationPriority.URGENT, now, NotificationLinks.Booking(null, plan.TransportPlan.Transport.BookingId));
+                await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Backup route activated",
+                    $"Follow backup route plan {plan.RoutePlanCode} from the branch point. Check your updated segments.{NoteSuffix(request.Note)}", now, cancellationToken);
             }
         }
         else if (type == "RETURN")
@@ -111,8 +116,10 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             plan.RouteNote = request.Note!.Trim();
         }
         plan.UpdatedAt = now;
-        await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR,
-            request.Decision == "APPROVE" ? "Route change approved" : "Route change rejected", request.Note, NotificationPriority.HIGH, now, cancellationToken);
+        var decided = request.Decision == "APPROVE" ? "approved" : "rejected";
+        await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR, $"Route change {decided}",
+            $"The {type.ToLowerInvariant()} route change for route plan {plan.RoutePlanCode} was {decided} by the Logistics Manager.{NoteSuffix(request.Note)}",
+            NotificationPriority.HIGH, now, cancellationToken);
         Audit(plan, accountId, "ROUTE_CHANGE_" + request.Decision, request.Note, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -195,8 +202,11 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         await SupersedeAsync(remaining, now, cancellationToken);
         plan.Status = RoutePlanStatus.ACTIVE; plan.UpdatedAt = now;
         Audit(plan, accountId, "RETURN_ROUTE_ACTIVATED", request.Note, now);
-        Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Return route activated", request.Note, NotificationPriority.URGENT, now);
-        await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR, "Return route activated", request.Note, NotificationPriority.HIGH, now, cancellationToken);
+        Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Return route activated",
+            $"Your transport is heading back on return route plan {plan.RoutePlanCode}.{NoteSuffix(request.Note)}",
+            NotificationPriority.URGENT, now, NotificationLinks.Booking(null, plan.TransportPlan.Transport.BookingId));
+        await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR, "Return route activated",
+            $"Return route plan {plan.RoutePlanCode} is now active.{NoteSuffix(request.Note)}", NotificationPriority.HIGH, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         var detail = await routePlans.GetByIdAsync(accountId, routePlanId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);

@@ -469,7 +469,12 @@ public class BookingServiceTests
         Assert.Empty(await db.Notifications.ToListAsync());
         await service.ChangeStatusAsync(customerAccount.AccountId, booking.BookingId, new() { Status = "PENDING" });
         Assert.Equal(manager.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
-        Assert.Equal("Booking submitted for review", (await db.Notifications.SingleAsync()).Title);
+        var notification = await db.Notifications.SingleAsync();
+        Assert.Equal("New booking to review", notification.Title);
+        Assert.Equal($"/admin/transport-requests/{booking.BookingId}", notification.ActionUrl);
+        Assert.Contains(customer.FullName, notification.Message);
+        Assert.Contains(booking.BookingCode, notification.Message);
+        Assert.Contains($"{booking.OriginCountry} to {booking.DestinationCountry}", notification.Message);
     }
 
     [Fact]

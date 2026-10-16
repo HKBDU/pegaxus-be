@@ -59,7 +59,7 @@ public sealed partial class Service
                 : "Booking submitted for review",
             now);
         if (targetStatus == BookingStatus.PENDING)
-            await NotifyManagersAsync(booking, "Booking submitted for review", now, cancellationToken);
+            await NotifyManagersAsync(booking, "New booking to review", "submitted", " Review it and approve or reject the request.", now, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -130,7 +130,7 @@ public sealed partial class Service
             CreatedAt = now
         }));
         AddHistory(booking.BookingId, accountId, BookingHistoryType.SUBMIT, null, BookingStatus.PENDING, null, now);
-        await NotifyManagersAsync(booking, "Booking submitted for review", now, cancellationToken);
+        await NotifyManagersAsync(booking, "New booking to review", "submitted", " Review it and approve or reject the request.", now, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -230,7 +230,7 @@ public sealed partial class Service
         booking.CancellationReason = reason;
         booking.UpdatedAt = now;
         AddHistory(bookingId, accountId, BookingHistoryType.CANCEL, BookingStatus.PENDING, BookingStatus.CANCELLED, reason, now);
-        await NotifyManagersAsync(booking, "Booking cancelled by customer", now, cancellationToken);
+        await NotifyManagersAsync(booking, "Booking cancelled by customer", "cancelled", $" Reason: {reason}.", now, cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -271,7 +271,8 @@ public sealed partial class Service
         booking.UpdatedAt = now;
         _db.Transports.Add(transport);
         AddHistory(bookingId, accountId, BookingHistoryType.APPROVE, BookingStatus.PENDING, BookingStatus.APPROVED, null, now);
-        AddNotification(booking.Customer.AccountId, transport.TransportId, booking, "Booking approved", now);
+        AddNotification(booking.Customer.AccountId, null, transport.TransportId, booking, "Booking approved",
+            $"Your booking {booking.BookingCode} ({RouteSummary(booking)}) has been approved. Our team will now prepare your transport plan and keep you updated.", now);
         var approvalMail = new MailService.MailContent
         {
             To = booking.Customer.Account.Email,
@@ -327,7 +328,8 @@ public sealed partial class Service
         booking.RejectionReason = reason;
         booking.UpdatedAt = now;
         AddHistory(bookingId, accountId, BookingHistoryType.REJECT, BookingStatus.PENDING, BookingStatus.REJECTED, reason, now);
-        AddNotification(booking.Customer.AccountId, null, booking, "Booking rejected", now);
+        AddNotification(booking.Customer.AccountId, null, null, booking, "Booking rejected",
+            $"Your booking {booking.BookingCode} ({RouteSummary(booking)}) was not approved. Reason: {reason}. You can edit the request and submit it again.", now, NotificationPriority.HIGH);
         var rejectionMail = new MailService.MailContent
         {
             To = booking.Customer.Account.Email,

@@ -259,10 +259,10 @@ public sealed partial class Service
     {
         if ((routeType is RouteType.PRIMARY or RouteType.BACKUP) && action == "SUBMIT_FOR_LEGAL_REVIEW")
             foreach (var accountId in plan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST).Select(item => item.Employee.AccountId).Distinct())
-                notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.COMPLIANCE, Priority = NotificationPriority.NORMAL, Title = "Backup route requires legal review", Message = $"Route Plan {routePlan.RoutePlanCode} requires compliance review.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}", CreatedAt = now });
+                notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.COMPLIANCE, Priority = NotificationPriority.NORMAL, Title = routeType == RouteType.BACKUP ? "Backup route requires legal review" : "Route plan requires legal review", Message = $"Route plan {routePlan.RoutePlanCode} for transport plan {plan.PlanCode} was submitted for legal review. Check that it is feasible, then confirm it or request changes.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.TRANSPORT_SPECIALIST, routePlan.RoutePlanId), CreatedAt = now });
         if (routeType == RouteType.RETURN)
             foreach (var accountId in db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted).Select(item => item.AccountId))
-                notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE, Priority = NotificationPriority.URGENT, Title = "Return route plan created", Message = $"Return Route Plan {routePlan.RoutePlanCode} requires your approval.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}", CreatedAt = now });
+                notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE, Priority = NotificationPriority.URGENT, Title = "Return route needs your approval", Message = $"Return route plan {routePlan.RoutePlanCode} for transport plan {plan.PlanCode} was created and needs your approval before the transport can head back.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.LOGISTICS_MANAGER, routePlan.RoutePlanId, "change-decision"), CreatedAt = now });
     }
 
     private void QueueUpdateNotifications(RoutePlan routePlan, string reason, DateTime now)
@@ -277,11 +277,11 @@ public sealed partial class Service
                 TransportId = routePlan.TransportPlan.TransportId,
                 Type = NotificationType.COMPLIANCE,
                 Priority = NotificationPriority.HIGH,
-                Title = "Route plan waiting for legal review",
-                Message = $"Route Plan {routePlan.RoutePlanCode} was updated. Reason: {reason}",
+                Title = "Route plan needs another legal review",
+                Message = $"Route plan {routePlan.RoutePlanCode} was updated and needs another legal review. Reason for the update: {reason}",
                 ReferenceType = "RoutePlan",
                 ReferenceId = routePlan.RoutePlanId,
-                ActionUrl = $"/admin/route-plans/{routePlan.RoutePlanId}",
+                ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.TRANSPORT_SPECIALIST, routePlan.RoutePlanId),
                 CreatedAt = now
             });
     }
