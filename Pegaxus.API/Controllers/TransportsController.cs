@@ -18,7 +18,7 @@ public sealed class TransportsController(Transports.ITransportService service) :
     /// <returns>200 OK with transport items and pagination totals.</returns>
     [HttpGet("ongoing")]
     [Authorize(Policy = JwtExtensions.LogisticsManagerOrTransportSpecialistOrFleetRouteCoordinatorPolicy)]
-    public async Task<IActionResult> GetOngoing([FromQuery] Transports.Request.ListRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetOngoingAsync([FromQuery] Transports.Request.ListRequest request, CancellationToken cancellationToken)
     {
         var response = await service.GetOngoingAsync(AccountId, request, cancellationToken);
         return Success(response, "Ongoing transports retrieved successfully");
@@ -31,7 +31,7 @@ public sealed class TransportsController(Transports.ITransportService service) :
     /// <returns>200 OK with the caller's assigned transports.</returns>
     [HttpGet("assigned-to-me")]
     [Authorize(Policy = JwtExtensions.DriverOrEscortPolicy)]
-    public async Task<IActionResult> GetAssigned([FromQuery] Transports.Request.AssignedRequest request, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetAssignedAsync([FromQuery] Transports.Request.AssignedRequest request, CancellationToken cancellationToken)
     {
         var response = await service.GetAssignedAsync(AccountId, request, cancellationToken);
         return Success(response, "Assigned transports retrieved successfully");
@@ -43,7 +43,7 @@ public sealed class TransportsController(Transports.ITransportService service) :
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the transport overview.</returns>
     [HttpGet("{transportId}/overview")]
-    public async Task<IActionResult> GetOverview(Guid transportId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetOverviewAsync(Guid transportId, CancellationToken cancellationToken)
     {
         var response = await service.GetOverviewAsync(AccountId, transportId, cancellationToken);
         return Success(response, "Transport overview retrieved successfully");
@@ -55,7 +55,7 @@ public sealed class TransportsController(Transports.ITransportService service) :
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with effective segments and handover boundaries.</returns>
     [HttpGet("{transportId}/segments")]
-    public async Task<IActionResult> GetSegments(Guid transportId, CancellationToken cancellationToken)
+    public async Task<IActionResult> GetSegmentsAsync(Guid transportId, CancellationToken cancellationToken)
     {
         var response = await service.GetSegmentsAsync(AccountId, transportId, cancellationToken);
         return Success(response, "Transport segments retrieved successfully");

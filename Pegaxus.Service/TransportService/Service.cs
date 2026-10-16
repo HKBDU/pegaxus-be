@@ -3,15 +3,16 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.TransportService.Validator;
 
 using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.TransportService;
 
-public sealed partial class Service(AppDbContext db, TimeProvider clock) : ITransportService
+public sealed partial class Service(AppDbContext db, TimeProvider clock,
+    IValidator<Request.ListRequest> listValidator, IValidator<Request.AssignedRequest> assignedValidator) : ITransportService
 {
     private static readonly TransportStatus[] VisibleStatuses = [TransportStatus.READY, TransportStatus.IN_TRANSIT, TransportStatus.COMPLETED];
     private static readonly RoutePlanStatus[] VisiblePlanStatuses = [RoutePlanStatus.CONFIRMED, RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED];
@@ -20,7 +21,7 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock) : ITran
     {
         var actor = await GetActorAsync(accountId, cancellationToken);
         if (!actor.IsBackOffice) throw new ForbiddenException("Only back-office employees can view ongoing transports", "FORBIDDEN");
-        Validate(request, new ListRequestValidator());
+        Validation.ValidateFields(request, listValidator);
         var statuses = ParseStatuses(request);
         var query = TransportQuery().Where(item => statuses.Contains(item.Status) && item.HasRoutePlan);
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -55,7 +56,7 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock) : ITran
     {
         var actor = await GetActorAsync(accountId, cancellationToken);
         if (!actor.IsCrew) throw new ForbiddenException("Only Drivers and Escorts can view assigned transports", "FORBIDDEN");
-        Validate(request, new AssignedRequestValidator());
+        Validation.ValidateFields(request, assignedValidator);
         var statuses = ParseStatuses(request);
         var assigned = AssignedSegments(actor);
         var transports = await TransportQuery().Where(item => statuses.Contains(item.Status) && item.HasRoutePlan &&
@@ -75,13 +76,20 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock) : ITran
 
     private async Task<Actor> GetActorAsync(Guid accountId, CancellationToken cancellationToken)
     {
-        var account = await db.Accounts.AsNoTracking().Include(item => item.CustomerAccount).Include(item => item.EmployeeAccount)
-            .SingleOrDefaultAsync(item => item.AccountId == accountId, cancellationToken);
-        if (account is null || account.IsDeleted || account.Status != AccountStatus.ACTIVE)
+        var account = await db.Accounts.AsNoTracking().Where(item => item.AccountId == accountId &&
+                !item.IsDeleted && item.Status == AccountStatus.ACTIVE)
+            .Select(item => new
+            {
+                item.AccountType,
+                CustomerId = item.CustomerAccount != null && !item.CustomerAccount.IsDeleted ? (Guid?)item.CustomerAccount.CustomerId : null,
+                Employee = db.Employees.Active().Where(employee => employee.AccountId == item.AccountId)
+                    .Select(employee => new { employee.EmployeeId, employee.Role }).FirstOrDefault()
+            }).SingleOrDefaultAsync(cancellationToken);
+        if (account is null)
             throw new UnauthorizedException("The account is inactive or unavailable", "UNAUTHORIZED");
-        if (account.AccountType == AccountType.CUSTOMER && account.CustomerAccount is { IsDeleted: false } customer)
-            return new(customer.CustomerId, null, null);
-        if (account.AccountType == AccountType.EMPLOYEE && account.EmployeeAccount is { IsDeleted: false, IsActive: true } employee && Enum.IsDefined(employee.Role))
+        if (account.AccountType == AccountType.CUSTOMER && account.CustomerId.HasValue)
+            return new(account.CustomerId, null, null);
+        if (account.AccountType == AccountType.EMPLOYEE && account.Employee is { } employee && Enum.IsDefined(employee.Role))
             return new(null, employee.EmployeeId, employee.Role);
         throw new UnauthorizedException("The account is inactive or unavailable", "UNAUTHORIZED");
     }
@@ -125,13 +133,6 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock) : ITran
 
     private static TransportStatus[] ParseStatuses(Request.AssignedRequest request) =>
         (request.Status ?? "READY,IN_TRANSIT").Split(',', StringSplitOptions.TrimEntries).Select(Enum.Parse<TransportStatus>).Distinct().ToArray();
-
-    private static void Validate<T>(T request, IValidator<T> validator)
-    {
-        var result = validator.Validate(request);
-        if (!result.IsValid) throw new FieldValidationException(result.Errors.Select(error =>
-            new FieldError(char.ToLowerInvariant(error.PropertyName[0]) + error.PropertyName[1..], error.ErrorMessage)).ToList());
-    }
 
     private sealed record Actor(Guid? CustomerId, Guid? EmployeeId, EmployeeRole? Role)
     {

@@ -14,9 +14,9 @@ public sealed class AssignedRequestValidator : AbstractValidator<Request.Assigne
 
 public sealed class ListRequestValidator : AbstractValidator<Request.ListRequest>
 {
-    public ListRequestValidator()
+    public ListRequestValidator(IValidator<Request.AssignedRequest> assignedValidator)
     {
-        Include(new AssignedRequestValidator());
+        Include(assignedValidator);
         RuleFor(request => request.PageIndex).GreaterThanOrEqualTo(0);
         RuleFor(request => request.PageSize).InclusiveBetween(1, 100);
         RuleFor(request => request).Must(request => (long)request.PageIndex * request.PageSize <= int.MaxValue)

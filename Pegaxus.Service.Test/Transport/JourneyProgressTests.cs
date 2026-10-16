@@ -239,6 +239,25 @@ public class JourneyProgressTests
             await Assert.ThrowsAsync<FieldValidationException>(() => f.Service.GetAssignedAsync(f.Driver.AccountId, new() { Status = status }));
     }
 
+    [Theory]
+    [InlineData(AccountType.CUSTOMER)]
+    [InlineData(AccountType.EMPLOYEE)]
+    public async Task Reads_RejectDeletedAccountsAndInactiveProfilesAsync(AccountType type)
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        var accountId = type == AccountType.CUSTOMER ? f.Customer.AccountId : f.Manager.AccountId;
+        var account = await db.Accounts.SingleAsync(item => item.AccountId == accountId);
+        account.IsDeleted = true;
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<UnauthorizedException>(() => f.Service.GetSegmentsAsync(accountId, f.Transport.TransportId));
+        account.IsDeleted = false;
+        if (type == AccountType.CUSTOMER) f.Customer.IsDeleted = true;
+        else f.Manager.IsActive = false;
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<UnauthorizedException>(() => f.Service.GetOverviewAsync(accountId, f.Transport.TransportId));
+    }
+
     internal sealed class Fixture
     {
         internal required Transports.Service Service { get; init; }
@@ -275,9 +294,10 @@ public class JourneyProgressTests
             var primary = new RoutePlan { RoutePlanId = Guid.NewGuid(), RoutePlanCode = "RP-JOURNEY-1", TransportPlan = plan,
                 TransportPlanId = plan.TransportPlanId, Status = RoutePlanStatus.ACTIVE, CreatedAt = Day(1), UpdatedAt = Day(1) };
             db.AddRange(transport, plan, primary);
+            var assignedValidator = new Transports.Validator.AssignedRequestValidator();
             var f = new Fixture { Customer = customer, OtherCustomer = otherCustomer, Manager = manager, Coordinator = coordinator,
                 Specialist = specialist, Driver = driver, OtherDriver = otherDriver, Escort = escort, Transport = transport, Plan = plan,
-                Primary = primary, Service = new(db, new TestClock()) };
+                Primary = primary, Service = new(db, new TestClock(), new Transports.Validator.ListRequestValidator(assignedValidator), assignedValidator) };
             var locations = Enumerable.Range(0, 4).Select(index => new Location { LocationId = Guid.NewGuid(), LocationName = $"Stop {index}",
                 Address = $"Address {index}", Country = "France", LocationType = LocationType.REST_STOP, Latitude = 49 + index,
                 Longitude = 2 + index, CreatedAt = Day(1), UpdatedAt = Day(1) }).ToArray();

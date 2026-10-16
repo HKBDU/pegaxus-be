@@ -19,8 +19,6 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.JwtService;
 
-using Transports = Pegaxus.Service.TransportService;
-
 namespace Pegaxus.Service.Test;
 
 public class JourneyProgressHttpTests
@@ -153,7 +151,7 @@ public class JourneyProgressHttpTests
                     field = string.IsNullOrEmpty(item.Key) ? "$" : char.ToLowerInvariant(item.Key[0]) + item.Key[1..], message = error.ErrorMessage })),
                 "The request data is invalid", traceId: context.HttpContext.TraceIdentifier)));
         builder.Services.AddJwtServices(builder.Configuration);
-        builder.Services.AddScoped<Transports.ITransportService, Transports.Service>();
+        builder.Services.AddTransportPlanningModule();
         builder.Services.AddTransient<GlobalExceptionHandlerMiddleware>();
         var app = builder.Build();
         app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
