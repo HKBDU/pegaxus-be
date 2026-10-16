@@ -222,8 +222,10 @@ public sealed partial class Service
 
         AddNotification(
             dossier.Transport.Booking.Customer.AccountId,
+            null,
             dossier,
-            "ComplianceDossier submitted",
+            "Dossier submitted to authorities",
+            $"Your compliance dossier {dossier.DossierCode} was submitted to {submission.AuthorityName}. We will let you know as soon as the authority decides.",
             now);
 
         var logisticsManagerAccountIds = await _db.Employees
@@ -233,7 +235,8 @@ public sealed partial class Service
             .ToListAsync(cancellationToken);
 
         foreach (var managerAccountId in logisticsManagerAccountIds)
-            AddNotification(managerAccountId, dossier, "ComplianceDossier submitted", now);
+            AddNotification(managerAccountId, EmployeeRole.LOGISTICS_MANAGER, dossier, "Dossier submitted to authorities",
+                $"Compliance dossier {dossier.DossierCode} was submitted to {submission.AuthorityName}.", now);
 
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -376,7 +379,8 @@ public sealed partial class Service
             await NotifyEmployeesAsync(
                 dossier,
                 [EmployeeRole.LOGISTICS_MANAGER, EmployeeRole.FLEET_ROUTE_COORDINATOR],
-                "ComplianceDossier approved",
+                "Dossier approved by authorities",
+                $"{submission.AuthorityName} approved compliance dossier {dossier.DossierCode}. All required authority approvals are now in place.",
                 NotificationPriority.NORMAL,
                 now,
                 cancellationToken);
@@ -386,7 +390,8 @@ public sealed partial class Service
             await NotifyEmployeesAsync(
                 dossier,
                 [EmployeeRole.LOGISTICS_MANAGER],
-                "ComplianceDossier rejected",
+                "Dossier rejected by an authority",
+                $"{submission.AuthorityName} rejected a required submission for compliance dossier {dossier.DossierCode}. Reason: {submission.RejectionReason ?? "not provided"}. The dossier needs action before departure.",
                 NotificationPriority.URGENT,
                 now,
                 cancellationToken);

@@ -6,17 +6,18 @@ using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
 
+using Pegaxus.Service.Common;
+
 using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.RoutePlanService;
 
 public sealed partial class Service
 {
-    private static RouteType GetRouteType(RoutePlan plan)
-    {
-        var types = plan.RoutePlanRoutes.Select(item => item.RouteType).Distinct().ToList();
-        return types.Count == 1 ? types[0] : RouteType.PRIMARY;
-    }
+    private static RouteType GetRouteType(RoutePlan plan) => TransportItinerary.PlanType(plan);
+
+    private static Response.LocationResponse? BranchLocation(RoutePlan plan) =>
+        TransportItinerary.BranchSegment(plan) is { } branch ? ToLocation(branch.Route.FromLocation) : null;
 
     private static Response.SummaryResponse ToSummary(RoutePlan item)
     {
@@ -33,23 +34,11 @@ public sealed partial class Service
             EstimatedDurationMinutes = item.EstimatedDurationMinutes ?? 0,
             SegmentCount = segments.Count,
             IsPersonnelComplete = segments.Where(segment => !segment.TransportProviderId.HasValue).All(segment => segment.DriverEmployeeId.HasValue && segment.EscortEmployeeId.HasValue),
-            ReplacesSequenceNo = routeType == RouteType.BACKUP ? ReplacementSequenceRange(item, segments) : null,
+            BranchSequenceNo = TransportItinerary.BranchSequenceNo(item),
+            BranchLocation = BranchLocation(item),
             RouteNote = item.RouteNote,
             UpdatedAt = AsUtc(item.UpdatedAt)
         };
-    }
-
-    private static Response.SequenceRangeResponse? ReplacementSequenceRange(RoutePlan item, List<RoutePlanRoute> segments)
-    {
-        if (segments.Count == 0) return null;
-        var primary = item.TransportPlan.RoutePlans.SingleOrDefault(plan => plan.RoutePlanId == item.PrimaryRoutePlanId);
-        var primarySegments = primary?.RoutePlanRoutes.OrderBy(segment => segment.SequenceNo).ToList();
-        if (primarySegments is null) return null;
-        var start = primarySegments.FindIndex(segment => segment.Route.FromLocationId == segments[0].Route.FromLocationId);
-        var end = primarySegments.FindLastIndex(segment => segment.Route.ToLocationId == segments[^1].Route.ToLocationId);
-        return start >= 0 && end >= start
-            ? new Response.SequenceRangeResponse { From = primarySegments[start].SequenceNo, To = primarySegments[end].SequenceNo }
-            : null;
     }
 
     private static Response.DetailResponse ToDetail(RoutePlan item, Response.LegalReviewResponse? legalReview = null)
@@ -57,9 +46,7 @@ public sealed partial class Service
         var segments = item.RoutePlanRoutes.OrderBy(route => route.SequenceNo).ToList();
         var effective = GetRouteType(item) == RouteType.PRIMARY && item.Status == RoutePlanStatus.ACTIVE;
         if (effective)
-            segments = item.TransportPlan.RoutePlans.Where(plan => plan.Status == RoutePlanStatus.ACTIVE)
-                .SelectMany(plan => plan.RoutePlanRoutes).Where(segment => segment.SupersededAt == null)
-                .OrderBy(segment => segment.PlannedDepartureAt).ThenBy(segment => segment.SequenceNo).ToList();
+            segments = TransportItinerary.Effective(item.TransportPlan.RoutePlans).Select(segment => segment.Route).ToList();
         return new Response.DetailResponse
         {
             RoutePlanId = item.RoutePlanId,
@@ -89,11 +76,7 @@ public sealed partial class Service
                 PlannedArrivalAt = segment.PlannedArrivalAt.HasValue ? AsUtc(segment.PlannedArrivalAt.Value) : null,
                 ActualDepartureAt = segment.ActualDepartureAt.HasValue ? AsUtc(segment.ActualDepartureAt.Value) : null,
                 ActualArrivalAt = segment.ActualArrivalAt.HasValue ? AsUtc(segment.ActualArrivalAt.Value) : null,
-                Status = segment.ActualArrivalAt.HasValue
-                    ? "COMPLETED"
-                    : segment.ActualDepartureAt.HasValue
-                        ? "IN_PROGRESS"
-                        : "PENDING",
+                Status = TransportItinerary.StatusOf(segment).ToString(),
                 DwellAfterMinutes = index < segments.Count - 1 && segment.PlannedArrivalAt.HasValue && segments[index + 1].PlannedDepartureAt.HasValue ? (int)(segments[index + 1].PlannedDepartureAt.GetValueOrDefault() - segment.PlannedArrivalAt.GetValueOrDefault()).TotalMinutes : null,
                 IsOutsourced = segment.TransportProviderId.HasValue,
                 Vehicles = segment.RoutePlanRouteVehicles.Select(item => new Response.VehicleResponse { VehicleId = item.Vehicle.VehicleId, VehicleCode = item.Vehicle.VehicleCode, VehicleName = item.Vehicle.VehicleName, LicensePlate = item.Vehicle.LicensePlate, TransportMode = item.Vehicle.TransportMode.ToString(), CapacityHorses = item.Vehicle.CapacityHorses }).ToList(),
@@ -103,6 +86,8 @@ public sealed partial class Service
                 Note = segment.Note
             }).ToList(),
             IsPersonnelComplete = segments.Where(item => !item.TransportProviderId.HasValue).All(item => item.DriverEmployeeId.HasValue && item.EscortEmployeeId.HasValue),
+            BranchSequenceNo = TransportItinerary.BranchSequenceNo(item),
+            BranchLocation = BranchLocation(item),
             LegalReview = legalReview,
             RouteNote = item.RouteNote,
             CreatedAt = AsUtc(item.CreatedAt),

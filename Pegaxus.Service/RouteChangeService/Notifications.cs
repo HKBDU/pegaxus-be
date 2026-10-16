@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 using static Pegaxus.Service.Common.DbTime;
@@ -25,35 +26,38 @@ public sealed partial class Service
         EnsureTypeStatus(plan, segments, "RETURN", plan.Status);
         var primary = await PrimaryAsync(plan, cancellationToken);
         var now = Now;
-        var drivers = await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Begin return journey", request.Message, now, cancellationToken);
+        var drivers = await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Begin return journey",
+            $"Start the return journey on route plan {plan.RoutePlanCode}.{NoteSuffix(request.Message)}", now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
         return new(routePlanId, drivers.Select(x => Employee(x)!).ToArray(), AsUtc(now));
     }
 
-    private async Task NotifyAssignedAsync(RoutePlan plan, EmployeeRole role, string title, string? message,
+    private async Task NotifyAssignedAsync(RoutePlan plan, EmployeeRole role, string title, string message,
         NotificationPriority priority, DateTime now, CancellationToken token)
     {
         var recipients = await db.EmployeeTransportPlans.AsNoTracking().Where(x => x.TransportPlanId == plan.TransportPlanId &&
             x.Employee.Role == role && x.Employee.IsActive && !x.Employee.IsDeleted &&
             !x.Employee.Account.IsDeleted && x.Employee.Account.Status == AccountStatus.ACTIVE)
             .Select(x => x.Employee.AccountId).Distinct().ToArrayAsync(token);
-        foreach (var recipient in recipients) Notify(recipient, plan, title, message, priority, now);
+        foreach (var recipient in recipients) Notify(recipient, plan, title, message, priority, now, NotificationLinks.RoutePlan(role, plan.RoutePlanId));
     }
 
-    private async Task<List<Employee>> NotifyPrimaryDriversAsync(RoutePlan plan, Guid primaryId, string title, string? message, DateTime now, CancellationToken token)
+    private async Task<List<Employee>> NotifyPrimaryDriversAsync(RoutePlan plan, Guid primaryId, string title, string message, DateTime now, CancellationToken token)
     {
         var driverIds = db.RoutePlanRoutes.Where(x => x.RoutePlanId == primaryId && x.DriverEmployeeId.HasValue).Select(x => x.DriverEmployeeId!.Value);
         var drivers = await db.Employees.AsNoTracking().Active().Where(x => driverIds.Contains(x.EmployeeId) && x.Role == EmployeeRole.DRIVER).OrderBy(x => x.EmployeeCode).ToListAsync(token);
-        foreach (var driver in drivers) Notify(driver.AccountId, plan, title, message, NotificationPriority.URGENT, now);
+        foreach (var driver in drivers) Notify(driver.AccountId, plan, title, message, NotificationPriority.URGENT, now, null);
         return drivers;
     }
 
-    private void Notify(Guid accountId, RoutePlan plan, string title, string? message, NotificationPriority priority, DateTime now) =>
+    private void Notify(Guid accountId, RoutePlan plan, string title, string message, NotificationPriority priority, DateTime now, string? actionUrl) =>
         notifications.Queue(new() { AccountId = accountId, TransportId = plan.TransportPlan.TransportId, Type = NotificationType.ROUTE,
-            Priority = priority, Title = title, Message = $"{plan.RoutePlanCode}: {message}", ReferenceType = "RoutePlan",
-            ReferenceId = plan.RoutePlanId, ActionUrl = $"/admin/route-plans/{plan.RoutePlanId}", CreatedAt = now });
+            Priority = priority, Title = title, Message = message, ReferenceType = "RoutePlan",
+            ReferenceId = plan.RoutePlanId, ActionUrl = actionUrl, CreatedAt = now });
+
+    private static string NoteSuffix(string? note) => string.IsNullOrWhiteSpace(note) ? "" : $" Note: {note.Trim()}";
 
     private void Audit(RoutePlan plan, Guid accountId, string action, string? note, DateTime now) =>
         db.CatalogAuditLogs.Add(new() { CatalogAuditLogId = Guid.NewGuid(), EntityType = "RoutePlan", EntityId = plan.RoutePlanId,

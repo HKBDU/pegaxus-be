@@ -57,6 +57,10 @@ public class Request
         public string OriginCountry { get; set; } = string.Empty;
         public string DestinationAddress { get; set; } = string.Empty;
         public string DestinationCountry { get; set; } = string.Empty;
+        public decimal? OriginLatitude { get; set; }
+        public decimal? OriginLongitude { get; set; }
+        public decimal? DestinationLatitude { get; set; }
+        public decimal? DestinationLongitude { get; set; }
         public DateOnly RequestedDepartureDate { get; set; }
         public DateOnly? RequestedArrivalDate { get; set; }
         public List<BookingHorseRequest> Horses { get; set; } = [];
@@ -77,6 +81,10 @@ public class Request
         public string? OriginCountry { get; set; }
         public string? DestinationAddress { get; set; }
         public string? DestinationCountry { get; set; }
+        public decimal? OriginLatitude { get; set; }
+        public decimal? OriginLongitude { get; set; }
+        public decimal? DestinationLatitude { get; set; }
+        public decimal? DestinationLongitude { get; set; }
         public DateOnly? RequestedDepartureDate { get; set; }
         public DateOnly? RequestedArrivalDate { get; set; }
         public string? SpecialRequirements { get; set; }

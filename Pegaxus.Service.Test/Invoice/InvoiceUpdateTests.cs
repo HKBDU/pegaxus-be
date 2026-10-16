@@ -23,9 +23,8 @@ public class InvoiceUpdateTests
         var (editor, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var request = f.Request();
         request.Type = " quotation ";
-        request.Currency = "EUR";
         request.Note = "Updated billing note";
-        request.Items = [Fixture.Item(1.5m, 0.03m, keep.InvoiceItemId), Fixture.Item(1.5m, 0.03m)];
+        request.Items = [Fixture.Item(2, 5, keep.InvoiceItemId), Fixture.Item(3, 5)];
         request.Items[0].HorseId = f.Horse.HorseId;
         request.Items[0].Note = "Horse care";
         request.Items[1].ItemType = "EMERGENCY_COST";
@@ -39,14 +38,14 @@ public class InvoiceUpdateTests
         Assert.Equal("QUOTATION", result.Type);
         Assert.False(result.IsPaymentRequired);
         Assert.Equal("DRAFT", result.Status);
-        Assert.Equal("EUR", result.Currency);
+        Assert.Equal("VND", result.Currency);
         Assert.Equal(request.Note, result.Note);
         Assert.Equal(keep.InvoiceItemId, result.Items[0].InvoiceItemId);
         Assert.Equal(f.Horse.HorseName, result.Items[0].Horse!.HorseName);
         Assert.Equal("Horse care", result.Items[0].Note);
         Assert.NotEqual(remove.InvoiceItemId, result.Items[1].InvoiceItemId);
         Assert.Equal("EMERGENCY_COST", result.Items[1].ItemType);
-        Assert.Equal(new Response.SummaryResponse(0.10m, 0.02m, 0, 0.12m), result.Summary);
+        Assert.Equal(new Response.SummaryResponse(25, 5, 0, 30), result.Summary);
         Assert.Null(result.Payment);
         Assert.All(result.Items, item => { Assert.Null(item.ItemDate); Assert.Null(item.EmergencyCostRequestId); });
         Assert.Equal(f.Account.Email, result.ContactPerson.Email);
@@ -152,19 +151,6 @@ public class InvoiceUpdateTests
         Assert.Equal(2, await db.InvoiceItems.CountAsync());
     }
 
-    [Fact]
-    public async Task Final_CurrencyMustMatchAllPaidDepositsWithoutChangingDraft()
-    {
-        await using var db = TestSupport.CreateDb();
-        var f = await Fixture.CreateAsync(db, InvoiceType.FINAL);
-        var different = f.Deposit(1); different.Currency = "EUR";
-        db.Invoices.AddRange(f.Deposit(2), different); await db.SaveChangesAsync();
-        Assert.Equal("CURRENCY_MISMATCH", (await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
-            f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, f.Request()))).ErrorCode);
-        Assert.Equal(2, await db.InvoiceItems.CountAsync());
-        Assert.Equal(f.Invoice.UpdatedAt, (await db.Invoices.AsNoTracking().SingleAsync(item => item.InvoiceId == f.Invoice.InvoiceId)).UpdatedAt);
-    }
-
     [Theory]
     [InlineData("role")]
     [InlineData("employeeInactive")]
@@ -243,7 +229,6 @@ public class InvoiceUpdateTests
     [Theory]
     [InlineData("version", "lastUpdatedAt")]
     [InlineData("type", "type")]
-    [InlineData("currency", "currency")]
     [InlineData("dueDate", "dueDate")]
     [InlineData("missingDueDate", "dueDate")]
     [InlineData("missingItems", "items")]
@@ -273,7 +258,6 @@ public class InvoiceUpdateTests
         {
             case "version": request.LastUpdatedAt = null; break;
             case "type": request.Type = "FINAL"; break;
-            case "currency": request.Currency = "USD"; break;
             case "dueDate": request.DueDate = request.DueDate!.Value.AddDays(-1); break;
             case "missingDueDate": request.DueDate = null; break;
             case "missingItems": request.Items = null; break;
@@ -282,7 +266,7 @@ public class InvoiceUpdateTests
             case "description": request.Items[0].Description = "  "; break;
             case "longDescription": request.Items[0].Description = new string('x', 501); break;
             case "quantity": request.Items[0].Quantity = 0; break;
-            case "quantityPrecision": request.Items[0].Quantity = 100_000_000; break;
+            case "quantityPrecision": request.Items[0].Quantity = 10_000_000_000; break;
             case "quantityScale": request.Items[0].Quantity = 1.001m; break;
             case "price": request.Items[0].Price = -1; break;
             case "pricePrecision": request.Items[0].Price = 10_000_000_000_000_000; break;
@@ -291,8 +275,8 @@ public class InvoiceUpdateTests
             case "itemId": request.Items[0].InvoiceItemId = Guid.NewGuid(); break;
             case "emptyItemId": request.Items[0].InvoiceItemId = Guid.Empty; break;
             case "duplicateItemId": request.Items.Add(request.Items[0]); break;
-            case "overflow": request.Items[0].Quantity = 99_999_999.99m; request.Items[0].Price = 9_999_999_999_999_999.99m; break;
-            case "taxOverflow": request.Items[0].Price = 9_999_999_999_999_999.99m; break;
+            case "overflow": request.Items[0].Quantity = 99_999_999; request.Items[0].Price = 9_999_999_999_999_999; break;
+            case "taxOverflow": request.Items[0].Price = 9_999_999_999_999_999; break;
         }
         var error = await Assert.ThrowsAsync<FieldValidationException>(() =>
             f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, request));
@@ -334,7 +318,7 @@ public class InvoiceUpdateTests
         }
         internal Request.UpdateRequest Request() => new()
         {
-            LastUpdatedAt = Version(Invoice.UpdatedAt), Currency = "VND", DueDate = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime), Items = []
+            LastUpdatedAt = Version(Invoice.UpdatedAt), DueDate = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime), Items = []
         };
         internal static Request.ItemRequest Item(decimal quantity, decimal price, Guid? id = null) => new()
         {

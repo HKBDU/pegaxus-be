@@ -33,7 +33,11 @@ public partial class Transport
 
     public virtual Booking Booking { get; set; } = null!;
 
-    public virtual ComplianceDossier? ComplianceDossier { get; set; }
+    public virtual ICollection<ComplianceDossier> ComplianceDossiers { get; set; } = new List<ComplianceDossier>();
+
+    public ComplianceDossier? MainDossier => ComplianceDossiers.FirstOrDefault(item => item.DossierType == DossierType.MAIN);
+
+    public ComplianceDossier? ExtraDossier => ComplianceDossiers.FirstOrDefault(item => item.DossierType == DossierType.EXTRA);
 
     public virtual FinancialReport? FinancialReport { get; set; }
 

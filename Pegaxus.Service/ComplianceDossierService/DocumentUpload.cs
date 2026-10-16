@@ -74,7 +74,7 @@ public sealed partial class Service
                         document = new ComplianceDocument
                         {
                             ComplianceDocumentId = Guid.NewGuid(), DossierRequirementId = requirementId,
-                            CreatedByAccountId = accountId, CreatedAt = now, DocumentCode = $"CDOC-{Guid.NewGuid():N}",
+                            CreatedByAccountId = accountId, CreatedAt = now, DocumentCode = await NextDocumentCodeAsync(now, cancellationToken),
                             DocumentName = requirement.ComplianceRequirement.RequirementName
                         };
                         _db.ComplianceDocuments.Add(document);
@@ -130,8 +130,8 @@ public sealed partial class Service
                             employee.EmployeeTransportPlans.Any(assignment => assignment.TransportPlan.TransportId == dossier.TransportId))
                         .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
                     foreach (var recipient in recipients)
-                        AddNotification(recipient, dossier, "Document submitted for review", now,
-                            message: $"{requirement.ComplianceRequirement.RequirementName} was uploaded for dossier {dossier.DossierCode}.");
+                        AddNotification(recipient, EmployeeRole.TRANSPORT_SPECIALIST, dossier, "Document submitted for review",
+                            $"{requirement.ComplianceRequirement.RequirementName} was uploaded for dossier {dossier.DossierCode} and is waiting for your review.", now);
                     await _db.SaveChangesAsync(cancellationToken);
                     commitAttempted = true;
                     await transaction.CommitAsync(cancellationToken);

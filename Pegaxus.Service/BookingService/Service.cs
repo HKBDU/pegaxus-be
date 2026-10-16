@@ -3,6 +3,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 using static Pegaxus.Service.Common.Text;
@@ -64,31 +65,39 @@ public partial class Service : IBookingService
         ChangedAt = changedAt
     });
 
-    private void AddNotification(Guid accountId, Guid? transportId, BookingEntity booking, string title, DateTime now)
+    /// <param name="role">The recipient employee role, or <c>null</c> for the booking customer.</param>
+    private void AddNotification(Guid accountId, EmployeeRole? role, Guid? transportId, BookingEntity booking, string title, string message,
+        DateTime now, NotificationPriority priority = NotificationPriority.NORMAL)
     {
         _notificationService.Queue(new NotificationService.NotificationCreateRequest
         {
             AccountId = accountId,
             TransportId = transportId,
             Type = NotificationType.BOOKING,
-            Priority = NotificationPriority.NORMAL,
+            Priority = priority,
             Title = title,
-            Message = $"Booking {booking.BookingCode}: {title.ToLowerInvariant()}.",
+            Message = message,
             ReferenceType = "Booking",
             ReferenceId = booking.BookingId,
-            ActionUrl = $"/bookings/{booking.BookingId}",
+            ActionUrl = NotificationLinks.Booking(role, booking.BookingId),
             CreatedAt = now
         });
     }
 
-    private async Task NotifyManagersAsync(BookingEntity booking, string title, DateTime now, CancellationToken cancellationToken)
+    private static string RouteSummary(BookingEntity booking) =>
+        $"{booking.OriginCountry} to {booking.DestinationCountry}, departing {booking.RequestedDepartureDate:yyyy-MM-dd}";
+
+    private async Task NotifyManagersAsync(BookingEntity booking, string title, string verb, string followUp, DateTime now, CancellationToken cancellationToken)
     {
+        var customerName = await _db.Customers.Where(customer => customer.CustomerId == booking.CustomerId)
+            .Select(customer => customer.FullName).SingleAsync(cancellationToken);
+        var message = $"{customerName} {verb} booking {booking.BookingCode} ({RouteSummary(booking)}).{followUp}";
         var recipients = await _db.Employees.Active()
             .Where(employee => employee.Role == EmployeeRole.LOGISTICS_MANAGER ||
                 employee.EmployeeTransportPlans.Any(assignment => assignment.TransportPlan.Transport.BookingId == booking.BookingId))
-            .Select(employee => employee.AccountId).Distinct().ToListAsync(cancellationToken);
+            .Select(employee => new { employee.AccountId, employee.Role }).Distinct().ToListAsync(cancellationToken);
         foreach (var recipient in recipients)
-            AddNotification(recipient, booking.Transport?.TransportId, booking, title, now);
+            AddNotification(recipient.AccountId, recipient.Role, booking.Transport?.TransportId, booking, title, message, now);
     }
 
     private Task<bool> HasHorseAsync(Guid bookingId, CancellationToken cancellationToken) =>
