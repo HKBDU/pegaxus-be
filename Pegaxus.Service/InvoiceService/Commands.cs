@@ -6,6 +6,7 @@ using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Pegaxus.Repository.Entities;
+using Pegaxus.Service.Common;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
@@ -137,7 +138,7 @@ public sealed partial class Service
                     UnitPrice: -x.TotalAmount, LineAmount: -x.TotalAmount)).OrderBy(x => x.Description, StringComparer.Ordinal);
                 var saved = items.Where(x => x.ItemType == InvoiceItemType.OTHER && x.LineAmount < 0)
                     .Select(x => (x.Description, x.Quantity, x.UnitPrice, x.LineAmount)).OrderBy(x => x.Description, StringComparer.Ordinal);
-                if (deposits.Any(x => x.Currency != invoice.Currency) || !saved.SequenceEqual(expected))
+                if (!saved.SequenceEqual(expected))
                     throw new ConflictException("The paid deposits changed after this draft was saved. Please open the draft and save it again", "DEPOSIT_DEDUCTION_CHANGED");
             }
 
@@ -155,7 +156,7 @@ public sealed partial class Service
                 PreviousStatus = InvoiceStatus.DRAFT, NewStatus = InvoiceStatus.ISSUED, ChangedByAccountId = accountId,
                 ChangedAt = now, CreatedAt = now
             });
-            var amount = invoice.TotalAmount.ToString("0.00", CultureInfo.InvariantCulture) + " " + invoice.Currency;
+            var amount = Vnd.Format(invoice.TotalAmount, invoice.Currency);
             var (title, message, priority) = invoice.Type switch
             {
                 InvoiceType.QUOTATION => ("Quotation issued", $"Quotation {invoice.InvoiceCode} for booking {customer.BookingCode} has been issued. Estimated total: {amount}. No payment is required.", NotificationPriority.NORMAL),
@@ -184,7 +185,7 @@ public sealed partial class Service
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);
             return new(invoiceId, invoice.InvoiceCode, invoice.Type.ToString(), invoice.Status.ToString(),
-                DateOnly.FromDateTime(now), AsUtc(now), invoice.TotalAmount, invoice.Currency, invoice.DueDate,
+                DateOnly.FromDateTime(now), AsUtc(now), Vnd.ToLong(invoice.TotalAmount), invoice.Currency, invoice.DueDate,
                 invoice.Type == InvoiceType.QUOTATION ? ["CANCEL", "CREATE_ANOTHER"] : ["RECORD_PAYMENT", "CANCEL", "CREATE_ANOTHER"],
                 AsUtc(invoice.UpdatedAt));
         }
@@ -234,8 +235,6 @@ public sealed partial class Service
         if (type == InvoiceType.CREDIT_NOTE && !invoices.Any(item => item.Type == InvoiceType.FINAL && item.Status == InvoiceStatus.PAID))
             throw new UnprocessableEntityException("Cannot create a claim/compensation invoice. The FINAL invoice of this booking must be PAID first.", "UNPAID_FINAL_INVOICE");
         var deposits = invoices.Where(item => type == InvoiceType.FINAL && item.Type == InvoiceType.DEPOSIT && item.Status == InvoiceStatus.PAID).ToArray();
-        if (deposits.Any(item => item.Currency != request.Currency))
-            throw new UnprocessableEntityException("Currency must match the paid deposit currency", "CURRENCY_MISMATCH");
 
         var requestedItems = request.Items!.Where(item => !item.IsDepositDeduction).ToArray();
         var horseIds = requestedItems.Where(item => item.HorseId.HasValue).Select(item => item.HorseId!.Value).Distinct().ToArray();
@@ -250,7 +249,7 @@ public sealed partial class Service
         var invoice = new Invoice
         {
             InvoiceId = Guid.NewGuid(), BookingId = bookingId, EmployeeId = employee.EmployeeId, Type = type,
-            Status = InvoiceStatus.DRAFT, Currency = request.Currency, DueDate = request.DueDate,
+            Status = InvoiceStatus.DRAFT, Currency = Vnd.Currency, DueDate = request.DueDate,
             BillingNote = request.Note, CreatedAt = now, UpdatedAt = now
         };
         try
@@ -260,11 +259,11 @@ public sealed partial class Service
                 {
                     InvoiceItemId = Guid.NewGuid(), ItemType = Enum.Parse<InvoiceItemType>(item.ItemType.Trim(), true),
                     Description = item.Description.Trim(), Quantity = item.Quantity, UnitPrice = item.Price,
-                    LineAmount = Money(decimal.Round(item.Quantity * item.Price, 2, MidpointRounding.AwayFromZero)),
+                    LineAmount = Money(item.Quantity * item.Price),
                     HorseId = item.HorseId, Note = item.Note, CreatedAt = now, UpdatedAt = now
                 });
             invoice.Subtotal = Money(invoice.InvoiceItems.Sum(item => item.LineAmount));
-            invoice.TaxAmount = Money(decimal.Round(invoice.Subtotal * 0.20m, 2, MidpointRounding.AwayFromZero));
+            invoice.TaxAmount = Money(Vnd.Tax(invoice.Subtotal));
             foreach (var deposit in deposits)
                 invoice.InvoiceItems.Add(new InvoiceItem
                 {
@@ -339,8 +338,6 @@ public sealed partial class Service
                     item.Type == InvoiceType.DEPOSIT && item.Status == InvoiceStatus.PAID)
                 .OrderBy(item => item.CreatedAt).ThenBy(item => item.InvoiceId)
                 .Select(item => new { item.InvoiceCode, item.Currency, item.TotalAmount }).ToListAsync(cancellationToken);
-            if (deposits.Any(item => item.Currency != request.Currency))
-                throw new UnprocessableEntityException("Currency must match the paid deposit currency", "CURRENCY_MISMATCH");
             var now = new DateTime(Math.Max(clock.GetUtcNow().UtcTicks / 10 * 10, invoice.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
             var items = new List<InvoiceItem>();
             decimal subtotal, tax, total;
@@ -352,12 +349,12 @@ public sealed partial class Service
                         InvoiceItemId = item.InvoiceItemId ?? Guid.NewGuid(), InvoiceId = invoiceId,
                         ItemType = Enum.Parse<InvoiceItemType>(item.ItemType.Trim(), true), Description = item.Description.Trim(),
                         Quantity = item.Quantity, UnitPrice = item.Price,
-                        LineAmount = Money(decimal.Round(item.Quantity * item.Price, 2, MidpointRounding.AwayFromZero)),
+                        LineAmount = Money(item.Quantity * item.Price),
                         HorseId = item.HorseId, Note = item.Note,
                         CreatedAt = item.InvoiceItemId.HasValue ? existing[item.InvoiceItemId.Value].CreatedAt : now, UpdatedAt = now
                     });
                 subtotal = Money(items.Sum(item => item.LineAmount));
-                tax = Money(decimal.Round(subtotal * 0.20m, 2, MidpointRounding.AwayFromZero));
+                tax = Money(Vnd.Tax(subtotal));
                 foreach (var deposit in deposits)
                     items.Add(new InvoiceItem
                     {
@@ -386,7 +383,7 @@ public sealed partial class Service
                 if (existing.TryGetValue(item.InvoiceItemId, out var old)) db.Entry(old).CurrentValues.SetValues(item);
                 else db.InvoiceItems.Add(item);
             }
-            invoice.Currency = request.Currency;
+            invoice.Currency = Vnd.Currency;
             invoice.DueDate = request.DueDate;
             invoice.BillingNote = request.Note;
             invoice.Subtotal = subtotal;
@@ -446,10 +443,11 @@ public sealed partial class Service
             Currency = invoice.Currency, Note = invoice.BillingNote,
             Customer = new(customer.CustomerId, customer.CustomerCode, customer.FullName, customer.Phone, customer.Address, customer.Account.Email),
             Items = items.OrderBy(item => item.CreatedAt).Select(item => new Response.ItemResponse(item.InvoiceItemId, item.ItemType.ToString(),
-                item.Description, null, item.Quantity, item.UnitPrice, item.LineAmount,
+                item.Description, null, Vnd.ToInt(item.Quantity), Vnd.ToLong(item.UnitPrice), Vnd.ToLong(item.LineAmount),
                 item.HorseId.HasValue ? horses[item.HorseId.Value] : null, null,
                 IsDeduction(invoice, item), item.Note)).ToArray(),
-            Summary = new(invoice.Subtotal, invoice.TaxAmount, items.Where(item => IsDeduction(invoice, item)).Sum(item => item.LineAmount), invoice.TotalAmount),
+            Summary = new(Vnd.ToLong(invoice.Subtotal), Vnd.ToLong(invoice.TaxAmount),
+                Vnd.ToLong(items.Where(item => IsDeduction(invoice, item)).Sum(item => item.LineAmount)), Vnd.ToLong(invoice.TotalAmount)),
             ContactPerson = new(employee.FullName, employee.Account.Email, employee.Phone),
             Booking = new(booking.BookingId, booking.BookingCode, booking.Status.ToString(), booking.OriginAddress,
                 booking.OriginCountry, booking.DestinationAddress, booking.DestinationCountry, booking.RequestedDepartureDate),

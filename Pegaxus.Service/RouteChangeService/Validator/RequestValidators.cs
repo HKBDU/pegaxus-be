@@ -9,11 +9,9 @@ public sealed class CreateRequestValidator : AbstractValidator<Request.CreateReq
     {
         RuleFor(x => x.Reason).Must(x => x?.Trim().Length >= 10).MaximumLength(4000);
         RuleFor(x => x.NewEstimatedArrivalAt).NotEmpty();
-        RuleFor(x => x.EstimatedExtraCost).InclusiveBetween(0, 9999999999999999.99m)
-            .Must(x => x == decimal.Round(x!.Value, 2)).When(x => x.EstimatedExtraCost.HasValue);
-        RuleFor(x => x.Currency).Must(code => code is { Length: 3 } &&
-            CultureInfo.GetCultures(CultureTypes.SpecificCultures).Any(c => new RegionInfo(c.Name).ISOCurrencySymbol == code))
-            .When(x => x.EstimatedExtraCost.HasValue || x.Currency is not null);
+        RuleFor(x => x.EstimatedExtraCost).InclusiveBetween(0, 9999999999999999m)
+            .Must(x => Pegaxus.Service.Common.Vnd.IsWhole(x!.Value)).WithMessage("Amount must be a whole number of VND")
+            .When(x => x.EstimatedExtraCost.HasValue);
         RuleFor(x => x.Note).MaximumLength(4000);
     }
 }

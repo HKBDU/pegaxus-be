@@ -135,7 +135,7 @@ public class RouteChangeTests
             var notification = Assert.Single(db.Notifications);
             Assert.Equal(NotificationPriority.URGENT, notification.Priority); Assert.Equal("RoutePlan", notification.ReferenceType);
             Assert.Equal(backup.RoutePlanId, notification.ReferenceId);
-            Assert.Contains("1800 EUR", notification.Message);
+            Assert.Contains("1,800 VND", notification.Message);
             Assert.Contains(FormattableString.Invariant($"ETA: {f.Proposal(delay).NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC"), notification.Message);
         }
         else
@@ -502,7 +502,7 @@ public class RouteChangeTests
         internal Request.CreateRequest Proposal(int delay = 60) => new()
         {
             Reason = "Road blocked by severe weather", NewEstimatedArrivalAt = StartAt.AddHours(2).AddMinutes(delay),
-            EstimatedExtraCost = 1800, Currency = "EUR"
+            EstimatedExtraCost = 1800
         };
         private static DateTime DbTime(DateTimeOffset value) => DateTime.SpecifyKind(value.UtcDateTime, DateTimeKind.Unspecified);
         internal sealed class FixedClock : TimeProvider { public override DateTimeOffset GetUtcNow() => StartAt.AddHours(-1); }

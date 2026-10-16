@@ -36,7 +36,7 @@ public class InvoiceSuggestionTests
         await using var db = TestSupport.CreateDb();
         var (account, employee, booking, transport) = await SeedAsync(db);
         AddInvoice(db, booking, employee, InvoiceType.DEPOSIT, InvoiceStatus.PAID, 30_000_000, "INV-DEPOSIT-1");
-        AddInvoice(db, booking, employee, InvoiceType.DEPOSIT, InvoiceStatus.PAID, 1_000_000.25m, "INV-DEPOSIT-2");
+        AddInvoice(db, booking, employee, InvoiceType.DEPOSIT, InvoiceStatus.PAID, 1_000_000, "INV-DEPOSIT-2");
         AddInvoice(db, booking, employee, InvoiceType.DEPOSIT, InvoiceStatus.ISSUED, 99_000_000, "INV-UNPAID");
         var (_, otherCustomer) = await TestSupport.AddCustomerAsync(db);
         var (otherBooking, _) = await TestSupport.AddPendingBookingAsync(db, otherCustomer);
@@ -54,7 +54,7 @@ public class InvoiceSuggestionTests
         Assert.Equal("FINAL", result.Type);
         Assert.Equal("VND", result.Currency);
         Assert.True(result.IsPaymentRequired);
-        Assert.Equal(new[] { -30_000_000m, -1_000_000.25m }, result.Items.Select(item => item.Total));
+        Assert.Equal(new[] { -30_000_000L, -1_000_000L }, result.Items.Select(item => item.Total));
         Assert.All(result.Items, item =>
         {
             Assert.Equal("OTHER", item.ItemType);
@@ -93,20 +93,6 @@ public class InvoiceSuggestionTests
             .GetSuggestionAsync(account.AccountId, booking.BookingId, new() { Type = type! }));
         Assert.Equal("VALIDATION_ERROR", error.ErrorCode);
         Assert.Equal("type", Assert.Single(error.Errors).Field);
-    }
-
-    [Fact]
-    public async Task Final_DoesNotCombinePaidDepositsInDifferentCurrencies()
-    {
-        await using var db = TestSupport.CreateDb();
-        var (account, employee, booking, _) = await SeedAsync(db);
-        AddInvoice(db, booking, employee, InvoiceType.DEPOSIT, InvoiceStatus.PAID, code: "INV-VND");
-        AddInvoice(db, booking, employee, InvoiceType.DEPOSIT, InvoiceStatus.PAID, code: "INV-EUR");
-        db.Invoices.Local.Single(invoice => invoice.InvoiceCode == "INV-EUR").Currency = "EUR";
-        await db.SaveChangesAsync();
-        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() => Service(db)
-            .GetSuggestionAsync(account.AccountId, booking.BookingId, new() { Type = "FINAL" }));
-        Assert.Equal("CURRENCY_MISMATCH", error.ErrorCode);
     }
 
     [Theory]
@@ -193,7 +179,7 @@ public class InvoiceSuggestionTests
         }
         var result = await Service(db).GetSuggestionAsync(account.AccountId, booking.BookingId, new() { Type = type });
         Assert.Empty(result.Items);
-        Assert.Null(result.Currency);
+        Assert.Equal("VND", result.Currency);
         Assert.Equal(type != "QUOTATION", result.IsPaymentRequired);
     }
 

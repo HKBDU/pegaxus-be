@@ -159,7 +159,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName, TransportId = (Guid?)x.Transport!.TransportId })
             .SingleAsync(cancellationToken);
         var message = $"Online payment for invoice {invoice.InvoiceCode} has been confirmed. Receipt: {receipt.ReceiptCode}. " +
-            $"Amount: {receipt.Amount.ToString("0.##", CultureInfo.InvariantCulture)} {receipt.Currency}. Invoice status: PAID.";
+            $"Amount: {Pegaxus.Service.Common.Vnd.Format(receipt.Amount, receipt.Currency)}. Invoice status: PAID.";
         notifications.Queue(new NotificationCreateRequest
         {
             AccountId = customer.AccountId, TransportId = customer.TransportId, Type = NotificationType.PAYMENT,
@@ -197,7 +197,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
         }
 
         var message = $"{reason}. Receipt: {receipt.ReceiptCode} ({receipt.Status}). Gateway reference: {reference}. " +
-            $"Amount: {receipt.Amount.ToString("0.##", CultureInfo.InvariantCulture)} {receipt.Currency}. " +
+            $"Amount: {Pegaxus.Service.Common.Vnd.Format(receipt.Amount, receipt.Currency)}. " +
             $"Invoice: {invoice.InvoiceCode} ({invoice.Status}). Check the bank statement and refund or reconcile manually.";
         foreach (var manager in managers)
         {

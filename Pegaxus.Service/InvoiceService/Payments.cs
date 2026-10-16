@@ -6,6 +6,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Npgsql;
 using Pegaxus.Repository.Entities;
+using Pegaxus.Service.Common;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Exceptions;
@@ -81,7 +82,7 @@ public sealed partial class Service
                 throw new AppException("Payment gateway is unavailable. Please try again later", 502, "PAYMENT_GATEWAY_ERROR");
             }
             await transaction.CommitAsync(cancellationToken);
-            return new(new(receipt.ReceiptId, receipt.ReceiptCode, receipt.Amount, receipt.Currency,
+            return new(new(receipt.ReceiptId, receipt.ReceiptCode, Vnd.ToLong(receipt.Amount), receipt.Currency,
                 receipt.PaymentMethod.ToString(), receipt.Status.ToString(), null, null, null, null, null), checkout.PaymentUrl, checkout.Fields);
         }
         catch (Exception ex) when (ex is DbUpdateConcurrencyException || ex.GetBaseException() is PostgresException
@@ -122,8 +123,6 @@ public sealed partial class Service
                 throw new ConflictException($"Cannot pay an invoice in status {invoice.Status}", "INVALID_INVOICE_STATUS");
             if (request.Amount != invoice.TotalAmount)
                 throw new UnprocessableEntityException("Only full payment of the invoice total is accepted", "PARTIAL_PAYMENT_NOT_SUPPORTED");
-            if (!string.Equals(request.Currency.Trim(), invoice.Currency, StringComparison.OrdinalIgnoreCase))
-                throw new UnprocessableEntityException("Payment currency must match the invoice currency", "CURRENCY_MISMATCH");
 
             var now = Truncate(clock.GetUtcNow().UtcDateTime);
             var receipt = new Receipt
@@ -173,7 +172,7 @@ public sealed partial class Service
             var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
                 .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName,
                     TransportId = x.Transport == null ? (Guid?)null : x.Transport.TransportId }).SingleAsync(cancellationToken);
-            var amount = receipt.Amount.ToString("0.00", CultureInfo.InvariantCulture) + " " + receipt.Currency;
+            var amount = Vnd.Format(receipt.Amount, receipt.Currency);
             var message = $"{(invoice.Type == InvoiceType.CREDIT_NOTE ? "Payout" : "Payment")} for invoice {invoice.InvoiceCode} has been confirmed. Receipt: {receipt.ReceiptCode}. Amount: {amount}. Invoice status: PAID.";
             notifications.Queue(new NotificationCreateRequest
             {
@@ -192,7 +191,7 @@ public sealed partial class Service
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);
-            return new(new(receipt.ReceiptId, receipt.ReceiptCode, receipt.Amount, receipt.Currency, receipt.PaymentMethod.ToString(),
+            return new(new(receipt.ReceiptId, receipt.ReceiptCode, Vnd.ToLong(receipt.Amount), receipt.Currency, receipt.PaymentMethod.ToString(),
                     receipt.Status.ToString(), receipt.TransactionReference, AsUtc(receipt.PaidAt!.Value), AsUtc(now), receipt.Note,
                     new(accountId, account.EmployeeAccount!.FullName)),
                 new(invoiceId, invoice.InvoiceCode, invoice.Type.ToString(), invoice.Status.ToString(), AsUtc(now), ["CREATE_ANOTHER"], AsUtc(invoice.UpdatedAt)),
