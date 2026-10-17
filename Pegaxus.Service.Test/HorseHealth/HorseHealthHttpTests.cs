@@ -81,7 +81,7 @@ public class HorseHealthHttpTests
         foreach (var field in new[] { "latitude", "longitude", "capturedAt", "caption" })
             Assert.Equal(JsonValueKind.Null, detail.GetProperty("photos")[0].GetProperty(field).ValueKind);
         Assert.Equal(HorseHealthTests.Fixture.ServerTime, detail.GetProperty("serverTime").GetDateTimeOffset());
-        Assert.DoesNotContain(f.Latest.PhotoUrl!, detail.GetRawText());
+        Assert.DoesNotContain(Assert.Single(f.Latest.PhotoUrls), detail.GetRawText());
         Assert.Empty(db.ChangeTracker.Entries());
     }
 

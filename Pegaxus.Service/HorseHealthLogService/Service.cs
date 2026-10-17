@@ -12,7 +12,7 @@ using Pegaxus.Service.NotificationService;
 namespace Pegaxus.Service.HorseHealthLogService;
 
 public sealed partial class Service(AppDbContext db, TimeProvider clock, IValidator<Request.RecordRequest> recordValidator,
-    IValidator<Request.CreateRequest> createValidator, IMediaService media, IDocumentStorageService documentStorage,
+    IValidator<Request.CreateRequest> createValidator, IValidator<Request.AddPhotosRequest> photosValidator, IMediaService media, IDocumentStorageService documentStorage,
     INotificationService notifications, ILogger<Service> logger) : IHorseHealthLogService
 {
     private const string ForbiddenMessage = "Only the assigned escort can record horse health logs";

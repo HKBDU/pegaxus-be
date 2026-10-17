@@ -18,6 +18,8 @@ public sealed partial class Service
     {
         if (single is null) Validation.Validate(request, recordValidator);
         else Validation.Validate(single, createValidator);
+        if (single is null && request.Files.Count > 1)
+            throw new FieldValidationException([new("files", "Only one panorama image is accepted.")]);
         if (transportId == Guid.Empty) throw new BadRequestException("Transport ID must be a non-empty UUID.", "VALIDATION_ERROR");
         if (single is not null && (single.TemperatureCelsius is < 30 or > 43 || single.HeartRateBpm is < 10 or > 200 || single.RespiratoryRateBpm is < 2 or > 100))
             throw new UnprocessableEntityException("Vital signs are outside the biological range. Please check the entered values again.", "VITAL_SIGNS_OUT_OF_RANGE");
@@ -26,7 +28,7 @@ public sealed partial class Service
         var selectedHorseId = single?.HorseId;
         for (var attempt = 0; ; attempt++)
         {
-            Guid? photoId = null;
+            var photoIds = new List<Guid>();
             var committed = false;
             var commitAttempted = false;
             try
@@ -47,12 +49,18 @@ public sealed partial class Service
                     .Select(item => new { item.HorseHealthLogId, item.HorseId }).ToListAsync(cancellationToken);
                 var idsByHorse = existing.GroupBy(item => item.HorseId).ToDictionary(group => group.Key, group => group.First().HorseHealthLogId);
                 var missing = horseIds.Where(id => !idsByHorse.ContainsKey(id)).ToArray();
-                string? photoUrl = null;
-                if (missing.Length > 0 && request.Files.FirstOrDefault() is { } file)
+                var photoUrls = new List<string>();
+                if (missing.Length > 0)
                 {
-                    var image = await ReadImageAsync(file, cancellationToken);
-                    photoId = Guid.NewGuid();
-                    photoUrl = await media.UploadPrivateImageAsync(photoId.Value, image, cancellationToken);
+                    var images = new List<Pegaxus.Service.MediaService.PreviewFile>();
+                    foreach (var file in request.Files) images.Add(await ReadImageAsync(file, cancellationToken));
+                    foreach (var image in images)
+                    {
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var photoId = Guid.NewGuid();
+                        photoIds.Add(photoId);
+                        photoUrls.Add(await media.UploadPrivateImageAsync(photoId, image, cancellationToken));
+                    }
                 }
                 var now = Truncate(clock.GetUtcNow());
                 var created = missing.Select(horseId => new HorseHealthLog
@@ -67,7 +75,7 @@ public sealed partial class Service
                     TreatmentProvided = EmptyToNull(single?.TreatmentProvided), MedicationGiven = EmptyToNull(single?.MedicationGiven),
                     VeterinarianRequired = single?.VeterinarianRequired ?? false, VeterinarianNote = EmptyToNull(single?.VeterinarianNote),
                     LocationDescription = EmptyToNull(request.LocationDescription), GeneralNote = EmptyToNull(request.GeneralNote),
-                    PhotoUrl = photoUrl, CreatedAt = now, UpdatedAt = now
+                    PhotoUrls = photoUrls.ToArray(), CreatedAt = now, UpdatedAt = now
                 }).ToArray();
                 db.HorseHealthLogs.AddRange(created);
                 var emergencyNotified = false;
@@ -76,13 +84,8 @@ public sealed partial class Service
                 if (created.Length > 0) await db.SaveChangesAsync(cancellationToken);
                 var ids = idsByHorse.Values.Concat(created.Select(item => item.HorseHealthLogId)).ToArray();
                 var rows = await ReadLogsAsync(ids, cancellationToken);
-                if (single is not null && rows[0].PhotoUrl is { } storedUrl)
-                {
-                    var signed = storedUrl.StartsWith("s3://", StringComparison.Ordinal)
-                        ? await documentStorage.CreateReadUrlAsync(storedUrl, cancellationToken)
-                        : await media.CreateReadUrlAsync(storedUrl, cancellationToken);
-                    rows[0] = rows[0] with { Log = rows[0].Log with { Photos = [new(signed.Url)] } };
-                }
+                if (single is not null)
+                    rows[0] = rows[0] with { Log = rows[0].Log with { Photos = await SignPhotosAsync(rows[0].PhotoUrls, cancellationToken) } };
                 commitAttempted = true;
                 await transaction.CommitAsync(cancellationToken);
                 committed = true;
@@ -92,9 +95,10 @@ public sealed partial class Service
             catch (Exception error)
             {
                 var conflict = PostgresErrors.IsWriteConflict(error);
-                if (!committed && photoId.HasValue && (!commitAttempted || conflict)) await CleanupPhotoAsync(photoId.Value);
+                if (!committed && (!commitAttempted || conflict))
+                    foreach (var photoId in photoIds) await CleanupPhotoAsync(photoId);
                 if (!committed && commitAttempted && !conflict)
-                    logger.LogError(error, "Health log commit outcome is unknown; retaining photo {PhotoId}", photoId);
+                    logger.LogError(error, "Health log commit outcome is unknown; retaining photos {PhotoIds}", photoIds);
                 if (!committed && conflict && attempt < 2)
                 {
                     db.ChangeTracker.Clear();

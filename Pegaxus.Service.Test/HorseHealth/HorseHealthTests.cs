@@ -116,7 +116,7 @@ public class HorseHealthTests
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db);
-        f.Latest.PhotoUrl = legacyStorage ? "s3://health/photo.jpg" : "https://res.cloudinary.com/test/image/authenticated/photo.jpg";
+        f.Latest.PhotoUrls = [legacyStorage ? "s3://health/photo.jpg" : "https://res.cloudinary.com/test/image/authenticated/photo.jpg"];
         await db.SaveChangesAsync(); db.ChangeTracker.Clear();
         using var cancellation = new CancellationTokenSource();
         var result = await f.Service.GetAsync(f.Latest.HorseHealthLogId, f.Manager.AccountId, cancellation.Token);
@@ -141,7 +141,7 @@ public class HorseHealthTests
         var photo = Assert.Single(result.Photos);
         Assert.Equal(Storage.SignedUrl, photo.PhotoUrl);
         Assert.Null(photo.Latitude); Assert.Null(photo.Longitude); Assert.Null(photo.CapturedAt); Assert.Null(photo.Caption);
-        Assert.Equal((f.Latest.PhotoUrl, cancellation.Token), Assert.Single(f.Storage.Reads));
+        Assert.Equal((Assert.Single(f.Latest.PhotoUrls), cancellation.Token), Assert.Single(f.Storage.Reads));
         var customer = await f.Service.GetAsync(f.Latest.HorseHealthLogId, f.Customer.AccountId);
         Assert.Equal(result with { VeterinarianNote = null, Photos = customer.Photos }, customer);
         Assert.Null(customer.VeterinarianNote);
@@ -421,7 +421,7 @@ public class HorseHealthTests
             f.Latest.TreatmentProvided = "Cleaned"; f.Latest.MedicationGiven = "Medication";
             f.Latest.VeterinarianRequired = true; f.Latest.VeterinarianNote = "Internal vet note";
             f.Latest.LocationDescription = "Lille Rest Stop"; f.Latest.GeneralNote = "  ";
-            f.Latest.PhotoUrl = "https://res.cloudinary.com/test/image/authenticated/photo.jpg";
+            f.Latest.PhotoUrls = ["https://res.cloudinary.com/test/image/authenticated/photo.jpg"];
             db.AddRange(f.Logs); await db.SaveChangesAsync(); return f;
         }
 

@@ -30,7 +30,7 @@ public class HorseHealthLogTests
         request.FeedingNote = " Half hay "; request.HydrationNote = " Drank water ";
         request.TreatmentProvided = " Cleaned "; request.MedicationGiven = " Medication ";
         request.LocationDescription = " Lille "; request.GeneralNote = " Details ";
-        request.Files = [Photo(), new FormFile(Stream.Null, 0, 0, "files", "ignored.exe")];
+        request.Files = [Photo()];
         var result = await f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId);
         Assert.True(result.Created);
         var log = result.Value;
@@ -49,7 +49,7 @@ public class HorseHealthLogTests
         var photo = Assert.Single(log.Photos); Assert.Equal(Storage.SignedUrl, photo.PhotoUrl);
         Assert.Null(photo.Latitude); Assert.Null(photo.Longitude); Assert.Null(photo.CapturedAt); Assert.Null(photo.Caption);
         var stored = await db.HorseHealthLogs.SingleAsync();
-        Assert.Equal(Storage.Url(Assert.Single(f.Storage.Uploads)), stored.PhotoUrl);
+        Assert.Equal(Storage.Url(Assert.Single(f.Storage.Uploads)), Assert.Single(stored.PhotoUrls));
         Assert.Equal(DbTime.AsUtc(Fixture.Now), log.CreatedAt); Assert.Equal(log.CreatedAt, log.UpdatedAt);
         Assert.Empty(f.Storage.Deletes); Assert.Empty(await db.IncidentReports.ToListAsync()); Assert.Empty(await db.Notifications.ToListAsync());
     }
@@ -110,7 +110,7 @@ public class HorseHealthLogTests
             Assert.True(log.HasPhoto); Assert.False(log.VeterinarianRequired);
         });
         var logs = await db.HorseHealthLogs.ToArrayAsync();
-        Assert.Single(logs.Select(log => log.PhotoUrl).Distinct()); Assert.Single(f.Storage.Uploads); Assert.Equal(0, f.Storage.Signs);
+        Assert.Single(logs.SelectMany(log => log.PhotoUrls).Distinct()); Assert.Single(f.Storage.Uploads); Assert.Equal(0, f.Storage.Signs);
         Assert.All(logs, log =>
         {
             Assert.Null(log.TemperatureCelsius); Assert.Null(log.HeartRateBpm); Assert.Null(log.RespiratoryRateBpm);
@@ -383,7 +383,7 @@ public class HorseHealthLogTests
     internal static HealthLogs.Service CreateService(AppDbContext db, Storage storage, INotificationService notifications)
     {
         var validator = new RecordRequestValidator(new FixedClock());
-        return new(db, new FixedClock(), validator, new CreateRequestValidator(validator), storage, storage, notifications, NullLogger<HealthLogs.Service>.Instance);
+        return new(db, new FixedClock(), validator, new CreateRequestValidator(validator), new AddPhotosRequestValidator(), storage, storage, notifications, NullLogger<HealthLogs.Service>.Instance);
     }
 
     internal sealed class FixedClock : TimeProvider { public override DateTimeOffset GetUtcNow() => DbTime.AsUtc(Fixture.Now); }
@@ -396,13 +396,14 @@ public class HorseHealthLogTests
         internal List<Guid> Deletes { get; } = [];
         internal int Signs { get; private set; }
         internal bool FailUpload { get; set; }
+        internal int? FailAtUpload { get; set; }
         internal bool FailSign { get; set; }
         internal Func<Task>? AfterUpload { get; set; }
         public async Task<string> UploadPrivateImageAsync(Guid imageId, PreviewFile image, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested(); Assert.True(Images.IsValid(image.Content, image.ContentType));
             Uploads.Add(imageId); if (AfterUpload is not null) await AfterUpload();
-            if (FailUpload) throw new IOException("Planned upload failure"); return Url(imageId);
+            if (FailUpload || Uploads.Count == FailAtUpload) throw new IOException("Planned upload failure"); return Url(imageId);
         }
         public Task DeletePrivateImageAsync(Guid imageId, CancellationToken cancellationToken = default)
         {

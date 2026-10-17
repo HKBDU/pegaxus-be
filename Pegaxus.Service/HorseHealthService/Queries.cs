@@ -61,7 +61,7 @@ public sealed partial class Service
             .Select(item => new Response.ListItem(item.HorseHealthLogId,
                 new Response.HorseSummary(item.HorseId, item.Horse.HorseName, item.Horse.MicrochipNumber), AsUtc(item.CheckedAt),
                 item.LogType.ToString(), item.HealthStatus.ToString(), item.HydrationStatus.HasValue ? item.HydrationStatus.Value.ToString() : null,
-                new Response.CheckedBy(item.EmployeeId, item.Employee.EmployeeCode, item.Employee.FullName), item.VeterinarianRequired, item.PhotoUrl != null))
+                new Response.CheckedBy(item.EmployeeId, item.Employee.EmployeeCode, item.Employee.FullName), item.VeterinarianRequired, item.PhotoUrls.Length > 0))
             .ToListAsync(cancellationToken);
         return new(clock.GetUtcNow(), horse, items, request.PageIndex, request.PageSize, total, Paging.TotalPages(total, request.PageSize));
     }
@@ -79,7 +79,7 @@ public sealed partial class Service
         var result = await db.HorseHealthLogs.AsNoTracking().Where(item => item.HorseHealthLogId == horseHealthLogId)
             .Select(item => new
             {
-                item.PhotoUrl,
+                item.PhotoUrls,
                 Detail = new Response.DetailResponse
                 {
                     HorseHealthLogId = item.HorseHealthLogId, TransportId = item.TransportId,
@@ -91,13 +91,12 @@ public sealed partial class Service
                     BehaviorNote = item.BehaviorNote, SymptomNote = item.SymptomNote, InjuryNote = item.InjuryNote, FeedingNote = item.FeedingNote,
                     HydrationNote = item.HydrationNote, TreatmentProvided = item.TreatmentProvided, MedicationGiven = item.MedicationGiven,
                     VeterinarianRequired = item.VeterinarianRequired, VeterinarianNote = actor.IsCustomer ? null : item.VeterinarianNote,
-                    LocationDescription = item.LocationDescription, GeneralNote = item.GeneralNote, HasPhoto = item.PhotoUrl != null,
+                    LocationDescription = item.LocationDescription, GeneralNote = item.GeneralNote, HasPhoto = item.PhotoUrls.Length > 0,
                     CreatedAt = AsUtc(item.CreatedAt), UpdatedAt = AsUtc(item.UpdatedAt)
                 }
             }).SingleAsync(cancellationToken);
-        // shortcut: one legacy photo with no metadata until B-04 adds health-log photo records.
         var photos = new List<Response.Photo>();
-        if (result.PhotoUrl is { } url)
+        foreach (var url in result.PhotoUrls)
         {
             var signed = url.StartsWith("s3://", StringComparison.Ordinal)
                 ? await documentStorage.CreateReadUrlAsync(url, cancellationToken)
@@ -109,14 +108,11 @@ public sealed partial class Service
 
     private async Task<Response.Escort?> GetCurrentEscortAsync(Guid transportId, TransportStatus status, Actor actor, CancellationToken cancellationToken)
     {
-        var segments = await db.RoutePlanRoutes.AsNoTracking().Where(item => item.RoutePlan.TransportPlan.TransportId == transportId &&
-                VisiblePlanStatuses.Contains(item.RoutePlan.Status))
-            .Select(item => new EffectiveJourney.Segment(item.RoutePlanRouteId, item.RoutePlanId, item.RoutePlan.PrimaryRoutePlanId,
-                item.RoutePlan.Status, item.RoutePlan.CreatedAt, item.RoutePlan.UpdatedAt, item.SequenceNo, item.RouteType,
-                item.SupersededAt, item.ActualDepartureAt, item.ActualArrivalAt)).ToListAsync(cancellationToken);
-        var current = EffectiveJourney.Current(EffectiveJourney.Select(segments), status);
+        var plans = await db.RoutePlans.AsNoTracking().Where(item => item.TransportPlan.TransportId == transportId &&
+                VisiblePlanStatuses.Contains(item.Status)).Include(item => item.RoutePlanRoutes).ToListAsync(cancellationToken);
+        var current = TransportItinerary.Current(TransportItinerary.Effective(plans), status);
         if (current is null) return null;
-        return await db.RoutePlanRoutes.AsNoTracking().Where(item => item.RoutePlanRouteId == current.RoutePlanRouteId &&
+        return await db.RoutePlanRoutes.AsNoTracking().Where(item => item.RoutePlanRouteId == current.Route.RoutePlanRouteId &&
                 !item.TransportProviderId.HasValue && item.EscortEmployee != null)
             .Select(item => new Response.Escort(item.EscortEmployee!.EmployeeId, item.EscortEmployee.EmployeeCode,
                 item.EscortEmployee.FullName, item.EscortEmployee.Role.ToString(), actor.IsCustomer ? null : item.EscortEmployee.Phone))

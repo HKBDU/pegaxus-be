@@ -11,8 +11,13 @@ public static class Request
         public DateTimeOffset? CheckedAt { get; set; }
         public string? LocationDescription { get; set; }
         public string? GeneralNote { get; set; }
-        // ponytail: only the first file is stored until B-04 adds multiple health-log photos.
         public List<IFormFile> Files { get; set; } = [];
+    }
+
+    public sealed class AddPhotosRequest
+    {
+        public List<IFormFile> Files { get; set; } = [];
+        // ponytail: photo metadata is ignored; add a child table when per-photo metadata is approved.
     }
 
     public sealed class CreateRequest : RecordRequest

@@ -9,7 +9,7 @@ public sealed partial class Service
     private async Task<List<LogData>> ReadLogsAsync(Guid[] ids, CancellationToken cancellationToken) =>
         await db.HorseHealthLogs.AsNoTracking().Where(item => ids.Contains(item.HorseHealthLogId))
             .OrderBy(item => item.Horse.HorseName).ThenBy(item => item.HorseId)
-            .Select(item => new LogData(item.PhotoUrl, new Response.HealthLog
+            .Select(item => new LogData(item.PhotoUrls, new Response.HealthLog
             {
                 HorseHealthLogId = item.HorseHealthLogId, TransportId = item.TransportId,
                 Horse = new(item.HorseId, item.Horse.HorseName, item.Horse.MicrochipNumber, item.Horse.PassportNumber),
@@ -20,9 +20,9 @@ public sealed partial class Service
                 BehaviorNote = item.BehaviorNote, SymptomNote = item.SymptomNote, InjuryNote = item.InjuryNote, FeedingNote = item.FeedingNote,
                 HydrationNote = item.HydrationNote, TreatmentProvided = item.TreatmentProvided, MedicationGiven = item.MedicationGiven,
                 VeterinarianRequired = item.VeterinarianRequired, VeterinarianNote = item.VeterinarianNote,
-                LocationDescription = item.LocationDescription, GeneralNote = item.GeneralNote, HasPhoto = item.PhotoUrl != null,
+                LocationDescription = item.LocationDescription, GeneralNote = item.GeneralNote, HasPhoto = item.PhotoUrls.Length > 0,
                 CreatedAt = AsUtc(item.CreatedAt), UpdatedAt = AsUtc(item.UpdatedAt)
             })).ToListAsync(cancellationToken);
 
-    private sealed record LogData(string? PhotoUrl, Response.HealthLog Log);
+    private sealed record LogData(string[] PhotoUrls, Response.HealthLog Log);
 }

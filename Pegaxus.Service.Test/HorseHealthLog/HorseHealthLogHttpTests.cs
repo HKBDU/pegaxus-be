@@ -101,7 +101,7 @@ public class HorseHealthLogHttpTests
             }
         }
         Assert.Single(f.Storage.Uploads); Assert.Equal(2, await db.HorseHealthLogs.CountAsync());
-        Assert.Single(await db.HorseHealthLogs.Select(log => log.PhotoUrl).Distinct().ToListAsync());
+        Assert.Single((await db.HorseHealthLogs.ToListAsync()).SelectMany(log => log.PhotoUrls).Distinct());
         Assert.Empty(db.Notifications);
     }
 
@@ -155,6 +155,89 @@ public class HorseHealthLogHttpTests
         using var anonymousForm = Form(f);
         using var anonymous = await client.PostAsync(url, anonymousForm);
         Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
+    }
+
+    [Fact]
+    public async Task Multipart_AppendReturnsAllSignedPhotosAndIgnoresUnsupportedMetadataAndCheckEdits()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var request = f.Request(); request.Files = [Photo()]; request.GeneralNote = "Original";
+        var id = (await f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId)).Value.HorseHealthLogId;
+        await using var host = await StartAsync(db, f.Storage);
+        using var client = Client(host, f.Escort.AccountId, EmployeeRole.ESCORT);
+        using var form = PhotosForm(2);
+        foreach (var field in new[] { "caption", "latitude", "longitude", "capturedAt", "generalNote", "healthStatus" })
+            form.Add(new StringContent("ignored"), field);
+        using var response = await client.PostAsync($"/api/v1/transports/{f.Transport.TransportId}/horse-health-logs/{id}/photos", form);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.True(body.GetProperty("isSuccess").GetBoolean()); Assert.Equal(200, body.GetProperty("code").GetInt32());
+        Assert.Equal("Horse health log photos added successfully", body.GetProperty("message").GetString());
+        var photos = body.GetProperty("value").GetProperty("photos"); Assert.Equal(3, photos.GetArrayLength());
+        foreach (var photo in photos.EnumerateArray())
+        {
+            Assert.Equal(Storage.SignedUrl, photo.GetProperty("photoUrl").GetString());
+            foreach (var field in new[] { "caption", "latitude", "longitude", "capturedAt" })
+                Assert.Equal(JsonValueKind.Null, photo.GetProperty(field).ValueKind);
+        }
+        using var read = await client.GetAsync($"/api/v1/horse-health-logs/{id}");
+        Assert.Equal(HttpStatusCode.OK, read.StatusCode);
+        var detail = (await read.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.Equal(3, detail.GetProperty("photos").GetArrayLength()); Assert.Equal("Original", detail.GetProperty("generalNote").GetString());
+        Assert.Equal("NORMAL", detail.GetProperty("healthStatus").GetString());
+        foreach (var url in (await db.HorseHealthLogs.SingleAsync()).PhotoUrls) Assert.DoesNotContain(url, detail.GetRawText());
+    }
+
+    [Theory]
+    [InlineData(0, 400, "VALIDATION_ERROR")]
+    [InlineData(6, 400, "VALIDATION_ERROR")]
+    [InlineData(5, 422, "PHOTO_LIMIT_EXCEEDED")]
+    public async Task Multipart_AppendEnforcesPerRequestAndTotalPhotoLimits(int count, int status, string code)
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var request = f.Request(); request.Files = [Photo()];
+        var id = (await f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId)).Value.HorseHealthLogId;
+        await using var host = await StartAsync(db, f.Storage);
+        using var client = Client(host, f.Escort.AccountId, EmployeeRole.ESCORT);
+        using var form = PhotosForm(count);
+        using var response = await client.PostAsync($"/api/v1/transports/{f.Transport.TransportId}/horse-health-logs/{id}/photos", form);
+        Assert.Equal(status, (int)response.StatusCode);
+        Assert.Equal(code, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        Assert.Single(f.Storage.Uploads); Assert.Single((await db.HorseHealthLogs.SingleAsync()).PhotoUrls);
+    }
+
+    [Fact]
+    public async Task Multipart_AppendRequiresAuthenticationRoleAuthorAndLiveScope()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var id = (await f.Service.CreateAsync(f.Transport.TransportId, f.Request(), f.Escort.AccountId)).Value.HorseHealthLogId;
+        var other = await EmployeeAsync(db, EmployeeRole.ESCORT);
+        await using var host = await StartAsync(db, f.Storage);
+        var url = $"/api/v1/transports/{f.Transport.TransportId}/horse-health-logs/{id}/photos";
+        foreach (var (accountId, role) in new[] { (f.Escort.AccountId, EmployeeRole.DRIVER), (f.Manager.AccountId, EmployeeRole.ESCORT),
+            (other.AccountId, EmployeeRole.ESCORT) })
+        {
+            using var client = Client(host, accountId, role); using var form = PhotosForm(1);
+            using var response = await client.PostAsync(url, form); Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        f.Segment.EscortEmployeeId = other.EmployeeId; await db.SaveChangesAsync();
+        using var assignedOther = Client(host, other.AccountId, EmployeeRole.ESCORT);
+        using var otherForm = PhotosForm(1); using var authorDenied = await assignedOther.PostAsync(url, otherForm);
+        Assert.Equal(HttpStatusCode.Forbidden, authorDenied.StatusCode);
+        assignedOther.DefaultRequestHeaders.Authorization = null;
+        using var anonymousForm = PhotosForm(1); using var anonymous = await assignedOther.PostAsync(url, anonymousForm);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode); Assert.Empty(f.Storage.Uploads);
+    }
+
+    private static MultipartFormDataContent PhotosForm(int count)
+    {
+        var form = new MultipartFormDataContent();
+        for (var index = 0; index < count; index++)
+        {
+            var file = new ByteArrayContent(Png); file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
+            form.Add(file, "files", $"health-{index}.png");
+        }
+        return form;
     }
 
     private static MultipartFormDataContent Form(Fixture f, bool batch = false, Dictionary<string, string>? fields = null, bool photo = false)

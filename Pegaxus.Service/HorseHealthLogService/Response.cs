@@ -7,6 +7,7 @@ public static class Response
     public sealed record CheckedBy(Guid EmployeeId, string EmployeeCode, string FullName);
     public sealed record Effects(bool EmergencyNotified, bool CanReportIncident);
     public sealed record Photo(string PhotoUrl, decimal? Latitude = null, decimal? Longitude = null, DateTimeOffset? CapturedAt = null, string? Caption = null);
+    public sealed record PhotosResponse(IReadOnlyList<Photo> Photos);
     public sealed record CreateResult(HealthLog Value, bool Created);
     public sealed record BatchResult(BatchResponse Value, bool Created);
     public sealed record Summary(Guid HorseHealthLogId, HorseSummary Horse, DateTimeOffset CheckedAt, string LogType,
@@ -36,7 +37,7 @@ public static class Response
         public bool VeterinarianRequired { get; init; }
         public string? VeterinarianNote { get; init; }
         public string? LocationDescription { get; init; }
-        // ponytail: GPS and photo metadata remain null until B-04/B-05 provide storage columns.
+        // ponytail: GPS remains null until B-05 provides health-log coordinate columns.
         public object? GpsCoordinates { get; init; }
         public IReadOnlyList<Photo> Photos { get; init; } = [];
         public string? GeneralNote { get; init; }

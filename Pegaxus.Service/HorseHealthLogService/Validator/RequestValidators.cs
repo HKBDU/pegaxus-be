@@ -13,6 +13,17 @@ public sealed class RecordRequestValidator : AbstractValidator<Request.RecordReq
             .WithMessage("Checked at must not be more than 5 minutes in the future.");
         RuleFor(request => request.LocationDescription).MaximumLength(500);
         RuleFor(request => request.GeneralNote).MaximumLength(2000);
+        RuleFor(request => request.Files).Must(files => files is { Count: <= 5 })
+            .WithMessage("A health log may have at most 5 photos.");
+    }
+}
+
+public sealed class AddPhotosRequestValidator : AbstractValidator<Request.AddPhotosRequest>
+{
+    public AddPhotosRequestValidator()
+    {
+        RuleFor(request => request.Files).Must(files => files is { Count: >= 1 and <= 5 })
+            .WithMessage("Between 1 and 5 photos are required.");
     }
 }
 

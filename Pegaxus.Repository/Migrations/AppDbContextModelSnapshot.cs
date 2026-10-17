@@ -2772,10 +2772,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("medication_given");
 
-                    b.Property<string>("PhotoUrl")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)")
-                        .HasColumnName("photo_url");
+                    b.Property<string[]>("PhotoUrls")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("character varying(500)[]")
+                        .HasColumnName("photo_urls")
+                        .HasDefaultValueSql("ARRAY[]::character varying(500)[]");
 
                     b.Property<int?>("RespiratoryRateBpm")
                         .HasColumnType("integer")
@@ -2828,7 +2830,10 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex(new[] { "TransportId" }, "HorseHealthLog_transport_id_idx");
 
-                    b.ToTable("HorseHealthLog", (string)null);
+                    b.ToTable("HorseHealthLog", null, t =>
+                        {
+                            t.HasCheckConstraint("HorseHealthLog_photos_check", "cardinality(photo_urls) <= 5 AND array_position(photo_urls, NULL) IS NULL");
+                        });
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.IncidentReport", b =>
