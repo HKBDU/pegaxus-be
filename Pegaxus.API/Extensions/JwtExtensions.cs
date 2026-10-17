@@ -151,6 +151,7 @@ public static class JwtExtensions
                 JwtServices.GetRoleName(AccountType.CUSTOMER), JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER),
                 JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
                 JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
+
             options.AddPolicy(CustomerOrLogisticsManagerPolicy, policy =>
                 policy.RequireAuthenticatedUser().RequireRole(JwtServices.GetRoleName(AccountType.CUSTOMER),
                     JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER)));
