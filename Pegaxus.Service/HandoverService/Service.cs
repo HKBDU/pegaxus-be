@@ -1,11 +1,13 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.MediaService;
 using Pegaxus.Service.NotificationService;
 
 using static Pegaxus.Service.Common.DbTime;
@@ -13,7 +15,8 @@ using static Pegaxus.Service.Common.DbTime;
 namespace Pegaxus.Service.HandoverService;
 
 public sealed partial class Service(AppDbContext db, TimeProvider clock, IValidator<Request.ListRequest> listValidator,
-    IValidator<Request.CancelRequest> cancelValidator, INotificationService notifications) : IHandoverService
+    IValidator<Request.CancelRequest> cancelValidator, INotificationService notifications,
+    IValidator<Request.CompleteRequest> completeValidator, IMediaService media, ILogger<Service> logger) : IHandoverService
 {
     private static readonly RoutePlanStatus[] EligibleStatuses = [RoutePlanStatus.CONFIRMED, RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED];
     private static readonly EmployeeRole[] ViewerRoles = [EmployeeRole.LOGISTICS_MANAGER, EmployeeRole.FLEET_ROUTE_COORDINATOR,

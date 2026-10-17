@@ -259,6 +259,7 @@ public class HandoverTests
         internal static readonly DateTime Now = new(2026, 10, 16, 12, 0, 0, DateTimeKind.Unspecified);
         internal Clock Clock { get; } = new();
         internal RecordingRealtime Realtime { get; } = new();
+        internal HandoverCompletionTests.SignatureMedia Media { get; } = new();
         internal required Employee Manager { get; init; }
         internal required Employee Coordinator { get; init; }
         internal required Employee Driver { get; init; }
@@ -275,7 +276,8 @@ public class HandoverTests
         internal Guid TransportId => Route.TransportPlan.TransportId;
         internal Handovers.Service Service => CreateService(db);
         internal Handovers.Service CreateService(AppDbContext context) => new(context, Clock, new ListRequestValidator(), new CancelRequestValidator(),
-            new Pegaxus.Service.NotificationService.Service(context, Realtime));
+            new Pegaxus.Service.NotificationService.Service(context, Realtime), new CompleteRequestValidator(), Media,
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Handovers.Service>.Instance);
         internal Handovers.Request.CancelRequest Cancel(HandoverRecord item) => new() { LastUpdatedAt = DbTime.AsUtc(item.UpdatedAt), CancellationReason = "  Primary road is closed  " };
 
         internal static async Task<Fixture> CreateAsync(AppDbContext db)
@@ -319,7 +321,8 @@ public class HandoverTests
 
     internal sealed class Clock : TimeProvider
     {
-        public override DateTimeOffset GetUtcNow() => DbTime.AsUtc(Fixture.Now);
+        internal DateTimeOffset Now { get; set; } = DbTime.AsUtc(Fixture.Now);
+        public override DateTimeOffset GetUtcNow() => Now;
     }
     internal sealed class RecordingRealtime : INotificationRealtimeService
     {

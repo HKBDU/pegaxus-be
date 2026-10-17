@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Pegaxus.Service.HandoverService;
 
 public static class Response
@@ -14,5 +16,12 @@ public static class Response
         Party From, Party To, SegmentBrief? FromSegment, SegmentBrief? ToSegment, Location Location,
         string? HorseConditionNote, string? DocumentHandoverNote, string? EquipmentHandoverNote, string? DiscrepancyNote,
         string? SenderSignatureUrl, string? ReceiverSignatureUrl, DateTimeOffset? CancelledAt, string? CancellationReason,
-        IReadOnlyList<string> AvailableActions, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+        IReadOnlyList<string> AvailableActions, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt)
+    {
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CompletionEffects? Effects { get; init; }
+    }
+    public sealed record CompletionEffects(string TransportStatus, string? RoutePlanStatus, string? TransportPlanStatus,
+        Guid? ClosedRoutePlanRouteId, Guid? ActivatedRoutePlanRouteId,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? ClaimWindowEndsAt);
 }

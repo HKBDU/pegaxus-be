@@ -25,7 +25,7 @@ using Claim = System.Security.Claims.Claim;
 
 namespace Pegaxus.Service.Test;
 
-public class HandoverHttpTests
+public partial class HandoverHttpTests
 {
     [Theory]
     [InlineData(EmployeeRole.LOGISTICS_MANAGER, 200, 200)]
@@ -123,6 +123,7 @@ public class HandoverHttpTests
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["JwtOptions:SecretKey"] = new string('x', 32),
             ["JwtOptions:ExpirationMinutes"] = "15", ["JwtOptions:Issuer"] = "handover-tests", ["JwtOptions:Audience"] = "handover-tests" });
         builder.Services.AddSingleton(db); builder.Services.AddSingleton<TimeProvider>(fixture.Clock);
+        builder.Services.AddSingleton<Pegaxus.Service.MediaService.IMediaService>(fixture.Media);
         builder.Services.AddApiControllers(); builder.Services.AddControllers().AddApplicationPart(typeof(HandoverRecordsController).Assembly);
         builder.Services.AddJwtServices(builder.Configuration); builder.Services.AddTransportPlanningModule();
         builder.Services.AddScoped<INotificationService, Pegaxus.Service.NotificationService.Service>();

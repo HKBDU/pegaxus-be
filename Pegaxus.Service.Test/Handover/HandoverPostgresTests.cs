@@ -15,7 +15,7 @@ using static Pegaxus.Service.Test.HandoverTests;
 namespace Pegaxus.Service.Test;
 
 [Collection("PostgresSharedDatabase")]
-public class HandoverPostgresTests
+public partial class HandoverPostgresTests
 {
     [PostgresFact]
     public async Task Postgres_QueriesTranslate_LocksReloadTrackedRecords_CancellationAndOutboxRollBackTogether()
