@@ -233,6 +233,7 @@ public class RouteChangeTests
         Assert.Equal(0, decision.ComplianceDossier.InheritedRequirementCount);
         Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
         Assert.Single(db.AuditDossiers); Assert.Equal(2, await db.Notifications.CountAsync());
+        Assert.Contains(await EmailOutboxWiringTests.EmailsAsync(db), mail => mail.Subject.StartsWith("Extra dossier ready for the return route — "));
         var specialist = await db.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST);
         var reviewed = await TestSupport.CreateRoutePlans(db).ReviewLegalAsync(specialist.AccountId, plan.RoutePlanId,
             new() { LastUpdatedAt = decision.UpdatedAt, IsFeasible = true });

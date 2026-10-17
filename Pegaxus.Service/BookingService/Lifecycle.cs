@@ -229,7 +229,7 @@ public sealed partial class Service
         booking.CancellationReason = reason;
         booking.UpdatedAt = now;
         AddHistory(bookingId, accountId, BookingHistoryType.CANCEL, BookingStatus.PENDING, BookingStatus.CANCELLED, reason, now);
-        await NotifyManagersAsync(booking, "Booking cancelled by customer", "cancelled", $" Reason: {reason}.", now, cancellationToken);
+        await NotifyManagersAsync(booking, "Booking cancelled by customer", "cancelled", $" Reason: {reason}.", now, cancellationToken, reason);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -281,7 +281,7 @@ public sealed partial class Service
                 bookingCode: booking.BookingCode,
                 transportCode: transport.TransportCode,
                 departureDate: booking.RequestedDepartureDate,
-                actionUrl: null)
+                actionUrl: NotificationLinks.Booking(null, booking.BookingId))
         };
         if (OutboxQueue.IsEnabled(_db))
             OutboxQueue.AddEmail(_db, approvalMail, now);
@@ -337,7 +337,7 @@ public sealed partial class Service
                 customerName: booking.Customer.FullName,
                 bookingCode: booking.BookingCode,
                 reason: reason,
-                actionUrl: null)
+                actionUrl: NotificationLinks.Booking(null, booking.BookingId))
         };
         if (OutboxQueue.IsEnabled(_db))
             OutboxQueue.AddEmail(_db, rejectionMail, now);

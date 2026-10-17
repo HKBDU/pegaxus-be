@@ -154,6 +154,11 @@ public sealed class Service : IEmployeeService
         {
             _db.Accounts.Add(account);
             _db.Employees.Add(employee);
+            OutboxService.OutboxQueue.AddEmail(_db, new MailService.MailContent
+            {
+                To = email, Subject = $"Welcome to Pegaxus — {employee.EmployeeCode}",
+                Body = MailService.EmailBodies.EmployeeWelcomeBody(employee.FullName, RoleLabel.Of(role), email, "/login")
+            }, now);
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }

@@ -82,7 +82,8 @@ public sealed partial class Service
                 OutboxQueue.AddEmail(db, new()
                 {
                     To = customer.Email, Subject = $"Invoice cancelled — {invoice.InvoiceCode}",
-                    Body = MailService.EmailBodies.InvoiceCancelledBody(customer.FullName, invoice.InvoiceCode, invoice.Type.ToString(), reason, null)
+                    Body = MailService.EmailBodies.InvoiceCancelledBody(customer.FullName, invoice.InvoiceCode, invoice.Type.ToString(), reason,
+                    NotificationLinks.Invoice(null, invoice.BookingId, invoiceId))
                 }, now);
             }
             await db.SaveChangesAsync(cancellationToken);
@@ -179,7 +180,8 @@ public sealed partial class Service
             {
                 To = customer.Email, Subject = $"{title} — {invoice.InvoiceCode}",
                 Body = MailService.EmailBodies.InvoiceIssuedBody(customer.FullName, invoice.InvoiceCode, invoice.Type.ToString(), customer.BookingCode,
-                    mailKind, invoice.TotalAmount, invoice.Currency, invoice.DueDate, null)
+                    mailKind, invoice.TotalAmount, invoice.Currency, invoice.DueDate,
+                    NotificationLinks.Invoice(null, invoice.BookingId, invoiceId))
             }, now);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

@@ -54,6 +54,7 @@ services:
       JwtOptions__Issuer: ${JWT_ISSUER:-pegaxusServer}
       JwtOptions__Audience: ${JWT_AUDIENCE:-pegaxusClient}
       JwtOptions__ExpirationMinutes: ${JWT_EXPIRY_MINUTES:-15}
+      Cors__FrontendUrl: ${Cors__FrontendUrl:-http://localhost:5173}
       Brevo__ApiUrl: ${Brevo__ApiUrl:-https://api.brevo.com/v3/smtp/email}
       Brevo__ApiKey: ${Brevo__ApiKey:-}
       Brevo__SenderName: ${Brevo__SenderName:-Pegaxus}

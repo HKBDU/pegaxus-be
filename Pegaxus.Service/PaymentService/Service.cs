@@ -172,7 +172,8 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
         {
             To = customer.Email, Subject = $"Payment confirmed — {receipt.ReceiptCode}",
             Body = EmailBodies.PaymentConfirmedBody(customer.FullName, invoice.InvoiceCode, receipt.ReceiptCode,
-                receipt.Amount, receipt.Currency, isPayout: false, actionUrl: null)
+                receipt.Amount, receipt.Currency, isPayout: false,
+                actionUrl: NotificationLinks.Invoice(null, invoice.BookingId, invoice.InvoiceId))
         }, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -212,7 +213,8 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             {
                 To = manager.Email, Subject = $"{title} — {receipt.ReceiptCode}",
                 Body = EmailBodies.PaymentReconciliationBody(manager.FullName, reason, receipt.ReceiptCode, receipt.Status.ToString(), reference,
-                    receipt.Amount, receipt.Currency, invoice.InvoiceCode, invoice.Status.ToString(), actionUrl: null)
+                    receipt.Amount, receipt.Currency, invoice.InvoiceCode, invoice.Status.ToString(),
+                    actionUrl: NotificationLinks.Invoice(EmployeeRole.LOGISTICS_MANAGER, invoice.BookingId, invoice.InvoiceId))
             }, now);
         }
     }

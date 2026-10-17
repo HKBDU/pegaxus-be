@@ -119,6 +119,9 @@ public sealed partial class Service
 
         foreach (var recipient in recipients)
             AddNotification(recipient.AccountId, recipient.Role, dossier, title, message, now, priority);
+        if (request.IsHeld)
+            await QueueClearanceMailAsync(recipients.Select(item => item.AccountId), dossier, MailService.EmailBodies.ClearanceKind.Customs,
+                proof.CustomsPortName, MailService.EmailBodies.ClearanceOutcome.Held, null, now, cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -270,6 +273,8 @@ public sealed partial class Service
                 $"Your customs clearance proof for dossier {dossier.DossierCode} ({proof.CustomsPortName}) was rejected. Reason: {proof.RejectionReason}. Please submit a new proof.",
                 now,
                 NotificationPriority.HIGH);
+            await QueueClearanceMailAsync([proof.SubmittedByEmployee.AccountId], dossier, MailService.EmailBodies.ClearanceKind.Customs,
+                proof.CustomsPortName, MailService.EmailBodies.ClearanceOutcome.ProofRejected, proof.RejectionReason, now, cancellationToken);
 
             await _db.SaveChangesAsync(cancellationToken);
             await _notificationService.FlushAsync(cancellationToken);
@@ -378,6 +383,16 @@ public sealed partial class Service
                 message,
                 now,
                 NotificationPriority.URGENT);
+        }
+        if (status is CustomsClearanceProofStatus.Rejected or CustomsClearanceProofStatus.Held)
+        {
+            var outcome = status == CustomsClearanceProofStatus.Rejected
+                ? MailService.EmailBodies.ClearanceOutcome.Rejected : MailService.EmailBodies.ClearanceOutcome.Held;
+            var mailRecipients = recipients.Select(item => item.AccountId);
+            if (status == CustomsClearanceProofStatus.Rejected)
+                mailRecipients = mailRecipients.Append(dossier.Transport.Booking.Customer.AccountId);
+            await QueueClearanceMailAsync(mailRecipients, dossier, MailService.EmailBodies.ClearanceKind.Customs, proof.CustomsPortName,
+                outcome, proof.RejectionReason, now, cancellationToken);
         }
 
         await _db.SaveChangesAsync(cancellationToken);

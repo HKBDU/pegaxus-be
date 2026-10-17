@@ -28,13 +28,14 @@ public sealed partial class Service
         var now = Now;
         var drivers = await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Begin return journey",
             $"Start the return journey on route plan {plan.RoutePlanCode}.{NoteSuffix(request.Message)}", now, cancellationToken);
+        await MailChangedAsync(plan, drivers.Select(item => item.AccountId), MailService.EmailBodies.RouteChangeKind.DriverBeginReturn, request.Message, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
         return new(routePlanId, drivers.Select(x => Employee(x)!).ToArray(), AsUtc(now));
     }
 
-    private async Task NotifyAssignedAsync(RoutePlan plan, EmployeeRole role, string title, string message,
+    private async Task<Guid[]> NotifyAssignedAsync(RoutePlan plan, EmployeeRole role, string title, string message,
         NotificationPriority priority, DateTime now, CancellationToken token)
     {
         var recipients = await db.EmployeeTransportPlans.AsNoTracking().Where(x => x.TransportPlanId == plan.TransportPlanId &&
@@ -42,7 +43,27 @@ public sealed partial class Service
             !x.Employee.Account.IsDeleted && x.Employee.Account.Status == AccountStatus.ACTIVE)
             .Select(x => x.Employee.AccountId).Distinct().ToArrayAsync(token);
         foreach (var recipient in recipients) Notify(recipient, plan, title, message, priority, now, NotificationLinks.RoutePlan(role, plan.RoutePlanId));
+        return recipients;
     }
+
+    private Task MailReviewAsync(RoutePlan plan, IEnumerable<Guid> accountIds, MailService.EmailBodies.RouteReviewKind kind, string? detail,
+        DateTime now, CancellationToken token)
+    {
+        var view = kind is MailService.EmailBodies.RouteReviewKind.EmergencyApproval or MailService.EmailBodies.RouteReviewKind.ReturnApproval
+            ? "change-decision" : null;
+        return MailService.MailRecipients.QueueAsync(db, accountIds, now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.RouteReviewTitle(kind)} — {plan.RoutePlanCode}",
+            MailService.EmailBodies.RouteReviewBody(recipient.FullName, plan.RoutePlanCode, kind, detail,
+                NotificationLinks.RoutePlan(recipient.Role, plan.RoutePlanId, view))), token);
+    }
+
+    /// <summary>Customers get a link to their booking; drivers have no page for a route plan, so their mail has no button.</summary>
+    private Task MailChangedAsync(RoutePlan plan, IEnumerable<Guid> accountIds, MailService.EmailBodies.RouteChangeKind kind, string? note,
+        DateTime now, CancellationToken token) =>
+        MailService.MailRecipients.QueueAsync(db, accountIds, now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.RouteChangedTitle(kind)} — {plan.RoutePlanCode}",
+            MailService.EmailBodies.RouteChangedBody(recipient.FullName, plan.RoutePlanCode, kind, note,
+                recipient.Role is null ? NotificationLinks.Booking(null, plan.TransportPlan.Transport.BookingId) : null)), token);
 
     private async Task<List<Employee>> NotifyPrimaryDriversAsync(RoutePlan plan, Guid primaryId, string title, string message, DateTime now, CancellationToken token)
     {

@@ -101,4 +101,13 @@ public static partial class EmailBodies
               {Button(actionUrl, "Open invoice")}
         """ +
         Footer();
+
+    /// <summary>The invoice passed its due date without payment.</summary>
+    public static string InvoiceOverdueBody(
+        string customerName, string invoiceCode, string bookingCode, decimal amount, string currency, DateOnly? dueDate, string? actionUrl) =>
+        Notice("Invoice overdue", $"Invoice {invoiceCode} is past its due date", invoiceCode, customerName,
+            "This invoice is past its due date. Please pay it as soon as possible.", Tone.Error, "Overdue",
+            [Row("Invoice code", Accent(invoiceCode)), Row("Booking code", Encode(bookingCode)),
+             Row("Amount due", Accent(FmtMoney(amount, currency))), Row("Due date", Accent(FmtDate(dueDate)))],
+            null, "Note", actionUrl, "Pay invoice");
 }

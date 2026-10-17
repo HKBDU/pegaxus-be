@@ -68,10 +68,11 @@ public class EmailBodiesTests
     }
 
     [Fact]
-    public void Button_IsRenderedOnlyForAbsoluteHttpsUrls()
+    public void Button_IsRenderedOnlyForAbsoluteHttpsUrls_OrAnAppPathTheMailServiceResolves()
     {
         Assert.Contains($"<a href=\"{Link}\"", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, Link));
-        foreach (var unsafeUrl in new[] { null, "", "#", "/bookings/1", "http://app.pegaxus.example/x", "javascript:alert(1)" })
+        Assert.Contains("<a href=\"{{PX_FRONTEND_URL}}/bookings/1\"", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, "/bookings/1"));
+        foreach (var unsafeUrl in new[] { null, "", "#", "//evil.example", "http://app.pegaxus.example/x", "javascript:alert(1)" })
         {
             var html = Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, unsafeUrl);
             Assert.DoesNotContain("<a ", html);

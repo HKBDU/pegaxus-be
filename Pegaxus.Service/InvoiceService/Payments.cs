@@ -184,7 +184,8 @@ public sealed partial class Service
             {
                 To = customer.Email, Subject = $"{(isPayout ? "Payout" : "Payment")} confirmed — {receipt.ReceiptCode}",
                 Body = MailService.EmailBodies.PaymentConfirmedBody(customer.FullName, invoice.InvoiceCode, receipt.ReceiptCode,
-                    receipt.Amount, receipt.Currency, isPayout, null)
+                    receipt.Amount, receipt.Currency, isPayout,
+                    NotificationLinks.Invoice(null, invoice.BookingId, invoiceId))
             }, now);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);

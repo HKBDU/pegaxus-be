@@ -87,7 +87,8 @@ public partial class Service : IBookingService
     private static string RouteSummary(BookingEntity booking) =>
         $"{booking.OriginCountry} to {booking.DestinationCountry}, departing {booking.RequestedDepartureDate:yyyy-MM-dd}";
 
-    private async Task NotifyManagersAsync(BookingEntity booking, string title, string verb, string followUp, DateTime now, CancellationToken cancellationToken)
+    private async Task NotifyManagersAsync(BookingEntity booking, string title, string verb, string followUp, DateTime now,
+        CancellationToken cancellationToken, string? cancelReason = null)
     {
         var customerName = await _db.Customers.Where(customer => customer.CustomerId == booking.CustomerId)
             .Select(customer => customer.FullName).SingleAsync(cancellationToken);
@@ -98,6 +99,13 @@ public partial class Service : IBookingService
             .Select(employee => new { employee.AccountId, employee.Role }).Distinct().ToListAsync(cancellationToken);
         foreach (var recipient in recipients)
             AddNotification(recipient.AccountId, recipient.Role, booking.Transport?.TransportId, booking, title, message, now);
+
+        var cancelled = cancelReason is not null;
+        await MailService.MailRecipients.QueueAsync(_db, recipients.Select(item => item.AccountId), now, recipient => MailService.MailRecipients.Mail(
+            recipient, cancelled ? $"Booking cancelled — {booking.BookingCode}" : $"New booking to review — {booking.BookingCode}",
+            MailService.EmailBodies.BookingNeedsReviewBody(recipient.FullName, customerName, booking.BookingCode,
+                $"{booking.OriginCountry} to {booking.DestinationCountry}", booking.RequestedDepartureDate, cancelled, cancelReason,
+                NotificationLinks.Booking(recipient.Role, booking.BookingId))), cancellationToken);
     }
 
     private Task<bool> HasHorseAsync(Guid bookingId, CancellationToken cancellationToken) =>

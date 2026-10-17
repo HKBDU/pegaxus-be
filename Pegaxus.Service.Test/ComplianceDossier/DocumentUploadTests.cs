@@ -39,6 +39,7 @@ public class DocumentUploadTests
             requirement.DossierRequirementId, ValidRequest(dossier));
 
         Assert.Equal(assigned.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
+        Assert.Empty(await EmailOutboxWiringTests.EmailsAsync(db));
     }
 
     [Fact]

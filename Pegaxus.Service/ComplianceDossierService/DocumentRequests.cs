@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.OutboxService;
 
@@ -123,7 +124,7 @@ public sealed partial class Service
                             errorCategory: revision.ErrorCategory ?? "",
                             note: note,
                             revisionDeadline: request.RevisionDeadline,
-                            actionUrl: null)
+                            actionUrl: NotificationLinks.Dossier(null, dossierId))
                     }, now);
                 await _db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
@@ -163,7 +164,7 @@ public sealed partial class Service
                     errorCategory: revision.ErrorCategory ?? "",
                     note: revision.Message,
                     revisionDeadline: revision.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
-                    actionUrl: null)
+                    actionUrl: NotificationLinks.Dossier(null, dossierId))
             }).WaitAsync(TimeSpan.FromSeconds(2));
             response.EmailSent = true;
         }
@@ -206,6 +207,9 @@ public sealed partial class Service
             if (recipientId != accountId)
                 AddNotification(recipientId, role is null ? EmployeeRole.TRANSPORT_SPECIALIST : null, dossier, "New comment on a document request",
                     $"New comment on {revision.RequestCode} (dossier {dossier.DossierCode}): {comment.Message}", now);
+            if (recipientId != accountId && role is not null)
+                await QueueDossierUpdateMailAsync(recipientId, dossier, MailService.EmailBodies.DossierUpdateKind.RequestComment,
+                    revision.RequestCode, comment.Message, now, cancellationToken);
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await _notificationService.FlushAsync(CancellationToken.None);

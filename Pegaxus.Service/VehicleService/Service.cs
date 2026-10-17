@@ -239,6 +239,12 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             notifications.Queue(new NotificationCreateRequest { AccountId = recipient.AccountId, Type = NotificationType.SYSTEM,
                 Title = title, Message = message, ReferenceType = nameof(Vehicle), ReferenceId = vehicle.VehicleId,
                 ActionUrl = NotificationLinks.Vehicle(recipient.Role, vehicle.VehicleId), CreatedAt = vehicle.UpdatedAt });
+        if (action == "STATUS_CHANGE" && vehicle.Status is VehicleStatus.MAINTENANCE or VehicleStatus.INACTIVE or VehicleStatus.SUSPENDED or VehicleStatus.OUT_OF_SERVICE)
+            await MailService.MailRecipients.QueueAsync(db, recipients.Select(item => item.AccountId), vehicle.UpdatedAt,
+                recipient => MailService.MailRecipients.Mail(recipient, $"Vehicle status changed — {vehicle.VehicleCode}",
+                    MailService.EmailBodies.CatalogChangeBody(recipient.FullName, "Vehicle", vehicle.VehicleCode, vehicle.VehicleName,
+                        $"is now {vehicle.Status} and may be unavailable for assignments", string.IsNullOrWhiteSpace(reason) ? null : reason,
+                        NotificationLinks.Vehicle(recipient.Role, vehicle.VehicleId))), cancellationToken);
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw Modified(); }
         catch (Exception ex) when (ex.GetBaseException() is PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected })
