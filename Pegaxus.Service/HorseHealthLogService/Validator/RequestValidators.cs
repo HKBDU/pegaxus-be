@@ -15,6 +15,10 @@ public sealed class RecordRequestValidator : AbstractValidator<Request.RecordReq
         RuleFor(request => request.GeneralNote).MaximumLength(2000);
         RuleFor(request => request.Files).Must(files => files is { Count: <= 5 })
             .WithMessage("A health log may have at most 5 photos.");
+        RuleFor(request => request.Files).Must(files => files is null || files.All(file => file is not null &&
+                !string.IsNullOrWhiteSpace(file.PublicId) && file.PublicId.Length <= 255) &&
+                files.Select(file => file.PublicId).Distinct(StringComparer.Ordinal).Count() == files.Count)
+            .WithMessage("Each photo must have a distinct, non-empty publicId of at most 255 characters.");
     }
 }
 
@@ -24,6 +28,10 @@ public sealed class AddPhotosRequestValidator : AbstractValidator<Request.AddPho
     {
         RuleFor(request => request.Files).Must(files => files is { Count: >= 1 and <= 5 })
             .WithMessage("Between 1 and 5 photos are required.");
+        RuleFor(request => request.Files).Must(files => files is null || files.All(file => file is not null &&
+                !string.IsNullOrWhiteSpace(file.PublicId) && file.PublicId.Length <= 255) &&
+                files.Select(file => file.PublicId).Distinct(StringComparer.Ordinal).Count() == files.Count)
+            .WithMessage("Each photo must have a distinct, non-empty publicId of at most 255 characters.");
     }
 }
 

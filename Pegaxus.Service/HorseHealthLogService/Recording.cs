@@ -1,5 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
@@ -28,9 +27,7 @@ public sealed partial class Service
         var selectedHorseId = single?.HorseId;
         for (var attempt = 0; ; attempt++)
         {
-            var photoIds = new List<Guid>();
             var committed = false;
-            var commitAttempted = false;
             try
             {
                 await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
@@ -52,15 +49,8 @@ public sealed partial class Service
                 var photoUrls = new List<string>();
                 if (missing.Length > 0)
                 {
-                    var images = new List<Pegaxus.Service.MediaService.PreviewFile>();
-                    foreach (var file in request.Files) images.Add(await ReadImageAsync(file, cancellationToken));
-                    foreach (var image in images)
-                    {
-                        cancellationToken.ThrowIfCancellationRequested();
-                        var photoId = Guid.NewGuid();
-                        photoIds.Add(photoId);
-                        photoUrls.Add(await media.UploadPrivateImageAsync(photoId, image, cancellationToken));
-                    }
+                    foreach (var file in request.Files)
+                        photoUrls.Add(await ConfirmImageAsync(accountId, file.PublicId, cancellationToken));
                 }
                 var now = Truncate(clock.GetUtcNow());
                 var created = missing.Select(horseId => new HorseHealthLog
@@ -86,26 +76,19 @@ public sealed partial class Service
                 var rows = await ReadLogsAsync(ids, cancellationToken);
                 if (single is not null)
                     rows[0] = rows[0] with { Log = rows[0].Log with { Photos = await SignPhotosAsync(rows[0].PhotoUrls, cancellationToken) } };
-                commitAttempted = true;
                 await transaction.CommitAsync(cancellationToken);
                 committed = true;
                 await notifications.FlushAsync(cancellationToken);
                 return new(rows.Select(item => item.Log).ToArray(), created.Length, emergencyNotified);
             }
-            catch (Exception error)
+            catch (Exception error) when (!committed && PostgresErrors.IsWriteConflict(error))
             {
-                var conflict = PostgresErrors.IsWriteConflict(error);
-                if (!committed && (!commitAttempted || conflict))
-                    foreach (var photoId in photoIds) await CleanupPhotoAsync(photoId);
-                if (!committed && commitAttempted && !conflict)
-                    logger.LogError(error, "Health log commit outcome is unknown; retaining photos {PhotoIds}", photoIds);
-                if (!committed && conflict && attempt < 2)
+                if (attempt < 2)
                 {
                     db.ChangeTracker.Clear();
                     continue;
                 }
-                if (conflict) throw new ConflictException("The record changed. Please retry the request", "CONCURRENT_UPDATE");
-                throw;
+                throw new ConflictException("The record changed. Please retry the request", "CONCURRENT_UPDATE");
             }
         }
     }
