@@ -33,6 +33,7 @@ public static class JwtExtensions
     public const string ComplianceDossierViewerPolicy = "ComplianceDossierViewerPolicy";
     public const string TransportProviderViewerPolicy = "TransportProviderViewerPolicy";
     public const string TransportTrackingViewerPolicy = nameof(TransportTrackingViewerPolicy);
+    public const string TransportProgressViewerPolicy = nameof(TransportProgressViewerPolicy);
 
     public static void AddJwtServices(
         this IServiceCollection services,
@@ -150,6 +151,11 @@ public static class JwtExtensions
             options.AddPolicy(TransportTrackingViewerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
                 JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
                 JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(AccountType.CUSTOMER)));
+            options.AddPolicy(TransportProgressViewerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(AccountType.CUSTOMER), JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER),
+                JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
+
             options.AddPolicy(CustomerOrLogisticsManagerPolicy, policy =>
                 policy.RequireAuthenticatedUser().RequireRole(JwtServices.GetRoleName(AccountType.CUSTOMER),
                     JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER)));

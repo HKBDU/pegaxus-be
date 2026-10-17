@@ -26,6 +26,7 @@ using CloudinaryService = Pegaxus.Service.CloudinaryService;
 using MailService = Pegaxus.Service.MailService;
 using AccountService = Pegaxus.Service.AccountService;
 using HorseService = Pegaxus.Service.HorseService;
+using HorseHealthLogService = Pegaxus.Service.HorseHealthLogService;
 using EmployeeService = Pegaxus.Service.EmployeeService;
 using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
 using NotificationService = Pegaxus.Service.NotificationService;
@@ -252,6 +253,14 @@ public static class ServiceCollectionExtensions
         services.AddOptions<LocationTrackingService.TrackingOptions>().BindConfiguration("Tracking")
             .Validate(options => double.IsFinite(options.GeofenceRadiusMeters) && options.GeofenceRadiusMeters > 0,
                 "Tracking:GeofenceRadiusMeters must be a positive finite number.").ValidateOnStart();
+        services.AddScoped<HorseHealthLogService.IHorseHealthLogService, HorseHealthLogService.Service>();
+        services.AddScoped<IValidator<HorseHealthLogService.Request.RecordRequest>, HorseHealthLogService.Validator.RecordRequestValidator>();
+        services.AddScoped<IValidator<HorseHealthLogService.Request.CreateRequest>, HorseHealthLogService.Validator.CreateRequestValidator>();
+        services.AddScoped<Pegaxus.Service.HorseHealthService.IHorseHealthService, Pegaxus.Service.HorseHealthService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.HorseHealthService.Request.ListRequest>, Pegaxus.Service.HorseHealthService.Validator.ListRequestValidator>();
+        services.AddScoped<Pegaxus.Service.TransportService.ITransportService, Pegaxus.Service.TransportService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.TransportService.Request.AssignedRequest>, Pegaxus.Service.TransportService.Validator.AssignedRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.TransportService.Request.ListRequest>, Pegaxus.Service.TransportService.Validator.ListRequestValidator>();
         services.AddScoped<TransportPlanService.ITransportPlanService, TransportPlanService.Service>();
         services.AddScoped<RoutePlanService.IRoutePlanService, RoutePlanService.Service>();
         services.AddScoped<Pegaxus.Service.NotificationService.TransportNotifications>();
