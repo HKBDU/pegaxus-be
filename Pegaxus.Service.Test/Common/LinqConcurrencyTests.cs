@@ -13,6 +13,7 @@ using Pegaxus.API.Services;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.ComplianceRequirementService.Validator;
 using Pegaxus.Service.MailService;
 using Pegaxus.Service.OutboxService;
@@ -48,7 +49,7 @@ public class LinqConflictResponseTests
             3 => new InvalidOperationException("private execution details", error),
             _ => error
         };
-        Assert.True(Pegaxus.Repository.Extensions.PostgresErrors.IsWriteConflict(failure));
+        Assert.True(PostgresErrors.IsWriteConflict(failure));
         await middleware.InvokeAsync(context, _ => Task.FromException(failure));
 
         Assert.Equal(409, context.Response.StatusCode);

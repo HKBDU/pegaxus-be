@@ -343,6 +343,31 @@ public class HorseHealthTests
         await Assert.ThrowsAsync<UnauthorizedException>(() => f.Service.GetAsync(f.Latest.HorseHealthLogId, Guid.NewGuid()));
     }
 
+    [Fact]
+    public void EffectiveJourney_KeepsExecutedHistoryAndPrimaryTailAfterBackupBranch()
+    {
+        var primaryId = Guid.NewGuid(); var backupId = Guid.NewGuid();
+        var first = new EffectiveJourney.Segment(Guid.NewGuid(), primaryId, null, RoutePlanStatus.ACTIVE,
+            Fixture.Now, Fixture.Now, 1, RouteType.PRIMARY, Fixture.Now, Fixture.Now.AddHours(-3), Fixture.Now.AddHours(-2));
+        var superseded = first with { RoutePlanRouteId = Guid.NewGuid(), SequenceNo = 2, ActualDepartureAt = null, ActualArrivalAt = null };
+        var prefix = first with { RoutePlanRouteId = Guid.NewGuid(), RoutePlanId = backupId, PrimaryRoutePlanId = primaryId,
+            SupersededAt = null, ActualDepartureAt = null, ActualArrivalAt = null };
+        var backup = prefix with { RoutePlanRouteId = Guid.NewGuid(), SequenceNo = 2, RouteType = RouteType.BACKUP,
+            ActualDepartureAt = Fixture.Now.AddHours(-1), ActualArrivalAt = Fixture.Now };
+        var tail = prefix with { RoutePlanRouteId = Guid.NewGuid(), SequenceNo = 3 };
+        var segments = EffectiveJourney.Select([first, superseded, prefix, backup, tail]);
+        Assert.Equal(new[] { first.RoutePlanRouteId, backup.RoutePlanRouteId, tail.RoutePlanRouteId }, segments.Select(segment => segment.RoutePlanRouteId));
+        Assert.Equal(tail, EffectiveJourney.Current(segments, TransportStatus.COMPLETED));
+        Assert.Null(EffectiveJourney.Current(segments, TransportStatus.IN_TRANSIT));
+        var returning = prefix with { RoutePlanRouteId = Guid.NewGuid(), RoutePlanId = Guid.NewGuid(), RouteType = RouteType.RETURN,
+            PlanUpdatedAt = Fixture.Now.AddHours(1), ActualDepartureAt = Fixture.Now.AddMinutes(1) };
+        segments = EffectiveJourney.Select([first, superseded, prefix with { PlanStatus = RoutePlanStatus.COMPLETED },
+            backup with { PlanStatus = RoutePlanStatus.COMPLETED }, tail with { PlanStatus = RoutePlanStatus.COMPLETED }, returning]);
+        Assert.Equal(new[] { first.RoutePlanRouteId, backup.RoutePlanRouteId, returning.RoutePlanRouteId }, segments.Select(segment => segment.RoutePlanRouteId));
+        Assert.Equal(returning, EffectiveJourney.Current(segments, TransportStatus.IN_TRANSIT));
+        Assert.Empty(EffectiveJourney.Select([prefix, backup, tail]));
+    }
+
     internal sealed class Fixture(AppDbContext db)
     {
         internal static readonly DateTime Now = new(2026, 10, 16, 8, 0, 0, DateTimeKind.Unspecified);
