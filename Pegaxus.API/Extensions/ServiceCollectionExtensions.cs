@@ -1,5 +1,6 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.ModelBinding;
@@ -39,6 +40,19 @@ namespace Pegaxus.API.Extensions;
 /// <summary>Composition-root registrations, grouped by feature module.</summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// The API runs behind a TLS-terminating proxy (Render). Without this the request looks like plain http, so the Google
+    /// redirect_uri is built as http://... and Google rejects it with redirect_uri_mismatch. The proxy is the only way in,
+    /// so any sender of forwarded headers is trusted.
+    /// </summary>
+    public static IServiceCollection AddProxyForwardedHeaders(this IServiceCollection services) =>
+        services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            options.KnownNetworks.Clear();
+            options.KnownProxies.Clear();
+        });
+
     public static IServiceCollection AddApiControllers(this IServiceCollection services)
     {
         services

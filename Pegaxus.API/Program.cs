@@ -27,6 +27,8 @@ builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".keys")))
     .SetApplicationName("Pegaxus");
 
+builder.Services.AddProxyForwardedHeaders();
+
 // Keep issued access tokens at the 15-minute API contract lifetime in every environment.
 builder.Configuration["JwtOptions:ExpirationMinutes"] = "15";
 
@@ -62,6 +64,7 @@ using (var scope = app.Services.CreateScope())
     await Pegaxus.API.AppDbContextSeedData.SeedAsync(db);
 }
 
+app.UseForwardedHeaders();
 app.UseSwaggerAPI();
 
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
