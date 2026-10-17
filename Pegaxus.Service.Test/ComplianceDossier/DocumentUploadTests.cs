@@ -456,6 +456,8 @@ public class DocumentUploadTests
         public Task<string> UploadImageAsync(IFormFile file) => throw new NotSupportedException();
         public Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file) => throw new NotSupportedException();
         public Task DeleteFileAsync(string publicId) => throw new NotSupportedException();
+        public Task<string> UploadPrivateImageAsync(Guid imageId, Pegaxus.Service.MediaService.PreviewFile image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task DeletePrivateImageAsync(Guid imageId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Pegaxus.Service.MediaService.SignedUploadResult> CreateSignedUploadAsync(Guid accountId, string entity, string contentType, long sizeBytes) => throw new NotSupportedException();
         public Task<Pegaxus.Service.MediaService.ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default)
         {
