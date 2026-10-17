@@ -227,6 +227,8 @@ public sealed partial class Service
             "Dossier submitted to authorities",
             $"Your compliance dossier {dossier.DossierCode} was submitted to {submission.AuthorityName}. We will let you know as soon as the authority decides.",
             now);
+        await QueueAuthorityMailAsync([dossier.Transport.Booking.Customer.AccountId], dossier, submission.AuthorityName,
+            MailService.EmailBodies.AuthorityMailKind.Submitted, null, now, cancellationToken);
 
         var logisticsManagerAccountIds = await _db.Employees
             .Active()
@@ -387,7 +389,7 @@ public sealed partial class Service
         }
         else if (decision == AuthoritySubmissionStatus.REJECTED && submission.IsRequired)
         {
-            await NotifyEmployeesAsync(
+            var rejectionRecipients = await NotifyEmployeesAsync(
                 dossier,
                 [EmployeeRole.LOGISTICS_MANAGER],
                 "Dossier rejected by an authority",
@@ -395,6 +397,8 @@ public sealed partial class Service
                 NotificationPriority.URGENT,
                 now,
                 cancellationToken);
+            await QueueAuthorityMailAsync(rejectionRecipients, dossier, submission.AuthorityName,
+                MailService.EmailBodies.AuthorityMailKind.Rejected, submission.RejectionReason, now, cancellationToken);
         }
 
         await _db.SaveChangesAsync(cancellationToken);

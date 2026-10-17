@@ -128,7 +128,7 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
             throw new BadRequestException("Both Locations must have valid coordinates", "INVALID_COORDINATES");
         if (mode != TransportMode.ROAD)
         {
-            var distance = Haversine(from.Latitude.Value, from.Longitude.Value, to.Latitude.Value, to.Longitude.Value);
+            var distance = (decimal)(Geo.DistanceMeters(from.Latitude.Value, from.Longitude.Value, to.Latitude.Value, to.Longitude.Value) / 1000);
             var speed = mode == TransportMode.AIR ? 800m : 35m;
             return (Math.Round(distance, 1), (int)Math.Ceiling((double)(distance / speed * 60)));
         }
@@ -167,7 +167,6 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
     private async Task<string> GenerateCodeAsync(CancellationToken token) { for (var i = 1; ; i++) { var code = $"RT-{DateTime.UtcNow:yyyyMMdd}-{i:0000}"; if (!await db.Routes.AnyAsync(item => item.RouteCode == code, token)) return code; } }
     private static Response.DetailResponse Map(Route item) => new() { RouteId = item.RouteId, RouteCode = item.RouteCode, RouteName = item.RouteName, TransportMode = item.TransportMode.ToString(), FromLocation = MapLocation(item.FromLocation), ToLocation = MapLocation(item.ToLocation), DistanceKm = item.DistanceKm, EstimatedDurationMinutes = item.EstimatedDurationMinutes, RouteNote = item.RouteNote, UpdatedAt = AsUtc(item.UpdatedAt) };
     private static Response.LocationResponse MapLocation(Location item) => new() { LocationId = item.LocationId, LocationName = item.LocationName, LocationType = item.LocationType?.ToString(), City = item.City, Country = item.Country, Latitude = item.Latitude, Longitude = item.Longitude };
-    private static decimal Haversine(decimal lat1, decimal lon1, decimal lat2, decimal lon2) { const double earth = 6371; var dLat = (double)(lat2 - lat1) * Math.PI / 180; var dLon = (double)(lon2 - lon1) * Math.PI / 180; var a = Math.Sin(dLat / 2) * Math.Sin(dLat / 2) + Math.Cos((double)lat1 * Math.PI / 180) * Math.Cos((double)lat2 * Math.PI / 180) * Math.Sin(dLon / 2) * Math.Sin(dLon / 2); return (decimal)(earth * 2 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1 - a))); }
     private static void ValidatePaging(int page, int size) { if (page < 1 || size is < 1 or > 100) throw new BadRequestException("Invalid pagination", "VALIDATION_ERROR"); }
     // The database stores timestamps as `timestamp without time zone`.
     // Keep the UTC instant while writing an unspecified DateTime so Npgsql

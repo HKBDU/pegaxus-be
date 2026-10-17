@@ -102,7 +102,29 @@ public sealed partial class Service : IComplianceDossierService
             _db.DocumentRequests.Local.Any(item => item.RequestCode == code) ||
             await _db.DocumentRequests.AnyAsync(item => item.RequestCode == code, cancellationToken));
 
-    private async Task NotifyEmployeesAsync(
+    private Task QueueDossierUpdateMailAsync(Guid customerAccountId, ComplianceDossier dossier,
+        MailService.EmailBodies.DossierUpdateKind kind, string? subject, string? detail, DateTime now, CancellationToken cancellationToken) =>
+        MailService.MailRecipients.QueueAsync(_db, [customerAccountId], now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.DossierUpdateTitle(kind)} — {dossier.DossierCode}",
+            MailService.EmailBodies.DossierUpdateBody(recipient.FullName, dossier.DossierCode, kind, subject, detail,
+                NotificationLinks.Dossier(null, dossier.ComplianceDossierId))), cancellationToken);
+
+    private Task QueueAuthorityMailAsync(IEnumerable<Guid> accountIds, ComplianceDossier dossier, string authorityName,
+        MailService.EmailBodies.AuthorityMailKind kind, string? reason, DateTime now, CancellationToken cancellationToken) =>
+        MailService.MailRecipients.QueueAsync(_db, accountIds, now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.AuthorityTitle(kind)} — {dossier.DossierCode}",
+            MailService.EmailBodies.AuthorityBody(recipient.FullName, dossier.DossierCode, authorityName, kind, reason,
+                NotificationLinks.Dossier(recipient.Role, dossier.ComplianceDossierId))), cancellationToken);
+
+    private Task QueueClearanceMailAsync(IEnumerable<Guid> accountIds, ComplianceDossier dossier,
+        MailService.EmailBodies.ClearanceKind kind, string place, MailService.EmailBodies.ClearanceOutcome outcome, string? detail,
+        DateTime now, CancellationToken cancellationToken) =>
+        MailService.MailRecipients.QueueAsync(_db, accountIds, now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.ClearanceTitle(kind, outcome)} — {dossier.DossierCode}",
+            MailService.EmailBodies.ClearanceBody(recipient.FullName, dossier.DossierCode, kind, place, outcome, detail,
+                NotificationLinks.Dossier(recipient.Role, dossier.ComplianceDossierId))), cancellationToken);
+
+    private async Task<IReadOnlyList<Guid>> NotifyEmployeesAsync(
         ComplianceDossier dossier,
         EmployeeRole[] roles,
         string title,
@@ -119,5 +141,6 @@ public sealed partial class Service : IComplianceDossierService
 
         foreach (var recipient in recipients)
             AddNotification(recipient.AccountId, recipient.Role, dossier, title, message, now, priority);
+        return recipients.Select(item => item.AccountId).ToList();
     }
 }

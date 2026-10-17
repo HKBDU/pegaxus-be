@@ -127,6 +127,11 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
                     ReferenceType = nameof(TransportProvider), ReferenceId = id,
                     ActionUrl = NotificationLinks.TransportProviders(recipient.Role), CreatedAt = UtcNowTruncated()
                 });
+            if (status != ProviderStatus.ACTIVE)
+                await MailService.MailRecipients.QueueAsync(db, recipients.Select(item => item.AccountId), UtcNowTruncated(),
+                    recipient => MailService.MailRecipients.Mail(recipient, $"Transport provider status changed — {item.ProviderCode}",
+                        MailService.EmailBodies.CatalogChangeBody(recipient.FullName, "Transport provider", item.ProviderCode, item.ProviderName,
+                            $"changed from {item.Status} to {status}", reason, NotificationLinks.TransportProviders(recipient.Role))), cancellationToken);
         }
         item.Status = status;
         await SaveAsync(item, accountId, "STATUS_CHANGED", before, EmptyToNull(request.Reason), cancellationToken);

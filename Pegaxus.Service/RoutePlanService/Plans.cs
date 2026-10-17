@@ -88,7 +88,7 @@ public sealed partial class Service
                 });
         }
 
-        QueueCreateNotifications(plan, routeType, request.Action, routePlan, now);
+        await QueueCreateNotificationsAsync(plan, routeType, request.Action, routePlan, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
@@ -199,7 +199,7 @@ public sealed partial class Service
         routePlan.RouteNote = string.IsNullOrWhiteSpace(request.RouteNote) ? null : request.RouteNote.Trim();
         routePlan.UpdatedAt = now;
         if (request.Action == "SUBMIT_FOR_LEGAL_REVIEW")
-            QueueUpdateNotifications(routePlan, request.UpdateReason.Trim(), now);
+            await QueueUpdateNotificationsAsync(routePlan, request.UpdateReason.Trim(), now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
@@ -255,22 +255,36 @@ public sealed partial class Service
         };
     }
 
-    private void QueueCreateNotifications(TransportPlan plan, RouteType routeType, string action, RoutePlan routePlan, DateTime now)
+    private async Task QueueCreateNotificationsAsync(TransportPlan plan, RouteType routeType, string action, RoutePlan routePlan, DateTime now,
+        CancellationToken cancellationToken)
     {
         if ((routeType is RouteType.PRIMARY or RouteType.BACKUP) && action == "SUBMIT_FOR_LEGAL_REVIEW")
             foreach (var accountId in plan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST).Select(item => item.Employee.AccountId).Distinct())
                 notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.COMPLIANCE, Priority = NotificationPriority.NORMAL, Title = routeType == RouteType.BACKUP ? "Backup route requires legal review" : "Route plan requires legal review", Message = $"Route plan {routePlan.RoutePlanCode} for transport plan {plan.PlanCode} was submitted for legal review. Check that it is feasible, then confirm it or request changes.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.TRANSPORT_SPECIALIST, routePlan.RoutePlanId), CreatedAt = now });
+        var managerIds = routeType == RouteType.RETURN
+            ? await db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted)
+                .Select(item => item.AccountId).ToListAsync(cancellationToken)
+            : [];
         if (routeType == RouteType.RETURN)
-            foreach (var accountId in db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted).Select(item => item.AccountId))
+            foreach (var accountId in managerIds)
                 notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE, Priority = NotificationPriority.URGENT, Title = "Return route needs your approval", Message = $"Return route plan {routePlan.RoutePlanCode} for transport plan {plan.PlanCode} was created and needs your approval before the transport can head back.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.LOGISTICS_MANAGER, routePlan.RoutePlanId, "change-decision"), CreatedAt = now });
+        await MailService.MailRecipients.QueueAsync(db, managerIds, now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.RouteReviewTitle(MailService.EmailBodies.RouteReviewKind.ReturnApproval)} — {routePlan.RoutePlanCode}",
+            MailService.EmailBodies.RouteReviewBody(recipient.FullName, routePlan.RoutePlanCode, MailService.EmailBodies.RouteReviewKind.ReturnApproval, null,
+                NotificationLinks.RoutePlan(recipient.Role, routePlan.RoutePlanId, "change-decision"))), cancellationToken);
     }
 
-    private void QueueUpdateNotifications(RoutePlan routePlan, string reason, DateTime now)
+    private async Task QueueUpdateNotificationsAsync(RoutePlan routePlan, string reason, DateTime now, CancellationToken cancellationToken)
     {
-        foreach (var accountId in routePlan.TransportPlan.EmployeeTransportPlans
-                     .Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST)
-                     .Select(item => item.Employee.AccountId)
-                     .Distinct())
+        var specialistIds = routePlan.TransportPlan.EmployeeTransportPlans
+            .Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST)
+            .Select(item => item.Employee.AccountId)
+            .Distinct().ToList();
+        await MailService.MailRecipients.QueueAsync(db, specialistIds, now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.RouteReviewTitle(MailService.EmailBodies.RouteReviewKind.LegalReviewRequested)} — {routePlan.RoutePlanCode}",
+            MailService.EmailBodies.RouteReviewBody(recipient.FullName, routePlan.RoutePlanCode, MailService.EmailBodies.RouteReviewKind.LegalReviewRequested, reason,
+                NotificationLinks.RoutePlan(recipient.Role, routePlan.RoutePlanId))), cancellationToken);
+        foreach (var accountId in specialistIds)
             notificationService.Queue(new NotificationService.NotificationCreateRequest
             {
                 AccountId = accountId,

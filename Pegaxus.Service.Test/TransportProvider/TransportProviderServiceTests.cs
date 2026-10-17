@@ -287,10 +287,10 @@ public class TransportProviderServiceTests
             var statusRequest = new Providers.Request.StatusRequest { Status = "INACTIVE", Reason = "Contract ended", LastUpdatedAt = latest.UpdatedAt };
             await CreateService(db).UpdateStatusAsync(actor.AccountId, provider.TransportProviderId, statusRequest);
             Assert.Single(await db.Notifications.ToListAsync());
-            Assert.Single(await db.OutboxMessages.ToListAsync());
+            Assert.Equal(2, await db.OutboxMessages.CountAsync());
             Assert.Equal("PROVIDER_MODIFIED", (await Assert.ThrowsAsync<ConflictException>(() =>
                 CreateService(db).UpdateStatusAsync(actor.AccountId, provider.TransportProviderId, statusRequest))).ErrorCode);
-            Assert.Single(await db.OutboxMessages.ToListAsync());
+            Assert.Equal(2, await db.OutboxMessages.CountAsync());
             latest = await CreateService(db).GetAsync(actor.AccountId, provider.TransportProviderId);
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE FUNCTION reject_provider_audit() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -304,7 +304,7 @@ public class TransportProviderServiceTests
             Assert.Equal("INACTIVE", (await CreateService(db).GetAsync(actor.AccountId, provider.TransportProviderId)).Status);
             Assert.Equal(3, await db.CatalogAuditLogs.CountAsync());
             Assert.Single(await db.Notifications.ToListAsync());
-            Assert.Single(await db.OutboxMessages.ToListAsync());
+            Assert.Equal(2, await db.OutboxMessages.CountAsync());
             await db.Database.ExecuteSqlRawAsync("DROP TRIGGER reject_provider_audit ON \"CatalogAuditLog\"; DROP FUNCTION reject_provider_audit()");
             await using var duplicateDb = new AppDbContext(options);
             duplicateDb.TransportProviders.Add(new TransportProvider

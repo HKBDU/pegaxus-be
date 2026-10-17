@@ -31,6 +31,10 @@ public class DossierInitializationTests
         Assert.Equal("MAIN", result.DossierType);
         Assert.Equal(DossierType.MAIN, (await db.ComplianceDossiers.SingleAsync()).DossierType);
         Assert.Matches(@"^CD-\d{8}-\d{4}$", (await db.ComplianceDossiers.SingleAsync()).DossierCode);
+        var mail = Assert.Single(await EmailOutboxWiringTests.EmailsAsync(db));
+        Assert.Equal(booking.Customer.Account.Email, mail.To);
+        Assert.Equal($"Compliance dossier opened — {result.DossierCode}", mail.Subject);
+        Assert.Contains($"{{{{PX_FRONTEND_URL}}}}/compliance-dossiers/{result.ComplianceDossierId}", mail.Body);
         Assert.Equal(3, result.Requirements.Count);
         Assert.Equal(2, result.Requirements.Count(item => item.HorseId != null));
         Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30), result.Requirements.First().ValidUntil);

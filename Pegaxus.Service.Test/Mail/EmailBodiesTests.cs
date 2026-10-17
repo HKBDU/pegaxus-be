@@ -16,6 +16,7 @@ public class EmailBodiesTests
         ("otp-reset", Mail.OtpBody(false, "Ada", "123456", 5)),
         ("booking-approved", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", new DateOnly(2026, 12, 1), Link)),
         ("booking-rejected", Mail.BookingRejectedBody("Ada", "REQ-1", "No capacity", Link)),
+        ("delivered", Mail.TransportDeliveredBody("Ada", "TR-1", new DateTime(2026, 10, 16, 12, 0, 0), Link)),
         ("reupload", Mail.DocumentReuploadBody("DRQ-1", "Passport", "Storm", "EXPIRED", "Please retake", new DateOnly(2026, 12, 1), Link)),
         ("missing", Mail.MissingDocumentsBody("CDOS-1", "REQ-1", new DateOnly(2026, 12, 1), "Soon", Link,
             [new Mail.MissingItem("Passport", "Storm", null)])),
@@ -52,6 +53,7 @@ public class EmailBodiesTests
             Mail.OtpBody(true, Evil, "123456", 5),
             Mail.BookingApprovedBody(Evil, Evil, Evil, null, null),
             Mail.BookingRejectedBody(Evil, Evil, Evil, null),
+            Mail.TransportDeliveredBody(Evil, Evil, new DateTime(2026, 10, 16, 12, 0, 0), null),
             Mail.DocumentReuploadBody(Evil, Evil, Evil, Evil, Evil, new DateOnly(2026, 12, 1), null),
             Mail.MissingDocumentsBody(Evil, Evil, new DateOnly(2026, 12, 1), Evil, null, [new Mail.MissingItem(Evil, Evil, null)]),
             Mail.RouteAssignmentBody(Evil, Evil, true, Evil, null, [new Mail.RouteSegment(1, null, null, Evil, Evil, Evil)]),
@@ -68,10 +70,11 @@ public class EmailBodiesTests
     }
 
     [Fact]
-    public void Button_IsRenderedOnlyForAbsoluteHttpsUrls()
+    public void Button_IsRenderedOnlyForAbsoluteHttpsUrls_OrAnAppPathTheMailServiceResolves()
     {
         Assert.Contains($"<a href=\"{Link}\"", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, Link));
-        foreach (var unsafeUrl in new[] { null, "", "#", "/bookings/1", "http://app.pegaxus.example/x", "javascript:alert(1)" })
+        Assert.Contains("<a href=\"{{PX_FRONTEND_URL}}/bookings/1\"", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, "/bookings/1"));
+        foreach (var unsafeUrl in new[] { null, "", "#", "//evil.example", "http://app.pegaxus.example/x", "javascript:alert(1)" })
         {
             var html = Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, unsafeUrl);
             Assert.DoesNotContain("<a ", html);

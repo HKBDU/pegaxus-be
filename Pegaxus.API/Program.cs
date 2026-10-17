@@ -93,5 +93,7 @@ app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapHub<ComplianceDossierHub>("/hubs/compliance-dossiers",
     options => options.CloseOnAuthenticationExpiration = true);
+app.MapHub<TransportTrackingHub>("/hubs/transport-tracking",
+    options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();

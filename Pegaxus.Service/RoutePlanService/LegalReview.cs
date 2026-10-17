@@ -111,7 +111,7 @@ public sealed partial class Service
             AddDossierAudit(auditDossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW_REJECTED", routePlan, request, now, "Route Plan requires revision.");
         }
         routePlan.UpdatedAt = now;
-        QueueLegalReviewNotifications(routePlan, reviewer, routeType, request, now);
+        await QueueLegalReviewNotificationsAsync(routePlan, reviewer, routeType, request, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
@@ -215,7 +215,8 @@ public sealed partial class Service
             dossier.ReadyForSubmissionAt = now;
     }
 
-    private void QueueLegalReviewNotifications(RoutePlan routePlan, Employee reviewer, RouteType routeType, Request.LegalReviewRequest request, DateTime now)
+    private async Task QueueLegalReviewNotificationsAsync(RoutePlan routePlan, Employee reviewer, RouteType routeType, Request.LegalReviewRequest request,
+        DateTime now, CancellationToken cancellationToken)
     {
         var staff = new Dictionary<Guid, EmployeeRole>();
         var transport = routePlan.TransportPlan.Transport;
@@ -265,6 +266,23 @@ public sealed partial class Service
             Notify(customer, customerUrl, routeType == RouteType.RETURN
                 ? $"The return route for booking {transport.Booking.BookingCode} has been confirmed. Please upload the additional documents it requires."
                 : $"The route for booking {transport.Booking.BookingCode} has been confirmed. Please upload the required legal documents.");
+
+        if (!request.IsFeasible)
+        {
+            var revisionKind = MailService.EmailBodies.RouteReviewKind.RevisionRequired;
+            await MailService.MailRecipients.QueueAsync(db, staff.Keys.Where(id => id != reviewer.AccountId), now, recipient => MailService.MailRecipients.Mail(recipient,
+                $"{MailService.EmailBodies.RouteReviewTitle(revisionKind)} — {routePlan.RoutePlanCode}",
+                MailService.EmailBodies.RouteReviewBody(recipient.FullName, routePlan.RoutePlanCode, revisionKind, request.Note,
+                    NotificationLinks.RoutePlan(recipient.Role, routePlan.RoutePlanId))), cancellationToken);
+        }
+        else if (notifyCustomer && customer != reviewer.AccountId)
+        {
+            var confirmedKind = routeType == RouteType.RETURN
+                ? MailService.EmailBodies.RouteChangeKind.ReturnConfirmed : MailService.EmailBodies.RouteChangeKind.RouteConfirmed;
+            await MailService.MailRecipients.QueueAsync(db, [customer], now, recipient => MailService.MailRecipients.Mail(recipient,
+                $"{MailService.EmailBodies.RouteChangedTitle(confirmedKind)} — {routePlan.RoutePlanCode}",
+                MailService.EmailBodies.RouteChangedBody(recipient.FullName, routePlan.RoutePlanCode, confirmedKind, null, customerUrl)), cancellationToken);
+        }
     }
 
     private sealed class LegalReviewSnapshot
