@@ -9,7 +9,7 @@ using Pegaxus.Service.MediaService;
 
 namespace Pegaxus.Service.CloudinaryService;
 
-public class Service : IMediaService
+public partial class Service : IMediaService
 {
     public const string PreviewHttpClient = "ComplianceDocumentPreview";
     private const long MaxSignedUploadSize = DocumentStorageService.Service.MaxFileSize;
