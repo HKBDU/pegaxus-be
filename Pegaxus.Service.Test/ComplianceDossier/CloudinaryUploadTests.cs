@@ -131,7 +131,7 @@ public class CloudinaryUploadTests
             secure_url = $"https://res.cloudinary.com/test-cloud/{resourceType}/authenticated/v1/{PublicId}.pdf"
         }))!;
 
-    private sealed class TestCloudinary(GetResourceResult? resource = null, bool missingImage = false)
+    internal sealed class TestCloudinary(GetResourceResult? resource = null, bool missingImage = false)
         : CloudinaryUploadService(Configuration(), new NoNetworkFactory())
     {
         public int Calls { get; private set; }

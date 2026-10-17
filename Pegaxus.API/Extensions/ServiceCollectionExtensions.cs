@@ -271,6 +271,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddTransportPlanningModule(this IServiceCollection services)
     {
         services.AddScoped<Pegaxus.Service.HandoverService.IHandoverService, Pegaxus.Service.HandoverService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CreateRequest>, Pegaxus.Service.HandoverService.Validator.CreateRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.ListRequest>, Pegaxus.Service.HandoverService.Validator.ListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CancelRequest>, Pegaxus.Service.HandoverService.Validator.CancelRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CompleteRequest>, Pegaxus.Service.HandoverService.Validator.CompleteRequestValidator>();

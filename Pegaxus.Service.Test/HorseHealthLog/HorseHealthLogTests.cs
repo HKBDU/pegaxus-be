@@ -49,7 +49,8 @@ public class HorseHealthLogTests
         var photo = Assert.Single(log.Photos); Assert.Equal(Storage.SignedUrl, photo.PhotoUrl);
         Assert.Null(photo.Latitude); Assert.Null(photo.Longitude); Assert.Null(photo.CapturedAt); Assert.Null(photo.Caption);
         var stored = await db.HorseHealthLogs.SingleAsync();
-        Assert.Equal(Storage.Url(Assert.Single(f.Storage.Uploads)), Assert.Single(stored.PhotoUrls));
+        Assert.Equal(Storage.Url(Assert.Single(f.Storage.Confirmations)), Assert.Single(stored.PhotoUrls));
+        Assert.Equal(f.Escort.AccountId, Assert.Single(f.Storage.Accounts));
         Assert.Equal(DbTime.AsUtc(Fixture.Now), log.CreatedAt); Assert.Equal(log.CreatedAt, log.UpdatedAt);
         Assert.Empty(f.Storage.Deletes); Assert.Empty(await db.IncidentReports.ToListAsync()); Assert.Empty(await db.Notifications.ToListAsync());
     }
@@ -90,7 +91,7 @@ public class HorseHealthLogTests
         Assert.Null(result.Value.GeneralNote); Assert.Equal(vet ? "Call vet" : null, result.Value.VeterinarianNote);
         Assert.False(result.Value.Effects.EmergencyNotified); Assert.False(result.Value.Effects.CanReportIncident);
         Assert.Equal(1, await db.HorseHealthLogs.CountAsync()); Assert.Equal(2, await db.Notifications.CountAsync());
-        Assert.Equal(2, f.Realtime.Messages.Count); Assert.Single(f.Storage.Uploads); Assert.Empty(f.Storage.Deletes);
+        Assert.Equal(2, f.Realtime.Messages.Count); Assert.Single(f.Storage.Confirmations); Assert.Empty(f.Storage.Deletes);
         Assert.Empty(await db.IncidentReports.ToListAsync());
     }
 
@@ -110,7 +111,7 @@ public class HorseHealthLogTests
             Assert.True(log.HasPhoto); Assert.False(log.VeterinarianRequired);
         });
         var logs = await db.HorseHealthLogs.ToArrayAsync();
-        Assert.Single(logs.SelectMany(log => log.PhotoUrls).Distinct()); Assert.Single(f.Storage.Uploads); Assert.Equal(0, f.Storage.Signs);
+        Assert.Single(logs.SelectMany(log => log.PhotoUrls).Distinct()); Assert.Single(f.Storage.Confirmations); Assert.Equal(0, f.Storage.Signs);
         Assert.All(logs, log =>
         {
             Assert.Null(log.TemperatureCelsius); Assert.Null(log.HeartRateBpm); Assert.Null(log.RespiratoryRateBpm);
@@ -118,7 +119,7 @@ public class HorseHealthLogTests
         });
         result = await f.Service.MarkAllNormalAsync(f.Transport.TransportId, request, f.Escort.AccountId);
         Assert.False(result.Created); Assert.Equal(0, result.Value.CreatedCount); Assert.Equal(2, result.Value.Logs.Count);
-        Assert.Equal(2, await db.HorseHealthLogs.CountAsync()); Assert.Single(f.Storage.Uploads);
+        Assert.Equal(2, await db.HorseHealthLogs.CountAsync()); Assert.Single(f.Storage.Confirmations);
         Assert.Empty(await db.Notifications.ToListAsync()); Assert.Empty(f.Realtime.Messages);
     }
 
@@ -141,17 +142,17 @@ public class HorseHealthLogTests
     [InlineData("upload")]
     [InlineData("sign")]
     [InlineData("save")]
-    public async Task Failures_RollBackBeforePersistenceAndCleanUploadedPhoto(string failure)
+    public async Task Failures_RollBackBeforePersistenceAndPreserveUploadedPhoto(string failure)
     {
         var audit = new SaveAudit();
         await using var db = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString())
             .ConfigureWarnings(warnings => warnings.Ignore(InMemoryEventId.TransactionIgnoredWarning)).AddInterceptors(audit).Options);
         var f = await Fixture.CreateAsync(db);
-        f.Storage.FailUpload = failure == "upload"; f.Storage.FailSign = failure == "sign";
+        f.Storage.FailConfirmation = failure == "upload"; f.Storage.FailSign = failure == "sign";
         audit.Enabled = true; audit.Fail = failure == "save";
         var request = f.Request(); request.HealthStatus = "CRITICAL"; request.Files = [Photo()];
         await Assert.ThrowsAsync<IOException>(() => f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId));
-        Assert.Single(f.Storage.Uploads); Assert.Equal(f.Storage.Uploads, f.Storage.Deletes);
+        Assert.Single(f.Storage.Confirmations); Assert.Empty(f.Storage.Deletes);
         Assert.Empty(f.Realtime.Messages);
         // InMemory has no rollback; PostgreSQL below verifies rollback after a successful SaveChanges.
         if (failure != "sign")
@@ -203,7 +204,7 @@ public class HorseHealthLogTests
         }
         Assert.Equal("VALIDATION_ERROR", (await Assert.ThrowsAsync<BadRequestException>(() =>
             f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId))).ErrorCode);
-        Assert.Equal(0, await db.HorseHealthLogs.CountAsync()); Assert.Empty(f.Storage.Uploads);
+        Assert.Equal(0, await db.HorseHealthLogs.CountAsync()); Assert.Empty(f.Storage.Confirmations);
     }
 
     [Theory]
@@ -243,13 +244,13 @@ public class HorseHealthLogTests
     public async Task Photos_RejectInvalidMetadataAndContentBeforeStorage(string kind)
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = f.Request();
-        var bytes = kind == "signature" ? "invalid"u8.ToArray() : Png;
-        request.Files = [new FormFile(new MemoryStream(bytes), 0, kind switch { "empty" => 0, "oversized" => 5 * 1024 * 1024 + 1,
-            "length" => bytes.Length + 1, _ => bytes.Length }, "files", kind == "pdf" ? "file.pdf" : "file.png")
-            { Headers = new HeaderDictionary(), ContentType = kind == "mime" ? "image/jpeg" : kind == "pdf" ? "application/pdf" : "image/png" }];
+        request.Files = [Photo()];
+        f.Storage.Preview = new(kind switch { "empty" => [], "signature" => "invalid"u8.ToArray(), "oversized" => new byte[5 * 1024 * 1024 + 1], _ => Png }, kind == "pdf" ? "application/pdf" : "image/png");
+        if (kind == "mime") f.Storage.ConfirmedMimeType = "image/jpeg";
+        if (kind == "length") f.Storage.ConfirmedSize = Png.Length + 1;
         Assert.Equal("INVALID_IMAGE", (await Assert.ThrowsAsync<BadRequestException>(() =>
             f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId))).ErrorCode);
-        Assert.Empty(f.Storage.Uploads); Assert.Empty(f.Storage.Deletes); Assert.Equal(0, await db.HorseHealthLogs.CountAsync());
+        Assert.Single(f.Storage.Confirmations); Assert.Empty(f.Storage.Deletes); Assert.Equal(0, await db.HorseHealthLogs.CountAsync());
     }
 
     [Theory]
@@ -298,7 +299,7 @@ public class HorseHealthLogTests
         if (scenario == "missingProfile") db.Remove(f.Escort);
         await db.SaveChangesAsync();
         await Assert.ThrowsAsync<UnauthorizedException>(() => f.Service.CreateAsync(f.Transport.TransportId, f.Request(), f.Escort.AccountId));
-        Assert.Empty(f.Storage.Uploads);
+        Assert.Empty(f.Storage.Confirmations);
     }
 
     [Theory]
@@ -313,7 +314,7 @@ public class HorseHealthLogTests
         Assert.Equal("INVALID_TRANSPORT_STATUS", (await Assert.ThrowsAsync<ConflictException>(() =>
             f.Service.CreateAsync(f.Transport.TransportId, f.Request(), f.Escort.AccountId))).ErrorCode);
         await Assert.ThrowsAsync<ConflictException>(() => f.Service.MarkAllNormalAsync(f.Transport.TransportId, new() { LogType = "OTHER" }, f.Escort.AccountId));
-        Assert.Empty(f.Storage.Uploads);
+        Assert.Empty(f.Storage.Confirmations);
     }
 
     [Fact]
@@ -328,12 +329,54 @@ public class HorseHealthLogTests
         db.BookingHorses.RemoveRange(await db.BookingHorses.ToArrayAsync()); await db.SaveChangesAsync();
         Assert.Equal("NO_HORSES_IN_TRANSPORT", (await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
             f.Service.MarkAllNormalAsync(f.Transport.TransportId, new() { LogType = "OTHER" }, f.Escort.AccountId))).ErrorCode);
-        Assert.Empty(f.Storage.Uploads);
+        Assert.Empty(f.Storage.Confirmations);
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("blank")]
+    [InlineData("long")]
+    [InlineData("duplicate")]
+    public async Task Photos_RejectInvalidReferencesBeforeConfirmation(string scenario)
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = f.Request();
+        var photo = Photo();
+        request.Files = scenario switch
+        {
+            "null" => [null!],
+            "blank" => [new() { PublicId = " " }],
+            "long" => [new() { PublicId = new string('x', 256) }],
+            _ => [photo, photo]
+        };
+        Assert.Equal("VALIDATION_ERROR", (await Assert.ThrowsAsync<BadRequestException>(() =>
+            f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId))).ErrorCode);
+        Assert.Empty(f.Storage.Confirmations); Assert.Empty(db.HorseHealthLogs);
+    }
+
+    [Fact]
+    public async Task Photos_RejectForeignUploadWithoutPersistingOrDeletingEvidence()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = f.Request();
+        request.Files = [Photo()]; f.Storage.OwnerAccountId = f.Manager.AccountId;
+        await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId));
+        Assert.Empty(db.HorseHealthLogs); Assert.Empty(f.Storage.Deletes);
+        Assert.Equal(f.Escort.AccountId, Assert.Single(f.Storage.Accounts));
+    }
+
+    [Theory]
+    [InlineData("FILE_TOO_LARGE", 413)]
+    [InlineData("INVALID_FILE_TYPE", 400)]
+    public async Task Photos_MapConfirmedMetadataErrorsToInvalidImage(string code, int status)
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = f.Request();
+        request.Files = [Photo()]; f.Storage.ConfirmationFailure = new Pegaxus.Service.Exceptions.Exceptions("Invalid uploaded image", status, code);
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId));
+        Assert.Equal(400, error.StatusCode); Assert.Equal("INVALID_IMAGE", error.ErrorCode);
+        Assert.Empty(db.HorseHealthLogs); Assert.Empty(f.Storage.Deletes);
     }
 
     internal static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a8N8AAAAASUVORK5CYII=");
-    internal static IFormFile Photo() => new FormFile(new MemoryStream(Png), 0, Png.Length, "files", "photo.png")
-        { Headers = new HeaderDictionary(), ContentType = "image/png" };
+    internal static Pegaxus.Service.UploadService.Request.UploadedAssetReference Photo() => new() { PublicId = "evidence/" + Guid.NewGuid().ToString("N") };
 
     internal static async Task<Employee> EmployeeAsync(AppDbContext db, EmployeeRole role)
     {
@@ -383,7 +426,7 @@ public class HorseHealthLogTests
     internal static HealthLogs.Service CreateService(AppDbContext db, Storage storage, INotificationService notifications)
     {
         var validator = new RecordRequestValidator(new FixedClock());
-        return new(db, new FixedClock(), validator, new CreateRequestValidator(validator), new AddPhotosRequestValidator(), storage, storage, notifications, NullLogger<HealthLogs.Service>.Instance);
+        return new(db, new FixedClock(), validator, new CreateRequestValidator(validator), new AddPhotosRequestValidator(), storage, storage, notifications);
     }
 
     internal sealed class FixedClock : TimeProvider { public override DateTimeOffset GetUtcNow() => DbTime.AsUtc(Fixture.Now); }
@@ -392,19 +435,20 @@ public class HorseHealthLogTests
     {
         internal const string SignedUrl = "https://signed.example.com/health?signature=test";
         internal static string Url(Guid id) => $"https://res.cloudinary.com/test-cloud/image/authenticated/health/{id:N}.png";
-        internal List<Guid> Uploads { get; } = [];
+        internal List<Guid> Confirmations { get; } = [];
         internal List<Guid> Deletes { get; } = [];
         internal int Signs { get; private set; }
-        internal bool FailUpload { get; set; }
-        internal int? FailAtUpload { get; set; }
+        internal bool FailConfirmation { get; set; }
+        internal int? FailAtConfirmation { get; set; }
         internal bool FailSign { get; set; }
-        internal Func<Task>? AfterUpload { get; set; }
-        public async Task<string> UploadPrivateImageAsync(Guid imageId, PreviewFile image, CancellationToken cancellationToken = default)
-        {
-            cancellationToken.ThrowIfCancellationRequested(); Assert.True(Images.IsValid(image.Content, image.ContentType));
-            Uploads.Add(imageId); if (AfterUpload is not null) await AfterUpload();
-            if (FailUpload || Uploads.Count == FailAtUpload) throw new IOException("Planned upload failure"); return Url(imageId);
-        }
+        internal Func<Task>? AfterConfirmation { get; set; }
+        internal PreviewFile Preview { get; set; } = new(Png, "image/png");
+        internal string? ConfirmedMimeType { get; set; }
+        internal long? ConfirmedSize { get; set; }
+        internal List<Guid> Accounts { get; } = [];
+        internal Guid? OwnerAccountId { get; set; }
+        internal Exception? ConfirmationFailure { get; set; }
+        public Task<string> UploadPrivateImageAsync(Guid imageId, PreviewFile image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task DeletePrivateImageAsync(Guid imageId, CancellationToken cancellationToken = default)
         {
             cancellationToken.ThrowIfCancellationRequested(); Deletes.Add(imageId); return Task.CompletedTask;
@@ -419,8 +463,18 @@ public class HorseHealthLogTests
         public Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file) => throw new NotSupportedException();
         public Task DeleteFileAsync(string publicId) => throw new NotSupportedException();
         public Task<SignedUploadResult> CreateSignedUploadAsync(Guid accountId, string entity, string contentType, long sizeBytes) => throw new NotSupportedException();
-        public Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PreviewFile> DownloadPreviewAsync(string fileUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public async Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var id = Guid.Parse(publicId.Split('/').Last()); Confirmations.Add(id); Accounts.Add(accountId);
+            if (OwnerAccountId.HasValue && OwnerAccountId != accountId) throw new ForbiddenException("Upload belongs to another account", "FORBIDDEN");
+            if (ConfirmationFailure is not null) throw ConfirmationFailure;
+            if (AfterConfirmation is not null) await AfterConfirmation();
+            if (FailConfirmation || Confirmations.Count == FailAtConfirmation) throw new IOException("Planned confirmation failure");
+            return new(publicId, Url(id), "photo.png", ConfirmedMimeType ?? Preview.ContentType, ConfirmedSize ?? Preview.Content.Length);
+        }
+        public Task<PreviewFile> DownloadPreviewAsync(string fileUrl, CancellationToken cancellationToken = default)
+        { cancellationToken.ThrowIfCancellationRequested(); return Task.FromResult(Preview); }
         public Task ValidateContentAsync(PreviewFile file, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<StoredDocumentFile> UploadAsync(Guid versionId, int sortOrder, IFormFile file, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task DeleteAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();

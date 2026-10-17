@@ -1,10 +1,7 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.MediaService;
 
 using static Pegaxus.Service.Common.DbTime;
 
@@ -20,9 +17,6 @@ public sealed partial class Service
             throw new BadRequestException("Transport and health log IDs must be non-empty UUIDs.", "VALIDATION_ERROR");
         for (var attempt = 0; ; attempt++)
         {
-            var photoIds = new List<Guid>();
-            var committed = false;
-            var commitAttempted = false;
             try
             {
                 await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
@@ -42,39 +36,28 @@ public sealed partial class Service
                 if (log.PhotoUrls.Length + request.Files.Count > 5)
                     throw new UnprocessableEntityException("A health log may have at most 5 photos.", "PHOTO_LIMIT_EXCEEDED");
 
-                var images = new List<PreviewFile>();
-                foreach (var file in request.Files) images.Add(await ReadImageAsync(file, cancellationToken));
                 var urls = new List<string>(log.PhotoUrls);
-                foreach (var image in images)
+                foreach (var file in request.Files)
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var photoId = Guid.NewGuid();
-                    photoIds.Add(photoId);
-                    urls.Add(await media.UploadPrivateImageAsync(photoId, image, cancellationToken));
+                    var url = await ConfirmImageAsync(accountId, file.PublicId, cancellationToken);
+                    if (urls.Contains(url, StringComparer.Ordinal)) throw InvalidImage();
+                    urls.Add(url);
                 }
                 var photos = await SignPhotosAsync(urls, cancellationToken);
                 log.PhotoUrls = urls.ToArray();
                 log.UpdatedAt = Truncate(clock.GetUtcNow());
                 await db.SaveChangesAsync(cancellationToken);
-                commitAttempted = true;
                 await transaction.CommitAsync(cancellationToken);
-                committed = true;
                 return new(photos);
             }
-            catch (Exception error)
+            catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
             {
-                var conflict = PostgresErrors.IsWriteConflict(error);
-                if (!committed && (!commitAttempted || conflict))
-                    foreach (var photoId in photoIds) await CleanupPhotoAsync(photoId);
-                if (!committed && commitAttempted && !conflict)
-                    logger.LogError(error, "Health photo commit outcome is unknown; retaining photos {PhotoIds}", photoIds);
-                if (!committed && conflict && attempt < 2)
+                if (attempt < 2)
                 {
                     db.ChangeTracker.Clear();
                     continue;
                 }
-                if (conflict) throw new ConflictException("The record changed. Please retry the request", "CONCURRENT_UPDATE");
-                throw;
+                throw new ConflictException("The record changed. Please retry the request", "CONCURRENT_UPDATE");
             }
         }
     }
@@ -92,34 +75,18 @@ public sealed partial class Service
         return photos;
     }
 
-    private static async Task<PreviewFile> ReadImageAsync(IFormFile file, CancellationToken cancellationToken)
+    private async Task<string> ConfirmImageAsync(Guid accountId, string publicId, CancellationToken cancellationToken)
     {
-        string mimeType;
-        try { mimeType = DocumentStorageService.Service.ValidateFileMetadata(file); }
-        catch (Pegaxus.Service.Exceptions.Exceptions) { throw InvalidImage(); }
-        if (mimeType is not ("image/jpeg" or "image/png")) throw InvalidImage();
-        await using var input = file.OpenReadStream();
-        using var content = new MemoryStream();
-        var buffer = new byte[81920];
-        int count;
-        while ((count = await input.ReadAsync(buffer, cancellationToken)) > 0)
-        {
-            if (content.Length + count > DocumentStorageService.Service.MaxFileSize) throw InvalidImage();
-            content.Write(buffer, 0, count);
-        }
-        var bytes = content.ToArray();
-        if (bytes.Length != file.Length || !Images.IsValid(bytes, mimeType)) throw InvalidImage();
-        return new(bytes, mimeType);
-    }
-
-    private async Task CleanupPhotoAsync(Guid photoId)
-    {
-        try
-        {
-            using var cleanup = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            await media.DeletePrivateImageAsync(photoId, cleanup.Token);
-        }
-        catch (Exception error) { logger.LogError(error, "Failed to remove uncommitted health photo {PhotoId}", photoId); }
+        MediaService.ConfirmedUploadResult asset;
+        try { asset = await media.ConfirmUploadAsync(accountId, publicId, cancellationToken); }
+        catch (Pegaxus.Service.Exceptions.Exceptions error) when (error.ErrorCode is "FILE_TOO_LARGE" or "INVALID_FILE_TYPE")
+        { throw InvalidImage(); }
+        if (asset.MimeType is not ("image/jpeg" or "image/png") ||
+            asset.SizeBytes <= 0 || asset.SizeBytes > DocumentStorageService.Service.MaxFileSize) throw InvalidImage();
+        var image = await media.DownloadPreviewAsync(asset.FileUrl, cancellationToken);
+        if (image.Content.LongLength != asset.SizeBytes || image.ContentType != asset.MimeType ||
+            !Images.IsValid(image.Content, asset.MimeType)) throw InvalidImage();
+        return asset.FileUrl;
     }
 
     private static BadRequestException InvalidImage() =>

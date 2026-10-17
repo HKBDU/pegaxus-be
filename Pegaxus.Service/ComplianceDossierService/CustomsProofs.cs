@@ -78,16 +78,15 @@ public sealed partial class Service
 
         for (var index = 0; index < request.Files.Count; index++)
         {
-            var file = request.Files[index];
-            var (fileUrl, _) = await _mediaService.UploadFileAsync(file);
+            var file = await ConfirmProofImageAsync(accountId, request.Files[index].PublicId, cancellationToken);
             proof.Attachments.Add(new ProofAttachment
             {
                 ProofAttachmentId = Guid.NewGuid(),
                 CustomsClearanceProofId = proof.CustomsClearanceProofId,
                 FileName = file.FileName,
-                FileUrl = fileUrl,
-                MimeType = file.ContentType,
-                FileSizeBytes = file.Length,
+                FileUrl = file.FileUrl,
+                MimeType = file.MimeType,
+                FileSizeBytes = file.SizeBytes,
                 SortOrder = index + 1,
                 CreatedAt = now
             });
@@ -165,6 +164,17 @@ public sealed partial class Service
             .Select(item => item.ComplianceDocument!)
             .FirstOrDefault();
 
+        var files = new List<Response.ProofFileResponse>();
+        foreach (var attachment in proof.Attachments.OrderBy(item => item.SortOrder))
+        {
+            var readUrl = await _mediaService.CreateReadUrlAsync(attachment.FileUrl, cancellationToken);
+            files.Add(new Response.ProofFileResponse
+            {
+                FileName = attachment.FileName, FileUrl = readUrl.Url, MimeType = attachment.MimeType,
+                FileSizeBytes = attachment.FileSizeBytes, SortOrder = attachment.SortOrder
+            });
+        }
+
         return new Response.CustomsClearanceProofResponse
         {
             CustomsClearanceProofId = proof.CustomsClearanceProofId,
@@ -199,14 +209,7 @@ public sealed partial class Service
             RejectionReason = proof.RejectionReason,
             IsFinalized = proof.IsFinalized,
             FinalizedAt = AsUtc(proof.FinalizedAt),
-            Files = proof.Attachments.OrderBy(item => item.SortOrder).Select(item => new Response.ProofFileResponse
-            {
-                FileName = item.FileName,
-                FileUrl = item.FileUrl,
-                MimeType = item.MimeType,
-                FileSizeBytes = item.FileSizeBytes,
-                SortOrder = item.SortOrder
-            }).ToList()
+            Files = files
         };
     }
 
@@ -438,29 +441,12 @@ public sealed partial class Service
                 "quickNote is required when isHeld is true",
                 "QUICK_NOTE_REQUIRED");
 
-        if (request.Files.Count == 0)
+        if (request.Files is null || request.Files.Count == 0)
             throw new BadRequestException(
                 "Image unclear or missing customs stamp. Please retake photo",
                 "EVIDENCE_UNCLEAR");
 
-        const long maxFileSize = 5 * 1024 * 1024;
-        foreach (var file in request.Files)
-        {
-            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            var validExtension = extension is ".jpg" or ".jpeg" or ".png";
-            var validContentType = file.ContentType is "image/jpeg" or "image/png";
-
-            if (file.Length > maxFileSize)
-                throw new Pegaxus.Service.Exceptions.Exceptions(
-                    "Proof image must not exceed 5 MB",
-                    413,
-                    "FILE_TOO_LARGE");
-
-            if (!validExtension || !validContentType)
-                throw new BadRequestException(
-                    "Proof file must be JPG, JPEG, or PNG",
-                    "INVALID_FILE_TYPE");
-        }
+        ValidateProofReferences(request.Files);
     }
 
     private static CustomsLane? ParseCustomsLane(string? value)

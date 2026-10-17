@@ -1,6 +1,5 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Logging;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
@@ -13,7 +12,7 @@ namespace Pegaxus.Service.HorseHealthLogService;
 
 public sealed partial class Service(AppDbContext db, TimeProvider clock, IValidator<Request.RecordRequest> recordValidator,
     IValidator<Request.CreateRequest> createValidator, IValidator<Request.AddPhotosRequest> photosValidator, IMediaService media, IDocumentStorageService documentStorage,
-    INotificationService notifications, ILogger<Service> logger) : IHorseHealthLogService
+    INotificationService notifications) : IHorseHealthLogService
 {
     private const string ForbiddenMessage = "Only the assigned escort can record horse health logs";
     private static readonly RoutePlanStatus[] AssignmentStatuses = [RoutePlanStatus.CONFIRMED, RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED];

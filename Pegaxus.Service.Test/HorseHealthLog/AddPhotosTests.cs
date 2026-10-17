@@ -28,7 +28,7 @@ public class AddPhotosTests
         var response = await f.Service.AddPhotosAsync(f.Transport.TransportId, log.HorseHealthLogId,
             new() { Files = [Photo(), Photo(), Photo()] }, f.Escort.AccountId);
         Assert.Equal(5, response.Photos.Count);
-        Assert.Equal(original.Concat(f.Storage.Uploads.Skip(2).Select(Storage.Url)), log.PhotoUrls);
+        Assert.Equal(original.Concat(f.Storage.Confirmations.Skip(2).Select(Storage.Url)), log.PhotoUrls);
         Assert.Equal(created.CheckedAt, DbTime.AsUtc(log.CheckedAt));
         Assert.Equal(created.CreatedAt, DbTime.AsUtc(log.CreatedAt));
         Assert.Equal(f.Escort.EmployeeId, log.EmployeeId); Assert.Equal("Original check", log.GeneralNote);
@@ -36,7 +36,7 @@ public class AddPhotosTests
         Assert.Equal(alerts, await db.Notifications.CountAsync()); Assert.Empty(f.Storage.Deletes);
 
         var replay = await f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId);
-        Assert.False(replay.Created); Assert.Equal(5, replay.Value.Photos.Count); Assert.Equal(5, f.Storage.Uploads.Count);
+        Assert.False(replay.Created); Assert.Equal(5, replay.Value.Photos.Count); Assert.Equal(5, f.Storage.Confirmations.Count);
         var customerId = await db.Bookings.Where(item => item.BookingId == f.Transport.BookingId).Select(item => item.Customer.AccountId).SingleAsync();
         var viewer = new Health.Service(db, new FixedClock(), new ListRequestValidator(), f.Storage, f.Storage);
         var detail = await viewer.GetAsync(log.HorseHealthLogId, customerId);
@@ -59,24 +59,23 @@ public class AddPhotosTests
         var id = (await f.Service.CreateAsync(f.Transport.TransportId, f.Request(), f.Escort.AccountId)).Value.HorseHealthLogId;
         Assert.Equal("VALIDATION_ERROR", (await Assert.ThrowsAsync<BadRequestException>(() => f.Service.AddPhotosAsync(
             f.Transport.TransportId, id, new() { Files = Enumerable.Range(0, count).Select(_ => Photo()).ToList() }, f.Escort.AccountId))).ErrorCode);
-        Assert.Empty(f.Storage.Uploads); Assert.Empty((await db.HorseHealthLogs.SingleAsync()).PhotoUrls);
+        Assert.Empty(f.Storage.Confirmations); Assert.Empty((await db.HorseHealthLogs.SingleAsync()).PhotoUrls);
     }
 
     [Fact]
-    public async Task Append_RejectsCombinedLimitAndValidatesEveryImageBeforeAnyUpload()
+    public async Task Append_RejectsCombinedLimitAndInvalidConfirmedImage()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         var id = (await f.Service.CreateAsync(f.Transport.TransportId, f.Request(), f.Escort.AccountId)).Value.HorseHealthLogId;
-        var invalid = new FormFile(new MemoryStream("invalid"u8.ToArray()), 0, 7, "files", "photo.png")
-            { Headers = new HeaderDictionary(), ContentType = "image/png" };
+        f.Storage.Preview = new("invalid"u8.ToArray(), "image/png");
         Assert.Equal("INVALID_IMAGE", (await Assert.ThrowsAsync<BadRequestException>(() => f.Service.AddPhotosAsync(
-            f.Transport.TransportId, id, new() { Files = [Photo(), invalid] }, f.Escort.AccountId))).ErrorCode);
-        Assert.Empty(f.Storage.Uploads);
+            f.Transport.TransportId, id, new() { Files = [Photo(), Photo()] }, f.Escort.AccountId))).ErrorCode);
+        Assert.Single(f.Storage.Confirmations); f.Storage.Confirmations.Clear(); f.Storage.Preview = new(Png, "image/png");
         var log = await db.HorseHealthLogs.SingleAsync();
         log.PhotoUrls = Enumerable.Range(0, 4).Select(_ => Storage.Url(Guid.NewGuid())).ToArray(); await db.SaveChangesAsync();
         Assert.Equal("PHOTO_LIMIT_EXCEEDED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.AddPhotosAsync(
             f.Transport.TransportId, id, new() { Files = [Photo(), Photo()] }, f.Escort.AccountId))).ErrorCode);
-        Assert.Empty(f.Storage.Uploads); Assert.Equal(4, log.PhotoUrls.Length);
+        Assert.Empty(f.Storage.Confirmations); Assert.Equal(4, log.PhotoUrls.Length);
     }
 
     [Theory]
@@ -105,7 +104,7 @@ public class AddPhotosTests
         Func<Task> append = () => f.Service.AddPhotosAsync(f.Transport.TransportId, id, new() { Files = [Photo()] }, accountId);
         if (scenario == "inactive") await Assert.ThrowsAsync<UnauthorizedException>(append);
         else Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<ForbiddenException>(append)).ErrorCode);
-        Assert.Empty(f.Storage.Uploads); Assert.Empty(f.Storage.Deletes);
+        Assert.Empty(f.Storage.Confirmations); Assert.Empty(f.Storage.Deletes);
     }
 
     [Theory]
@@ -120,7 +119,7 @@ public class AddPhotosTests
         f.Transport.Status = status; await db.SaveChangesAsync();
         Assert.Equal("INVALID_TRANSPORT_STATUS", (await Assert.ThrowsAsync<ConflictException>(() => f.Service.AddPhotosAsync(
             f.Transport.TransportId, id, new() { Files = [Photo()] }, f.Escort.AccountId))).ErrorCode);
-        Assert.Empty(f.Storage.Uploads);
+        Assert.Empty(f.Storage.Confirmations);
     }
 
     [Fact]
@@ -137,28 +136,28 @@ public class AddPhotosTests
             Guid.NewGuid(), id, request, f.Escort.AccountId))).ErrorCode);
         await Assert.ThrowsAsync<BadRequestException>(() => f.Service.AddPhotosAsync(Guid.Empty, id, request, f.Escort.AccountId));
         await Assert.ThrowsAsync<BadRequestException>(() => f.Service.AddPhotosAsync(f.Transport.TransportId, Guid.Empty, request, f.Escort.AccountId));
-        Assert.Empty(f.Storage.Uploads);
+        Assert.Empty(f.Storage.Confirmations);
     }
 
     [Theory]
-    [InlineData("secondUpload")]
+    [InlineData("secondConfirmation")]
     [InlineData("sign")]
     [InlineData("cancel")]
-    public async Task Append_FailuresCleanOnlyNewPhotosAndPreserveExistingEvidence(string failure)
+    public async Task Append_FailuresPreserveUploadedAndExistingEvidence(string failure)
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         var id = (await f.Service.CreateAsync(f.Transport.TransportId, f.Request(), f.Escort.AccountId)).Value.HorseHealthLogId;
         var log = await db.HorseHealthLogs.SingleAsync();
         var original = new[] { Storage.Url(Guid.NewGuid()) }; log.PhotoUrls = original; await db.SaveChangesAsync();
         using var cancellation = new CancellationTokenSource();
-        f.Storage.FailAtUpload = failure == "secondUpload" ? 2 : null;
+        f.Storage.FailAtConfirmation = failure == "secondConfirmation" ? 2 : null;
         f.Storage.FailSign = failure == "sign";
-        if (failure == "cancel") f.Storage.AfterUpload = () => { cancellation.Cancel(); return Task.CompletedTask; };
+        if (failure == "cancel") f.Storage.AfterConfirmation = () => { cancellation.Cancel(); return Task.CompletedTask; };
         Func<Task> append = () => f.Service.AddPhotosAsync(f.Transport.TransportId, id,
             new() { Files = [Photo(), Photo()] }, f.Escort.AccountId, cancellation.Token);
         if (failure == "cancel") await Assert.ThrowsAnyAsync<OperationCanceledException>(append);
         else await Assert.ThrowsAsync<IOException>(append);
-        Assert.Equal(f.Storage.Uploads, f.Storage.Deletes); Assert.NotEmpty(f.Storage.Uploads);
+        Assert.Empty(f.Storage.Deletes); Assert.NotEmpty(f.Storage.Confirmations);
         Assert.Equal(original, log.PhotoUrls);
     }
 
@@ -170,7 +169,7 @@ public class AddPhotosTests
         await Assert.ThrowsAsync<BadRequestException>(() => f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId));
         await Assert.ThrowsAsync<FieldValidationException>(() => f.Service.MarkAllNormalAsync(f.Transport.TransportId,
             new() { LogType = "OTHER", Files = [Photo(), Photo()] }, f.Escort.AccountId));
-        Assert.Empty(f.Storage.Uploads); Assert.Empty(db.HorseHealthLogs);
+        Assert.Empty(f.Storage.Confirmations); Assert.Empty(db.HorseHealthLogs);
         request.Files.RemoveAt(5);
         Assert.Equal(5, (await f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId)).Value.Photos.Count);
         Assert.Equal(5, (await db.HorseHealthLogs.SingleAsync()).PhotoUrls.Length);
