@@ -30,7 +30,7 @@ namespace Pegaxus.Service.Test;
 public class HorseHealthLogHttpTests
 {
     [Fact]
-    public async Task Multipart_CreateReturnsFullCheckAndReplayHasNoRepeatedEffects()
+    public async Task Json_CreateReturnsFullCheckAndReplayHasNoRepeatedEffects()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         await using var host = await StartAsync(db, f.Storage);
@@ -71,11 +71,11 @@ public class HorseHealthLogHttpTests
         Assert.Equal("CRITICAL", replayValue.GetProperty("healthStatus").GetString());
         Assert.False(replayValue.GetProperty("effects").GetProperty("emergencyNotified").GetBoolean());
         Assert.False(replayValue.GetProperty("effects").GetProperty("canReportIncident").GetBoolean());
-        Assert.Single(f.Storage.Uploads); Assert.Equal(2, await db.Notifications.CountAsync()); Assert.Empty(db.IncidentReports);
+        Assert.Single(f.Storage.Confirmations); Assert.Equal(2, await db.Notifications.CountAsync()); Assert.Empty(db.IncidentReports);
     }
 
     [Fact]
-    public async Task Multipart_BatchReturnsSummariesAndSharedPhotoWithoutAlerts()
+    public async Task Json_BatchReturnsSummariesAndSharedPhotoWithoutAlerts()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         await using var host = await StartAsync(db, f.Storage);
@@ -100,7 +100,7 @@ public class HorseHealthLogHttpTests
                 Assert.False(log.TryGetProperty("photos", out _)); Assert.False(log.TryGetProperty("effects", out _));
             }
         }
-        Assert.Single(f.Storage.Uploads); Assert.Equal(2, await db.HorseHealthLogs.CountAsync());
+        Assert.Single(f.Storage.Confirmations); Assert.Equal(2, await db.HorseHealthLogs.CountAsync());
         Assert.Single((await db.HorseHealthLogs.ToListAsync()).SelectMany(log => log.PhotoUrls).Distinct());
         Assert.Empty(db.Notifications);
     }
@@ -118,7 +118,7 @@ public class HorseHealthLogHttpTests
     [InlineData("veterinarianRequired", "true", 400, "VALIDATION_ERROR")]
     [InlineData("veterinarianNote", "", 400, "VALIDATION_ERROR")]
     [InlineData("veterinarianNote", "unexpected", 400, "VALIDATION_ERROR")]
-    public async Task Multipart_ValidationUsesContractErrors(string field, string input, int status, string code)
+    public async Task Json_ValidationUsesContractErrors(string field, string input, int status, string code)
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         await using var host = await StartAsync(db, f.Storage);
@@ -127,7 +127,7 @@ public class HorseHealthLogHttpTests
         using var response = await client.PostAsync($"/api/v1/transports/{f.Transport.TransportId}/horse-health-logs", form);
         Assert.Equal(status, (int)response.StatusCode);
         Assert.Equal(code, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
-        Assert.Empty(db.HorseHealthLogs); Assert.Empty(f.Storage.Uploads);
+        Assert.Empty(db.HorseHealthLogs); Assert.Empty(f.Storage.Confirmations);
     }
 
     [Theory]
@@ -158,7 +158,7 @@ public class HorseHealthLogHttpTests
     }
 
     [Fact]
-    public async Task Multipart_AppendReturnsAllSignedPhotosAndIgnoresUnsupportedMetadataAndCheckEdits()
+    public async Task Json_AppendReturnsAllSignedPhotosAndIgnoresUnsupportedMetadataAndCheckEdits()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         var request = f.Request(); request.Files = [Photo()]; request.GeneralNote = "Original";
@@ -166,8 +166,6 @@ public class HorseHealthLogHttpTests
         await using var host = await StartAsync(db, f.Storage);
         using var client = Client(host, f.Escort.AccountId, EmployeeRole.ESCORT);
         using var form = PhotosForm(2);
-        foreach (var field in new[] { "caption", "latitude", "longitude", "capturedAt", "generalNote", "healthStatus" })
-            form.Add(new StringContent("ignored"), field);
         using var response = await client.PostAsync($"/api/v1/transports/{f.Transport.TransportId}/horse-health-logs/{id}/photos", form);
         Assert.Equal(HttpStatusCode.OK, response.StatusCode);
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
@@ -192,7 +190,7 @@ public class HorseHealthLogHttpTests
     [InlineData(0, 400, "VALIDATION_ERROR")]
     [InlineData(6, 400, "VALIDATION_ERROR")]
     [InlineData(5, 422, "PHOTO_LIMIT_EXCEEDED")]
-    public async Task Multipart_AppendEnforcesPerRequestAndTotalPhotoLimits(int count, int status, string code)
+    public async Task Json_AppendEnforcesPerRequestAndTotalPhotoLimits(int count, int status, string code)
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         var request = f.Request(); request.Files = [Photo()];
@@ -203,11 +201,11 @@ public class HorseHealthLogHttpTests
         using var response = await client.PostAsync($"/api/v1/transports/{f.Transport.TransportId}/horse-health-logs/{id}/photos", form);
         Assert.Equal(status, (int)response.StatusCode);
         Assert.Equal(code, (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
-        Assert.Single(f.Storage.Uploads); Assert.Single((await db.HorseHealthLogs.SingleAsync()).PhotoUrls);
+        Assert.Single(f.Storage.Confirmations); Assert.Single((await db.HorseHealthLogs.SingleAsync()).PhotoUrls);
     }
 
     [Fact]
-    public async Task Multipart_AppendRequiresAuthenticationRoleAuthorAndLiveScope()
+    public async Task Json_AppendRequiresAuthenticationRoleAuthorAndLiveScope()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         var id = (await f.Service.CreateAsync(f.Transport.TransportId, f.Request(), f.Escort.AccountId)).Value.HorseHealthLogId;
@@ -226,33 +224,20 @@ public class HorseHealthLogHttpTests
         Assert.Equal(HttpStatusCode.Forbidden, authorDenied.StatusCode);
         assignedOther.DefaultRequestHeaders.Authorization = null;
         using var anonymousForm = PhotosForm(1); using var anonymous = await assignedOther.PostAsync(url, anonymousForm);
-        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode); Assert.Empty(f.Storage.Uploads);
+        Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode); Assert.Empty(f.Storage.Confirmations);
     }
 
-    private static MultipartFormDataContent PhotosForm(int count)
-    {
-        var form = new MultipartFormDataContent();
-        for (var index = 0; index < count; index++)
-        {
-            var file = new ByteArrayContent(Png); file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-            form.Add(file, "files", $"health-{index}.png");
-        }
-        return form;
-    }
+    private static JsonContent PhotosForm(int count) => JsonContent.Create(new { files = Enumerable.Range(0, count).Select(_ => Photo()).ToArray() });
 
-    private static MultipartFormDataContent Form(Fixture f, bool batch = false, Dictionary<string, string>? fields = null, bool photo = false)
+    private static JsonContent Form(Fixture f, bool batch = false, Dictionary<string, string>? fields = null, bool photo = false)
     {
-        var values = new Dictionary<string, string> { ["logType"] = "ROUTINE_CHECK", ["checkedAt"] = Fixture.CheckTime.ToString("O") };
-        if (!batch) { values["horseId"] = f.Horse.HorseId.ToString(); values["healthStatus"] = "NORMAL"; values["hydrationStatus"] = "NORMAL"; }
-        if (fields is not null) foreach (var pair in fields) values[pair.Key] = pair.Value;
-        var form = new MultipartFormDataContent();
-        foreach (var pair in values) form.Add(new StringContent(pair.Value), pair.Key);
-        if (photo)
-        {
-            var file = new ByteArrayContent(Png); file.Headers.ContentType = new MediaTypeHeaderValue("image/png");
-            form.Add(file, "files", "health.png");
-        }
-        return form;
+        var values = new Dictionary<string, object?> { ["logType"] = "ROUTINE_CHECK", ["checkedAt"] = Fixture.CheckTime.ToString("O") };
+        if (!batch) { values["horseId"] = f.Horse.HorseId; values["healthStatus"] = "NORMAL"; values["hydrationStatus"] = "NORMAL"; }
+        if (fields is not null) foreach (var pair in fields)
+            values[pair.Key] = pair.Key == "veterinarianRequired" && bool.TryParse(pair.Value, out var boolean) ? boolean :
+                new[] { "heartRateBpm", "respiratoryRateBpm", "temperatureCelsius" }.Contains(pair.Key) && decimal.TryParse(pair.Value, System.Globalization.NumberStyles.Number, System.Globalization.CultureInfo.InvariantCulture, out var number) ? number : pair.Value;
+        if (photo) values["files"] = new[] { Photo() };
+        return JsonContent.Create(values);
     }
 
     private static async Task<WebApplication> StartAsync(AppDbContext db, Storage storage)

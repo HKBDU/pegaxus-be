@@ -275,7 +275,7 @@ public class HandoverTests
         internal required HandoverRecord Delivery { get; init; }
         internal Guid TransportId => Route.TransportPlan.TransportId;
         internal Handovers.Service Service => CreateService(db);
-        internal Handovers.Service CreateService(AppDbContext context) => new(context, Clock, new ListRequestValidator(), new CancelRequestValidator(),
+        internal Handovers.Service CreateService(AppDbContext context) => new(context, Clock, new ListRequestValidator(), new CancelRequestValidator(), new CreateRequestValidator(),
             new Pegaxus.Service.NotificationService.Service(context, Realtime), new CompleteRequestValidator(), Media,
             Microsoft.Extensions.Logging.Abstractions.NullLogger<Handovers.Service>.Instance);
         internal Handovers.Request.CancelRequest Cancel(HandoverRecord item) => new() { LastUpdatedAt = DbTime.AsUtc(item.UpdatedAt), CancellationReason = "  Primary road is closed  " };

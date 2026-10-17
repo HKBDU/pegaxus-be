@@ -12,7 +12,7 @@ public sealed partial class ComplianceDossiersController
     /// <summary>
     /// Submit quarantine evidence.
     /// </summary>
-    /// <remarks>The assigned Driver or Escort submits BCP proof images using multipart/form-data. Creates a QuarantineProof awaiting Transport Specialist verification without changing dossier status.</remarks>
+    /// <remarks>The assigned Driver or Escort submits BCP proof images using JSON publicId references from presigned uploads. Creates a QuarantineProof awaiting Transport Specialist verification without changing dossier status.</remarks>
     /// <param name="dossierId">The compliance dossier identifier (UUID).</param>
     /// <param name="request">The BCP information, evidence files, and optional notes.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
@@ -24,10 +24,10 @@ public sealed partial class ComplianceDossiersController
     /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("/api/v1/compliance-dossiers/{dossierId:guid}/quarantine-proofs")]
     [Authorize(Policy = JwtExtensions.DriverOrEscortPolicy)]
-    [Consumes("multipart/form-data")]
+    [Consumes("application/json")]
     public async Task<IActionResult> SubmitQuarantineProof(
         Guid dossierId,
-        [FromForm] ComplianceDossierService.Request.SubmitQuarantineProofRequest request,
+        [FromBody] ComplianceDossierService.Request.SubmitQuarantineProofRequest request,
         CancellationToken cancellationToken)
     {
         var proofId = await _service.SubmitQuarantineProofAsync(

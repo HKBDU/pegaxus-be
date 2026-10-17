@@ -22,6 +22,10 @@ public sealed partial class Service
     {
         ValidateQuarantineProofRequest(request);
 
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
+        await _db.LockRowsAsync(_db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId),
+            item => item.ComplianceDossierId, cancellationToken);
+
         var dossier = await _db.ComplianceDossiers
             .Include(item => item.Transport)
                 .ThenInclude(item => item.Booking)
@@ -32,6 +36,7 @@ public sealed partial class Service
         if (dossier is null)
             throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
 
+        await _db.Entry(dossier).ReloadAsync(cancellationToken);
         if (dossier.Status != ComplianceDossierStatus.APPROVED)
             throw new ConflictException(
                 "Quarantine proof can only be submitted when the ComplianceDossier is APPROVED",
@@ -71,15 +76,14 @@ public sealed partial class Service
 
         for (var index = 0; index < request.Files.Count; index++)
         {
-            var file = request.Files[index];
-            var (fileUrl, _) = await _mediaService.UploadFileAsync(file);
+            var file = await ConfirmProofImageAsync(accountId, request.Files[index].PublicId, cancellationToken);
             proof.Attachments.Add(new ProofAttachment
             {
                 ProofAttachmentId = Guid.NewGuid(),
                 FileName = file.FileName,
-                FileUrl = fileUrl,
-                MimeType = file.ContentType,
-                FileSizeBytes = file.Length,
+                FileUrl = file.FileUrl,
+                MimeType = file.MimeType,
+                FileSizeBytes = file.SizeBytes,
                 SortOrder = index + 1,
                 CreatedAt = now
             });
@@ -116,6 +120,7 @@ public sealed partial class Service
                 MailService.EmailBodies.ClearanceOutcome.Held, null, now, cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
 
         return proof.QuarantineProofId;
@@ -153,6 +158,17 @@ public sealed partial class Service
             throw new ForbiddenException("You do not have permission to view this QuarantineProof");
 
         var bookingHorses = proof.ComplianceDossier.Transport.Booking.BookingHorses;
+        var files = new List<Response.ProofFileResponse>();
+        foreach (var attachment in proof.Attachments.Where(item => item.QuarantineProofId == proof.QuarantineProofId).OrderBy(item => item.SortOrder))
+        {
+            var readUrl = await _mediaService.CreateReadUrlAsync(attachment.FileUrl, cancellationToken);
+            files.Add(new Response.ProofFileResponse
+            {
+                FileName = attachment.FileName, FileUrl = readUrl.Url, MimeType = attachment.MimeType,
+                FileSizeBytes = attachment.FileSizeBytes, SortOrder = attachment.SortOrder
+            });
+        }
+
         return new Response.QuarantineProofResponse
         {
             QuarantineProofId = proof.QuarantineProofId,
@@ -190,17 +206,7 @@ public sealed partial class Service
                 HorseName = item.Horse.HorseName,
                 MicrochipNumber = item.Horse.MicrochipNumber
             }).ToList(),
-            Files = proof.Attachments
-                .Where(item => item.QuarantineProofId == proof.QuarantineProofId)
-                .OrderBy(item => item.SortOrder)
-                .Select(item => new Response.ProofFileResponse
-                {
-                    FileName = item.FileName,
-                    FileUrl = item.FileUrl,
-                    MimeType = item.MimeType,
-                    FileSizeBytes = item.FileSizeBytes,
-                    SortOrder = item.SortOrder
-                }).ToList()
+            Files = files
         };
     }
 
@@ -436,29 +442,12 @@ public sealed partial class Service
                 "quickNote is required when isHoldback is true",
                 "QUICK_NOTE_REQUIRED");
 
-        if (request.Files.Count == 0)
+        if (request.Files is null || request.Files.Count == 0)
             throw new BadRequestException(
                 "Upload failed or image unclear. Please retake the photo",
                 "EVIDENCE_UNCLEAR");
 
-        const long maxFileSize = 5 * 1024 * 1024;
-        foreach (var file in request.Files)
-        {
-            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            var validExtension = extension is ".jpg" or ".jpeg" or ".png";
-            var validContentType = file.ContentType is "image/jpeg" or "image/png";
-
-            if (file.Length > maxFileSize)
-                throw new Pegaxus.Service.Exceptions.Exceptions(
-                    "Proof image must not exceed 5 MB",
-                    413,
-                    "FILE_TOO_LARGE");
-
-            if (!validExtension || !validContentType)
-                throw new BadRequestException(
-                    "Proof file must be JPG, JPEG, or PNG",
-                    "INVALID_FILE_TYPE");
-        }
+        ValidateProofReferences(request.Files);
     }
 
     private static string ToQuarantineStatusName(QuarantineProofStatus status) => status switch
