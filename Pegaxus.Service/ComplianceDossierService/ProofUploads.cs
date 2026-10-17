@@ -14,7 +14,15 @@ public sealed partial class Service
 
     private async Task<ConfirmedUploadResult> ConfirmProofImageAsync(Guid accountId, string publicId, CancellationToken cancellationToken)
     {
-        var asset = await _mediaService.ConfirmUploadAsync(accountId, publicId, cancellationToken);
+        ConfirmedUploadResult asset;
+        try
+        {
+            asset = await _mediaService.ConfirmUploadAsync(accountId, publicId, cancellationToken);
+        }
+        catch (Pegaxus.Service.Exceptions.Exceptions exception) when (exception.ErrorCode == "FILE_TOO_LARGE")
+        {
+            throw new Pegaxus.Service.Exceptions.Exceptions("Proof image must not exceed 5 MB", 413, "FILE_TOO_LARGE");
+        }
         if (asset.SizeBytes > 5 * 1024 * 1024)
             throw new Pegaxus.Service.Exceptions.Exceptions("Proof image must not exceed 5 MB", 413, "FILE_TOO_LARGE");
         var extension = Path.GetExtension(asset.FileName).ToLowerInvariant();

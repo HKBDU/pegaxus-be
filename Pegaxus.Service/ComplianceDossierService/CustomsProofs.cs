@@ -22,6 +22,10 @@ public sealed partial class Service
     {
         ValidateCustomsProofRequest(request);
 
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
+        await _db.LockRowsAsync(_db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId),
+            item => item.ComplianceDossierId, cancellationToken);
+
         var dossier = await _db.ComplianceDossiers
             .Include(item => item.Transport)
                 .ThenInclude(item => item.Booking)
@@ -31,6 +35,7 @@ public sealed partial class Service
         if (dossier is null)
             throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
 
+        await _db.Entry(dossier).ReloadAsync(cancellationToken);
         if (dossier.Status != ComplianceDossierStatus.APPROVED)
             throw new ConflictException(
                 "Customs proof can only be submitted when the ComplianceDossier is APPROVED",
@@ -123,6 +128,7 @@ public sealed partial class Service
                 proof.CustomsPortName, MailService.EmailBodies.ClearanceOutcome.Held, null, now, cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
         return proof.CustomsClearanceProofId;
     }

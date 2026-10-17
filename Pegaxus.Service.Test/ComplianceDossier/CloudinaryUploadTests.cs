@@ -123,7 +123,7 @@ public class CloudinaryUploadTests
         Assert.Equal("UPLOAD_NOT_FOUND", error.ErrorCode);
     }
 
-    private static GetResourceResult Resource(string resourceType = "image") =>
+    internal static GetResourceResult Resource(string resourceType = "image") =>
         JsonConvert.DeserializeObject<GetResourceResult>(JsonConvert.SerializeObject(new
         {
             public_id = PublicId, format = "pdf", bytes = 123, original_filename = "passport",

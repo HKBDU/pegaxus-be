@@ -55,6 +55,34 @@ public class ProofUploadTests
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task Submit_CloudinarySizeRejectionPreservesProofError(bool customs)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (accountId, dossierId) = await SeedAsync(db);
+        var publicId = $"evidence/{accountId:D}/{Guid.NewGuid():N}";
+        var resource = CloudinaryUploadTests.Resource();
+        resource.PublicId = publicId;
+        resource.Bytes = 5 * 1024 * 1024 + 1;
+        var media = new CloudinaryUploadTests.TestCloudinary(resource);
+        var storage = new DocumentUploadTests.RecordingStorage();
+        var service = new Pegaxus.Service.ComplianceDossierService.Service(db, media,
+            new Pegaxus.Service.ComplianceDossierService.Validator.InitializeRequestValidator(), TestSupport.CreateNotifications(db),
+            storage, Microsoft.Extensions.Logging.Abstractions.NullLogger<Pegaxus.Service.ComplianceDossierService.Service>.Instance);
+
+        var error = await Assert.ThrowsAsync<Pegaxus.Service.Exceptions.Exceptions>(() => SubmitAsync(service,
+            customs, accountId, dossierId, [new AssetReference { PublicId = publicId }]));
+
+        Assert.Equal(413, error.StatusCode);
+        Assert.Equal("FILE_TOO_LARGE", error.ErrorCode);
+        Assert.Equal("Proof image must not exceed 5 MB", error.Message);
+        Assert.Equal(1, media.Calls);
+        Assert.Empty(await db.ProofAttachments.ToListAsync());
+        Assert.Empty(storage.Deleted);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task Submit_ContentValidationFailureRetainsDirectUpload_AndPersistsNothing(bool customs)
     {
         await using var db = TestSupport.CreateDb();

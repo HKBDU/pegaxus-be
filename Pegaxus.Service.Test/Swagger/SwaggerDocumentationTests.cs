@@ -32,10 +32,14 @@ public class SwaggerDocumentationTests
             .GetProperty("requestBody").GetProperty("content");
         Assert.Equal("application/json", Assert.Single(content.EnumerateObject()).Name);
         var schemas = json.RootElement.GetProperty("components").GetProperty("schemas");
-        var requestSchema = content.GetProperty("application/json").GetProperty("schema").GetProperty("$ref").GetString()!.Split('/').Last();
+        var requestReference = content.GetProperty("application/json").GetProperty("schema").GetProperty("$ref").GetString();
+        Assert.NotNull(requestReference);
+        var requestSchema = requestReference.Split('/').Last();
         var files = schemas.GetProperty(requestSchema).GetProperty("properties").GetProperty("files");
         Assert.Equal("array", files.GetProperty("type").GetString());
-        var assetSchema = files.GetProperty("items").GetProperty("$ref").GetString()!.Split('/').Last();
+        var assetReference = files.GetProperty("items").GetProperty("$ref").GetString();
+        Assert.NotNull(assetReference);
+        var assetSchema = assetReference.Split('/').Last();
         Assert.Equal("string", schemas.GetProperty(assetSchema).GetProperty("properties").GetProperty("publicId").GetProperty("type").GetString());
     }
 
