@@ -36,7 +36,8 @@ public class RouteChangePostgresTests
         Assert.Null((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Completed.RoutePlanRouteId)).SupersededAt);
         Assert.NotNull((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Current.RoutePlanRouteId)).SupersededAt);
         Assert.Equal(4, await check.Notifications.CountAsync());
-        Assert.Equal(4, await check.OutboxMessages.CountAsync());
+        Assert.Equal(4, await check.OutboxMessages.CountAsync(item => item.MessageType == "SIGNALR_ACCOUNT"));
+        Assert.Equal(4, await check.OutboxMessages.CountAsync(item => item.MessageType == "EMAIL"));
         Assert.Empty(await check.IncidentReports.ToListAsync());
         var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(scope.Source).Options;
         await CheckOutboxClaimsAsync(options);
@@ -230,6 +231,25 @@ public class RouteChangePostgresTests
         await using var check = scope.Db();
         Assert.Equal(RoutePlanStatus.CONFIRMED, (await check.RoutePlans.SingleAsync(x => x.RoutePlanId == backupId)).Status);
         Assert.Equal(RoutePlanStatus.CONFIRMED, (await check.RoutePlans.SingleAsync(x => x.RoutePlanId == primaryId)).Status);
+    }
+
+    [PostgresFact]
+    public async Task EmailRecipients_TranslateOnPostgres_AndSkipInactiveAccounts()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        await using var db = scope.Db();
+        var (customer, _) = await TestSupport.AddCustomerAsync(db);
+        var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var (disabled, disabledEmployee) = await TestSupport.AddLogisticsManagerAsync(db);
+        disabledEmployee.IsActive = false;
+        await db.SaveChangesAsync();
+
+        await Pegaxus.Service.MailService.MailRecipients.QueueAsync(db, [customer.AccountId, manager.AccountId, disabled.AccountId], DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified),
+            recipient => Pegaxus.Service.MailService.MailRecipients.Mail(recipient, "Subject", "Body"));
+        await db.SaveChangesAsync();
+
+        await using var check = scope.Db();
+        Assert.Equal(2, await check.OutboxMessages.CountAsync(item => item.MessageType == "EMAIL"));
     }
 
     [PostgresFact]

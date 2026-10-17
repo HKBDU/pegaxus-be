@@ -111,6 +111,9 @@ public sealed partial class Service
         foreach (var tsAccountId in tsAccountIds)
             AddNotification(tsAccountId, EmployeeRole.TRANSPORT_SPECIALIST, dossier, title, message, now,
                 request.IsHoldback ? NotificationPriority.URGENT : NotificationPriority.NORMAL);
+        if (request.IsHoldback)
+            await QueueClearanceMailAsync(tsAccountIds, dossier, MailService.EmailBodies.ClearanceKind.Bcp, proof.BcpName,
+                MailService.EmailBodies.ClearanceOutcome.Held, null, now, cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -267,6 +270,8 @@ public sealed partial class Service
                 $"Your quarantine proof for dossier {dossier.DossierCode} ({proof.BcpName}) was rejected. Reason: {proof.RejectionReason}. Please submit a new proof.",
                 now,
                 NotificationPriority.HIGH);
+            await QueueClearanceMailAsync([proof.SubmittedByEmployee.AccountId], dossier, MailService.EmailBodies.ClearanceKind.Bcp,
+                proof.BcpName, MailService.EmailBodies.ClearanceOutcome.ProofRejected, proof.RejectionReason, now, cancellationToken);
 
             await _db.SaveChangesAsync(cancellationToken);
             await _notificationService.FlushAsync(cancellationToken);
@@ -369,6 +374,8 @@ public sealed partial class Service
                 message,
                 now,
                 NotificationPriority.URGENT);
+            await QueueClearanceMailAsync(recipients.Select(item => item.AccountId).Append(dossier.Transport.Booking.Customer.AccountId), dossier,
+                MailService.EmailBodies.ClearanceKind.Bcp, proof.BcpName, MailService.EmailBodies.ClearanceOutcome.Failed, null, now, cancellationToken);
         }
 
         await _db.SaveChangesAsync(cancellationToken);

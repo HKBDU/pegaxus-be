@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 using static Pegaxus.Service.Common.DbTime;
@@ -73,6 +74,11 @@ public partial class Service
         foreach (var recipient in specialists)
             AddNotification(recipient, EmployeeRole.TRANSPORT_SPECIALIST, booking.Transport?.TransportId, booking, title, message, now);
         AddNotification(booking.Customer.AccountId, null, booking.Transport?.TransportId, booking, title, message, now, NotificationPriority.HIGH);
+        await MailService.MailRecipients.QueueAsync(_db, specialists.Append(booking.Customer.AccountId), now, recipient => MailService.MailRecipients.Mail(
+            recipient, $"{title} — {booking.BookingCode}",
+            MailService.EmailBodies.BookingChangedBody(recipient.FullName, booking.BookingCode,
+                $"{booking.OriginCountry} to {booking.DestinationCountry}", status == BookingStatus.CANCELLED, reason, recipient.Role is not null,
+                NotificationLinks.Booking(recipient.Role, booking.BookingId))), cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);

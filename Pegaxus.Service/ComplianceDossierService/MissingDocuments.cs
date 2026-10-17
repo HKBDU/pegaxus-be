@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.ComplianceDossierService;
@@ -212,7 +213,7 @@ public sealed partial class Service
                         bookingCode: dossier.Transport.Booking.BookingCode,
                         generalDueDate: reminder.DueDate,
                         note: reminder.Note,
-                        actionUrl: null,
+                        actionUrl: NotificationLinks.Dossier(null, dossier.ComplianceDossierId),
                         missingItems: missing.Select(item => new MailService.EmailBodies.MissingItem(
                             item.ComplianceRequirement.RequirementName, item.Horse?.HorseName, item.DueDate)))
                 }, timeout.Token);

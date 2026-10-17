@@ -99,6 +99,10 @@ public sealed partial class Service
                 ActionUrl = recipient.Url,
                 CreatedAt = now
             });
+        await MailService.MailRecipients.QueueAsync(db, [plan.Transport.Booking.Customer.AccountId], now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.TransportPlanTitle(MailService.EmailBodies.TransportPlanMailKind.Updated)} — {plan.PlanCode}",
+            MailService.EmailBodies.TransportPlanBody(recipient.FullName, plan.PlanCode, MailService.EmailBodies.TransportPlanMailKind.Updated, reason,
+                NotificationLinks.Booking(null, plan.Transport.BookingId))), cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)

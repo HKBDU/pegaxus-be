@@ -476,6 +476,11 @@ public class BookingServiceTests
         Assert.Contains(customer.FullName, notification.Message);
         Assert.Contains(booking.BookingCode, notification.Message);
         Assert.Contains($"{booking.OriginCountry} to {booking.DestinationCountry}", notification.Message);
+        var mail = Assert.Single(await EmailOutboxWiringTests.EmailsAsync(db));
+        Assert.Equal(manager.Email, mail.To);
+        Assert.Equal($"New booking to review — {booking.BookingCode}", mail.Subject);
+        Assert.Contains(customer.FullName, mail.Body);
+        Assert.Contains($"{{{{PX_FRONTEND_URL}}}}/admin/transport-requests/{booking.BookingId}", mail.Body);
     }
 
     [Fact]

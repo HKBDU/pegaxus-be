@@ -11,11 +11,13 @@ public class Service : IMailService
     private const int MaxErrorLength = 500;
 
     private readonly BrevoOptions _options = new();
+    private readonly string? _frontendUrl;
     private readonly IHttpClientFactory _httpClientFactory;
 
     public Service(IConfiguration configuration, IHttpClientFactory httpClientFactory)
     {
         configuration.GetSection(BrevoOptions.SectionName).Bind(_options);
+        _frontendUrl = configuration["Cors:FrontendUrl"];
         _httpClientFactory = httpClientFactory;
     }
 
@@ -40,7 +42,7 @@ public class Service : IMailService
                 sender,
                 to = new[] { new { email = recipient } },
                 subject = mailContent.Subject,
-                htmlContent = mailContent.Body
+                htmlContent = EmailLinks.Resolve(mailContent.Body, _frontendUrl)
             })
         };
         request.Headers.Add("api-key", _options.ApiKey);

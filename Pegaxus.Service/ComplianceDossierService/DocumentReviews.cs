@@ -206,6 +206,8 @@ public sealed partial class Service
                 .Select(customer => customer.AccountId).SingleAsync(cancellationToken);
             AddNotification(ownerAccountId, null, dossier, "Document approved",
                 $"{document.DocumentName} was approved for dossier {dossier.DossierCode}.", now);
+            await QueueDossierUpdateMailAsync(ownerAccountId, dossier, MailService.EmailBodies.DossierUpdateKind.DocumentApproved,
+                document.DocumentName, null, now, cancellationToken);
         }
         await _db.SaveChangesAsync(cancellationToken);
         return new Response.DocumentReviewResultResponse

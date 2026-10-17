@@ -103,6 +103,10 @@ public sealed partial class Service
                 ActionUrl = NotificationLinks.TransportPlan(employee.Role, plan.TransportPlanId),
                 CreatedAt = now
             });
+        await MailService.MailRecipients.QueueAsync(db, [specialist.AccountId, coordinator.AccountId], now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.TransportPlanTitle(MailService.EmailBodies.TransportPlanMailKind.Assigned)} — {plan.PlanCode}",
+            MailService.EmailBodies.TransportPlanBody(recipient.FullName, plan.PlanCode, MailService.EmailBodies.TransportPlanMailKind.Assigned,
+                recipient.Role is { } role ? RoleLabel.Of(role) : null, NotificationLinks.TransportPlan(recipient.Role, plan.TransportPlanId))), cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
@@ -251,6 +255,12 @@ public sealed partial class Service
                     ActionUrl = NotificationLinks.TransportPlan(recipient.Role, plan.TransportPlanId),
                     CreatedAt = now
                 });
+            if (change.NewEmployee.AccountId != accountId)
+                await MailService.MailRecipients.QueueAsync(db, [change.NewEmployee.AccountId], now, recipient => MailService.MailRecipients.Mail(recipient,
+                    $"{MailService.EmailBodies.TransportPlanTitle(MailService.EmailBodies.TransportPlanMailKind.PersonnelChanged)} — {plan.PlanCode}",
+                    MailService.EmailBodies.TransportPlanBody(recipient.FullName, plan.PlanCode, MailService.EmailBodies.TransportPlanMailKind.PersonnelChanged,
+                        $"The {RoleLabel.Of(change.NewEmployee.Role)} changed from {change.OldEmployee.FullName} to {change.NewEmployee.FullName}. Reason: {request.Reason.Trim()}",
+                        NotificationLinks.TransportPlan(recipient.Role, plan.TransportPlanId))), cancellationToken);
         }
 
         await db.SaveChangesAsync(cancellationToken);

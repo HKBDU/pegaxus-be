@@ -17,4 +17,12 @@ public static partial class EmailBodies
               {Muted(isVerification ? "If you did not create a Pegaxus account, you can safely ignore this email." : "If you did not request this, you can safely ignore this email.")}
         """ +
         Footer();
+
+    /// <summary>Tells a new staff member that the account exists. The email never carries a password.</summary>
+    public static string EmployeeWelcomeBody(string fullName, string roleLabel, string loginEmail, string? actionUrl) =>
+        Notice("Welcome to Pegaxus", "Your Pegaxus staff account is ready", null, fullName,
+            "Your staff account has been created.", Tone.Success, "Account created",
+            [Row("Role", Encode(roleLabel)), Row("Login email", Encode(loginEmail))],
+            null, "Note", actionUrl, "Sign in",
+            "Sign in with the temporary password your administrator gave you, then change it. If you do not have it, use the Forgot password option on the sign-in page.");
 }

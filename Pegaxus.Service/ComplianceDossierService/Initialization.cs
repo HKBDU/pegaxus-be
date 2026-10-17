@@ -77,6 +77,7 @@ public sealed partial class Service
         _db.ComplianceDossiers.Add(dossier);
         AddNotification(booking.Customer.AccountId, null, dossier, "Compliance dossier opened",
             $"Compliance dossier {dossier.DossierCode} is ready for booking {booking.BookingCode}. Open it to see the documents you need to upload.", now);
+        await QueueDossierUpdateMailAsync(booking.Customer.AccountId, dossier, MailService.EmailBodies.DossierUpdateKind.Opened, null, null, now, cancellationToken);
         try
         {
             await _db.SaveChangesAsync(cancellationToken);
