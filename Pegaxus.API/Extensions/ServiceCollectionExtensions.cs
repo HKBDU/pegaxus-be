@@ -2,6 +2,7 @@ using FluentValidation;
 using Microsoft.AspNetCore.Authentication.Google;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -42,6 +43,13 @@ public static class ServiceCollectionExtensions
     {
         services
             .AddControllers()
+            .AddMvcOptions(options =>
+            {
+                var factories = options.ValueProviderFactories;
+                for (var index = 0; index < factories.Count; index++)
+                    if (factories[index] is FormValueProviderFactory)
+                        factories[index] = new InvariantFormValueProviderFactory();
+            })
             .ConfigureApiBehaviorOptions(options =>
             {
                 options.InvalidModelStateResponseFactory = context =>
