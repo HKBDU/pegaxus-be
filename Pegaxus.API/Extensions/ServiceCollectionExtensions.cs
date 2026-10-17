@@ -18,6 +18,7 @@ using BookingService = Pegaxus.Service.BookingService;
 using TransportPlanService = Pegaxus.Service.TransportPlanService;
 using RoutePlanService = Pegaxus.Service.RoutePlanService;
 using LocationService = Pegaxus.Service.LocationService;
+using LocationTrackingService = Pegaxus.Service.LocationTrackingService;
 using RouteService = Pegaxus.Service.RouteService;
 using JwtService = Pegaxus.Service.JwtService;
 using MediaService = Pegaxus.Service.MediaService;
@@ -88,6 +89,8 @@ public static class ServiceCollectionExtensions
     {
         services.AddSignalR();
         services.AddSingleton<IUserIdProvider, AccountUserIdProvider>();
+        services.AddSingleton<LocationTrackingService.TrackingState>();
+        services.AddScoped<LocationTrackingService.ILocationTrackingRealtimeService, SignalRLocationTrackingService>();
         return services;
     }
 
@@ -245,6 +248,11 @@ public static class ServiceCollectionExtensions
     /// <summary>Transport plans, route plans, locations, routes, emergency route changes, outsourcing and personnel assignment.</summary>
     public static IServiceCollection AddTransportPlanningModule(this IServiceCollection services)
     {
+        services.AddScoped<LocationTrackingService.ILocationTrackingService, LocationTrackingService.Service>();
+        services.AddScoped<IValidator<LocationTrackingService.Request.LocationRequest>, LocationTrackingService.Validator.LocationRequestValidator>();
+        services.AddOptions<LocationTrackingService.TrackingOptions>().BindConfiguration("Tracking")
+            .Validate(options => double.IsFinite(options.GeofenceRadiusMeters) && options.GeofenceRadiusMeters > 0,
+                "Tracking:GeofenceRadiusMeters must be a positive finite number.").ValidateOnStart();
         services.AddScoped<HorseHealthLogService.IHorseHealthLogService, HorseHealthLogService.Service>();
         services.AddScoped<IValidator<HorseHealthLogService.Request.RecordRequest>, HorseHealthLogService.Validator.RecordRequestValidator>();
         services.AddScoped<IValidator<HorseHealthLogService.Request.CreateRequest>, HorseHealthLogService.Validator.CreateRequestValidator>();
