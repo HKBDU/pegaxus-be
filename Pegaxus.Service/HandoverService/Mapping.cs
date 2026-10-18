@@ -22,6 +22,8 @@ public sealed partial class Service
             var index = Array.FindIndex(ordered, entry => entry.Id == segment.Id);
             return new(segment.Id, index >= 0 ? index + 1 : segment.SequenceNo, segment.From, segment.To);
         }
+        var senderSignatureUrl = await ReadUrlAsync(item.SenderSignatureUrl, cancellationToken);
+        var receiverSignatureUrl = await ReadUrlAsync(item.ReceiverSignatureUrl, cancellationToken);
         var actions = new List<string>();
         if (item.Status is HandoverStatus.PLANNED or HandoverStatus.IN_PROGRESS)
         {
@@ -39,9 +41,12 @@ public sealed partial class Service
             new(item.ToType.ToString(), item.ToCustomerId, item.ToEmployeeId, null, item.ToPartyName, item.ToContactName,
                 actor.IsCustomer && item.ToType == HandoverPartyType.EMPLOYEE ? null : item.ToContactPhone),
             Brief(item.FromRoutePlanRouteId), Brief(item.ToRoutePlanRouteId), new(item.LocationName, item.Address, item.Country),
-            item.HorseConditionNote, item.DocumentHandoverNote, item.EquipmentHandoverNote, item.DiscrepancyNote, item.SenderSignatureUrl, item.ReceiverSignatureUrl,
+            item.HorseConditionNote, item.DocumentHandoverNote, item.EquipmentHandoverNote, item.DiscrepancyNote, senderSignatureUrl, receiverSignatureUrl,
             AsUtc(item.CancelledAt), item.CancellationReason, actions, AsUtc(item.CreatedAt), AsUtc(item.UpdatedAt));
     }
+
+    private async Task<string?> ReadUrlAsync(string? fileUrl, CancellationToken cancellationToken) =>
+        string.IsNullOrWhiteSpace(fileUrl) ? null : (await media.CreateReadUrlAsync(fileUrl, cancellationToken)).Url;
 
     private static SegmentData[] EffectiveSegments(SegmentData[] segments, TransportStatus status)
     {

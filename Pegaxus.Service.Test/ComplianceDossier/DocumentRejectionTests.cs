@@ -269,12 +269,10 @@ public class DocumentRejectionTests
         await using var otherDb = new AppDbContext((DbContextOptions<AppDbContext>)db.GetService<IDbContextOptions>());
         await CreateService(otherDb, new CaptureMailService()).RejectDocumentAsync(seed.Specialist, seed.Dossier.ComplianceDossierId,
             seed.Requirement.DossierRequirementId, seed.Version.DocumentVersionId, RejectRequest(seed.Version));
-        using var content = new MemoryStream([1]);
         var request = new Request.RecordAuthoritySubmissionRequest
         {
             AuthorityName = "Authority", SubmissionReference = "REF-REJECT", SubmittedAt = DateTimeOffset.UtcNow,
-            ProofFile = new Microsoft.AspNetCore.Http.FormFile(content, 0, 1, "proof", "proof.pdf")
-            { Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(), ContentType = "application/pdf" }
+            ProofFile = new() { PublicId = "evidence/proof/unused" }
         };
         await Assert.ThrowsAsync<ConflictException>(() => CreateService(db, new CaptureMailService())
             .RecordAuthoritySubmissionAsync(seed.Specialist, seed.Dossier.ComplianceDossierId, request));

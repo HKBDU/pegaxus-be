@@ -11,6 +11,7 @@ public static class Request
         public string? TransportMode { get; set; }
         public string? Status { get; set; }
         public string? VehicleType { get; set; }
+        public string? Country { get; set; }
         public int? MinCapacity { get; set; }
         public DateOnly? AvailableFrom { get; set; }
         public DateOnly? AvailableTo { get; set; }
@@ -32,6 +33,7 @@ public static class Request
         public string? InsuranceNumber { get; set; }
         public DateOnly? InsuranceExpiryDate { get; set; }
         public string? SpecialEquipment { get; set; }
+        public string? Country { get; set; }
     }
 
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]

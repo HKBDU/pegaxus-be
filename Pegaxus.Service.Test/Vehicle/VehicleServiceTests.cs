@@ -375,6 +375,32 @@ public class VehicleServiceTests
     }
 
     [Fact]
+    public async Task Country_IsNormalizedReturnedFilteredAndValidated()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var service = CreateService(db);
+        var french = ValidRequest("FR-1", "PLATE-FR"); french.Country = " fr ";
+        var created = await service.CreateAsync(french, account.AccountId);
+        await service.CreateAsync(ValidRequest("GB-1", "PLATE-GB"), account.AccountId);
+        var british = ValidRequest("GB-2", "PLATE-GB2"); british.Country = "GB";
+        await service.CreateAsync(british, account.AccountId);
+
+        Assert.Equal("FR", created.Country);
+        var list = await service.GetListAsync(new() { Country = "fr" }, account.AccountId);
+        Assert.Equal("FR-1", Assert.Single(list.Items).VehicleCode);
+        Assert.Equal(3, (await service.GetListAsync(new(), account.AccountId)).TotalItems);
+
+        var update = UpdateRequest(created); update.Country = "gb";
+        await service.UpdateAsync(created.VehicleId, update, account.AccountId);
+        Assert.Equal("GB", (await service.GetAsync(created.VehicleId, account.AccountId)).Country);
+
+        Assert.False(new ListRequestValidator().Validate(new Request.ListRequest { Country = "France" }).IsValid);
+        Assert.Contains(new CreateRequestValidator(TimeProvider.System).Validate(new Request.CreateRequest { Country = "F1" }).Errors,
+            x => x.PropertyName == "Country");
+    }
+
+    [Fact]
     public void Validators_RejectMissingReasonBadFormatDatesSortEnumsAndPagination()
     {
         var list = new ListRequestValidator();

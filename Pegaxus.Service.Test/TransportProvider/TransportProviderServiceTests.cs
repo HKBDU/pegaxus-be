@@ -83,6 +83,26 @@ public class TransportProviderServiceTests
         Assert.All(await db.AccountNotifications.ToListAsync(), item => Assert.Equal(recipient.AccountId, item.AccountId));
     }
 
+    [Fact]
+    public async Task Country_FiltersListAndMustBeIsoCode()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (actor, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var service = CreateService(db);
+        await service.CreateAsync(actor.AccountId, CreateRequest());
+        var other = CreateRequest(); other.ProviderCode = "PRV-FR-01"; other.TaxCode = "FR123"; other.Country = "fr";
+        await service.CreateAsync(actor.AccountId, other);
+
+        var list = await service.GetListAsync(actor.AccountId, new() { Country = " FR " });
+        Assert.Equal("PRV-FR-01", Assert.Single(list.Items).ProviderCode);
+        Assert.Equal("FR", list.Items[0].Country);
+        Assert.Equal(2, (await service.GetListAsync(actor.AccountId, new())).TotalItems);
+
+        Assert.False(new ListRequestValidator().Validate(new Providers.Request.ListRequest { Country = "France" }).IsValid);
+        var invalid = CreateRequest(); invalid.Country = "Germany";
+        Assert.Contains(new CreateRequestValidator().Validate(invalid).Errors, x => x.PropertyName == "Country");
+    }
+
     [Theory]
     [InlineData(RoutePlanStatus.DRAFT, false)]
     [InlineData(RoutePlanStatus.CONFIRMED, false)]

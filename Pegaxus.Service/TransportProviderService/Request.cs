@@ -8,6 +8,7 @@ public static class Request
         public int PageSize { get; set; } = 20;
         public string? Status { get; set; }
         public string? SupportedMode { get; set; }
+        public string? Country { get; set; }
         public string? Search { get; set; }
         public string SortBy { get; set; } = "providerName:asc";
     }

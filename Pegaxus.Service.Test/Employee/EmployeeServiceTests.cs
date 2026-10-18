@@ -61,6 +61,28 @@ public class EmployeeServiceTests
     }
 
     [Fact]
+    public async Task Country_IsNormalizedOnCreateAndUpdateAndRejectsNonIsoCodes()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var service = new EmployeeServiceImpl(db, new PasswordHasher<Account>());
+
+        var created = await service.CreateAsync(new() { Role = "DRIVER", Email = "driver.country@example.com",
+            Phone = "0900000000", FullName = "Driver Country", Country = " fr " }, manager.AccountId);
+        Assert.Equal("FR", (await service.GetAsync(created.EmployeeId)).Country);
+
+        await service.UpdateAsync(created.EmployeeId, new() { Country = "gb" }, manager.AccountId);
+        Assert.Equal("GB", (await service.GetAsync(created.EmployeeId)).Country);
+        await service.UpdateAsync(created.EmployeeId, new() { Country = " " }, manager.AccountId);
+        Assert.Null((await service.GetAsync(created.EmployeeId)).Country);
+
+        var invalid = await Assert.ThrowsAsync<BadRequestException>(() => service.UpdateAsync(created.EmployeeId, new() { Country = "France" }, manager.AccountId));
+        Assert.Equal("INVALID_COUNTRY", invalid.ErrorCode);
+        await Assert.ThrowsAsync<BadRequestException>(() => service.CreateAsync(new() { Role = "DRIVER", Email = "bad.country@example.com",
+            Phone = "0900000001", FullName = "Bad Country", Country = "F1" }, manager.AccountId));
+    }
+
+    [Fact]
     public async Task UpdateStatus_RejectsOwnAccount()
     {
         await using var db = TestSupport.CreateDb();

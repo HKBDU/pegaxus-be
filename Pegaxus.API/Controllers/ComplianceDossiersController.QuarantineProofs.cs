@@ -60,7 +60,7 @@ public sealed partial class ComplianceDossiersController
     /// <summary>
     /// Finalize quarantine verification.
     /// </summary>
-    /// <remarks>Transport Specialists verify horse microchips and record PASSED, PASSED_WITH_CONDITIONS, or FAILED using multipart/form-data. REJECT_PROOF returns the evidence for resubmission.</remarks>
+    /// <remarks>Transport Specialists verify horse microchips and record PASSED, PASSED_WITH_CONDITIONS, or FAILED using JSON. REJECT_PROOF returns the evidence for resubmission.</remarks>
     /// <param name="proofId">The proof identifier (UUID).</param>
     /// <param name="request">The verification action, horse checks, result, and supporting files or rejection reason.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
@@ -72,10 +72,10 @@ public sealed partial class ComplianceDossiersController
     /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPatch("/api/v1/quarantine-proofs/{proofId:guid}/finalize")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
-    [Consumes("multipart/form-data")]
+    [Consumes("application/json")]
     public async Task<IActionResult> FinalizeQuarantineProof(
         Guid proofId,
-        [FromForm] ComplianceDossierService.Request.FinalizeQuarantineProofRequest request,
+        [FromBody] ComplianceDossierService.Request.FinalizeQuarantineProofRequest request,
         CancellationToken cancellationToken)
     {
         var response = await _service.FinalizeQuarantineProofAsync(

@@ -4430,6 +4430,11 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("capacity_horses");
 
+                    b.Property<string>("Country")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("country");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");

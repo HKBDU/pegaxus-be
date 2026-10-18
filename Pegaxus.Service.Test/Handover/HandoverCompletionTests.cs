@@ -1,4 +1,3 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
@@ -17,7 +16,7 @@ namespace Pegaxus.Service.Test;
 public class HandoverCompletionTests
 {
     internal static byte[] PngBytes => Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/lS8AAAAASUVORK5CYII=");
-    internal static IFormFile Png() => new FormFile(new MemoryStream(PngBytes), 0, PngBytes.Length, "signature", "signature.png") { Headers = new HeaderDictionary(), ContentType = "image/png" };
+    internal static Pegaxus.Service.UploadService.Request.UploadedAssetReference Png() => new() { PublicId = "evidence/signature/" + Guid.NewGuid().ToString("N") };
     internal static Handovers.Request.CompleteRequest Request(HandoverRecord record) => new()
     {
         LastUpdatedAt = DbTime.AsUtc(record.UpdatedAt), HorseConditionNote = "  Healthy horses  ", DocumentHandoverNote = "  Passports checked  ",
@@ -61,7 +60,7 @@ public class HandoverCompletionTests
         Assert.Equal(f.Clock.Now, delivery.CompletedAt); Assert.Equal(delivery.CompletedAt, delivery.ActualHandoverAt); Assert.Equal(delivery.CompletedAt, delivery.UpdatedAt);
         Assert.Equal(f.Clock.Now.AddHours(24), delivery.Effects.ClaimWindowEndsAt); Assert.Equal(VehicleStatus.AVAILABLE, vehicle.Status);
         Assert.Equal(f.Second.ActualArrivalAt, f.Route.TransportPlan.Transport.ActualArrivalAt); Assert.Equal(f.Second.ActualArrivalAt, f.Route.TransportPlan.Transport.CompletedAt);
-        Assert.Equal(7, await db.Notifications.CountAsync()); Assert.Equal(7, f.Realtime.Messages.Count); Assert.Equal(6, f.Media.Uploaded.Count); Assert.Empty(f.Media.Deleted);
+        Assert.Equal(7, await db.Notifications.CountAsync()); Assert.Equal(7, f.Realtime.Messages.Count); Assert.Equal(6, f.Media.Confirmed.Count);
         var email = OutboxQueue.Deserialize<EmailPayload>((await db.OutboxMessages.SingleAsync()).Payload);
         Assert.Contains(f.Route.TransportPlan.Transport.TransportCode, email.Subject); Assert.Contains("24 hours", email.Body);
         Assert.Equal((await db.Accounts.SingleAsync(account => account.AccountId == f.CustomerAccountId)).Email, email.To);
@@ -120,7 +119,7 @@ public class HandoverCompletionTests
     [InlineData("oversize-file", "INVALID_IMAGE")]
     [InlineData("truncated-png", "INVALID_IMAGE")]
     [InlineData("header-only-png", "INVALID_IMAGE")]
-    public async Task Complete_RejectsInvalidInputBeforeUploading(string invalid, string code)
+    public async Task Complete_RejectsInvalidInputWithoutChangingTheRecord(string invalid, string code)
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = Request(f.Pickup);
         switch (invalid)
@@ -135,11 +134,10 @@ public class HandoverCompletionTests
             default:
                 var bytes = invalid == "oversize-file" ? new byte[200 * 1024 + 1] : invalid == "truncated-png" ? PngBytes[..33] :
                     invalid == "header-only-png" ? PngBytes[..33].Concat(PngBytes[^12..]).ToArray() : new byte[70];
-                request.ReceiverSignature = new FormFile(new MemoryStream(bytes), 0, bytes.Length, "receiverSignature", invalid == "jpeg" ? "signature.jpg" : "signature.png")
-                    { Headers = new HeaderDictionary(), ContentType = invalid == "jpeg" ? "image/jpeg" : "image/png" }; break;
+                f.Media.Files[request.ReceiverSignature!.PublicId] = (bytes, invalid == "jpeg" ? "image/jpeg" : "image/png"); break;
         }
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, request, f.Manager.AccountId));
-        Assert.Equal(code, error.ErrorCode); Assert.Empty(f.Media.Uploaded); Assert.Equal(HandoverStatus.PLANNED, f.Pickup.Status); Assert.Empty(db.Notifications);
+        Assert.Equal(code, error.ErrorCode); Assert.Equal(HandoverStatus.PLANNED, f.Pickup.Status); Assert.Empty(db.Notifications);
     }
 
     [Theory]
@@ -149,15 +147,14 @@ public class HandoverCompletionTests
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); f.Pickup.Status = status; await db.SaveChangesAsync();
         Assert.Equal("INVALID_HANDOVER_STATUS", (await Assert.ThrowsAsync<ConflictException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId))).ErrorCode);
-        Assert.Empty(f.Media.Uploaded); Assert.Empty(db.Notifications);
+        Assert.Empty(db.Notifications);
     }
 
     [Fact]
-    public async Task Complete_StaleVersionIsRejectedBeforeUploading()
+    public async Task Complete_StaleVersionIsRejected()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = Request(f.Pickup); request.LastUpdatedAt = request.LastUpdatedAt!.Value.AddSeconds(-1);
         Assert.Equal("HANDOVER_MODIFIED", (await Assert.ThrowsAsync<ConflictException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, request, f.Manager.AccountId))).ErrorCode);
-        Assert.Empty(f.Media.Uploaded);
     }
 
     [Theory]
@@ -170,7 +167,7 @@ public class HandoverCompletionTests
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         var accountId = actor switch { "customer" => f.CustomerAccountId, "specialist" => (await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.TRANSPORT_SPECIALIST)).AccountId,
             "unassigned" => (await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.DRIVER)).AccountId, _ => f.Receiver.AccountId };
-        await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), accountId)); Assert.Empty(f.Media.Uploaded);
+        await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), accountId));
     }
 
     [Theory]
@@ -196,7 +193,7 @@ public class HandoverCompletionTests
         }
         await db.SaveChangesAsync();
         Assert.Equal(code, (await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CompleteAsync(f.Transfer.HandoverRecordId, Request(f.Transfer), f.Manager.AccountId))).ErrorCode);
-        Assert.Empty(f.Media.Uploaded); Assert.Equal(HandoverStatus.PLANNED, f.Transfer.Status);
+        Assert.Equal(HandoverStatus.PLANNED, f.Transfer.Status);
     }
 
     [Fact]
@@ -224,31 +221,47 @@ public class HandoverCompletionTests
     }
 
     [Fact]
-    public async Task Complete_SecondUploadFailureDeletesFirstSignatureWithoutChangingDatabase()
+    public async Task Complete_UnconfirmedSignatureLeavesTheRecordUntouched()
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); f.Media.FailUpload = 2;
-        await Assert.ThrowsAsync<IOException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId));
-        Assert.Single(f.Media.Uploaded); Assert.Equal(f.Media.Uploaded, f.Media.Deleted); Assert.Equal(HandoverStatus.PLANNED, f.Pickup.Status);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = Request(f.Pickup);
+        request.ReceiverSignature = new() { PublicId = "evidence/signature/missing" };
+        var error = await Assert.ThrowsAsync<NotFoundException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, request, f.Manager.AccountId));
+        Assert.Equal("UPLOAD_NOT_FOUND", error.ErrorCode); Assert.Equal(HandoverStatus.PLANNED, f.Pickup.Status);
         Assert.Null(f.First.ActualDepartureAt); Assert.Empty(db.Notifications); Assert.Empty(db.OutboxMessages);
+    }
+
+    [Fact]
+    public async Task Complete_ReturnsSignedSignatureUrls()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var result = await f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId);
+        Assert.EndsWith("?signed=1", result.SenderSignatureUrl); Assert.EndsWith("?signed=1", result.ReceiverSignatureUrl);
+        Assert.DoesNotContain("?signed=1", f.Pickup.SenderSignatureUrl);
     }
 
     internal sealed class SignatureMedia : IMediaService
     {
-        internal List<string> Uploaded { get; } = [];
-        internal List<string> Deleted { get; } = [];
-        internal int FailUpload { get; set; }
-        public Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file)
+        private const string UrlPrefix = "https://res.cloudinary.com/test/image/authenticated/v1/";
+        internal List<string> Confirmed { get; } = [];
+        // Any publicId not listed here confirms as the default valid PNG.
+        internal Dictionary<string, (byte[] Content, string MimeType)> Files { get; } = [];
+        private (byte[] Content, string MimeType) Find(string publicId) => Files.TryGetValue(publicId, out var file) ? file : (PngBytes, "image/png");
+        public Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default)
         {
-            if (Uploaded.Count + 1 == FailUpload) throw new IOException("Planned signature upload failure");
-            var id = "handover/" + Guid.NewGuid().ToString("N") + ".png"; Uploaded.Add(id); return Task.FromResult(("https://storage.example.com/" + id, id));
+            if (publicId.EndsWith("missing")) throw new NotFoundException("Uploaded file was not found on Cloudinary", "UPLOAD_NOT_FOUND");
+            Confirmed.Add(publicId);
+            var file = Find(publicId);
+            return Task.FromResult(new ConfirmedUploadResult(publicId, UrlPrefix + publicId + ".png", "signature.png", file.MimeType, file.Content.Length));
         }
-        public Task DeleteFileAsync(string publicId) { Deleted.Add(publicId); return Task.CompletedTask; }
-        public Task<string> UploadImageAsync(IFormFile file) => throw new NotSupportedException();
+        public Task<PreviewFile> DownloadPreviewAsync(string fileUrl, CancellationToken cancellationToken = default)
+        {
+            var file = Find(fileUrl[UrlPrefix.Length..^".png".Length]); return Task.FromResult(new PreviewFile(file.Content, file.MimeType));
+        }
+        public Task<Pegaxus.Service.DocumentStorageService.SignedDocumentUrl> CreateReadUrlAsync(string fileUrl, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new Pegaxus.Service.DocumentStorageService.SignedDocumentUrl(fileUrl + "?signed=1", DateTimeOffset.UtcNow.AddMinutes(5)));
         public Task<string> UploadPrivateImageAsync(Guid imageId, PreviewFile image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task DeletePrivateImageAsync(Guid imageId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<SignedUploadResult> CreateSignedUploadAsync(Guid accountId, string entity, string contentType, long sizeBytes) => throw new NotSupportedException();
-        public Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<Pegaxus.Service.DocumentStorageService.SignedDocumentUrl> CreateReadUrlAsync(string fileUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
-        public Task<PreviewFile> DownloadPreviewAsync(string fileUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<ConfirmedUploadResult> ConfirmAvatarAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 }

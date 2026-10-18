@@ -1,6 +1,5 @@
 using System.Text.Json;
 using FluentValidation;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -49,6 +48,10 @@ public sealed partial class Service
             .ThenByDescending(item => item.CreatedAt)
             .ToListAsync(cancellationToken);
 
+        var readUrls = new Dictionary<Guid, string>();
+        foreach (var file in submissions.SelectMany(item => item.EvidenceFiles))
+            readUrls[file.AuthoritySubmissionEvidenceFileId] = (await _mediaService.CreateReadUrlAsync(file.FileUrl, cancellationToken)).Url;
+
         return new Response.AuthoritySubmissionListResponse
         {
             Items = submissions.Select(item => new Response.AuthoritySubmissionItemResponse
@@ -81,7 +84,7 @@ public sealed partial class Service
                     {
                         EvidenceType = file.EvidenceType.ToString().ToUpperInvariant(),
                         FileName = file.FileName,
-                        FileUrl = file.FileUrl,
+                        FileUrl = readUrls[file.AuthoritySubmissionEvidenceFileId],
                         MimeType = file.MimeType,
                         FileSizeBytes = file.FileSizeBytes,
                         Note = file.Note
@@ -174,8 +177,7 @@ public sealed partial class Service
             UpdatedAt = now
         };
 
-        var file = request.ProofFile!;
-        var (fileUrl, _) = await _mediaService.UploadFileAsync(file);
+        var proofFile = await ConfirmAuthorityFileAsync(accountId, request.ProofFile!, "Proof file", cancellationToken);
 
         submission.EvidenceFiles.Add(new AuthoritySubmissionEvidenceFile
         {
@@ -183,10 +185,10 @@ public sealed partial class Service
             AuthoritySubmissionId = submission.AuthoritySubmissionId,
             EvidenceType = AuthorityEvidenceType.Other,
             UploadedByEmployeeId = employeeId.Value,
-            FileName = file.FileName,
-            FileUrl = fileUrl,
-            MimeType = file.ContentType,
-            FileSizeBytes = file.Length,
+            FileName = proofFile.FileName,
+            FileUrl = proofFile.FileUrl,
+            MimeType = proofFile.MimeType,
+            FileSizeBytes = proofFile.SizeBytes,
             CreatedAt = now
         });
 
@@ -282,12 +284,12 @@ public sealed partial class Service
                 "This AuthoritySubmission already has a decision and is read-only",
                 "SUBMISSION_ALREADY_DECIDED");
 
-        if (request.DecisionFile is null || request.DecisionFile.Length == 0)
+        if (request.DecisionFile is null || string.IsNullOrWhiteSpace(request.DecisionFile.PublicId))
             throw new BadRequestException(
                 "Please upload the official authority decision document",
                 "DECISION_FILE_REQUIRED");
 
-        ValidateDecisionFile(request.DecisionFile);
+        var decisionFile = await ConfirmAuthorityFileAsync(accountId, request.DecisionFile, "Decision file", cancellationToken);
 
         var now = UtcNow();
         var responseReceivedAt = now;
@@ -303,7 +305,6 @@ public sealed partial class Service
         submission.RevisionDueDate = request.RevisionDueDate;
         submission.UpdatedAt = now;
 
-        var (fileUrl, _) = await _mediaService.UploadFileAsync(request.DecisionFile);
         _db.AuthoritySubmissionEvidenceFiles.Add(new AuthoritySubmissionEvidenceFile
         {
             AuthoritySubmissionEvidenceFileId = Guid.NewGuid(),
@@ -315,10 +316,10 @@ public sealed partial class Service
                 _ => AuthorityEvidenceType.AdditionalInformation
             },
             UploadedByEmployeeId = employeeId.Value,
-            FileName = request.DecisionFile.FileName,
-            FileUrl = fileUrl,
-            MimeType = request.DecisionFile.ContentType,
-            FileSizeBytes = request.DecisionFile.Length,
+            FileName = decisionFile.FileName,
+            FileUrl = decisionFile.FileUrl,
+            MimeType = decisionFile.MimeType,
+            FileSizeBytes = decisionFile.SizeBytes,
             CreatedAt = now
         });
 
@@ -423,18 +424,8 @@ public sealed partial class Service
         if (request.SubmittedAt == default)
             throw new BadRequestException("Submitted timestamp is required");
 
-        if (request.ProofFile is null || request.ProofFile.Length == 0)
+        if (request.ProofFile is null || string.IsNullOrWhiteSpace(request.ProofFile.PublicId))
             throw new BadRequestException("Proof file is required", "INVALID_FILE_TYPE");
-
-        if (request.ProofFile.Length > MaxProofFileSize)
-            throw new Pegaxus.Service.Exceptions.Exceptions("Proof file must not exceed 2 MB", 413, "FILE_TOO_LARGE");
-
-        var extension = Path.GetExtension(request.ProofFile.FileName).ToLowerInvariant();
-        var validExtension = extension is ".pdf" or ".jpg" or ".jpeg" or ".png";
-        var validContentType = request.ProofFile.ContentType is "application/pdf" or "image/jpeg" or "image/png";
-
-        if (!validExtension || !validContentType)
-            throw new BadRequestException("Proof file must be PDF, JPG, JPEG, or PNG", "INVALID_FILE_TYPE");
     }
 
     private static AuthoritySubmissionStatus ValidateDecisionRequest(Request.RecordAuthorityDecisionRequest request)
@@ -453,19 +444,5 @@ public sealed partial class Service
             throw new BadRequestException("Revision due date is required", "REVISION_DUE_DATE_REQUIRED");
 
         return decision;
-    }
-
-    private static void ValidateDecisionFile(IFormFile file)
-    {
-        const long maxFileSize = 2 * 1024 * 1024;
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        var validExtension = extension is ".pdf" or ".jpg" or ".jpeg" or ".png";
-        var validContentType = file.ContentType is "application/pdf" or "image/jpeg" or "image/png";
-
-        if (file.Length > maxFileSize)
-            throw new Pegaxus.Service.Exceptions.Exceptions("Decision file must not exceed 2 MB", 413, "FILE_TOO_LARGE");
-
-        if (!validExtension || !validContentType)
-            throw new BadRequestException("Decision file must be PDF, JPG, JPEG, or PNG", "INVALID_FILE_TYPE");
     }
 }

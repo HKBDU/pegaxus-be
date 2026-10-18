@@ -38,6 +38,8 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
             var mode = "," + request.SupportedMode.Trim().ToUpperInvariant() + ",";
             query = query.Where(item => ("," + (item.SupportedModes ?? "").ToUpper() + ",").Contains(mode));
         }
+        if (CountryCodes.Normalize(request.Country) is { } country)
+            query = query.Where(item => item.Country == country);
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToUpperInvariant();
@@ -195,7 +197,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         item.Phone = EmptyToNull(request.Phone);
         item.Email = EmptyToNull(request.Email);
         item.Address = EmptyToNull(request.Address);
-        item.Country = EmptyToNull(request.Country)?.ToUpperInvariant();
+        item.Country = CountryCodes.Normalize(request.Country);
         item.Note = EmptyToNull(request.Note);
     }
 

@@ -1,4 +1,5 @@
 using FluentValidation;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.TransportProviderService.Validator;
 
@@ -12,6 +13,8 @@ public sealed class ListRequestValidator : AbstractValidator<Request.ListRequest
             .WithMessage("Pagination exceeds the supported range.");
         RuleFor(request => request.Status).Must(value => string.IsNullOrWhiteSpace(value) || StatusRequestValidator.IsStatus(value));
         RuleFor(request => request.SupportedMode).Must(value => string.IsNullOrWhiteSpace(value) || SaveRequestValidator.IsMode(value));
+        RuleFor(request => request.Country).Must(value => string.IsNullOrWhiteSpace(value) || CountryCodes.IsValid(value))
+            .WithMessage("Country must be a 2-letter ISO code.");
         RuleFor(request => request.Search).MaximumLength(200);
         RuleFor(request => request.SortBy).Must(value => value?.Trim().ToLowerInvariant() is
             "providername:asc" or "providername:desc" or "providercode:asc" or "providercode:desc" or "createdat:asc" or "createdat:desc");
@@ -30,7 +33,8 @@ public sealed class SaveRequestValidator : AbstractValidator<Request.SaveRequest
         RuleFor(request => request.Phone).MaximumLength(30);
         RuleFor(request => request.Email).MaximumLength(255).EmailAddress().When(request => !string.IsNullOrWhiteSpace(request.Email));
         RuleFor(request => request.Address).MaximumLength(500);
-        RuleFor(request => request.Country).MaximumLength(100);
+        RuleFor(request => request.Country).Must(value => string.IsNullOrWhiteSpace(value) || CountryCodes.IsValid(value))
+            .WithMessage("Country must be a 2-letter ISO code.");
         RuleFor(request => request.Note).MaximumLength(2000);
     }
 

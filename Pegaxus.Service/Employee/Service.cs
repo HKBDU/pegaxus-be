@@ -120,6 +120,7 @@ public sealed class Service : IEmployeeService
         var email = request.Email.Trim().ToLowerInvariant();
         ValidateText(request.FullName, 150, "FullName", true);
         ValidateText(request.Phone, 30, "Phone", true);
+        CountryCodes.EnsureValid(request.Country);
         if (!Enum.TryParse<EmployeeRole>(request.Role.Trim(), true, out var role))
             throw new BadRequestException("Role is invalid", "INVALID_EMPLOYEE_ROLE");
         if (await _db.Accounts.AnyAsync(account => !account.IsDeleted && account.Email.ToLower() == email, cancellationToken))
@@ -144,6 +145,7 @@ public sealed class Service : IEmployeeService
             Role = role,
             FullName = request.FullName.Trim(),
             Phone = request.Phone.Trim(),
+            Country = CountryCodes.Normalize(request.Country),
             IsActive = true,
             CreatedAt = now,
             UpdatedAt = now
@@ -188,8 +190,9 @@ public sealed class Service : IEmployeeService
     {
         var employee = await GetVisibleEmployeeAsync(employeeId, cancellationToken);
         EnsureNotSelf(employee, managerAccountId);
-        if (request.Role is null && request.WorkingStatus is null)
+        if (request.Role is null && request.WorkingStatus is null && request.Country is null)
             throw new BadRequestException("At least one field must be provided");
+        CountryCodes.EnsureValid(request.Country);
         if (request.Role is not null)
         {
             if (!Enum.TryParse<EmployeeRole>(request.Role.Trim(), true, out var role))
@@ -198,6 +201,8 @@ public sealed class Service : IEmployeeService
         }
         if (request.WorkingStatus is not null)
             employee.IsActive = ParseRequiredWorkingStatus(request.WorkingStatus);
+        if (request.Country is not null)
+            employee.Country = CountryCodes.Normalize(request.Country);
 
         var now = UtcNow();
         employee.UpdatedAt = now;
@@ -316,6 +321,7 @@ public sealed class Service : IEmployeeService
         FullName = employee.FullName,
         Phone = employee.Phone,
         DateOfBirth = employee.DateOfBirth,
+        Country = employee.Country,
         AvatarUrl = employee.Account.AvatarUrl,
         LastLoginAt = employee.Account.LastLoginAt.HasValue ? AsUtc(employee.Account.LastLoginAt.Value) : null,
         CreatedAt = AsUtc(employee.CreatedAt),

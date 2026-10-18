@@ -24,6 +24,7 @@ public static class Response
         public DateOnly? InsuranceExpiryDate { get; init; }
         public string? InsuranceStatus { get; init; }
         public string? SpecialEquipment { get; init; }
+        public string? Country { get; init; }
         public IReadOnlyList<string> Warnings { get; init; } = [];
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public bool? IsAvailable { get; init; }
