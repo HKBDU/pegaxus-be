@@ -54,15 +54,15 @@ public sealed class HandoverRecordsController(Handovers.IHandoverService service
         Success(await service.StartAsync(handoverRecordId, AccountId, cancellationToken), "Handover record started successfully");
 
     /// <summary>Complete a handover and apply its transport lifecycle effects.</summary>
-    /// <remarks>LM/RC or Driver/Escort assigned to either linked segment. Submit flat multipart fields with lastUpdatedAt, three required notes and both PNG signatures (up to 200 KB each). PLANNED and IN_PROGRESS may complete. Stale versions return 409 HANDOVER_MODIFIED; terminal records return 409 INVALID_HANDOVER_STATUS; changed segment boundaries or parties return 422 INVALID_SEGMENT_PAIR. Signatures, lifecycle changes, notifications and delivery email commit together. GPS arrival timestamps are preserved.</remarks>
+    /// <remarks>LM/RC or Driver/Escort assigned to either linked segment. Submit JSON with lastUpdatedAt, three required notes and the publicIds of both PNG signatures (up to 200 KB each) uploaded through /api/v1/uploads/signature. PLANNED and IN_PROGRESS may complete. Stale versions return 409 HANDOVER_MODIFIED; terminal records return 409 INVALID_HANDOVER_STATUS; changed segment boundaries or parties return 422 INVALID_SEGMENT_PAIR. Signatures, lifecycle changes, notifications and delivery email commit together. GPS arrival timestamps are preserved.</remarks>
     /// <param name="handoverRecordId">The handover record identifier (UUID).</param>
-    /// <param name="request">Notes, optional snapshot overrides and both signature files.</param>
+    /// <param name="request">Notes, optional snapshot overrides and both signature publicIds.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the COMPLETED record, lifecycle effects and the delivery claim deadline.</returns>
     [Authorize(Policy = JwtExtensions.HandoverOperatorPolicy)]
     [HttpPost("{handoverRecordId:guid}/complete")]
-    [Consumes("multipart/form-data")]
-    public async Task<IActionResult> CompleteAsync(Guid handoverRecordId, [FromForm] Handovers.Request.CompleteRequest request, CancellationToken cancellationToken) =>
+    [Consumes("application/json")]
+    public async Task<IActionResult> CompleteAsync(Guid handoverRecordId, [FromBody] Handovers.Request.CompleteRequest request, CancellationToken cancellationToken) =>
         Success(await service.CompleteAsync(handoverRecordId, request, AccountId, cancellationToken), "Handover completed successfully");
 
     /// <summary>Cancel a planned or in-progress handover record.</summary>

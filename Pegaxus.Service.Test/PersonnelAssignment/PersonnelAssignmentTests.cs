@@ -416,6 +416,29 @@ public class PersonnelAssignmentTests
     }
 
     [Fact]
+    public async Task Assignable_FiltersByDepartureCountryAndReturnsEmployeeCountry()
+    {
+        await using var db = TestSupport.CreateDb();
+        var manager = await EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER);
+        var french = await EmployeeAsync(db, EmployeeRole.ESCORT); french.Country = "FR";
+        var british = await EmployeeAsync(db, EmployeeRole.ESCORT); british.Country = "GB";
+        await EmployeeAsync(db, EmployeeRole.ESCORT);
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+        var from = DateTimeOffset.UtcNow.AddDays(10);
+        var query = new Request.AssignableRequest { Role = "ESCORT", AvailableFrom = from, AvailableTo = from.AddHours(5) };
+
+        Assert.Equal(3, (await service.GetAssignableAsync(query, manager.AccountId)).TotalItems);
+        query.Country = " fr ";
+        var result = await service.GetAssignableAsync(query, manager.AccountId);
+        Assert.Equal(french.EmployeeId, Assert.Single(result.Items).EmployeeId);
+        Assert.Equal("FR", result.Items[0].Country);
+        query.Country = "France";
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => service.GetAssignableAsync(query, manager.AccountId));
+        Assert.Equal("INVALID_COUNTRY", error.ErrorCode);
+    }
+
+    [Fact]
     public async Task Replace_RequiresInitialAssignment()
     {
         await using var db = TestSupport.CreateDb();

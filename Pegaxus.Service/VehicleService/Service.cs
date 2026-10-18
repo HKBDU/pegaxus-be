@@ -42,6 +42,8 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             var type = request.VehicleType.Trim().ToUpperInvariant();
             query = query.Where(x => x.VehicleType != null && x.VehicleType.ToUpper() == type);
         }
+        if (CountryCodes.Normalize(request.Country) is { } country)
+            query = query.Where(x => x.Country == country);
         if (request.MinCapacity.HasValue)
             query = query.Where(x => x.CapacityHorses >= request.MinCapacity);
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -267,7 +269,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             Manufacturer = x.Manufacturer, Model = x.Model, CapacityHorses = x.CapacityHorses, Status = x.Status.ToString(),
             RegistrationNumber = x.RegistrationNumber, RegistrationExpiryDate = x.RegistrationExpiryDate,
             RegistrationStatus = registration, InsuranceNumber = x.InsuranceNumber, InsuranceExpiryDate = x.InsuranceExpiryDate,
-            InsuranceStatus = insurance, SpecialEquipment = x.SpecialEquipment, Warnings = warnings,
+            InsuranceStatus = insurance, SpecialEquipment = x.SpecialEquipment, Country = x.Country, Warnings = warnings,
             IsAvailable = available, CreatedAt = AsUtc(x.CreatedAt), UpdatedAt = AsUtc(x.UpdatedAt) };
     }
 
@@ -289,6 +291,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         vehicle.RegistrationNumber = EmptyToNull(request.RegistrationNumber); vehicle.RegistrationExpiryDate = request.RegistrationExpiryDate;
         vehicle.InsuranceNumber = EmptyToNull(request.InsuranceNumber); vehicle.InsuranceExpiryDate = request.InsuranceExpiryDate;
         vehicle.SpecialEquipment = EmptyToNull(request.SpecialEquipment);
+        vehicle.Country = CountryCodes.Normalize(request.Country);
     }
     private static void Validate<T>(T request, IValidator<T> validator)
     {

@@ -1,5 +1,6 @@
 using FluentValidation;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.VehicleService.Validator;
 
@@ -18,6 +19,8 @@ public sealed class ListRequestValidator : AbstractValidator<Request.ListRequest
         RuleFor(x => x.MinCapacity).InclusiveBetween(2, 9).When(x => x.MinCapacity.HasValue);
         RuleFor(x => x.Search).MaximumLength(200);
         RuleFor(x => x.VehicleType).MaximumLength(100);
+        RuleFor(x => x.Country).Must(x => string.IsNullOrWhiteSpace(x) || CountryCodes.IsValid(x))
+            .WithMessage("Country must be a 2-letter ISO code.");
         RuleFor(x => x).Must(x => x.AvailableFrom.HasValue == x.AvailableTo.HasValue &&
             (!x.AvailableFrom.HasValue || x.AvailableFrom <= x.AvailableTo && x.AvailableTo < DateOnly.MaxValue))
             .WithMessage("availableTo must not be earlier than availableFrom, and both are required together.")
@@ -43,6 +46,8 @@ public sealed class VehicleFieldsValidator : AbstractValidator<Request.VehicleFi
         RuleFor(x => x.VehicleType).MaximumLength(100);
         RuleFor(x => x.Manufacturer).MaximumLength(100);
         RuleFor(x => x.Model).MaximumLength(100);
+        RuleFor(x => x.Country).Must(x => string.IsNullOrWhiteSpace(x) || CountryCodes.IsValid(x))
+            .WithMessage("Country must be a 2-letter ISO code.");
         RuleFor(x => x.RegistrationNumber).MaximumLength(100);
         RuleFor(x => x.InsuranceNumber).MaximumLength(100);
         RuleFor(x => x.CapacityHorses).NotNull().InclusiveBetween(2, 9)

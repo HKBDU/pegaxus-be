@@ -453,9 +453,7 @@ public class DocumentUploadTests
         public int? FailAtFile { get; init; }
         public Func<Task>? AfterUpload { get; init; }
         public Task<StoredDocumentFile> UploadAsync(Guid versionId, int sortOrder, IFormFile file, CancellationToken cancellationToken = default) => throw new NotSupportedException("UC21/UC22 must not upload binary files again.");
-        public Task<string> UploadImageAsync(IFormFile file) => throw new NotSupportedException();
-        public Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file) => throw new NotSupportedException();
-        public Task DeleteFileAsync(string publicId) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.MediaService.ConfirmedUploadResult> ConfirmAvatarAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<string> UploadPrivateImageAsync(Guid imageId, Pegaxus.Service.MediaService.PreviewFile image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task DeletePrivateImageAsync(Guid imageId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Pegaxus.Service.MediaService.SignedUploadResult> CreateSignedUploadAsync(Guid accountId, string entity, string contentType, long sizeBytes) => throw new NotSupportedException();

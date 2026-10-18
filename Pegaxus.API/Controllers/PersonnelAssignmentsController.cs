@@ -47,7 +47,7 @@ public sealed class PersonnelAssignmentsController(Personnel.IPersonnelAssignmen
         => Success(await service.ReplaceAsync(routePlanId, routePlanRouteId, request, AccountId, cancellationToken), "Segment personnel updated successfully");
 
     /// <summary>List active employees available for assignment.</summary>
-    /// <param name="request">Role, schedule, search and pagination.</param>
+    /// <param name="request">Role, schedule, country, search and pagination. Pass the segment's departure country (2-letter ISO code) to list only employees based there.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with available employees.</returns>
     [HttpGet("employees/assignable")]

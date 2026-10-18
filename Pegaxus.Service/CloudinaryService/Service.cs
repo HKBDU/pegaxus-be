@@ -2,7 +2,6 @@
 using System.Text;
 using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.Configuration;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MediaService;
@@ -28,76 +27,16 @@ public partial class Service : IMediaService
             _cloudinaryOptions.ApiSecret));
     }
 
-    public async Task<string> UploadImageAsync(IFormFile file)
-    {
-        if (file == null || file.Length == 0)
-        {
-            throw new ArgumentException("File is empty or null.", nameof(file));
-        }
-        if (!IsImageFile(file))
-        {
-            throw new ArgumentException("File is not a valid image.", nameof(file));
-        }
-
-        await using var stream = file.OpenReadStream();
-        var uploadParams = new ImageUploadParams()
-        {
-            File = new FileDescription(file.FileName, stream)
-        };
-        var uploadResult = await _cloudinary.UploadAsync(uploadParams);
-        return uploadResult.SecureUrl.ToString();
-    }
-
-    private bool IsImageFile(IFormFile file)
-    {
-        var allowedExtensions = new[] { ".jpg", ".jpeg", ".png", ".gif", ".webp" };
-        var fileExtension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        return allowedExtensions.Contains(fileExtension);
-    }
-
-    // Upload non-image files such as PDF and DOCX through RawUploadParams.
-    public async Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file)
-    {
-        await using var stream = file.OpenReadStream();
-
-        var uploadParams = new RawUploadParams
-        {
-            File = new FileDescription(file.FileName, stream),
-            Folder = "pegaxus/documents",
-            UseFilename = true,
-            UniqueFilename = true,
-        };
-
-        var uploadResult = await _cloudinary.UploadAsync(uploadParams);
-
-        if (uploadResult.Error != null)
-            throw new Exception($"Cloudinary upload failed: {uploadResult.Error.Message}");
-
-        return (uploadResult.SecureUrl.ToString(), uploadResult.PublicId);
-    }
-
-    // Delete a Cloudinary file by public ID.
-    public async Task DeleteFileAsync(string publicId)
-    {
-        var deleteParams = new DeletionParams(publicId)
-        {
-            ResourceType = ResourceType.Raw
-        };
-
-        var result = await _cloudinary.DestroyAsync(deleteParams);
-
-        if (result.Error != null)
-            throw new Exception($"Cloudinary delete failed: {result.Error.Message}");
-    }
-
     public Task<SignedUploadResult> CreateSignedUploadAsync(
         Guid accountId,
         string entity,
         string contentType,
         long sizeBytes)
     {
+        if (string.Equals(entity?.Trim(), "avatar", StringComparison.OrdinalIgnoreCase))
+            return Task.FromResult(CreateAvatarUpload(accountId, contentType, sizeBytes));
         if (!string.Equals(entity?.Trim(), "attachment", StringComparison.OrdinalIgnoreCase))
-            throw new BadRequestException("Entity must be attachment", "INVALID_UPLOAD_ENTITY");
+            throw new BadRequestException("Entity must be attachment or avatar", "INVALID_UPLOAD_ENTITY");
 
         if (sizeBytes <= 0 || sizeBytes > MaxSignedUploadSize)
             throw new Pegaxus.Service.Exceptions.Exceptions(
@@ -112,15 +51,19 @@ public partial class Service : IMediaService
                 "INVALID_FILE_TYPE");
 
         EnsureConfigured();
-        var publicId = $"evidence/{accountId:D}/{Guid.NewGuid():N}";
+        return Task.FromResult(SignUpload($"evidence/{accountId:D}/{Guid.NewGuid():N}", "authenticated", AllowedFormats));
+    }
+
+    private SignedUploadResult SignUpload(string publicId, string deliveryType, string allowedFormats)
+    {
         var timestamp = DateTimeOffset.UtcNow.ToUnixTimeSeconds().ToString();
         var parameters = new SortedDictionary<string, string>(StringComparer.Ordinal)
         {
-            ["allowed_formats"] = AllowedFormats,
+            ["allowed_formats"] = allowedFormats,
             ["public_id"] = publicId,
             ["tags"] = "pending",
             ["timestamp"] = timestamp,
-            ["type"] = "authenticated",
+            ["type"] = deliveryType,
             ["overwrite"] = "false"
         };
         var signature = CreateSignature(parameters);
@@ -133,16 +76,16 @@ public partial class Service : IMediaService
             ["timestamp"] = timestamp,
             ["signature"] = signature,
             ["public_id"] = publicId,
-            ["type"] = "authenticated",
+            ["type"] = deliveryType,
             ["overwrite"] = "false",
             ["tags"] = "pending",
-            ["allowed_formats"] = AllowedFormats
+            ["allowed_formats"] = allowedFormats
         };
 
-        return Task.FromResult(new SignedUploadResult(
+        return new SignedUploadResult(
             publicId,
             $"https://api.cloudinary.com/v1_1/{_cloudinaryOptions.CloudName}/auto/upload",
-            orderedResponseParameters));
+            orderedResponseParameters);
     }
 
     protected virtual Task<GetResourceResult> GetResourceAsync(GetResourceParams parameters, CancellationToken cancellationToken) =>
@@ -212,6 +155,8 @@ public partial class Service : IMediaService
         var location = StorageLocation(fileUrl);
         cancellationToken.ThrowIfCancellationRequested();
         var expiresAt = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.AddMinutes(5).ToUnixTimeSeconds());
+        // Files stored before presigned uploads were delivered publicly; there is nothing to sign.
+        if (location.DeliveryType == "upload") return Task.FromResult(new DocumentStorageService.SignedDocumentUrl(fileUrl, expiresAt));
         var url = _cloudinary.DownloadPrivate(location.PublicId, attachment: false, format: location.Format,
             type: location.DeliveryType, expiresAt: expiresAt.ToUnixTimeSeconds(), resourceType: location.ResourceType);
         return Task.FromResult(new DocumentStorageService.SignedDocumentUrl(url, expiresAt));

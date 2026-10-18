@@ -39,7 +39,7 @@ public partial class HandoverPostgresTests
                 var result = await service.CompleteAsync(f.Delivery.HandoverRecordId, Request(f.Delivery), f.Coordinator.AccountId);
                 Assert.Equal(f.Clock.Now.AddHours(24), result.Effects!.ClaimWindowEndsAt); Assert.Equal("COMPLETED", result.Transport.Status);
             }
-            Assert.Equal(3, audit.Calls); Assert.Equal((1, 3, 4), audit.Writes); Assert.Empty(f.Media.Deleted); Assert.Empty(f.Realtime.Messages);
+            Assert.Equal(3, audit.Calls); Assert.Equal((1, 3, 4), audit.Writes); Assert.Empty(f.Realtime.Messages);
             await using var verify = new AppDbContext(options);
             Assert.All(await verify.HandoverRecords.ToArrayAsync(), item => { Assert.Equal(HandoverStatus.COMPLETED, item.Status); Assert.Equal(item.ActualHandoverAt, item.CompletedAt); });
             Assert.Equal(TransportStatus.COMPLETED, (await verify.Transports.SingleAsync()).Status);
@@ -52,7 +52,7 @@ public partial class HandoverPostgresTests
     }
 
     [PostgresFact]
-    public async Task Postgres_DeliveryFailureAfterSave_RollsBackAllEffectsAndDeletesBothSignatures()
+    public async Task Postgres_DeliveryFailureAfterSave_RollsBackAllEffects()
     {
         await WithDatabaseAsync(async options =>
         {
@@ -62,7 +62,7 @@ public partial class HandoverPostgresTests
             var failure = new SaveAudit { FailAfterSave = true };
             await using (var writer = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(failure).Options))
                 await Assert.ThrowsAsync<IOException>(() => f.CreateService(writer).CompleteAsync(f.Delivery.HandoverRecordId, Request(f.Delivery), f.Manager.AccountId));
-            Assert.Equal(1, failure.Calls); Assert.Equal((1, 3, 4), failure.Writes); Assert.Equal(2, f.Media.Uploaded.Count); Assert.Equal(f.Media.Uploaded, f.Media.Deleted);
+            Assert.Equal(1, failure.Calls); Assert.Equal((1, 3, 4), failure.Writes); Assert.Equal(2, f.Media.Confirmed.Count);
             await using var verify = new AppDbContext(options);
             var record = await verify.HandoverRecords.SingleAsync(item => item.HandoverRecordId == f.Delivery.HandoverRecordId);
             Assert.Equal(HandoverStatus.PLANNED, record.Status); Assert.Null(record.CompletedAt); Assert.Null(record.SenderSignatureUrl); Assert.Null(record.ReceiverSignatureUrl);
@@ -75,7 +75,7 @@ public partial class HandoverPostgresTests
     }
 
     [PostgresFact]
-    public async Task Postgres_ErrorAfterSuccessfulCommitDoesNotDeletePersistedSignatures()
+    public async Task Postgres_ErrorAfterSuccessfulCommitKeepsPersistedSignatures()
     {
         await WithDatabaseAsync(async options =>
         {
@@ -85,7 +85,7 @@ public partial class HandoverPostgresTests
             await using var verify = new AppDbContext(options);
             Assert.Equal(HandoverStatus.COMPLETED, (await verify.HandoverRecords.SingleAsync(item => item.HandoverRecordId == f.Pickup.HandoverRecordId)).Status);
             Assert.Equal(TransportStatus.IN_TRANSIT, (await verify.Transports.SingleAsync()).Status); Assert.Equal(3, await verify.OutboxMessages.CountAsync());
-            Assert.Equal(2, f.Media.Uploaded.Count); Assert.Empty(f.Media.Deleted);
+            Assert.Equal(2, f.Media.Confirmed.Count);
         });
     }
 
@@ -118,7 +118,7 @@ public partial class HandoverPostgresTests
             Assert.Equal(TransportStatus.IN_TRANSIT, (await verify.Transports.SingleAsync()).Status); Assert.Equal(VehicleStatus.IN_USE, (await verify.Vehicles.SingleAsync()).Status);
             Assert.Equal(HandoverStatus.COMPLETED, (await verify.HandoverRecords.SingleAsync(item => item.HandoverRecordId == f.Pickup.HandoverRecordId)).Status);
             Assert.Equal(3, await verify.Notifications.CountAsync()); Assert.Equal(3, await verify.OutboxMessages.CountAsync());
-            Assert.Equal(3, await verify.AccountNotifications.Select(item => item.AccountId).Distinct().CountAsync()); Assert.Equal(2, f.Media.Uploaded.Count); Assert.Empty(f.Media.Deleted);
+            Assert.Equal(3, await verify.AccountNotifications.Select(item => item.AccountId).Distinct().CountAsync()); Assert.Equal(4, f.Media.Confirmed.Count);
             Assert.Equal("INVALID_HANDOVER_STATUS", (await Assert.ThrowsAsync<ConflictException>(() => f.CreateService(verify).CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId))).ErrorCode);
         });
     }

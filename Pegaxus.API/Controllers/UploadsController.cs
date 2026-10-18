@@ -51,7 +51,7 @@ public sealed class UploadsController : ApiControllerBase
     /// <summary>
     /// Confirm an attachment upload.
     /// </summary>
-    /// <remarks>Verifies ownership, existence, actual size, and format using Cloudinary metadata. Returns trusted file metadata and a signed download URL expiring after five minutes. UC21/UC22 reverify publicIds before saving documents.</remarks>
+    /// <remarks>Verifies ownership, existence, actual size, and format using Cloudinary metadata. Returns trusted file metadata and a signed download URL expiring after five minutes; avatar uploads (publicId starting with avatars/) return their public URL. UC21/UC22 reverify publicIds before saving documents.</remarks>
     /// <param name="request">The publicId of the uploaded attachment.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with publicId, trusted file metadata, fileUrl, and fileUrlExpiresAt.</returns>
@@ -65,8 +65,9 @@ public sealed class UploadsController : ApiControllerBase
         [FromBody] UploadService.Request.ConfirmUploadRequest request,
         CancellationToken cancellationToken)
     {
-        var result = await _mediaService.ConfirmUploadAsync(
-            AccountId, request.PublicId, cancellationToken);
+        var result = request.PublicId?.StartsWith("avatars/", StringComparison.Ordinal) == true
+            ? await _mediaService.ConfirmAvatarAsync(AccountId, request.PublicId, cancellationToken)
+            : await _mediaService.ConfirmUploadAsync(AccountId, request.PublicId!, cancellationToken);
         var signed = await _mediaService.CreateReadUrlAsync(result.FileUrl, cancellationToken);
 
         return Success(new UploadService.Response.ConfirmUploadResponse

@@ -1,12 +1,7 @@
-﻿using Microsoft.AspNetCore.Http;
-
-namespace Pegaxus.Service.MediaService;
+﻿namespace Pegaxus.Service.MediaService;
 
 public interface IMediaService
 {
-    public Task<string> UploadImageAsync(IFormFile file);
-    Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file);
-    Task DeleteFileAsync(string publicId);
     Task<string> UploadPrivateImageAsync(Guid imageId, PreviewFile image, CancellationToken cancellationToken = default);
     Task DeletePrivateImageAsync(Guid imageId, CancellationToken cancellationToken = default);
     Task<SignedUploadResult> CreateSignedUploadAsync(
@@ -15,6 +10,7 @@ public interface IMediaService
         string contentType,
         long sizeBytes);
     Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default);
+    Task<ConfirmedUploadResult> ConfirmAvatarAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default);
     Task<DocumentStorageService.SignedDocumentUrl> CreateReadUrlAsync(string fileUrl, CancellationToken cancellationToken = default);
     Task<PreviewFile> DownloadPreviewAsync(string fileUrl, CancellationToken cancellationToken = default);
 }

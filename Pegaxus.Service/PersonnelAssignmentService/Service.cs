@@ -267,12 +267,16 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         if (!roles.Contains(roleName) || request.PageIndex < 1 || request.PageSize is < 1 or > 100 ||
             ((long)request.PageIndex - 1) * request.PageSize > int.MaxValue || request.Search?.Length > 200)
             throw new BadRequestException("Invalid role, search or pagination.", "VALIDATION_ERROR");
+        CountryCodes.EnsureValid(request.Country);
         var scheduled = roleName is "DRIVER" or "ESCORT";
         if (scheduled && (!request.AvailableFrom.HasValue || !request.AvailableTo.HasValue ||
                 request.AvailableFrom >= request.AvailableTo))
             throw new BadRequestException("Driver/Escort require a valid availableFrom and availableTo.", "INVALID_DATE_RANGE");
         var role = Enum.Parse<EmployeeRole>(roleName!);
         var query = db.Employees.AsNoTracking().Active().Where(x => x.Role == role && x.Account.AccountType == AccountType.EMPLOYEE);
+        // Personnel must start from the country where the segment departs.
+        if (CountryCodes.Normalize(request.Country) is { } country)
+            query = query.Where(x => x.Country == country);
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToUpperInvariant();
@@ -300,7 +304,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var items = await query.OrderBy(x => x.EmployeeCode).ThenBy(x => x.EmployeeId)
             .Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize)
             .Select(x => new Response.EmployeeBrief(x.EmployeeId, x.EmployeeCode, x.FullName, x.Role.ToString(),
-                x.Account.Email, x.Account.AvatarUrl, null))
+                x.Account.Email, x.Account.AvatarUrl, x.Country, null))
             .ToArrayAsync(cancellationToken);
         return new(items, request.PageIndex, request.PageSize, count, Paging.TotalPages(count, request.PageSize));
     }
@@ -370,7 +374,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         b.PlannedArrivalAt <= b.PlannedDepartureAt || a.PlannedDepartureAt <= b.PlannedArrivalAt && a.PlannedArrivalAt >= b.PlannedDepartureAt;
     private static Response.EmployeeBrief? Brief(Employee? employee, DateTime? assignedAt = null) => employee is null ? null :
         new(employee.EmployeeId, employee.EmployeeCode, employee.FullName, employee.Role.ToString(),
-            employee.Account.Email, employee.Account.AvatarUrl, AsUtc(assignedAt));
+            employee.Account.Email, employee.Account.AvatarUrl, employee.Country, AsUtc(assignedAt));
     private static Response.SegmentResponse Map(RoutePlanRoute x) => new(x.RoutePlanRouteId, x.SequenceNo, x.TransportProviderId.HasValue,
         AsUtc(x.PlannedDepartureAt), AsUtc(x.PlannedArrivalAt), Brief(x.DriverEmployee), Brief(x.EscortEmployee),
         x.TransportProvider is null ? null : new(x.TransportProvider.TransportProviderId, x.TransportProvider.ProviderCode, x.TransportProvider.ProviderName),

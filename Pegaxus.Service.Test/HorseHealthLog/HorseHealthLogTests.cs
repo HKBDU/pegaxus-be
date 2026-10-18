@@ -458,9 +458,7 @@ public class HorseHealthLogTests
             if (FailSign) throw new IOException("Planned signing failure");
             return Task.FromResult(new SignedDocumentUrl(SignedUrl, DbTime.AsUtc(Fixture.Now).AddMinutes(5)));
         }
-        public Task<string> UploadImageAsync(IFormFile file) => throw new NotSupportedException();
-        public Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file) => throw new NotSupportedException();
-        public Task DeleteFileAsync(string publicId) => throw new NotSupportedException();
+        public Task<ConfirmedUploadResult> ConfirmAvatarAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<SignedUploadResult> CreateSignedUploadAsync(Guid accountId, string entity, string contentType, long sizeBytes) => throw new NotSupportedException();
         public async Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default)
         {

@@ -16,7 +16,7 @@ public sealed class TransportProvidersController(Providers.ITransportProviderSer
     /// List transport providers.
     /// </summary>
     /// <remarks>Logistics Managers may filter all undeleted providers. Fleet Route Coordinators receive ACTIVE providers only.</remarks>
-    /// <param name="request">The status, supported mode, search, sorting and pagination filters.</param>
+    /// <param name="request">The status, supported mode, country (2-letter ISO code), search, sorting and pagination filters.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with a paginated provider catalog, including an empty items array when no providers match.</returns>
     [HttpGet]

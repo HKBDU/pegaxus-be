@@ -14,7 +14,7 @@ public sealed class VehiclesController(Vehicles.IVehicleService service) : ApiCo
 {
     /// <summary>List specialized vehicles.</summary>
     /// <remarks>Lists undeleted ROAD, SEA and AIR vehicles. Optional date filters return vehicles without unfinished schedule conflicts.</remarks>
-    /// <param name="request">Pagination, search, status, capacity, dates, and sorting.</param>
+    /// <param name="request">Pagination, search, status, capacity, dates, operating country (2-letter ISO code), and sorting.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with a paginated vehicle catalog and expiry warnings.</returns>
     [HttpGet]

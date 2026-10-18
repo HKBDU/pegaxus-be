@@ -33,9 +33,9 @@ public sealed partial class ComplianceDossiersController
     /// <summary>
     /// Record an authority submission.
     /// </summary>
-    /// <remarks>Transport Specialists record a dossier submission using multipart/form-data. Includes the authority, submission reference, submission time, and required proof file.</remarks>
+    /// <remarks>Transport Specialists record a dossier submission using JSON. Includes the authority, submission reference, submission time, and the publicId of the proof file (PDF/JPG/PNG up to 2 MB) uploaded through /api/v1/uploads/signature.</remarks>
     /// <param name="dossierId">The compliance dossier identifier (UUID).</param>
-    /// <param name="request">The authority submission details and proof file.</param>
+    /// <param name="request">The authority submission details and proof file publicId.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>201 Created with the authority submission record.</returns>
     /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
@@ -45,10 +45,10 @@ public sealed partial class ComplianceDossiersController
     /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPost("{dossierId:guid}/authority-submissions")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
-    [Consumes("multipart/form-data")]
+    [Consumes("application/json")]
     public async Task<IActionResult> RecordAuthoritySubmission(
         Guid dossierId,
-        [FromForm] ComplianceDossierService.Request.RecordAuthoritySubmissionRequest request,
+        [FromBody] ComplianceDossierService.Request.RecordAuthoritySubmissionRequest request,
         CancellationToken cancellationToken)
     {
         var response = await _service.RecordAuthoritySubmissionAsync(
@@ -60,9 +60,9 @@ public sealed partial class ComplianceDossiersController
     /// <summary>
     /// Record an authority decision.
     /// </summary>
-    /// <remarks>Transport Specialists submit APPROVED, REJECTED, or RETURNED decisions using multipart/form-data and a required decision file. Updates dossier status according to this decision and other mandatory submissions.</remarks>
+    /// <remarks>Transport Specialists submit APPROVED, REJECTED, or RETURNED decisions using JSON and a required decision file publicId (PDF/JPG/PNG up to 2 MB) uploaded through /api/v1/uploads/signature. Updates dossier status according to this decision and other mandatory submissions.</remarks>
     /// <param name="submissionId">The authority submission identifier (UUID).</param>
-    /// <param name="request">The decision, decision file, and decision-specific permit number, rejection reason, or revision deadline.</param>
+    /// <param name="request">The decision, decision file publicId, and decision-specific permit number, rejection reason, or revision deadline.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the authority decision and updated dossier status.</returns>
     /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
@@ -72,9 +72,10 @@ public sealed partial class ComplianceDossiersController
     /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPatch("/api/v1/authority-submissions/{submissionId:guid}/decision")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    [Consumes("application/json")]
     public async Task<IActionResult> RecordAuthorityDecision(
         Guid submissionId,
-        [FromForm] ComplianceDossierService.Request.RecordAuthorityDecisionRequest request,
+        [FromBody] ComplianceDossierService.Request.RecordAuthorityDecisionRequest request,
         CancellationToken cancellationToken)
     {
         var response = await _service.RecordAuthorityDecisionAsync(

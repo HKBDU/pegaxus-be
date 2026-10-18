@@ -38,7 +38,7 @@ public class HandoverTests
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         f.Pickup.Status = HandoverStatus.COMPLETED; f.Pickup.CompletedAt = f.Pickup.ActualHandoverAt = Fixture.Now;
-        f.Pickup.SenderSignatureUrl = "https://example.com/sender.png"; f.Pickup.ReceiverSignatureUrl = "https://example.com/receiver.png";
+        f.Pickup.SenderSignatureUrl = "https://res.cloudinary.com/test/image/authenticated/v1/evidence/sender.png"; f.Pickup.ReceiverSignatureUrl = "https://res.cloudinary.com/test/image/authenticated/v1/evidence/receiver.png";
         await db.SaveChangesAsync();
         var customer = await f.Service.GetAsync(f.Pickup.HandoverRecordId, f.CustomerAccountId);
         Assert.Equal(f.TransportId, customer.Transport.TransportId); Assert.Equal(f.Route.TransportPlan.Transport.BookingId, customer.BookingId);
@@ -46,7 +46,7 @@ public class HandoverTests
         Assert.Equal("customer-phone", customer.From.ContactPhone); Assert.Null(customer.To.ContactPhone); Assert.Null(customer.To.TransportProviderId);
         Assert.Equal("Healthy horses", customer.HorseConditionNote); Assert.Equal("Documents checked", customer.DocumentHandoverNote);
         Assert.Equal("Equipment checked", customer.EquipmentHandoverNote); Assert.Equal("Minor discrepancy", customer.DiscrepancyNote);
-        Assert.Equal(f.Pickup.SenderSignatureUrl, customer.SenderSignatureUrl); Assert.Equal(customer.CompletedAt, customer.ActualHandoverAt);
+        Assert.Equal(f.Pickup.SenderSignatureUrl + "?signed=1", customer.SenderSignatureUrl); Assert.Equal(customer.CompletedAt, customer.ActualHandoverAt);
         Assert.Null(customer.FromSegment); Assert.Equal(1, customer.ToSegment!.DisplayOrder); Assert.Empty(customer.AvailableActions);
         Assert.Equal("employee-phone", (await f.Service.GetAsync(f.Pickup.HandoverRecordId, f.Manager.AccountId)).To.ContactPhone);
         var delivery = await f.Service.GetAsync(f.Delivery.HandoverRecordId, f.CustomerAccountId);

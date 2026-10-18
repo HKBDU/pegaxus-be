@@ -302,12 +302,10 @@ public class DocumentReviewTests
         await using var otherDb = new AppDbContext((DbContextOptions<AppDbContext>)db.GetService<IDbContextOptions>());
         await CreateService(otherDb).RevokeDocumentReviewAsync(specialist, dossier.ComplianceDossierId, requirement.DossierRequirementId,
             version.DocumentVersionId, approval.Review.DocumentReviewId, new() { Status = DossierRequirementStatus.PROVIDED, Reason = "Wrong signature" });
-        using var content = new MemoryStream([1]);
         var request = new Request.RecordAuthoritySubmissionRequest
         {
             AuthorityName = "Authority", SubmissionReference = "REF-REVIEW", SubmittedAt = DateTimeOffset.UtcNow,
-            ProofFile = new Microsoft.AspNetCore.Http.FormFile(content, 0, 1, "proof", "proof.pdf")
-            { Headers = new Microsoft.AspNetCore.Http.HeaderDictionary(), ContentType = "application/pdf" }
+            ProofFile = new() { PublicId = "evidence/proof/unused" }
         };
         await Assert.ThrowsAsync<ConflictException>(() => service.RecordAuthoritySubmissionAsync(specialist, dossier.ComplianceDossierId, request));
         Assert.Empty(await db.AuthoritySubmissions.ToListAsync());

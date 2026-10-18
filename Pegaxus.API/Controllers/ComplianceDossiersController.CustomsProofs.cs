@@ -60,7 +60,7 @@ public sealed partial class ComplianceDossiersController
     /// <summary>
     /// Finalize customs clearance.
     /// </summary>
-    /// <remarks>Transport Specialists verify the MRN and customs channel, then record CLEARED, HELD, or REJECTED using multipart/form-data. REJECT_PROOF returns the evidence to the Driver for resubmission.</remarks>
+    /// <remarks>Transport Specialists verify the MRN and customs channel, then record CLEARED, HELD, or REJECTED using JSON. REJECT_PROOF returns the evidence to the Driver for resubmission.</remarks>
     /// <param name="proofId">The proof identifier (UUID).</param>
     /// <param name="request">The verification action, MRN, customs channel, result, and supporting files or rejection reason.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
@@ -72,10 +72,10 @@ public sealed partial class ComplianceDossiersController
     /// <exception cref="Pegaxus.Service.Exceptions.Exceptions">A business or storage error occurs; its HTTP status and errorCode describe the failure.</exception>
     [HttpPatch("/api/v1/customs-clearance-proofs/{proofId:guid}/finalize")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
-    [Consumes("multipart/form-data")]
+    [Consumes("application/json")]
     public async Task<IActionResult> FinalizeCustomsClearanceProof(
         Guid proofId,
-        [FromForm] ComplianceDossierService.Request.FinalizeCustomsClearanceProofRequest request,
+        [FromBody] ComplianceDossierService.Request.FinalizeCustomsClearanceProofRequest request,
         CancellationToken cancellationToken)
     {
         var response = await _service.FinalizeCustomsClearanceProofAsync(
