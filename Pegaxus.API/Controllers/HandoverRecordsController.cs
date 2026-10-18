@@ -10,6 +10,18 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/handover-records")]
 public sealed class HandoverRecordsController(Handovers.IHandoverService service) : ApiControllerBase
 {
+    /// <summary>Create a handover record.</summary>
+    /// <remarks>LM/RC or Driver/Escort assigned to a linked segment. Only LM/RC may schedule with startNow=false. Parties and boundary snapshots are inferred; OTHER requires explicit parties. Creation does not change journey state. Duplicate active boundaries return 409 HANDOVER_ALREADY_EXISTS.</remarks>
+    /// <param name="transportId">The transport identifier (UUID).</param>
+    /// <param name="request">Handover type, boundary segments, scheduling and optional snapshot overrides.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>201 Created with the complete handover record.</returns>
+    [Authorize(Policy = JwtExtensions.HandoverOperatorPolicy)]
+    [HttpPost("~/api/v1/transports/{transportId:guid}/handover-records")]
+    [Consumes("application/json")]
+    public async Task<IActionResult> CreateAsync(Guid transportId, [FromBody] Handovers.Request.CreateRequest request, CancellationToken cancellationToken) =>
+        SuccessCreated(await service.CreateAsync(transportId, request, AccountId, cancellationToken), "Handover record created successfully");
+
     /// <summary>List a transport's handover records.</summary>
     /// <remarks>LM, RC and TS may view all eligible transports; Driver and Escort must be assigned. Customers see only PICKUP and DELIVERY records belonging to their booking. Pagination starts at zero. Filters accept comma-separated enum names.</remarks>
     /// <param name="transportId">The transport identifier (UUID).</param>

@@ -123,7 +123,7 @@ public class CloudinaryUploadTests
         Assert.Equal("UPLOAD_NOT_FOUND", error.ErrorCode);
     }
 
-    private static GetResourceResult Resource(string resourceType = "image") =>
+    internal static GetResourceResult Resource(string resourceType = "image") =>
         JsonConvert.DeserializeObject<GetResourceResult>(JsonConvert.SerializeObject(new
         {
             public_id = PublicId, format = "pdf", bytes = 123, original_filename = "passport",
@@ -131,7 +131,7 @@ public class CloudinaryUploadTests
             secure_url = $"https://res.cloudinary.com/test-cloud/{resourceType}/authenticated/v1/{PublicId}.pdf"
         }))!;
 
-    private sealed class TestCloudinary(GetResourceResult? resource = null, bool missingImage = false)
+    internal sealed class TestCloudinary(GetResourceResult? resource = null, bool missingImage = false)
         : CloudinaryUploadService(Configuration(), new NoNetworkFactory())
     {
         public int Calls { get; private set; }

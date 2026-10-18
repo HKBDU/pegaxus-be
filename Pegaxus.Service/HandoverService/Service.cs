@@ -15,7 +15,7 @@ using static Pegaxus.Service.Common.DbTime;
 namespace Pegaxus.Service.HandoverService;
 
 public sealed partial class Service(AppDbContext db, TimeProvider clock, IValidator<Request.ListRequest> listValidator,
-    IValidator<Request.CancelRequest> cancelValidator, INotificationService notifications,
+    IValidator<Request.CancelRequest> cancelValidator, IValidator<Request.CreateRequest> createValidator, INotificationService notifications,
     IValidator<Request.CompleteRequest> completeValidator, IMediaService media, ILogger<Service> logger) : IHandoverService
 {
     private static readonly RoutePlanStatus[] EligibleStatuses = [RoutePlanStatus.CONFIRMED, RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED];

@@ -58,10 +58,10 @@ public class HorseHealthLogPostgresTests
                 Assert.Equal(2, await verify.Notifications.CountAsync()); Assert.Equal(2, await verify.AccountNotifications.CountAsync());
                 Assert.Equal(2, await verify.OutboxMessages.CountAsync()); Assert.Empty(await verify.IncidentReports.ToListAsync());
             }
-            Assert.Equal(2, f.Storage.Uploads.Count); Assert.Empty(f.Storage.Deletes);
+            Assert.Equal(2, f.Storage.Confirmations.Count); Assert.Empty(f.Storage.Deletes);
             foreach (var failure in new[] { "upload", "save", "sign", "batch" })
             {
-                var storage = new Storage { FailUpload = failure == "upload", FailSign = failure == "sign" };
+                var storage = new Storage { FailConfirmation = failure == "upload", FailSign = failure == "sign" };
                 var failSave = new WriteAudit { FailAfterSave = failure is "save" or "batch" };
                 await using var writer = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(failSave).Options);
                 var service = CreateService(writer, storage, TestSupport.CreateNotifications(writer));
@@ -69,7 +69,7 @@ public class HorseHealthLogPostgresTests
                 if (failure == "batch")
                     await Assert.ThrowsAsync<IOException>(() => service.MarkAllNormalAsync(f.Transport.TransportId, request, f.Escort.AccountId));
                 else await Assert.ThrowsAsync<IOException>(() => service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId));
-                Assert.Single(storage.Uploads); Assert.Equal(storage.Uploads, storage.Deletes);
+                Assert.Single(storage.Confirmations); Assert.Empty(storage.Deletes);
                 await using var verify = new AppDbContext(options);
                 Assert.Equal(4, await verify.HorseHealthLogs.CountAsync()); Assert.Equal(2, await verify.Notifications.CountAsync());
                 Assert.Equal(2, await verify.AccountNotifications.CountAsync()); Assert.Equal(2, await verify.OutboxMessages.CountAsync());
@@ -80,13 +80,13 @@ public class HorseHealthLogPostgresTests
             await using (var writer = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(new LostCommitAcknowledgment()).Options))
                 await Assert.ThrowsAsync<IOException>(() => CreateService(writer, retained, TestSupport.CreateNotifications(writer))
                     .CreateAsync(f.Transport.TransportId, uncertainRequest, f.Escort.AccountId));
-            Assert.Single(retained.Uploads); Assert.Empty(retained.Deletes);
+            Assert.Single(retained.Confirmations); Assert.Empty(retained.Deletes);
             await using (var verify = new AppDbContext(options))
             {
                 Assert.Equal(5, await verify.HorseHealthLogs.CountAsync()); Assert.Equal(4, await verify.Notifications.CountAsync());
                 Assert.Equal(4, await verify.OutboxMessages.CountAsync());
                 var replay = await CreateService(verify, retained, TestSupport.CreateNotifications(verify)).CreateAsync(f.Transport.TransportId, uncertainRequest, f.Escort.AccountId);
-                Assert.False(replay.Created); Assert.False(replay.Value.Effects.EmergencyNotified); Assert.Single(retained.Uploads);
+                Assert.False(replay.Created); Assert.False(replay.Value.Effects.EmergencyNotified); Assert.Single(retained.Confirmations);
             }
             var retriedStorage = new Storage(); var retryAudit = new WriteAudit { ConflictOnceAfterSave = true };
             await using (var writer = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(retryAudit).Options))
@@ -94,13 +94,13 @@ public class HorseHealthLogPostgresTests
                 var request = f.Request(); request.CheckedAt = Fixture.CheckTime.AddHours(-3); request.HealthStatus = "CRITICAL"; request.Files = [Photo()];
                 var result = await CreateService(writer, retriedStorage, TestSupport.CreateNotifications(writer)).CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId);
                 Assert.True(result.Created); Assert.Equal(2, retryAudit.Calls);
-                Assert.Equal(2, retriedStorage.Uploads.Count); Assert.Equal(retriedStorage.Uploads[0], Assert.Single(retriedStorage.Deletes));
+                Assert.Equal(2, retriedStorage.Confirmations.Count); Assert.Empty(retriedStorage.Deletes);
             }
             await using (var verify = new AppDbContext(options))
             {
                 Assert.Equal(6, await verify.HorseHealthLogs.CountAsync()); Assert.Equal(6, await verify.Notifications.CountAsync());
                 Assert.Equal(6, await verify.OutboxMessages.CountAsync());
-                Assert.Contains(await verify.HorseHealthLogs.ToListAsync(), log => log.PhotoUrls.Contains(Storage.Url(retriedStorage.Uploads[1])));
+                Assert.Contains(await verify.HorseHealthLogs.ToListAsync(), log => log.PhotoUrls.Contains(Storage.Url(retriedStorage.Confirmations[1])));
             }
             await using var stale = new AppDbContext(options);
             await stale.Transports.SingleAsync(item => item.TransportId == f.Transport.TransportId);
@@ -121,7 +121,7 @@ public class HorseHealthLogPostgresTests
             {
                 var uploaded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
                 var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-                var storage = new Storage { AfterUpload = async () => { uploaded.TrySetResult(); await release.Task.WaitAsync(TimeSpan.FromSeconds(15)); } };
+                var storage = new Storage { AfterConfirmation = async () => { uploaded.TrySetResult(); await release.Task.WaitAsync(TimeSpan.FromSeconds(15)); } };
                 var competingStorage = new Storage(); var barrier = new CompetingSnapshot();
                 await using var first = new AppDbContext(options);
                 await using var second = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(barrier).Options);
@@ -142,7 +142,7 @@ public class HorseHealthLogPostgresTests
                     Assert.False(replay.Created); Assert.Equal(batch ? "NORMAL" : "CRITICAL", replay.Value.HealthStatus);
                     Assert.False(replay.Value.Effects.EmergencyNotified); Assert.False(replay.Value.Effects.CanReportIncident);
                     Assert.True(barrier.Attempts >= 2, "The competing serializable snapshot must conflict and retry.");
-                    Assert.Single(storage.Uploads); Assert.Empty(storage.Deletes); Assert.Empty(competingStorage.Uploads);
+                    Assert.Single(storage.Confirmations); Assert.Empty(storage.Deletes); Assert.Empty(competingStorage.Confirmations);
                 }
                 finally { release.TrySetResult(); }
                 await using var verify = new AppDbContext(options);
@@ -156,7 +156,7 @@ public class HorseHealthLogPostgresTests
     }
 
     [PostgresFact]
-    public async Task Postgres_AppendRollsBackAndCleansOnlyNewFilesButRetainsCommittedEvidence()
+    public async Task Postgres_AppendRollsBackAndPreservesUploadedEvidence()
     {
         foreach (var failure in new[] { "save", "sign", "lostCommit", "retry" })
         await WithDatabaseAsync(async options =>
@@ -178,19 +178,19 @@ public class HorseHealthLogPostgresTests
             }
             await using var verify = new AppDbContext(options); var log = await verify.HorseHealthLogs.SingleAsync();
             Assert.Equal("Immutable", log.GeneralNote); Assert.Empty(await verify.Notifications.ToListAsync());
-            Assert.Equal(failure == "retry" ? 4 : 2, storage.Uploads.Count);
+            Assert.Equal(failure == "retry" ? 4 : 2, storage.Confirmations.Count);
             if (failure == "retry")
             {
-                Assert.Equal(original.Concat(storage.Uploads.Skip(2).Select(Storage.Url)), log.PhotoUrls);
-                Assert.Equal(storage.Uploads.Take(2), storage.Deletes); Assert.Equal(2, audit.Calls);
+                Assert.Equal(original.Concat(storage.Confirmations.Skip(2).Select(Storage.Url)), log.PhotoUrls);
+                Assert.Empty(storage.Deletes); Assert.Equal(2, audit.Calls);
             }
             else if (failure == "lostCommit")
             {
-                Assert.Equal(original.Concat(storage.Uploads.Select(Storage.Url)), log.PhotoUrls); Assert.Empty(storage.Deletes);
+                Assert.Equal(original.Concat(storage.Confirmations.Select(Storage.Url)), log.PhotoUrls); Assert.Empty(storage.Deletes);
             }
             else
             {
-                Assert.Equal(original, log.PhotoUrls); Assert.Equal(storage.Uploads, storage.Deletes);
+                Assert.Equal(original, log.PhotoUrls); Assert.Empty(storage.Deletes);
             }
         });
     }
@@ -213,7 +213,7 @@ public class HorseHealthLogPostgresTests
             await Assert.ThrowsAsync<UnprocessableEntityException>(() => secondService.AddPhotosAsync(f.Transport.TransportId, id,
                 new() { Files = [Photo()] }, f.Escort.AccountId));
             await using var verify = new AppDbContext(options);
-            Assert.Equal(firstStorage.Uploads.Concat(secondStorage.Uploads).Select(Storage.Url), (await verify.HorseHealthLogs.SingleAsync()).PhotoUrls);
+            Assert.Equal(firstStorage.Confirmations.Concat(secondStorage.Confirmations).Select(Storage.Url), (await verify.HorseHealthLogs.SingleAsync()).PhotoUrls);
             Assert.Empty(firstStorage.Deletes); Assert.Empty(secondStorage.Deletes);
         });
     }
@@ -231,7 +231,7 @@ public class HorseHealthLogPostgresTests
             var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var snapshot = new CompetingSnapshot();
-            var firstStorage = new Storage { AfterUpload = async () => { entered.TrySetResult(); await release.Task.WaitAsync(TimeSpan.FromSeconds(15)); } };
+            var firstStorage = new Storage { AfterConfirmation = async () => { entered.TrySetResult(); await release.Task.WaitAsync(TimeSpan.FromSeconds(15)); } };
             var secondStorage = new Storage();
             await using var first = new AppDbContext(options);
             await using var second = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(snapshot).Options);
@@ -252,8 +252,8 @@ public class HorseHealthLogPostgresTests
             else Assert.Equal("PHOTO_LIMIT_EXCEEDED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => competing)).ErrorCode);
             Assert.True(snapshot.Attempts >= 2);
             await using var verify = new AppDbContext(options); var log = await verify.HorseHealthLogs.SingleAsync();
-            Assert.Equal(original.Concat(firstStorage.Uploads.Concat(secondStorage.Uploads).Select(Storage.Url)), log.PhotoUrls);
-            Assert.Equal(bothSucceed ? count : 0, secondStorage.Uploads.Count);
+            Assert.Equal(original.Concat(firstStorage.Confirmations.Concat(secondStorage.Confirmations).Select(Storage.Url)), log.PhotoUrls);
+            Assert.Equal(bothSucceed ? count : 0, secondStorage.Confirmations.Count);
             Assert.Empty(firstStorage.Deletes); Assert.Empty(secondStorage.Deletes);
         });
     }

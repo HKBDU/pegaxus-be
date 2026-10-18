@@ -167,7 +167,7 @@ public class Request
 
         public string? QuickNote { get; set; }
 
-        public List<IFormFile> Files { get; set; } = [];
+        public List<UploadService.Request.UploadedAssetReference> Files { get; set; } = [];
     }
 
     public class FinalizeQuarantineProofRequest
@@ -201,7 +201,7 @@ public class Request
 
         public string? QuickNote { get; set; }
 
-        public List<IFormFile> Files { get; set; } = [];
+        public List<UploadService.Request.UploadedAssetReference> Files { get; set; } = [];
     }
 
     public class FinalizeCustomsClearanceProofRequest
