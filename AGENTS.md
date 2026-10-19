@@ -51,3 +51,16 @@ Files are searched in this order:
 
 @.agents/skills/caveman/SKILL.md
 ```
+## Agent skills
+
+### Issue tracker
+
+Issues live on GitHub (`HKBDU/pegaxus-be`), accessed with the `gh` CLI. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Categories: `bug`, `feature`, `refactor`. States: `needs-triage`, `needs-info`, `ready` (agent-ready), `ready-for-human`, `wontfix`. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `GLOSSARY.md` and `docs/adr/` at the repo root. See `docs/agents/domain.md`.

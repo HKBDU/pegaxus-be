@@ -56,6 +56,11 @@ public sealed class VehicleFieldsValidator : AbstractValidator<Request.VehicleFi
             .WithMessage("Expiry date must be in the future.");
         RuleFor(x => x.InsuranceExpiryDate).Must(x => !x.HasValue || x.Value > DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime))
             .WithMessage("Expiry date must be in the future.");
+        RuleFor(x => x.RegistrationExpiryDate).Must(x => !x.HasValue || x.Value <= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime).AddYears(Limits.DateWindowYears))
+            .WithMessage($"Expiry date must be within {Limits.DateWindowYears} years from today.");
+        RuleFor(x => x.InsuranceExpiryDate).Must(x => !x.HasValue || x.Value <= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime).AddYears(Limits.DateWindowYears))
+            .WithMessage($"Expiry date must be within {Limits.DateWindowYears} years from today.");
+        RuleFor(x => x.SpecialEquipment).MaximumLength(Limits.NoteMaxLength);
     }
 }
 

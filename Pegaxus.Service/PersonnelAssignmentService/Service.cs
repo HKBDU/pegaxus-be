@@ -302,7 +302,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         }
         var count = await query.CountAsync(cancellationToken);
         var items = await query.OrderBy(x => x.EmployeeCode).ThenBy(x => x.EmployeeId)
-            .Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize)).Take(request.PageSize)
             .Select(x => new Response.EmployeeBrief(x.EmployeeId, x.EmployeeCode, x.FullName, x.Role.ToString(),
                 x.Account.Email, x.Account.AvatarUrl, x.Country, null))
             .ToArrayAsync(cancellationToken);

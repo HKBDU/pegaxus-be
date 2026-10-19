@@ -80,7 +80,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             "updatedat:desc" => query.OrderByDescending(x => x.UpdatedAt),
             _ => query.OrderBy(x => x.VehicleCode)
         };
-        var items = await ordered.ThenBy(x => x.VehicleId).Skip((request.PageIndex - 1) * request.PageSize)
+        var items = await ordered.ThenBy(x => x.VehicleId).Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize).ToListAsync(cancellationToken);
         return new(items.Select(x => Map(x, request.AvailableFrom.HasValue ? true : null)).ToArray(),
             request.PageIndex, request.PageSize, count, Paging.TotalPages(count, request.PageSize));

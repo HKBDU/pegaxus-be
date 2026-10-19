@@ -3,6 +3,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MediaService;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
@@ -212,7 +213,7 @@ public sealed partial class Service
             throw new BadRequestException("HorseId must not be empty.");
         if (string.IsNullOrWhiteSpace(request.Status))
             return null;
-        if (!Enum.TryParse<DossierRequirementStatus>(request.Status.Trim(), true, out var status) || !Enum.IsDefined(status))
+        if (!EnumParser.TryParseDefined<DossierRequirementStatus>(request.Status.Trim(), out var status) || !Enum.IsDefined(status))
             throw new BadRequestException("Status is invalid.", "INVALID_STATUS_PARAMETER");
         return status;
     }

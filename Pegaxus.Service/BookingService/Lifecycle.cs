@@ -27,7 +27,7 @@ public sealed partial class Service
         if (booking is null)
             throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
 
-        if (!Enum.TryParse<BookingStatus>(request.Status.Trim(), true, out var targetStatus) ||
+        if (!EnumParser.TryParseDefined<BookingStatus>(request.Status.Trim(), out var targetStatus) ||
             targetStatus is not (BookingStatus.DRAFT or BookingStatus.PENDING))
             throw new BadRequestException("Only DRAFT and PENDING statuses are supported", "INVALID_BOOKING_STATUS");
 

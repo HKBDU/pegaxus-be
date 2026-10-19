@@ -33,7 +33,7 @@ public sealed class Service : IEmployeeService
         var totalItems = await query.CountAsync(cancellationToken);
         var ordered = ApplySort(query, request.SortBy);
         var items = await ordered
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .Select(employee => new Response.EmployeeItemResponse
             {
@@ -117,11 +117,13 @@ public sealed class Service : IEmployeeService
         Guid managerAccountId,
         CancellationToken cancellationToken = default)
     {
+        Emails.EnsureValid(request.Email?.Trim());
         var email = request.Email.Trim().ToLowerInvariant();
-        ValidateText(request.FullName, 150, "FullName", true);
+        ValidateText(Text.NormalizeName(request.FullName), 150, "FullName", true);
         ValidateText(request.Phone, 30, "Phone", true);
+        Phones.EnsureValid(request.Phone);
         CountryCodes.EnsureValid(request.Country);
-        if (!Enum.TryParse<EmployeeRole>(request.Role.Trim(), true, out var role))
+        if (!EnumParser.TryParseDefined<EmployeeRole>(request.Role.Trim(), out var role))
             throw new BadRequestException("Role is invalid", "INVALID_EMPLOYEE_ROLE");
         if (await _db.Accounts.AnyAsync(account => !account.IsDeleted && account.Email.ToLower() == email, cancellationToken))
             throw new ConflictException("The email address is already in use", "EMAIL_ALREADY_EXISTS");
@@ -143,7 +145,7 @@ public sealed class Service : IEmployeeService
             AccountId = account.AccountId,
             EmployeeCode = await GenerateEmployeeCodeAsync(cancellationToken),
             Role = role,
-            FullName = request.FullName.Trim(),
+            FullName = Text.NormalizeName(request.FullName),
             Phone = request.Phone.Trim(),
             Country = CountryCodes.Normalize(request.Country),
             IsActive = true,
@@ -195,7 +197,7 @@ public sealed class Service : IEmployeeService
         CountryCodes.EnsureValid(request.Country);
         if (request.Role is not null)
         {
-            if (!Enum.TryParse<EmployeeRole>(request.Role.Trim(), true, out var role))
+            if (!EnumParser.TryParseDefined<EmployeeRole>(request.Role.Trim(), out var role))
                 throw new BadRequestException("Role is invalid", "INVALID_EMPLOYEE_ROLE");
             employee.Role = role;
         }
@@ -219,7 +221,7 @@ public sealed class Service : IEmployeeService
     {
         var employee = await GetVisibleEmployeeAsync(employeeId, cancellationToken);
         EnsureNotSelf(employee, managerAccountId);
-        if (!Enum.TryParse<AccountStatus>(request.Status.Trim(), true, out var status))
+        if (!EnumParser.TryParseDefined<AccountStatus>(request.Status.Trim(), out var status))
             throw new BadRequestException("Status is invalid", "INVALID_ACCOUNT_STATUS");
 
         var now = UtcNow();
@@ -344,14 +346,14 @@ public sealed class Service : IEmployeeService
 
     private static EmployeeRole? ParseOptionalRole(string? value) => string.IsNullOrWhiteSpace(value)
         ? null
-        : Enum.TryParse<EmployeeRole>(value.Trim(), true, out var role)
+        : EnumParser.TryParseDefined<EmployeeRole>(value.Trim(), out var role)
             ? role
             : throw new BadRequestException("Role is invalid", "INVALID_EMPLOYEE_ROLE");
 
     private static AccountStatus? ParseAccountStatusFilter(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
-        if (!Enum.TryParse<AccountStatus>(value.Trim(), true, out var status) || status == AccountStatus.SUSPENDED)
+        if (!EnumParser.TryParseDefined<AccountStatus>(value.Trim(), out var status) || status == AccountStatus.SUSPENDED)
             throw new BadRequestException("Account status must be ACTIVE or INACTIVE", "INVALID_ACCOUNT_STATUS");
         return status;
     }

@@ -21,7 +21,7 @@ public sealed partial class Service
         var query = _db.DossierRequirements.AsNoTracking().Where(item => item.ComplianceDossierId == dossierId && !item.IsDeleted);
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            if (!Enum.TryParse<DossierRequirementStatus>(request.Status.Trim(), true, out var status) || !Enum.IsDefined(status))
+            if (!EnumParser.TryParseDefined<DossierRequirementStatus>(request.Status.Trim(), out var status) || !Enum.IsDefined(status))
                 throw new BadRequestException("Invalid DossierRequirement status filter", "INVALID_REQUIREMENT_STATUS");
             query = query.Where(item => item.Status == status);
         }
@@ -37,7 +37,7 @@ public sealed partial class Service
             _ => throw new BadRequestException("The sort parameter is invalid", "INVALID_SORT_PARAMETER")
         };
         var total = await query.CountAsync(cancellationToken);
-        var items = await ordered.ThenBy(item => item.DossierRequirementId).Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize)
+        var items = await ordered.ThenBy(item => item.DossierRequirementId).Skip(Paging.Offset(request.PageIndex, request.PageSize)).Take(request.PageSize)
             .Select(item => new Response.RequirementListItemResponse
             {
                 DossierRequirementId = item.DossierRequirementId, ComplianceRequirementId = item.ComplianceRequirementId,

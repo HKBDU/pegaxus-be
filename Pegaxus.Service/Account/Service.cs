@@ -96,8 +96,9 @@ public sealed class Service : IAccountService
         if (account is null)
             throw new KeyNotFoundException("Account not found");
 
-        ValidateText(request.FullName, 150, "FullName");
+        ValidateText(request.FullName is null ? null : Text.NormalizeName(request.FullName), 150, "FullName");
         ValidateText(request.Phone, 30, "Phone");
+        Phones.EnsureValid(request.Phone);
         ValidateText(request.Address, 500, "Address");
         ValidateText(request.Country, 100, "Country");
         // Assignment filters match employees by ISO code, so an employee's country must use it.
@@ -109,15 +110,23 @@ public sealed class Service : IAccountService
 
         if (request.DateOfBirth is { } dateOfBirth && dateOfBirth > DateOnly.FromDateTime(DateTime.UtcNow))
             throw new BadRequestException("Date of birth cannot be in the future");
+        if (request.DateOfBirth is { } birth)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (birth > today.AddYears(-Limits.AccountMinAgeYears))
+                throw new BadRequestException($"You must be at least {Limits.AccountMinAgeYears} years old");
+            if (birth < today.AddYears(-Limits.AccountMaxAgeYears))
+                throw new BadRequestException($"Date of birth cannot be more than {Limits.AccountMaxAgeYears} years ago");
+        }
 
         var avatarUrl = request.Avatar is null ? null : await ConfirmAvatarAsync(accountId, request.Avatar, cancellationToken);
 
         if (request.FullName is not null)
         {
             if (account.CustomerAccount is { IsDeleted: false } customer)
-                customer.FullName = request.FullName.Trim();
+                customer.FullName = Text.NormalizeName(request.FullName);
             if (account.EmployeeAccount is { IsDeleted: false } employee)
-                employee.FullName = request.FullName.Trim();
+                employee.FullName = Text.NormalizeName(request.FullName);
         }
         if (request.DateOfBirth is not null)
         {

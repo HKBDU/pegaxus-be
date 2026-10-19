@@ -30,7 +30,8 @@ public sealed class SaveRequestValidator : AbstractValidator<Request.SaveRequest
         RuleFor(request => request.SupportedModes).NotEmpty();
         RuleForEach(request => request.SupportedModes).Must(IsMode).WithMessage("Supported modes must be ROAD, SEA or AIR.");
         RuleFor(request => request.ContactName).MaximumLength(150);
-        RuleFor(request => request.Phone).MaximumLength(30);
+        RuleFor(request => request.Phone).MaximumLength(30).Must(Phones.IsValid)
+            .When(request => !string.IsNullOrWhiteSpace(request.Phone)).WithMessage(Phones.Message);
         RuleFor(request => request.Email).MaximumLength(255).EmailAddress().When(request => !string.IsNullOrWhiteSpace(request.Email));
         RuleFor(request => request.Address).MaximumLength(500);
         RuleFor(request => request.Country).Must(value => string.IsNullOrWhiteSpace(value) || CountryCodes.IsValid(value))

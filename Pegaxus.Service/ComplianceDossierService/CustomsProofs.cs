@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -263,6 +264,7 @@ public sealed partial class Service
                 throw new BadRequestException(
                     "rejectionReason is required for REJECT_PROOF",
                     "FIELD_REQUIRED_FOR_ACTION");
+            InputRules.MaxLength(request.RejectionReason, Limits.NoteMaxLength, "rejectionReason");
 
             proof.Status = CustomsClearanceProofStatus.Rejected;
             proof.RejectionReason = request.RejectionReason.Trim();
@@ -301,6 +303,15 @@ public sealed partial class Service
             throw new BadRequestException(
                 "mrnNumber, customsLane, and status are required for FINALIZE",
                 "FIELD_REQUIRED_FOR_ACTION");
+
+        InputRules.MaxLength(request.MrnNumber, 100, "mrnNumber");
+        InputRules.MaxLength(request.VerificationNote, Limits.NoteMaxLength, "verificationNote");
+        if (request.AtaCarnetExpiryDate is { } carnetExpiry)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (carnetExpiry < today.AddYears(-Limits.DateWindowYears) || carnetExpiry > today.AddYears(Limits.DateWindowYears))
+                throw new BadRequestException($"ataCarnetExpiryDate must be within {Limits.DateWindowYears} years of today");
+        }
 
         var customsLane = ParseCustomsLane(request.CustomsLane);
         if (customsLane is null)
@@ -441,6 +452,9 @@ public sealed partial class Service
     {
         if (string.IsNullOrWhiteSpace(request.CustomsPortName))
             throw new BadRequestException("Customs port name is required");
+        InputRules.MaxLength(request.CustomsPortName, 200, "Customs port name");
+        InputRules.MaxLength(request.MrnNumber, 100, "mrnNumber");
+        InputRules.MaxLength(request.QuickNote, Limits.NoteMaxLength, "quickNote");
 
         if (request.IsHeld && string.IsNullOrWhiteSpace(request.QuickNote))
             throw new BadRequestException(
