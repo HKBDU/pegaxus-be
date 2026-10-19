@@ -275,7 +275,7 @@ public class InvoiceUpdateTests
             case "itemId": request.Items[0].InvoiceItemId = Guid.NewGuid(); break;
             case "emptyItemId": request.Items[0].InvoiceItemId = Guid.Empty; break;
             case "duplicateItemId": request.Items.Add(request.Items[0]); break;
-            case "overflow": request.Items[0].Quantity = 99_999_999; request.Items[0].Price = 9_999_999_999_999_999; break;
+            case "overflow": request.Items[0].Quantity = 5000; request.Items[0].Price = 9_999_999_999_999_999; break;
             case "taxOverflow": request.Items[0].Price = 9_999_999_999_999_999; break;
         }
         var error = await Assert.ThrowsAsync<FieldValidationException>(() =>

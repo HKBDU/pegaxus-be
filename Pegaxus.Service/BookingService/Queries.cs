@@ -187,7 +187,7 @@ public sealed partial class Service
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            if (!Enum.TryParse<BookingStatus>(request.Status.Trim(), true, out var status))
+            if (!EnumParser.TryParseDefined<BookingStatus>(request.Status.Trim(), out var status))
                 throw new BadRequestException("Booking status is invalid", "INVALID_STATUS");
             query = query.Where(booking => booking.Status == status);
         }
@@ -215,7 +215,7 @@ public sealed partial class Service
 
         var totalItems = await query.CountAsync(cancellationToken);
         var items = await query
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .Select(booking => new Response.BookingListItemResponse
             {

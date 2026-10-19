@@ -176,7 +176,7 @@ public sealed partial class Service
             "totalamount:desc" => query.OrderByDescending(item => item.TotalAmount),
             _ => query.OrderByDescending(item => item.CreatedAt)
         };
-        var rows = await sorted.ThenBy(item => item.InvoiceId).Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize)
+        var rows = await sorted.ThenBy(item => item.InvoiceId).Skip(Paging.Offset(request.PageIndex, request.PageSize)).Take(request.PageSize)
             .Select(item => new
             {
                 item.InvoiceId, item.InvoiceCode, item.Type, item.Status, item.BookingId, item.Booking.BookingCode,
@@ -252,7 +252,7 @@ public sealed partial class Service
             "totalamount:desc" => query.OrderByDescending(item => item.TotalAmount),
             _ => query.OrderByDescending(item => item.CreatedAt)
         };
-        var rows = await sorted.ThenBy(item => item.InvoiceId).Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize)
+        var rows = await sorted.ThenBy(item => item.InvoiceId).Skip(Paging.Offset(request.PageIndex, request.PageSize)).Take(request.PageSize)
             .Select(item => new
             {
                 item.InvoiceId, item.InvoiceCode, item.Type, item.Status, item.BookingId, item.Booking.BookingCode,

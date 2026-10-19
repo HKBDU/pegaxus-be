@@ -123,7 +123,7 @@ public sealed class Service : INotificationService
         var totalPages = totalItems == 0 ? 0 : Paging.TotalPages(totalItems, request.PageSize);
         var items = await query
             .OrderByDescending(item => item.CreatedAt)
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .Select(item => new Response.NotificationItemResponse
             {

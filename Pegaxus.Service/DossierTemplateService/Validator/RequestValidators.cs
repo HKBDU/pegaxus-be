@@ -26,6 +26,7 @@ public sealed class SaveRequestValidator : AbstractValidator<Request.SaveRequest
         RuleFor(request => request.TemplateName).NotEmpty()
             .Must(value => value is null || value.Trim().Length <= 200)
             .WithMessage("TemplateName must not exceed 200 characters.");
+        RuleFor(request => request.Description).MaximumLength(500);
         RuleFor(request => request.Status).Must(ChangeStatusRequestValidator.IsValidStatus)
             .WithMessage("Status must be DRAFT, ACTIVE or INACTIVE.");
         RuleFor(request => request.EffectiveTo).Must((request, value) => !(request.EffectiveFrom > value))
@@ -36,6 +37,7 @@ public sealed class SaveRequestValidator : AbstractValidator<Request.SaveRequest
         {
             item.RuleFor(value => value.ComplianceRequirementId).NotEmpty();
             item.RuleFor(value => value.SequenceNo).GreaterThan(0);
+            item.RuleFor(value => value.Instruction).MaximumLength(1000);
         });
         RuleFor(request => request.Items)
             .Must(items => items.Select(item => item.ComplianceRequirementId).Distinct().Count() == items.Count &&

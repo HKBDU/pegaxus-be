@@ -29,7 +29,7 @@ public class LocationTrackingTests
         var accepted = await f.Service.RecordAsync(f.TransportId, request, f.Driver.AccountId);
         Assert.Equal(f.Clock.Now, accepted.ServerTime); Assert.Single(f.Realtime.Points);
         var after = await f.Service.GetAsync(f.TransportId, f.Manager.AccountId);
-        Assert.Equal(0.5m, after.Truck!.Longitude); Assert.Equal(0, after.Truck.Latitude);
+        Assert.Equal(0.5m, after.Truck!.Longitude); Assert.Equal(10, after.Truck.Latitude);
         Assert.Equal(request.RecordedAt, after.Truck.RecordedAt); Assert.Equal(f.First.RoutePlanRouteId, after.Truck.RoutePlanRouteId);
         Assert.Equal(312, after.Truck.HeadingDegrees); Assert.Equal(78.5m, after.Truck.SpeedKmh); Assert.Equal(12, after.Truck.AccuracyMeters);
         Assert.Null((await db.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.First.RoutePlanRouteId)).ActualArrivalAt);
@@ -37,8 +37,8 @@ public class LocationTrackingTests
     }
 
     [Theory]
-    [InlineData(499, true)]
-    [InlineData(501, false)]
+    [InlineData(480, true)]
+    [InlineData(520, false)]
     public async Task Geofence_MarksOnlyStartedSegmentInsideConfiguredRadius(double distance, bool arrived)
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
@@ -75,7 +75,7 @@ public class LocationTrackingTests
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         var service = f.CreateService(db, radius: 100);
-        await service.RecordAsync(f.TransportId, f.Point(1 + LongitudeOffset(101)), f.Driver.AccountId);
+        await service.RecordAsync(f.TransportId, f.Point(1 + LongitudeOffset(115)), f.Driver.AccountId);
         Assert.Null(f.First.ActualArrivalAt);
         var request = f.Point(1); request.RecordedAt = DbTime.AsUtc(f.First.ActualDepartureAt!.Value.AddSeconds(-1));
         await f.CreateService(db, new Tracking.TrackingState()).RecordAsync(f.TransportId, request, f.Driver.AccountId);
@@ -274,7 +274,11 @@ public class LocationTrackingTests
         Assert.InRange(Geo.DistanceMeters(0, 179.999m, 0, -179.999m), 222, 223);
     }
 
-    private static decimal LongitudeOffset(double meters) => (decimal)(meters / 6_371_000 * 180 / Math.PI);
+    // Coordinates carry at most 4 decimals (about 11 m), so the offset is rounded the way a client would send it.
+    private static decimal LongitudeOffset(double meters) =>
+        Math.Round((decimal)(meters / (6_371_000 * Math.Cos(FixtureLatitude * Math.PI / 180)) * 180 / Math.PI), 4);
+
+    private const int FixtureLatitude = 10;
 
     internal sealed class Fixture(AppDbContext db)
     {
@@ -292,7 +296,7 @@ public class LocationTrackingTests
         internal Realtime Realtime { get; } = new();
         internal NotificationRealtime NotificationRealtime { get; } = new();
         internal Tracking.Service Service => CreateService(db);
-        internal Tracking.Request.LocationRequest Point(decimal longitude) => new() { Latitude = 0, Longitude = longitude, RecordedAt = Clock.Now };
+        internal Tracking.Request.LocationRequest Point(decimal longitude) => new() { Latitude = FixtureLatitude, Longitude = longitude, RecordedAt = Clock.Now };
         internal Tracking.Service CreateService(AppDbContext context, Tracking.TrackingState? state = null, double radius = 500) => new(context,
             Clock, state ?? State, Options.Create(new Tracking.TrackingOptions { GeofenceRadiusMeters = radius }), new LocationRequestValidator(Clock), Realtime,
             new Pegaxus.Service.NotificationService.Service(context, NotificationRealtime), NullLogger<Tracking.Service>.Instance);
@@ -304,11 +308,11 @@ public class LocationTrackingTests
             var (route, first) = await PersonnelAssignmentTests.RouteAsync(db, RoutePlanStatus.ACTIVE);
             route.TransportPlan.Transport.Status = TransportStatus.IN_TRANSIT;
             route.UpdatedAt = Now;
-            first.Route.FromLocation.Latitude = 0; first.Route.FromLocation.Longitude = 0;
-            first.Route.ToLocation.Latitude = 0; first.Route.ToLocation.Longitude = 1;
+            first.Route.FromLocation.Latitude = FixtureLatitude; first.Route.FromLocation.Longitude = 0;
+            first.Route.ToLocation.Latitude = FixtureLatitude; first.Route.ToLocation.Longitude = 1;
             first.Route.DistanceKm = 10; first.DriverEmployeeId = driver.EmployeeId; first.ActualDepartureAt = Now.AddHours(-1); first.PlannedArrivalAt = Now.AddHours(1);
             var second = PersonnelAssignmentTests.Segment(route, 2); second.Route.FromLocation = first.Route.ToLocation;
-            second.Route.ToLocation.Latitude = 0; second.Route.ToLocation.Longitude = 2; second.DriverEmployeeId = driver.EmployeeId;
+            second.Route.ToLocation.Latitude = FixtureLatitude; second.Route.ToLocation.Longitude = 2; second.DriverEmployeeId = driver.EmployeeId;
             second.Route.DistanceKm = 20; second.PlannedArrivalAt = Now.AddHours(2);
             db.Add(second); db.Add(new EmployeeTransportPlan { Employee = coordinator, TransportPlan = route.TransportPlan, Responsibility = "FLEET_ROUTE_COORDINATOR" });
             await db.SaveChangesAsync();

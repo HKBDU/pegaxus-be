@@ -60,7 +60,7 @@ public sealed class Service : IHorseService
         var items = await query
             .OrderBy(horse => horse.HorseName)
             .ThenBy(horse => horse.HorseId)
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .Select(horse => new Response.HorseItemResponse
             {
@@ -98,7 +98,7 @@ public sealed class Service : IHorseService
         if (customerId is null)
             throw new ForbiddenException("Only customer accounts can create horses");
 
-        var horseName = request.HorseName?.Trim() ?? string.Empty;
+        var horseName = Text.NormalizeName(request.HorseName);
         ValidateText(horseName, 150, "HorseName", required: true);
         ValidateText(request.Breed, 100, "Breed", required: true);
         ValidateText(request.Color, 100, "Color", required: true);
@@ -107,8 +107,8 @@ public sealed class Service : IHorseService
         ValidatePassportNumber(request.PassportNumber);
         ValidateText(request.IdentificationNotes, 1000, "IdentificationNotes", required: true);
         ValidateRequiredDateOfBirth(request.DateOfBirth);
-        ValidateRequiredMeasurement(request.WeightKg, "WeightKg");
-        ValidateRequiredMeasurement(request.HeightCm, "HeightCm");
+        ValidateRequiredMeasurement(request.WeightKg, "WeightKg", Limits.HorseWeightKg);
+        ValidateRequiredMeasurement(request.HeightCm, "HeightCm", Limits.HorseHeightCm);
 
         var sex = ParseSex(request.Sex);
 
@@ -243,7 +243,7 @@ public sealed class Service : IHorseService
                 "Horse belongs to an approved request and cannot be updated",
                 "HORSE_IN_APPROVED_BOOKING");
 
-        var horseName = request.HorseName?.Trim() ?? string.Empty;
+        var horseName = Text.NormalizeName(request.HorseName);
         ValidateText(horseName, 150, "HorseName", required: true);
         ValidateText(request.Breed, 100, "Breed", required: true);
         ValidateText(request.Color, 100, "Color", required: true);
@@ -252,8 +252,8 @@ public sealed class Service : IHorseService
         ValidatePassportNumber(request.PassportNumber);
         ValidateText(request.IdentificationNotes, 1000, "IdentificationNotes", required: true);
         ValidateRequiredDateOfBirth(request.DateOfBirth);
-        ValidateRequiredMeasurement(request.WeightKg, "WeightKg");
-        ValidateRequiredMeasurement(request.HeightCm, "HeightCm");
+        ValidateRequiredMeasurement(request.WeightKg, "WeightKg", Limits.HorseWeightKg);
+        ValidateRequiredMeasurement(request.HeightCm, "HeightCm", Limits.HorseHeightCm);
 
         var sex = ParseSex(request.Sex);
         var microchipNumber = EmptyToNull(request.MicrochipNumber);
@@ -367,32 +367,36 @@ public sealed class Service : IHorseService
             throw new BadRequestException("Passport Number must be a valid 15-character EU passport/UELN number");
     }
 
-    private static void ValidateMeasurement(decimal? value, string fieldName)
+    private static void ValidateMeasurement(decimal? value, string fieldName, DecimalRange range)
     {
         if (value is <= 0)
             throw new BadRequestException($"{fieldName} must be greater than 0");
+        InputRules.Measurement(value, range, fieldName);
     }
 
-    private static void ValidateRequiredMeasurement(decimal? value, string fieldName)
+    private static void ValidateRequiredMeasurement(decimal? value, string fieldName, DecimalRange range)
     {
         if (value is null)
             throw new BadRequestException($"{fieldName} is required");
-        ValidateMeasurement(value, fieldName);
+        ValidateMeasurement(value, fieldName, range);
     }
 
     private static void ValidateRequiredDateOfBirth(DateOnly? value)
     {
         if (value is null)
             throw new BadRequestException("DateOfBirth is required");
-        if (value > DateOnly.FromDateTime(DateTime.UtcNow))
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (value > today)
             throw new BadRequestException("DateOfBirth cannot be in the future");
+        if (value < today.AddYears(-Limits.HorseMaxAgeYears))
+            throw new BadRequestException($"DateOfBirth cannot be more than {Limits.HorseMaxAgeYears} years ago");
     }
 
     private static HorseSex? ParseSex(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             throw new BadRequestException("Sex is required");
-        if (!Enum.TryParse<HorseSex>(value.Trim(), true, out var sex))
+        if (!EnumParser.TryParseDefined<HorseSex>(value.Trim(), out var sex))
             throw new BadRequestException("Sex is invalid");
         return sex;
     }

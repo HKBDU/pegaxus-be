@@ -4,6 +4,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using QuestPDF.Infrastructure;
+using Pegaxus.Service.Common;
 
 using static Pegaxus.Service.Common.DbTime;
 
@@ -225,11 +226,11 @@ public sealed partial class Service
         await Task.CompletedTask;
     }
 
-    private static RouteType ParseRouteType(string value) => Enum.TryParse<RouteType>(value, true, out var result) && result is RouteType.PRIMARY or RouteType.BACKUP or RouteType.RETURN
+    private static RouteType ParseRouteType(string value) => EnumParser.TryParseDefined<RouteType>(value, out var result) && result is RouteType.PRIMARY or RouteType.BACKUP or RouteType.RETURN
         ? result
         : throw new BadRequestException("routeType must be PRIMARY, BACKUP or RETURN");
 
-    private static TransportMode ParseTransportMode(string value) => Enum.TryParse<TransportMode>(value, true, out var result)
+    private static TransportMode ParseTransportMode(string value) => EnumParser.TryParseDefined<TransportMode>(value, out var result)
         ? result
         : throw new BadRequestException("transportMode is invalid");
 

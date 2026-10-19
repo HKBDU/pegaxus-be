@@ -1,4 +1,5 @@
 using FluentValidation;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.ComplianceRequirementService.Validator;
 
@@ -42,7 +43,10 @@ public sealed class SaveRequestValidator : AbstractValidator<Request.SaveRequest
         RuleFor(request => request.BcpCode).MaximumLength(50);
         RuleFor(request => request.IssuingAuthority).MaximumLength(200);
         RuleFor(request => request.ValidityRequired).NotNull();
-        RuleFor(request => request.ValidityPeriodDays).GreaterThan(0);
+        RuleFor(request => request.ValidityPeriodDays).GreaterThan(0).LessThanOrEqualTo(Limits.ValidityPeriodDaysMax)
+            .WithMessage($"ValidityPeriodDays must be between 1 and {Limits.ValidityPeriodDaysMax}.");
+        RuleFor(request => request.Description).MaximumLength(Limits.NoteMaxLength);
+        RuleFor(request => request.LegalBasis).MaximumLength(1000);
         RuleFor(request => request.ValidityPeriodDays).NotNull().When(request => request.ValidityRequired == true)
             .WithMessage("ValidityPeriodDays is required when ValidityRequired is true");
     }

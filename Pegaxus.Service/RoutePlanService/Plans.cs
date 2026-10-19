@@ -107,7 +107,7 @@ public sealed partial class Service
         RoutePlanStatus? status = null;
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            if (!Enum.TryParse<RoutePlanStatus>(request.Status, true, out var parsedStatus))
+            if (!EnumParser.TryParseDefined<RoutePlanStatus>(request.Status, out var parsedStatus))
                 throw new BadRequestException("status is invalid", "INVALID_ROUTE_PLAN_STATUS");
             status = parsedStatus;
         }

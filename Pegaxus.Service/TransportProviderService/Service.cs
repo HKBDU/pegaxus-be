@@ -57,7 +57,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
             _ => query.OrderBy(item => item.ProviderName)
         };
         var items = await sorted.ThenBy(item => item.TransportProviderId)
-            .Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize).ToListAsync(cancellationToken);
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize)).Take(request.PageSize).ToListAsync(cancellationToken);
         return new Response.ListResponse
         {
             Items = items.Select(Map).ToArray(), PageIndex = request.PageIndex, PageSize = request.PageSize,

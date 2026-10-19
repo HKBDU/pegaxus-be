@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -255,6 +256,7 @@ public sealed partial class Service
                 throw new BadRequestException(
                     "rejectionReason is required for REJECT_PROOF",
                     "FIELD_REQUIRED_FOR_ACTION");
+            InputRules.MaxLength(request.RejectionReason, Limits.NoteMaxLength, "rejectionReason");
 
             proof.Status = QuarantineProofStatus.Rejected;
             proof.RejectionReason = request.RejectionReason.Trim();
@@ -295,6 +297,10 @@ public sealed partial class Service
             throw new BadRequestException(
                 "officialVetName, status, and microchipChecklist are required for FINALIZE",
                 "FIELD_REQUIRED_FOR_ACTION");
+
+        InputRules.MaxLength(request.OfficialVetName, 200, "officialVetName");
+        InputRules.MaxLength(request.BcpReceiptNo, 100, "bcpReceiptNo");
+        InputRules.MaxLength(request.Conditions, Limits.NoteMaxLength, "conditions");
 
         var status = request.Status.Trim().ToUpperInvariant() switch
         {
@@ -417,6 +423,9 @@ public sealed partial class Service
         });
     }
 
+    private static BadRequestException InvalidChecklist() =>
+        new("microchipChecklist must be a valid JSON array", "INVALID_MICROCHIP_CHECKLIST");
+
     private static List<MicrochipChecklistItem> ParseMicrochipChecklist(string value)
     {
         try
@@ -424,11 +433,11 @@ public sealed partial class Service
             var checklist = JsonSerializer.Deserialize<List<MicrochipChecklistItem>>(
                 value,
                 new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            return checklist ?? [];
+            return checklist ?? throw InvalidChecklist();
         }
         catch (JsonException)
         {
-            return [];
+            throw InvalidChecklist();
         }
     }
 
@@ -436,6 +445,8 @@ public sealed partial class Service
     {
         if (string.IsNullOrWhiteSpace(request.BcpName))
             throw new BadRequestException("BCP name is required");
+        InputRules.MaxLength(request.BcpName, 200, "BCP name");
+        InputRules.MaxLength(request.QuickNote, Limits.NoteMaxLength, "quickNote");
 
         if (request.IsHoldback && string.IsNullOrWhiteSpace(request.QuickNote))
             throw new BadRequestException(

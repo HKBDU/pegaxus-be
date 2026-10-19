@@ -27,14 +27,14 @@ public sealed class Service(AppDbContext db) : ILocationService
             query = query.Where(item => item.Country == request.Country.Trim().ToUpperInvariant());
         if (!string.IsNullOrWhiteSpace(request.LocationType))
         {
-            if (!Enum.TryParse<LocationType>(request.LocationType.Trim(), true, out var type))
+            if (!EnumParser.TryParseDefined<LocationType>(request.LocationType.Trim(), out var type))
                 throw new BadRequestException("locationType is invalid", "VALIDATION_ERROR");
             query = query.Where(item => item.LocationType == type);
         }
 
         var totalItems = await query.CountAsync(cancellationToken);
         var rows = await query.OrderBy(item => item.LocationName).ThenBy(item => item.LocationId)
-            .Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize)).Take(request.PageSize)
             .ToListAsync(cancellationToken);
         var items = rows.Select(Map).ToList();
         return new Response.ListResponse
@@ -125,13 +125,13 @@ public sealed class Service(AppDbContext db) : ILocationService
         if (string.IsNullOrWhiteSpace(name) || name.Trim().Length > 200 || string.IsNullOrWhiteSpace(country) ||
             !latitude.HasValue || !longitude.HasValue)
             throw new BadRequestException("locationName, country, latitude and longitude are required", "VALIDATION_ERROR");
-        if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180)
+        if (!Coordinates.IsValid(latitude.Value, longitude.Value))
             throw new BadRequestException("latitude or longitude is invalid", "INVALID_COORDINATES");
         _ = ParseType(type);
     }
 
     private static LocationType? ParseType(string? value) => string.IsNullOrWhiteSpace(value) ? null :
-        Enum.TryParse<LocationType>(value.Trim(), true, out var result)
+        EnumParser.TryParseDefined<LocationType>(value.Trim(), out var result)
             ? result : throw new BadRequestException("locationType is invalid", "VALIDATION_ERROR");
 
     private static Response.DetailResponse Map(Location item) => new()

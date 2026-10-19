@@ -32,7 +32,7 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
         }
         var totalItems = await query.CountAsync(cancellationToken);
         var rows = await query.OrderBy(item => item.RouteCode).ThenBy(item => item.RouteId)
-            .Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize).ToListAsync(cancellationToken);
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize)).Take(request.PageSize).ToListAsync(cancellationToken);
         return new Response.ListResponse
         {
             Items = rows.Select(Map).ToList(), PageIndex = request.PageIndex, PageSize = request.PageSize,
@@ -161,7 +161,7 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
         await db.Employees.Include(item => item.Account).Active().SingleOrDefaultAsync(item => item.AccountId == accountId && item.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR, token)
         ?? throw new ForbiddenException("Only Fleet Route Coordinators can manage Routes");
 
-    private static TransportMode ParseMode(string? value) => !string.IsNullOrWhiteSpace(value) && Enum.TryParse<TransportMode>(value.Trim(), true, out var mode)
+    private static TransportMode ParseMode(string? value) => !string.IsNullOrWhiteSpace(value) && EnumParser.TryParseDefined<TransportMode>(value.Trim(), out var mode)
         ? mode : throw new BadRequestException("transportMode must be ROAD, SEA or AIR", "VALIDATION_ERROR");
     private static void ValidateIds(Guid from, Guid to) { if (from == Guid.Empty || to == Guid.Empty || from == to) throw new BadRequestException("fromLocationId and toLocationId are required and must differ", "VALIDATION_ERROR"); }
     private async Task<string> GenerateCodeAsync(CancellationToken token) { for (var i = 1; ; i++) { var code = $"RT-{DateTime.UtcNow:yyyyMMdd}-{i:0000}"; if (!await db.Routes.AnyAsync(item => item.RouteCode == code, token)) return code; } }

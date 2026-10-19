@@ -1,4 +1,5 @@
 using FluentValidation;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.HandoverService.Validator;
 
@@ -9,5 +10,6 @@ public sealed class CancelRequestValidator : AbstractValidator<Request.CancelReq
         RuleFor(request => request.LastUpdatedAt).NotNull().NotEqual(default(DateTimeOffset));
         RuleFor(request => request.CancellationReason).Must(value => value?.Trim().Length >= 10)
             .WithMessage("CancellationReason must contain at least 10 characters after trimming.");
+        RuleFor(request => request.CancellationReason).MaximumLength(Limits.NoteMaxLength);
     }
 }
