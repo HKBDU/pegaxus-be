@@ -1,12 +1,14 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.LocationTrackingService;
 using Pegaxus.Service.MediaService;
 using Pegaxus.Service.NotificationService;
 
@@ -16,7 +18,7 @@ namespace Pegaxus.Service.HandoverService;
 
 public sealed partial class Service(AppDbContext db, TimeProvider clock, IValidator<Request.ListRequest> listValidator,
     IValidator<Request.CancelRequest> cancelValidator, IValidator<Request.CreateRequest> createValidator, INotificationService notifications,
-    IValidator<Request.CompleteRequest> completeValidator, IMediaService media, ILogger<Service> logger) : IHandoverService
+    IValidator<Request.CompleteRequest> completeValidator, IMediaService media, IOptions<TrackingOptions> tracking, ILogger<Service> logger) : IHandoverService
 {
     private static readonly RoutePlanStatus[] EligibleStatuses = [RoutePlanStatus.CONFIRMED, RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED];
     private static readonly EmployeeRole[] ViewerRoles = [EmployeeRole.LOGISTICS_MANAGER, EmployeeRole.FLEET_ROUTE_COORDINATOR,
@@ -108,6 +110,7 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock, IValida
     {
         internal bool IsCustomer => Type == AccountType.CUSTOMER;
         internal bool IsCrew => Type == AccountType.EMPLOYEE && Role is EmployeeRole.DRIVER or EmployeeRole.ESCORT;
+        internal bool IsSpecialist => Type == AccountType.EMPLOYEE && Role == EmployeeRole.TRANSPORT_SPECIALIST;
         internal bool IsManager => Type == AccountType.EMPLOYEE && Role is EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.FLEET_ROUTE_COORDINATOR;
     }
 }

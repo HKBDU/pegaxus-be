@@ -11,7 +11,7 @@ public sealed partial class Service
                 EligibleStatuses.Contains(segment.RoutePlan.Status))
             .Select(segment => new SegmentData(segment.RoutePlanRouteId, segment.RoutePlanId, segment.RoutePlan.Status, segment.RoutePlan.UpdatedAt,
                 segment.SequenceNo, segment.RouteType, segment.SupersededAt, segment.ActualDepartureAt, segment.ActualArrivalAt,
-                segment.PlannedArrivalAt, segment.Route.DistanceKm, segment.Route.TransportMode.ToString(),
+                segment.PlannedArrivalAt, segment.Route.DistanceKm, segment.Route.TransportMode.ToString(), segment.DriverEmployeeId,
                 new(segment.Route.FromLocationId, segment.Route.FromLocation.LocationName, segment.Route.FromLocation.LocationType.HasValue ? segment.Route.FromLocation.LocationType.Value.ToString() : null,
                     segment.Route.FromLocation.City, segment.Route.FromLocation.Country, segment.Route.FromLocation.Latitude, segment.Route.FromLocation.Longitude),
                 new(segment.Route.ToLocationId, segment.Route.ToLocation.LocationName, segment.Route.ToLocation.LocationType.HasValue ? segment.Route.ToLocation.LocationType.Value.ToString() : null,
@@ -40,5 +40,5 @@ public sealed partial class Service
 
     private sealed record SegmentData(Guid Id, Guid PlanId, RoutePlanStatus PlanStatus, DateTime PlanUpdatedAt, int SequenceNo, RouteType Type,
         DateTime? SupersededAt, DateTime? ActualDepartureAt, DateTime? ActualArrivalAt, DateTime? PlannedArrivalAt, decimal? DistanceKm,
-        string Mode, Response.LocationBrief From, Response.LocationBrief To);
+        string Mode, Guid? DriverEmployeeId, Response.LocationBrief From, Response.LocationBrief To);
 }

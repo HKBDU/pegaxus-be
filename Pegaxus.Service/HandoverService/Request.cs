@@ -44,6 +44,8 @@ public static class Request
     public sealed class CompleteRequest
     {
         public DateTimeOffset? LastUpdatedAt { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
         public string? HorseConditionNote { get; set; }
         public string? DocumentHandoverNote { get; set; }
         public string? EquipmentHandoverNote { get; set; }

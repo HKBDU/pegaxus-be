@@ -58,11 +58,11 @@ public class HandoverTests
     }
 
     [Theory]
-    [InlineData(EmployeeRole.LOGISTICS_MANAGER, "START,COMPLETE,CANCEL")]
-    [InlineData(EmployeeRole.FLEET_ROUTE_COORDINATOR, "START,COMPLETE,CANCEL")]
+    [InlineData(EmployeeRole.LOGISTICS_MANAGER, "START,CANCEL")]
+    [InlineData(EmployeeRole.FLEET_ROUTE_COORDINATOR, "START,CANCEL")]
     [InlineData(EmployeeRole.TRANSPORT_SPECIALIST, "")]
-    [InlineData(EmployeeRole.DRIVER, "START,COMPLETE")]
-    [InlineData(EmployeeRole.ESCORT, "START,COMPLETE")]
+    [InlineData(EmployeeRole.DRIVER, "START")]
+    [InlineData(EmployeeRole.ESCORT, "START")]
     public async Task Actions_ReflectActualRoleBoundaryAssignmentAndTerminalState(EmployeeRole role, string expected)
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
@@ -71,7 +71,7 @@ public class HandoverTests
             _ => await PersonnelAssignmentTests.EmployeeAsync(db, role) };
         Assert.Equal(expected, string.Join(',', (await f.Service.GetAsync(f.Pickup.HandoverRecordId, actor.AccountId)).AvailableActions));
         f.Pickup.Status = HandoverStatus.IN_PROGRESS; await db.SaveChangesAsync();
-        Assert.Equal(expected.Replace("START,", ""), string.Join(',', (await f.Service.GetAsync(f.Pickup.HandoverRecordId, actor.AccountId)).AvailableActions));
+        Assert.Equal(expected.Replace("START", "COMPLETE"), string.Join(',', (await f.Service.GetAsync(f.Pickup.HandoverRecordId, actor.AccountId)).AvailableActions));
         foreach (var status in new[] { HandoverStatus.COMPLETED, HandoverStatus.CANCELLED })
         {
             f.Pickup.Status = status; await db.SaveChangesAsync();
@@ -277,8 +277,17 @@ public class HandoverTests
         internal Handovers.Service Service => CreateService(db);
         internal Handovers.Service CreateService(AppDbContext context) => new(context, Clock, new ListRequestValidator(), new CancelRequestValidator(), new CreateRequestValidator(),
             new Pegaxus.Service.NotificationService.Service(context, Realtime), new CompleteRequestValidator(), Media,
-            Microsoft.Extensions.Logging.Abstractions.NullLogger<Handovers.Service>.Instance);
+            Microsoft.Extensions.Options.Options.Create(new Pegaxus.Service.LocationTrackingService.TrackingOptions()), Microsoft.Extensions.Logging.Abstractions.NullLogger<Handovers.Service>.Instance);
         internal Handovers.Request.CancelRequest Cancel(HandoverRecord item) => new() { LastUpdatedAt = DbTime.AsUtc(item.UpdatedAt), CancellationReason = "  Primary road is closed  " };
+
+        /// <summary>Records start IN_PROGRESS: completing a scheduled (PLANNED) record is refused, so completion tests begin from a started one.</summary>
+        internal static async Task<Fixture> CreateStartedAsync(AppDbContext db)
+        {
+            var f = await CreateAsync(db);
+            foreach (var record in new[] { f.Pickup, f.Transfer, f.Delivery }) record.Status = HandoverStatus.IN_PROGRESS;
+            await db.SaveChangesAsync();
+            return f;
+        }
 
         internal static async Task<Fixture> CreateAsync(AppDbContext db)
         {

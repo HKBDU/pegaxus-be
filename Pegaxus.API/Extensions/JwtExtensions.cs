@@ -154,8 +154,10 @@ public static class JwtExtensions
                 JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
                 JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.DRIVER),
                 JwtServices.GetRoleName(EmployeeRole.ESCORT), JwtServices.GetRoleName(AccountType.CUSTOMER)));
+            // Specialists pass this policy only to schedule a handover; the service refuses them on start and complete.
             options.AddPolicy(HandoverOperatorPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
                 JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST),
                 JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
             options.AddPolicy(TransportTrackingViewerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
                 JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),

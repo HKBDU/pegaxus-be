@@ -19,7 +19,7 @@ public class HandoverCompletionTests
     internal static Pegaxus.Service.UploadService.Request.UploadedAssetReference Png() => new() { PublicId = "evidence/signature/" + Guid.NewGuid().ToString("N") };
     internal static Handovers.Request.CompleteRequest Request(HandoverRecord record) => new()
     {
-        LastUpdatedAt = DbTime.AsUtc(record.UpdatedAt), HorseConditionNote = "  Healthy horses  ", DocumentHandoverNote = "  Passports checked  ",
+        LastUpdatedAt = DbTime.AsUtc(record.UpdatedAt), Latitude = 50.6292m, Longitude = 3.0573m, HorseConditionNote = "  Healthy horses  ", DocumentHandoverNote = "  Passports checked  ",
         EquipmentHandoverNote = "  All equipment checked  ", SenderSignature = Png(), ReceiverSignature = Png()
     };
     internal static Vehicle AddVehicle(AppDbContext db, params RoutePlanRoute[] segments)
@@ -33,7 +33,7 @@ public class HandoverCompletionTests
     [Fact]
     public async Task Complete_FullJourney_UpdatesLifecycleVehiclesNotesNotificationsAndDeliveryEmail()
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var vehicle = AddVehicle(db, f.First, f.Second); await db.SaveChangesAsync();
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db); var vehicle = AddVehicle(db, f.First, f.Second); await db.SaveChangesAsync();
         var pickupRequest = Request(f.Pickup); pickupRequest.LocationName = "  Actual stable  "; pickupRequest.FromContactName = "  Actual sender  ";
         pickupRequest.ToContactPhone = "  +33123456789  "; pickupRequest.DiscrepancyNote = "  Minor scratch  ";
         var pickup = await f.Service.CompleteAsync(f.Pickup.HandoverRecordId, pickupRequest, f.Escort.AccountId);
@@ -69,9 +69,9 @@ public class HandoverCompletionTests
     [Theory]
     [InlineData(HandoverType.TRANSFER)]
     [InlineData(HandoverType.BORDER_HANDOVER)]
-    public async Task Complete_PreservesGpsArrivalAndExistingDepartureTimes(HandoverType type)
+    public async Task Complete_SigningTimeReplacesEarlierGpsAndTransportTimes(HandoverType type)
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
         f.Transfer.HandoverType = type; f.Transfer.Status = HandoverStatus.IN_PROGRESS;
         f.First.ActualArrivalAt = Fixture.Now.AddMinutes(-20); f.Second.ActualDepartureAt = Fixture.Now.AddMinutes(-10);
         f.Second.ActualArrivalAt = Fixture.Now.AddMinutes(-5); f.Route.TransportPlan.Transport.ActualArrivalAt = Fixture.Now.AddMinutes(-4);
@@ -79,14 +79,63 @@ public class HandoverCompletionTests
         await db.SaveChangesAsync();
         await f.Service.CompleteAsync(f.Transfer.HandoverRecordId, Request(f.Transfer), f.Driver.AccountId);
         await f.Service.CompleteAsync(f.Delivery.HandoverRecordId, Request(f.Delivery), f.Manager.AccountId);
-        Assert.Equal(Fixture.Now.AddMinutes(-20), f.First.ActualArrivalAt); Assert.Equal(Fixture.Now.AddMinutes(-10), f.Second.ActualDepartureAt);
-        Assert.Equal(Fixture.Now.AddMinutes(-5), f.Second.ActualArrivalAt); Assert.Equal(Fixture.Now.AddMinutes(-4), f.Route.TransportPlan.Transport.ActualArrivalAt);
+        // The signed time is the official handover moment (M6, M7), so it replaces whatever was written before.
+        Assert.Equal(Fixture.Now, f.First.ActualArrivalAt); Assert.Equal(Fixture.Now, f.Second.ActualDepartureAt);
+        Assert.Equal(Fixture.Now, f.Second.ActualArrivalAt); Assert.Equal(Fixture.Now, f.Route.TransportPlan.Transport.ActualArrivalAt);
+    }
+
+    [Fact]
+    public async Task Complete_ScheduledRecordMustBeStartedFirst()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+
+        var error = await Assert.ThrowsAsync<ConflictException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId));
+
+        Assert.Equal("INVALID_HANDOVER_STATUS", error.ErrorCode); Assert.Equal(HandoverStatus.PLANNED, f.Pickup.Status);
+        await f.Service.StartAsync(f.Pickup.HandoverRecordId, f.Manager.AccountId);
+        Assert.Equal("COMPLETED", (await f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId)).Status);
+    }
+
+    [Fact]
+    public async Task Complete_RequiresTheDeviceNearTheBoundaryPoint_AndTheRecordReportsTheGeofence()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
+        Assert.Null((await f.Service.GetAsync(f.Pickup.HandoverRecordId, f.Manager.AccountId)).Geofence); // no coordinates on the location: nothing to check
+        f.First.Route.FromLocation.Latitude = 10; f.First.Route.FromLocation.Longitude = 0;
+        f.First.Route.ToLocation.Latitude = 10; f.First.Route.ToLocation.Longitude = 1;
+        f.Second.Route.ToLocation.Latitude = 10; f.Second.Route.ToLocation.Longitude = 2;
+        await db.SaveChangesAsync();
+        Assert.Equal(new Handovers.Response.Geofence(10, 0, 500), (await f.Service.GetAsync(f.Pickup.HandoverRecordId, f.Manager.AccountId)).Geofence);
+        Assert.Equal(new Handovers.Response.Geofence(10, 1, 500), (await f.Service.GetAsync(f.Transfer.HandoverRecordId, f.Manager.AccountId)).Geofence);
+        Assert.Equal(new Handovers.Response.Geofence(10, 2, 500), (await f.Service.GetAsync(f.Delivery.HandoverRecordId, f.Manager.AccountId)).Geofence);
+
+        var far = Request(f.Transfer); far.Latitude = 10; far.Longitude = 1.05m;
+        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CompleteAsync(f.Transfer.HandoverRecordId, far, f.Driver.AccountId));
+
+        Assert.Equal("NOT_IN_HANDOVER_RADIUS", error.ErrorCode);
+        Assert.Equal(HandoverStatus.IN_PROGRESS, f.Transfer.Status); Assert.Null(f.First.ActualArrivalAt); Assert.Empty(db.Notifications);
+        var near = Request(f.Transfer); near.Latitude = 10; near.Longitude = 1.002m;
+        Assert.Equal("COMPLETED", (await f.Service.CompleteAsync(f.Transfer.HandoverRecordId, near, f.Driver.AccountId)).Status);
+    }
+
+    [Fact]
+    public async Task Complete_OtherIsNotCheckedAgainstTheRadiusButStillNeedsValidCoordinates()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
+        f.Transfer.HandoverType = HandoverType.OTHER; await db.SaveChangesAsync();
+        var invalid = Request(f.Transfer); invalid.Latitude = null;
+        Assert.Equal("VALIDATION_ERROR", (await Assert.ThrowsAsync<BadRequestException>(() => f.Service.CompleteAsync(f.Transfer.HandoverRecordId, invalid, f.Manager.AccountId))).ErrorCode);
+        var anywhere = Request(f.Transfer); anywhere.Latitude = -45; anywhere.Longitude = 170;
+
+        var result = await f.Service.CompleteAsync(f.Transfer.HandoverRecordId, anywhere, f.Manager.AccountId);
+
+        Assert.Equal("COMPLETED", result.Status); Assert.Null(result.Geofence);
     }
 
     [Fact]
     public async Task Complete_DoesNotReleaseVehicleWithAnotherUnfinishedTransport()
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var vehicle = AddVehicle(db, f.First, f.Second);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db); var vehicle = AddVehicle(db, f.First, f.Second);
         var (other, segment) = await PersonnelAssignmentTests.RouteAsync(db, RoutePlanStatus.ACTIVE); other.TransportPlan.Transport.Status = TransportStatus.IN_TRANSIT;
         db.Add(new RoutePlanRouteVehicle { RoutePlanRoute = segment, Vehicle = vehicle }); await db.SaveChangesAsync();
         await f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId);
@@ -98,7 +147,7 @@ public class HandoverCompletionTests
     [Fact]
     public async Task Complete_NotifiesAllActiveManagersAndCoordinators()
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
         var otherCoordinator = await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.FLEET_ROUTE_COORDINATOR);
         var inactive = await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER); inactive.IsActive = false; await db.SaveChangesAsync();
         await f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId);
@@ -121,7 +170,7 @@ public class HandoverCompletionTests
     [InlineData("header-only-png", "INVALID_IMAGE")]
     public async Task Complete_RejectsInvalidInputWithoutChangingTheRecord(string invalid, string code)
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = Request(f.Pickup);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db); var request = Request(f.Pickup);
         switch (invalid)
         {
             case "missing-sender": request.SenderSignature = null; break;
@@ -137,7 +186,7 @@ public class HandoverCompletionTests
                 f.Media.Files[request.ReceiverSignature!.PublicId] = (bytes, invalid == "jpeg" ? "image/jpeg" : "image/png"); break;
         }
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, request, f.Manager.AccountId));
-        Assert.Equal(code, error.ErrorCode); Assert.Equal(HandoverStatus.PLANNED, f.Pickup.Status); Assert.Empty(db.Notifications);
+        Assert.Equal(code, error.ErrorCode); Assert.Equal(HandoverStatus.IN_PROGRESS, f.Pickup.Status); Assert.Empty(db.Notifications);
     }
 
     [Theory]
@@ -145,7 +194,7 @@ public class HandoverCompletionTests
     [InlineData(HandoverStatus.CANCELLED)]
     public async Task Complete_TerminalRecordsAreImmutable(HandoverStatus status)
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); f.Pickup.Status = status; await db.SaveChangesAsync();
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db); f.Pickup.Status = status; await db.SaveChangesAsync();
         Assert.Equal("INVALID_HANDOVER_STATUS", (await Assert.ThrowsAsync<ConflictException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId))).ErrorCode);
         Assert.Empty(db.Notifications);
     }
@@ -153,7 +202,7 @@ public class HandoverCompletionTests
     [Fact]
     public async Task Complete_StaleVersionIsRejected()
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = Request(f.Pickup); request.LastUpdatedAt = request.LastUpdatedAt!.Value.AddSeconds(-1);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db); var request = Request(f.Pickup); request.LastUpdatedAt = request.LastUpdatedAt!.Value.AddSeconds(-1);
         Assert.Equal("HANDOVER_MODIFIED", (await Assert.ThrowsAsync<ConflictException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, request, f.Manager.AccountId))).ErrorCode);
     }
 
@@ -164,7 +213,7 @@ public class HandoverCompletionTests
     [InlineData("other-segment")]
     public async Task Complete_EnforcesActualRoleAndLinkedSegmentAssignment(string actor)
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
         var accountId = actor switch { "customer" => f.CustomerAccountId, "specialist" => (await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.TRANSPORT_SPECIALIST)).AccountId,
             "unassigned" => (await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.DRIVER)).AccountId, _ => f.Receiver.AccountId };
         await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), accountId));
@@ -180,7 +229,7 @@ public class HandoverCompletionTests
     [InlineData("outsourced", "OUTSOURCED_SEGMENT")]
     public async Task Complete_RevalidatesBoundaryAndParties(string invalid, string code)
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
         switch (invalid)
         {
             case "nonadjacent": f.Transfer.ToRoutePlanRoute = f.First; break;
@@ -193,13 +242,13 @@ public class HandoverCompletionTests
         }
         await db.SaveChangesAsync();
         Assert.Equal(code, (await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CompleteAsync(f.Transfer.HandoverRecordId, Request(f.Transfer), f.Manager.AccountId))).ErrorCode);
-        Assert.Equal(HandoverStatus.PLANNED, f.Transfer.Status);
+        Assert.Equal(HandoverStatus.IN_PROGRESS, f.Transfer.Status);
     }
 
     [Fact]
     public async Task Complete_BackupBoundaryMayCrossRoutePlansAndSkipsCopiedPrimaryPrefix()
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
         f.First.ActualDepartureAt = Fixture.Now.AddHours(-1); f.Second.SupersededAt = Fixture.Now;
         var backup = new RoutePlan { RoutePlanId = Guid.NewGuid(), RoutePlanCode = "BACKUP", TransportPlan = f.Route.TransportPlan, Status = RoutePlanStatus.ACTIVE, UpdatedAt = Fixture.Now };
         var copied = PersonnelAssignmentTests.Segment(backup, 1);
@@ -213,7 +262,7 @@ public class HandoverCompletionTests
     [Fact]
     public async Task Complete_OtherHasNoJourneyEffectsOrNotifications()
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); f.Transfer.HandoverType = HandoverType.OTHER; await db.SaveChangesAsync();
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db); f.Transfer.HandoverType = HandoverType.OTHER; await db.SaveChangesAsync();
         var result = await f.Service.CompleteAsync(f.Transfer.HandoverRecordId, Request(f.Transfer), f.Manager.AccountId);
         Assert.Equal("COMPLETED", result.Status); Assert.Equal("READY", result.Effects!.TransportStatus);
         Assert.Null(result.Effects.ActivatedRoutePlanRouteId); Assert.Null(result.Effects.ClosedRoutePlanRouteId); Assert.Null(result.Effects.ClaimWindowEndsAt);
@@ -223,17 +272,17 @@ public class HandoverCompletionTests
     [Fact]
     public async Task Complete_UnconfirmedSignatureLeavesTheRecordUntouched()
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = Request(f.Pickup);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db); var request = Request(f.Pickup);
         request.ReceiverSignature = new() { PublicId = "evidence/signature/missing" };
         var error = await Assert.ThrowsAsync<NotFoundException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, request, f.Manager.AccountId));
-        Assert.Equal("UPLOAD_NOT_FOUND", error.ErrorCode); Assert.Equal(HandoverStatus.PLANNED, f.Pickup.Status);
+        Assert.Equal("UPLOAD_NOT_FOUND", error.ErrorCode); Assert.Equal(HandoverStatus.IN_PROGRESS, f.Pickup.Status);
         Assert.Null(f.First.ActualDepartureAt); Assert.Empty(db.Notifications); Assert.Empty(db.OutboxMessages);
     }
 
     [Fact]
     public async Task Complete_ReturnsSignedSignatureUrls()
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
         var result = await f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId);
         Assert.EndsWith("?signed=1", result.SenderSignatureUrl); Assert.EndsWith("?signed=1", result.ReceiverSignatureUrl);
         Assert.DoesNotContain("?signed=1", f.Pickup.SenderSignatureUrl);

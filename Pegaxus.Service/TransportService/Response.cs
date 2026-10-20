@@ -75,7 +75,8 @@ public static class Response
     public sealed record VehicleBrief(Guid VehicleId, string VehicleCode, string? LicensePlate);
 
     public sealed record HandoverBoundary(int BoundaryNo, Guid? FromRoutePlanRouteId, Guid? ToRoutePlanRouteId,
-        HandoverLocation Location, IReadOnlyList<string> AllowedHandoverTypes, HandoverBrief? ExistingHandover, bool CanCreate);
+        HandoverLocation Location, bool HandoverRequired, DateTimeOffset? ArrivalAt, IReadOnlyList<string> AllowedHandoverTypes,
+        HandoverBrief? ExistingHandover, bool CanCreate, IReadOnlyList<string> CreateModes);
     public sealed record HandoverLocation(string LocationName, string? Address, string Country);
     public sealed record HandoverBrief(Guid HandoverRecordId, string HandoverCode, string HandoverType, string Status);
 }

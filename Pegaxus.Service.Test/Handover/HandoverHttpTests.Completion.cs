@@ -17,7 +17,7 @@ public partial class HandoverHttpTests
     [InlineData(EmployeeRole.TRANSPORT_SPECIALIST, 403)]
     public async Task Http_CompleteAcceptsJsonAndReturnsFlatRecordWithEffects(EmployeeRole role, int status)
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
         var actor = role switch { EmployeeRole.LOGISTICS_MANAGER => f.Manager, EmployeeRole.FLEET_ROUTE_COORDINATOR => f.Coordinator,
             EmployeeRole.DRIVER => f.Driver, EmployeeRole.ESCORT => f.Escort, _ => await PersonnelAssignmentTests.EmployeeAsync(db, role) };
         await using var host = await StartAsync(db, f); using var client = Client(host, actor.AccountId, role);
@@ -42,7 +42,7 @@ public partial class HandoverHttpTests
     [Fact]
     public async Task Http_CompleteValidatesFilesNotesVersionsAndActualAssignments()
     {
-        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
         await using var host = await StartAsync(db, f); using var manager = Client(host, f.Manager.AccountId, EmployeeRole.LOGISTICS_MANAGER);
         var url = $"/api/v1/handover-records/{f.Pickup.HandoverRecordId}/complete";
         using var missingSignature = CompletionBody(f, receiver: false);
@@ -63,7 +63,7 @@ public partial class HandoverHttpTests
     private static JsonContent CompletionBody(Fixture fixture, bool receiver = true, string note = "Healthy horses", DateTimeOffset? version = null) =>
         JsonContent.Create(new Dictionary<string, object?>
         {
-            ["lastUpdatedAt"] = version ?? Pegaxus.Service.Common.DbTime.AsUtc(fixture.Pickup.UpdatedAt), ["horseConditionNote"] = note,
+            ["lastUpdatedAt"] = version ?? Pegaxus.Service.Common.DbTime.AsUtc(fixture.Pickup.UpdatedAt), ["latitude"] = 50.6292, ["longitude"] = 3.0573, ["horseConditionNote"] = note,
             ["documentHandoverNote"] = "Passports checked", ["equipmentHandoverNote"] = "Equipment checked",
             ["senderSignature"] = new { publicId = "evidence/signature/sender" },
             ["receiverSignature"] = receiver ? new { publicId = "evidence/signature/receiver" } : null

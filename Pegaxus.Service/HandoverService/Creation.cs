@@ -22,7 +22,8 @@ public sealed partial class Service
             {
                 await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
                 var actor = await ActorAsync(accountId, cancellationToken);
-                if (!actor.IsManager && !actor.IsCrew || !request.StartNow && !actor.IsManager) throw Forbidden();
+                // Specialists only schedule; starting or completing stays with managers and the crew.
+                if (!actor.IsManager && !actor.IsCrew && !actor.IsSpecialist || actor.IsSpecialist && request.StartNow || !request.StartNow && !actor.IsManager && !actor.IsSpecialist) throw Forbidden();
                 await HeaderAsync(transportId, cancellationToken);
                 await db.LockRowsAsync(db.Transports.Where(item => item.TransportId == transportId), item => item.TransportId, cancellationToken);
                 var (transport, segments) = await LockJourneyAsync(transportId, cancellationToken);
@@ -54,7 +55,7 @@ public sealed partial class Service
                     CreatedAt = now, UpdatedAt = now
                 };
                 ValidateBoundary(item, segments, effective, customerId);
-                if (!await CanOperateAsync(item, actor, cancellationToken)) throw Forbidden();
+                if (!actor.IsSpecialist && !await CanOperateAsync(item, actor, cancellationToken)) throw Forbidden();
                 var duplicate = await db.HandoverRecords.AsNoTracking().Where(record => record.TransportId == transportId && record.HandoverType == type &&
                     record.FromRoutePlanRouteId == item.FromRoutePlanRouteId && record.ToRoutePlanRouteId == item.ToRoutePlanRouteId && record.Status != HandoverStatus.CANCELLED)
                     .Select(record => (Guid?)record.HandoverRecordId).FirstOrDefaultAsync(cancellationToken);

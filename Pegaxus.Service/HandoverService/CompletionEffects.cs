@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 using static Pegaxus.Service.Common.DbTime;
@@ -55,6 +56,8 @@ public sealed partial class Service
                 ValidParty(item.FromType, item.FromCustomerId, item.FromEmployeeId) && ValidParty(item.ToType, item.ToCustomerId, item.ToEmployeeId),
             _ => false
         };
+        if (valid && item.HandoverType is HandoverType.TRANSFER or HandoverType.BORDER_HANDOVER && !HandoverRules.RequiredBetween(from!.DriverEmployeeId, to!.DriverEmployeeId))
+            throw new UnprocessableEntityException("The same driver runs both segments, so no handover record is needed here", "HANDOVER_NOT_REQUIRED");
         if (!valid) throw new UnprocessableEntityException("The handover segment boundary or parties no longer match the effective route", "INVALID_SEGMENT_PAIR");
     }
 
@@ -69,20 +72,21 @@ public sealed partial class Service
         var to = segments.SingleOrDefault(segment => segment.RoutePlanRouteId == item.ToRoutePlanRouteId);
         if (item.HandoverType != HandoverType.OTHER)
         {
-            if (from is not null && from.ActualArrivalAt is null) { from.ActualArrivalAt = now; from.UpdatedAt = now; }
-            if (to is not null && to.ActualDepartureAt is null) { to.ActualDepartureAt = now; to.UpdatedAt = now; }
+            // The signing time is the official handover moment, so it replaces any time written earlier (M6).
+            if (from is not null) { from.ActualArrivalAt = now; from.UpdatedAt = now; }
+            if (to is not null) { to.ActualDepartureAt = now; to.UpdatedAt = now; }
         }
         if (item.HandoverType == HandoverType.PICKUP)
         {
             if (transport.Status == TransportStatus.READY) { transport.Status = TransportStatus.IN_TRANSIT; transport.UpdatedAt = now; }
-            if (transport.ActualDepartureAt is null) { transport.ActualDepartureAt = now; transport.UpdatedAt = now; }
+            transport.ActualDepartureAt = now; transport.UpdatedAt = now;
             if (to!.RoutePlan.Status == RoutePlanStatus.CONFIRMED) { to.RoutePlan.Status = RoutePlanStatus.ACTIVE; to.RoutePlan.UpdatedAt = now; }
             if (to.RoutePlan.TransportPlan.Status == TransportPlanStatus.APPROVED) { to.RoutePlan.TransportPlan.Status = TransportPlanStatus.IN_PROGRESS; to.RoutePlan.TransportPlan.UpdatedAt = now; }
         }
         if (item.HandoverType == HandoverType.DELIVERY)
         {
             if (transport.Status == TransportStatus.IN_TRANSIT) { transport.Status = TransportStatus.COMPLETED; transport.CompletedAt = now; transport.UpdatedAt = now; }
-            if (transport.ActualArrivalAt is null) { transport.ActualArrivalAt = now; transport.UpdatedAt = now; }
+            transport.ActualArrivalAt = now; transport.UpdatedAt = now;
             foreach (var plan in segments.Select(segment => segment.RoutePlan).DistinctBy(plan => plan.RoutePlanId).Where(plan => plan.Status == RoutePlanStatus.ACTIVE))
             {
                 plan.Status = RoutePlanStatus.COMPLETED; plan.UpdatedAt = now;

@@ -8,6 +8,8 @@ public sealed class CompleteRequestValidator : AbstractValidator<Request.Complet
     public CompleteRequestValidator()
     {
         RuleFor(request => request.LastUpdatedAt).NotNull().NotEqual(default(DateTimeOffset));
+        RuleFor(request => request.Latitude).NotNull().Measurement(Limits.Latitude);
+        RuleFor(request => request.Longitude).NotNull().Measurement(Limits.Longitude);
         RuleFor(request => request.HorseConditionNote).NotEmpty().MaximumLength(Limits.NoteMaxLength);
         RuleFor(request => request.DocumentHandoverNote).NotEmpty().MaximumLength(Limits.NoteMaxLength);
         RuleFor(request => request.EquipmentHandoverNote).NotEmpty().MaximumLength(Limits.NoteMaxLength);
