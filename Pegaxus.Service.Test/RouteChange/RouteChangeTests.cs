@@ -196,7 +196,7 @@ public class RouteChangeTests
         Assert.Equal(205m, detail.TotalDistanceKm); Assert.Equal(420, detail.EstimatedDurationMinutes);
         Assert.Equal("SEGMENT_LOCKED", (await Assert.ThrowsAsync<ConflictException>(() =>
             f.Service.DecideAsync(overlap.RoutePlanId, f.Manager.AccountId, new() { Decision = "APPROVE", LastUpdatedAt = Fixture.Version(overlap) }))).ErrorCode);
-        Assert.Equal(3, await db.Notifications.CountAsync());
+        Assert.Equal(4, await db.Notifications.CountAsync());
         Assert.DoesNotContain(await db.AccountNotifications.ToListAsync(), x => x.AccountId ==
             db.Employees.Single(e => e.Role == EmployeeRole.TRANSPORT_SPECIALIST).AccountId);
         Assert.Empty(db.IncidentReports); Assert.Empty(db.EmergencyCostRequests);
@@ -262,6 +262,26 @@ public class RouteChangeTests
         var detail = await TestSupport.CreateRoutePlans(db).GetByIdAsync(f.Manager.AccountId, f.Plan.RoutePlanId);
         Assert.Equal(new[] { f.Completed.RouteId, row.RouteId }, detail.Segments.Select(x => x.Route.RouteId));
         Assert.Empty(db.EmergencyCostRequests);
+    }
+
+    [Fact]
+    public async Task Return_DriverNotice_ManagerCoversForAbsentCoordinator_ButUnassignedCoordinatorAndOtherRolesCannot()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db); var plan = await f.AlternateAsync(RouteType.RETURN, RoutePlanStatus.CONFIRMED);
+        await f.AddExtraAsync();
+        var (_, unassigned) = await TestSupport.AddLogisticsManagerAsync(db); unassigned.Role = EmployeeRole.FLEET_ROUTE_COORDINATOR;
+        var (_, specialist) = await TestSupport.AddLogisticsManagerAsync(db); specialist.Role = EmployeeRole.TRANSPORT_SPECIALIST;
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.NotifyDriversAsync(plan.RoutePlanId, unassigned.AccountId, new()));
+        await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.NotifyDriversAsync(plan.RoutePlanId, specialist.AccountId, new()));
+        Assert.Empty(db.Notifications);
+
+        var notice = await f.Service.NotifyDriversAsync(plan.RoutePlanId, f.Manager.AccountId, new() { Message = "Coordinator absent, return now" });
+
+        Assert.Equal(f.Driver.EmployeeId, Assert.Single(notice.NotifiedDrivers).EmployeeId);
+        Assert.Contains(await db.Notifications.ToListAsync(), x => x.Title == "Begin return journey");
     }
 
     [Fact]
@@ -402,6 +422,95 @@ public class RouteChangeTests
 
         if (code is null) Assert.Equal("DRAFT", (await create()).Status);
         else Assert.Equal(code, (await Assert.ThrowsAsync<ConflictException>(create)).ErrorCode);
+    }
+
+    private static IncidentReport AddIncident(AppDbContext db, Guid? transportId, IncidentStatus status = IncidentStatus.REPORTED)
+    {
+        var incident = new IncidentReport { IncidentReportId = Guid.NewGuid(), TransportId = transportId, IncidentCode = "INC-" + Guid.NewGuid().ToString("N")[..6],
+            EmployeeId = Guid.NewGuid(), LocationId = Guid.NewGuid(), Category = IncidentCategory.VEHICLE, Severity = IncidentSeverity.HIGH, Status = status,
+            Title = "Flat tyre", Description = "Flat tyre on the motorway" };
+        db.Add(incident);
+        return incident;
+    }
+
+    [Fact]
+    public async Task Incident_Ec1MovesReportedToPendingAndMentionsItToTheManager()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db); var backup = await f.AlternateAsync();
+        var incident = AddIncident(db, f.Transport.TransportId); await db.SaveChangesAsync();
+        var request = f.Proposal(); request.IncidentReportId = incident.IncidentReportId;
+
+        await f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, request);
+
+        Assert.Equal(IncidentStatus.PENDING, incident.Status);
+        Assert.Contains(await db.Notifications.ToListAsync(), x => x.Message.Contains(incident.IncidentCode));
+        Assert.Equal(RoutePlanStatus.CONFIRMED, backup.Status);
+    }
+
+    [Theory]
+    [InlineData("resolved", "INVALID_INCIDENT_STATUS")]
+    [InlineData("foreign", "INVALID_INCIDENT_STATUS")]
+    [InlineData("missing", "INCIDENT_NOT_FOUND")]
+    public async Task Incident_Ec1AndEc2RejectClosedForeignAndUnknownIncidentsWithoutChanges(string kind, string code)
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db); var backup = await f.AlternateAsync();
+        var incident = AddIncident(db, kind == "foreign" ? Guid.NewGuid() : f.Transport.TransportId, kind == "resolved" ? IncidentStatus.RESOLVED : IncidentStatus.REPORTED);
+        await db.SaveChangesAsync();
+        var id = kind == "missing" ? Guid.NewGuid() : incident.IncidentReportId;
+        var request = f.Proposal(); request.IncidentReportId = id;
+
+        var create = await Record.ExceptionAsync(() => f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, request));
+        var decide = await Record.ExceptionAsync(() => f.Service.DecideAsync(backup.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = Fixture.Version(backup), IncidentReportId = id }));
+        Assert.Equal(code, Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(create).ErrorCode);
+        Assert.Equal(code, Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(decide).ErrorCode);
+
+        Assert.Equal(kind == "resolved" ? IncidentStatus.RESOLVED : IncidentStatus.REPORTED, incident.Status);
+        Assert.Equal(RoutePlanStatus.CONFIRMED, backup.Status);
+    }
+
+    [Fact]
+    public async Task Incident_Ec2ApproveNotifiesEscortsAndMovesTheIncidentToPending()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db); var backup = await f.AlternateAsync();
+        var incident = AddIncident(db, f.Transport.TransportId); await db.SaveChangesAsync();
+
+        // The manager decides directly: no EC1 was sent first.
+        var result = await f.Service.DecideAsync(backup.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = Fixture.Version(backup), IncidentReportId = incident.IncidentReportId });
+
+        Assert.Equal("ACTIVE", result.Status); Assert.Equal(IncidentStatus.PENDING, incident.Status);
+        var recipients = await db.AccountNotifications.Where(x => x.Notification.Title == "Backup route activated").Select(x => x.AccountId).ToListAsync();
+        Assert.Contains(f.Escort.AccountId, recipients); Assert.Contains(f.Driver.AccountId, recipients);
+    }
+
+    [Fact]
+    public async Task Return_Rp1_ManagerCanCreateAndEditWithoutApprovalNoticeToSelf_IncidentOnlyForReturn()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        f.Transport.Booking.OriginCountry = f.Transport.Booking.DestinationCountry = "FR";
+        var back = f.NewRoute(f.Start, f.Origin, 70);
+        var incident = AddIncident(db, f.Transport.TransportId); await db.SaveChangesAsync();
+        var routes = TestSupport.CreateRoutePlans(db);
+        Pegaxus.Service.RoutePlanService.Request.SaveRequest Save(string type, Guid? incidentId) => new() {
+            RouteType = type, Action = "SAVE_DRAFT", RouteNote = "Road closed, return to origin", IncidentReportId = incidentId,
+            Segments = [new() { SequenceNo = 1, RouteId = back.RouteId, PlannedDepartureAt = Fixture.StartAt, PlannedArrivalAt = Fixture.StartAt.AddHours(2) }] };
+
+        var bad = await Assert.ThrowsAsync<BadRequestException>(() => routes.CreateAsync(f.Manager.AccountId, f.Plan.TransportPlanId, Save("BACKUP", incident.IncidentReportId)));
+        Assert.Equal("VALIDATION_ERROR", bad.ErrorCode); Assert.Equal(IncidentStatus.REPORTED, incident.Status);
+
+        var draft = await routes.CreateAsync(f.Manager.AccountId, f.Plan.TransportPlanId, Save("RETURN", incident.IncidentReportId));
+
+        Assert.Equal("DRAFT", draft.Status); Assert.Equal(IncidentStatus.PENDING, incident.Status);
+        Assert.DoesNotContain(await db.AccountNotifications.ToListAsync(), x => x.AccountId == f.Manager.AccountId);
+        var approved = await f.Service.DecideAsync(draft.RoutePlanId, f.Manager.AccountId, new() { Decision = "APPROVE", LastUpdatedAt = draft.UpdatedAt });
+        var update = await routes.UpdateAsync(f.Manager.AccountId, draft.RoutePlanId, new() { LastUpdatedAt = approved.UpdatedAt, UpdateReason = "Adjust return", Action = "SAVE_DRAFT",
+            RouteNote = "Road closed, return to origin", Segments = Save("RETURN", null).Segments });
+        Assert.Equal("DRAFT", update.Status);
     }
 
     [Fact]

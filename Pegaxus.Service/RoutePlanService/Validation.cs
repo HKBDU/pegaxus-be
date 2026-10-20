@@ -18,6 +18,8 @@ public sealed partial class Service
             throw new BadRequestException("At least one route segment is required");
         if (request.Action is not ("SAVE_DRAFT" or "SUBMIT_FOR_LEGAL_REVIEW"))
             throw new BadRequestException("action must be SAVE_DRAFT or SUBMIT_FOR_LEGAL_REVIEW");
+        if (request.IncidentReportId.HasValue && routeType != RouteType.RETURN)
+            throw new BadRequestException("incidentReportId is only allowed for RETURN route plans", "VALIDATION_ERROR");
         if (routeType == RouteType.RETURN && !updating && request.Action != "SAVE_DRAFT")
             throw new BadRequestException("RETURN route plans only support SAVE_DRAFT");
         if (routeType is RouteType.BACKUP or RouteType.RETURN && string.IsNullOrWhiteSpace(request.RouteNote) || routeType is RouteType.BACKUP or RouteType.RETURN && request.RouteNote!.Trim().Length < 10)
@@ -208,7 +210,7 @@ public sealed partial class Service
     {
         if (role == EmployeeRole.FLEET_ROUTE_COORDINATOR)
             return;
-        if (role == EmployeeRole.LOGISTICS_MANAGER && type == RouteType.BACKUP)
+        if (role == EmployeeRole.LOGISTICS_MANAGER && type is RouteType.BACKUP or RouteType.RETURN)
             return;
         throw new ForbiddenException("The current role cannot manage this route plan type");
     }

@@ -22,9 +22,9 @@ public sealed partial class Service
         await EnsurePlanCanBeUsedAsync(plan, cancellationToken);
         var routeType = ParseRouteType(request.RouteType);
         EnsureWriteRole(employee.Role, routeType);
-        if (routeType == RouteType.RETURN && !plan.EmployeeTransportPlans.Any(x => x.EmployeeId == employee.EmployeeId &&
+        if (routeType == RouteType.RETURN && employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && !plan.EmployeeTransportPlans.Any(x => x.EmployeeId == employee.EmployeeId &&
                 x.Responsibility == "FLEET_ROUTE_COORDINATOR"))
-            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan may create RETURN.");
+            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan or a Logistics Manager may create RETURN.");
         ValidateSaveRequest(request, routeType);
 
         var primary = plan.RoutePlans.FirstOrDefault(item => item.Status != RoutePlanStatus.CANCELLED && GetRouteType(item) == RouteType.PRIMARY);
@@ -46,6 +46,8 @@ public sealed partial class Service
         var materializedSegments = await MaterializeSegmentsAsync(request.Segments, routeType, plan, null, segment => SegmentType(segment, routeType, null), cancellationToken);
         ValidateRouteRules(materializedSegments, plan, routeType, primary);
         var now = UtcNowTruncated();
+        if (request.IncidentReportId is { } incidentId)
+            await IncidentLinks.AttachAsync(db, incidentId, plan.TransportId, now, cancellationToken);
         var routePlan = new RoutePlan
         {
             RoutePlanId = Guid.NewGuid(),
@@ -88,7 +90,7 @@ public sealed partial class Service
                 });
         }
 
-        await QueueCreateNotificationsAsync(plan, routeType, request.Action, routePlan, now, cancellationToken);
+        await QueueCreateNotificationsAsync(plan, routeType, request.Action, routePlan, employee.AccountId, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
@@ -143,9 +145,9 @@ public sealed partial class Service
             throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
         var routeType = GetRouteType(routePlan);
         EnsureWriteRole(employee.Role, routeType);
-        if (routeType == RouteType.RETURN && !routePlan.TransportPlan.EmployeeTransportPlans.Any(x => x.EmployeeId == employee.EmployeeId &&
+        if (routeType == RouteType.RETURN && employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && !routePlan.TransportPlan.EmployeeTransportPlans.Any(x => x.EmployeeId == employee.EmployeeId &&
                 x.Responsibility == "FLEET_ROUTE_COORDINATOR"))
-            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan may edit RETURN.");
+            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan or a Logistics Manager may edit RETURN.");
         if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.Status != TransportStatus.IN_TRANSIT)
             throw new ConflictException("The transport is not in transit", "TRANSPORT_NOT_IN_TRANSIT");
         if (routePlan.TransportPlan.Transport.Status == TransportStatus.IN_TRANSIT && routeType != RouteType.RETURN)
@@ -255,14 +257,15 @@ public sealed partial class Service
         };
     }
 
-    private async Task QueueCreateNotificationsAsync(TransportPlan plan, RouteType routeType, string action, RoutePlan routePlan, DateTime now,
+    private async Task QueueCreateNotificationsAsync(TransportPlan plan, RouteType routeType, string action, RoutePlan routePlan, Guid creatorAccountId, DateTime now,
         CancellationToken cancellationToken)
     {
         if ((routeType is RouteType.PRIMARY or RouteType.BACKUP) && action == "SUBMIT_FOR_LEGAL_REVIEW")
             foreach (var accountId in plan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST).Select(item => item.Employee.AccountId).Distinct())
                 notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.COMPLIANCE, Priority = NotificationPriority.NORMAL, Title = routeType == RouteType.BACKUP ? "Backup route requires legal review" : "Route plan requires legal review", Message = $"Route plan {routePlan.RoutePlanCode} for transport plan {plan.PlanCode} was submitted for legal review. Check that it is feasible, then confirm it or request changes.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.TRANSPORT_SPECIALIST, routePlan.RoutePlanId), CreatedAt = now });
         var managerIds = routeType == RouteType.RETURN
-            ? await db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted)
+            // A Logistics Manager who drafts the RETURN decides on it through the same approval call, so they are not asked to approve their own draft.
+            ? await db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted && item.AccountId != creatorAccountId)
                 .Select(item => item.AccountId).ToListAsync(cancellationToken)
             : [];
         if (routeType == RouteType.RETURN)

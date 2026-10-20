@@ -44,12 +44,14 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             .Select(x => x.AccountId).ToArrayAsync(cancellationToken);
         if (managers.Length == 0) throw new ConflictException("No active Logistics Manager can review this request.", "REVIEWER_UNAVAILABLE");
         var now = Now;
-        var message = FormattableString.Invariant($"Backup route plan {plan.RoutePlanCode} is waiting for your decision.\nReason: {request.Reason.Trim()}\nNew ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC\nEstimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}{NoteSuffix(request.Note)}");
+        var incident = request.IncidentReportId is { } incidentId ? await IncidentLinks.AttachAsync(db, incidentId, plan.TransportPlan.TransportId, now, cancellationToken) : null;
+        var incidentLine = incident is null ? "" : $"\nIncident: {incident.IncidentCode}";
+        var message = FormattableString.Invariant($"Backup route plan {plan.RoutePlanCode} is waiting for your decision.{incidentLine}\nReason: {request.Reason.Trim()}\nNew ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC\nEstimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}{NoteSuffix(request.Note)}");
         foreach (var manager in managers)
             Notify(manager, plan, "Emergency backup route needs approval", message, NotificationPriority.URGENT, now,
                 NotificationLinks.RoutePlan(EmployeeRole.LOGISTICS_MANAGER, plan.RoutePlanId, "change-decision"));
         await MailReviewAsync(plan, managers, MailService.EmailBodies.RouteReviewKind.EmergencyApproval,
-            FormattableString.Invariant($"{request.Reason.Trim()} New ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC. Estimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}.{NoteSuffix(request.Note)}"),
+            FormattableString.Invariant($"{(incident is null ? "" : $"Incident {incident.IncidentCode}. ")}{request.Reason.Trim()} New ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC. Estimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}.{NoteSuffix(request.Note)}"),
             now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -76,6 +78,8 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         if (type == "RETURN" && request.Decision == "APPROVE" && transport.ExtraDossier is not null)
             throw new ConflictException("An extra compliance dossier already exists for this transport", "EXTRA_DOSSIER_ALREADY_EXISTS");
         var now = NextVersion(plan);
+        if (request.IncidentReportId is { } incidentId)
+            await IncidentLinks.AttachAsync(db, incidentId, transport.TransportId, now, cancellationToken);
         Response.DossierBrief? extraBrief = null;
         if (request.Decision == "APPROVE")
         {
@@ -112,6 +116,8 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
                     NotificationPriority.URGENT, now, NotificationLinks.Booking(null, plan.TransportPlan.Transport.BookingId));
                 var backupDrivers = await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Backup route activated",
                     $"Follow backup route plan {plan.RoutePlanCode} from the branch point. Check your updated segments.{NoteSuffix(request.Note)}", now, cancellationToken);
+                await NotifyPrimaryEscortsAsync(plan, primary.RoutePlanId, "Backup route activated",
+                    $"The convoy now follows backup route plan {plan.RoutePlanCode} from the branch point. Check your updated segments.{NoteSuffix(request.Note)}", now, cancellationToken);
                 await MailChangedAsync(plan, [plan.TransportPlan.Transport.Booking.Customer.AccountId], MailService.EmailBodies.RouteChangeKind.BackupActivated,
                     request.Note, now, cancellationToken);
                 await MailChangedAsync(plan, backupDrivers.Select(item => item.AccountId), MailService.EmailBodies.RouteChangeKind.DriverBackup,
