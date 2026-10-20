@@ -116,14 +116,13 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     {
         await AuthorizeAsync(accountId, cancellationToken);
         Normalize(request);
-        request.VehicleCode = request.VehicleCode?.Trim().ToUpperInvariant()!;
         Validate(request, createValidator);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        if (await db.Vehicles.AnyAsync(x => !x.IsDeleted && x.VehicleCode.ToUpper() == request.VehicleCode, cancellationToken))
-            throw DuplicateCode();
         await CheckPlateAsync(request.LicensePlate, null, cancellationToken);
         var now = Now();
-        var vehicle = new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = request.VehicleCode,
+        var prefix = $"VEH-{now:yyyyMMdd}-";
+        var vehicle = new Vehicle { VehicleId = Guid.NewGuid(),
+            VehicleCode = DailyCodes.Next(prefix, await db.Vehicles.AsNoTracking().Where(x => x.VehicleCode.StartsWith(prefix)).Select(x => x.VehicleCode).ToListAsync(cancellationToken), "VEHICLE_CODE_EXHAUSTED"),
             Status = VehicleStatus.AVAILABLE, CreatedAt = now, UpdatedAt = now };
         Apply(vehicle, request);
         db.Vehicles.Add(vehicle);

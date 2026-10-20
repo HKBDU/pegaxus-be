@@ -69,8 +69,6 @@ public sealed class CreateRequestValidator : AbstractValidator<Request.CreateReq
     public CreateRequestValidator(TimeProvider clock)
     {
         Include(new VehicleFieldsValidator(clock));
-        RuleFor(x => x.VehicleCode).NotEmpty().MaximumLength(50).Matches(@"^[A-Za-z0-9][A-Za-z0-9_-]*$")
-            .WithMessage("Invalid vehicle code format.");
     }
 }
 

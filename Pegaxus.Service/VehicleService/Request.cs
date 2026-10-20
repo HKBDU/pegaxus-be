@@ -38,10 +38,7 @@ public static class Request
     }
 
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    public sealed class CreateRequest : VehicleFields
-    {
-        public string VehicleCode { get; set; } = "";
-    }
+    public sealed class CreateRequest : VehicleFields;
 
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class UpdateRequest : VehicleFields

@@ -45,7 +45,7 @@ public class TransportProviderServiceTests
         var (recipient, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var service = CreateService(db);
         var created = await service.CreateAsync(actor.AccountId, CreateRequest());
-        Assert.Equal("PRV-LUFTHANSA-01", created.ProviderCode);
+        Assert.Matches("^PRV-[0-9]{8}-0001$", created.ProviderCode);
         Assert.Equal("ACTIVE", created.Status);
         Assert.Equal(new[] { "AIR", "ROAD" }, created.SupportedModes);
         Assert.Equal("Operations", created.ContactName);
@@ -74,6 +74,7 @@ public class TransportProviderServiceTests
         Assert.Equal("PROVIDER_NOT_FOUND", (await Assert.ThrowsAsync<NotFoundException>(() => service.GetAsync(actor.AccountId, created.TransportProviderId))).ErrorCode);
         var recreated = await service.CreateAsync(actor.AccountId, CreateRequest());
         Assert.NotEqual(created.TransportProviderId, recreated.TransportProviderId);
+        Assert.Matches("^PRV-[0-9]{8}-0002$", recreated.ProviderCode); // the deleted provider keeps its number
         var audits = await db.CatalogAuditLogs.OrderBy(item => item.CreatedAt).ToListAsync();
         Assert.Equal(new[] { "CREATE", "UPDATE", "STATUS_CHANGED", "STATUS_CHANGED", "DELETE", "CREATE" }, audits.Select(item => item.ActionType));
         Assert.All(audits, item => Assert.Equal(actor.AccountId, item.ActorAccountId));
@@ -90,11 +91,11 @@ public class TransportProviderServiceTests
         var (actor, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var service = CreateService(db);
         await service.CreateAsync(actor.AccountId, CreateRequest());
-        var other = CreateRequest(); other.ProviderCode = "PRV-FR-01"; other.TaxCode = "FR123"; other.Country = "fr";
-        await service.CreateAsync(actor.AccountId, other);
+        var other = CreateRequest(); other.TaxCode = "FR123"; other.Country = "fr";
+        var french = await service.CreateAsync(actor.AccountId, other);
 
         var list = await service.GetListAsync(actor.AccountId, new() { Country = " FR " });
-        Assert.Equal("PRV-FR-01", Assert.Single(list.Items).ProviderCode);
+        Assert.Equal(french.ProviderCode, Assert.Single(list.Items).ProviderCode);
         Assert.Equal("FR", list.Items[0].Country);
         Assert.Equal(2, (await service.GetListAsync(actor.AccountId, new())).TotalItems);
 
@@ -133,13 +134,8 @@ public class TransportProviderServiceTests
         var (actor, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var service = CreateService(db);
         var provider = await service.CreateAsync(actor.AccountId, CreateRequest());
-        Assert.Equal("PROVIDER_CODE_DUPLICATED", (await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync(actor.AccountId, CreateRequest()))).ErrorCode);
-        var duplicateTax = CreateRequest();
-        duplicateTax.ProviderCode = "PRV-OTHER";
-        Assert.Equal("TAX_CODE_DUPLICATED", (await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync(actor.AccountId, duplicateTax))).ErrorCode);
-        var changedCode = UpdateRequest(provider.UpdatedAt);
-        changedCode.ProviderCode = "PRV-CHANGED";
-        await Assert.ThrowsAsync<BadRequestException>(() => service.UpdateAsync(actor.AccountId, provider.TransportProviderId, changedCode));
+        // The code is generated, so only the tax code can collide.
+        Assert.Equal("TAX_CODE_DUPLICATED", (await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync(actor.AccountId, CreateRequest()))).ErrorCode);
         await service.UpdateAsync(actor.AccountId, provider.TransportProviderId, UpdateRequest(provider.UpdatedAt));
         Assert.Equal("PROVIDER_MODIFIED", (await Assert.ThrowsAsync<ConflictException>(() => service.UpdateAsync(actor.AccountId, provider.TransportProviderId, UpdateRequest(provider.UpdatedAt)))).ErrorCode);
         Assert.Equal("PROVIDER_MODIFIED", (await Assert.ThrowsAsync<ConflictException>(() => service.UpdateStatusAsync(actor.AccountId, provider.TransportProviderId,
@@ -159,7 +155,6 @@ public class TransportProviderServiceTests
         var provider = await service.CreateAsync(manager.AccountId, CreateRequest());
         Assert.Single((await service.GetListAsync(coordinator.AccountId, new() { SupportedMode = "air", Search = "lufthan", PageSize = 1 })).Items);
         var second = CreateRequest();
-        second.ProviderCode = "PRV-SECOND";
         second.TaxCode = "DE-SECOND";
         second.ProviderName = "Second";
         second.SupportedModes = ["SEA"];
@@ -244,7 +239,7 @@ public class TransportProviderServiceTests
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync($"{path}/{id}")).StatusCode);
         var duplicate = await client.PostAsJsonAsync(path, CreateRequest());
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
-        Assert.Equal("PROVIDER_CODE_DUPLICATED", (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        Assert.Equal("TAX_CODE_DUPLICATED", (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(path, new Providers.Request.CreateRequest())).StatusCode);
         var updated = await client.PutAsJsonAsync($"{path}/{id}", UpdateRequest(timestamp));
         Assert.Equal(HttpStatusCode.OK, updated.StatusCode);
@@ -458,7 +453,7 @@ public class TransportProviderServiceTests
 
     private static Providers.Request.CreateRequest CreateRequest() => new()
     {
-        ProviderCode = " prv-lufthansa-01 ", ProviderName = "Lufthansa Cargo", TaxCode = "DE123456789",
+        ProviderName = "Lufthansa Cargo", TaxCode = "DE123456789",
         SupportedModes = ["air", "ROAD", "AIR"], ContactName = "Operations", Phone = "+49-000-000",
         Email = "ops@example.com", Address = "Frankfurt", Country = "de", Note = "IATA carrier"
     };

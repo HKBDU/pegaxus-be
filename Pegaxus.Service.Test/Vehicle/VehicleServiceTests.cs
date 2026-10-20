@@ -24,9 +24,9 @@ public class VehicleServiceTests
         new ListRequestValidator(), new CreateRequestValidator(TestClock), new UpdateRequestValidator(TestClock),
         new StatusRequestValidator(), new Pegaxus.Service.NotificationService.Service(db, new NoopNotificationRealtimeService()),
         Microsoft.Extensions.Logging.Abstractions.NullLogger<FleetService>.Instance);
-    internal static Request.CreateRequest ValidRequest(string code = "VEH-ROAD-005", string plate = "29C-99988") => new()
+    internal static Request.CreateRequest ValidRequest(string plate = "29C-99988") => new()
     {
-        VehicleCode = code, LicensePlate = plate, VehicleName = "Horse Truck 05", VehicleType = "HORSE_TRUCK",
+        LicensePlate = plate, VehicleName = "Horse Truck 05", VehicleType = "HORSE_TRUCK",
         Manufacturer = "MAN", Model = "TGX", CapacityHorses = 6,
         RegistrationNumber = "REG-005", RegistrationExpiryDate = Today.AddYears(1),
         InsuranceNumber = "INS-005", InsuranceExpiryDate = Today.AddYears(1), SpecialEquipment = "Ventilation, CCTV"
@@ -49,12 +49,12 @@ public class VehicleServiceTests
         employee.Role = EmployeeRole.FLEET_ROUTE_COORDINATOR;
         var (recipient, _) = await TestSupport.AddLogisticsManagerAsync(db);
         await db.SaveChangesAsync();
-        var request = ValidRequest("veh-road-005", " 29c-99988 ");
+        var request = ValidRequest(" 29c-99988 ");
         var result = await CreateService(db).CreateAsync(request, account.AccountId);
         var vehicle = await db.Vehicles.SingleAsync();
         Assert.Equal("ROAD", result.TransportMode);
         Assert.Equal("AVAILABLE", result.Status);
-        Assert.Equal("VEH-ROAD-005", result.VehicleCode);
+        Assert.Matches("^VEH-20261008-0001$", result.VehicleCode);
         Assert.Equal("29C-99988", result.LicensePlate);
         Assert.Equal(request.VehicleName, result.VehicleName);
         Assert.Equal(request.VehicleType, result.VehicleType);
@@ -73,7 +73,7 @@ public class VehicleServiceTests
         var audit = await db.CatalogAuditLogs.SingleAsync();
         Assert.Equal(account.AccountId, audit.ActorAccountId);
         Assert.Equal("CREATE", audit.ActionType);
-        Assert.Equal("VEH-ROAD-005", audit.AfterData.RootElement.GetProperty("vehicleCode").GetString());
+        Assert.Equal(result.VehicleCode, audit.AfterData.RootElement.GetProperty("vehicleCode").GetString());
         Assert.Equal(vehicle.VehicleId, (await db.Notifications.SingleAsync()).ReferenceId);
         Assert.Equal(recipient.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
     }
@@ -88,7 +88,7 @@ public class VehicleServiceTests
         var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var service = CreateService(db);
         var result = await service.CreateAsync(ValidRequest(), account.AccountId);
-        var create = ValidRequest("INVALID", "BAD-01"); create.CapacityHorses = capacity;
+        var create = ValidRequest("BAD-01"); create.CapacityHorses = capacity;
         var update = UpdateRequest(result); update.CapacityHorses = capacity;
         foreach (var error in new[] {
             await Assert.ThrowsAsync<FieldValidationException>(() => service.CreateAsync(create, account.AccountId)),
@@ -107,7 +107,7 @@ public class VehicleServiceTests
         var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var service = CreateService(db);
         var vehicle = await service.CreateAsync(ValidRequest(), account.AccountId);
-        var create = ValidRequest("INVALID", "BAD-01");
+        var create = ValidRequest("BAD-01");
         create.RegistrationExpiryDate = create.InsuranceExpiryDate = Today.AddDays(days);
         var update = UpdateRequest(vehicle);
         update.RegistrationExpiryDate = update.InsuranceExpiryDate = Today.AddDays(days);
@@ -156,11 +156,9 @@ public class VehicleServiceTests
         var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var service = CreateService(db);
         var first = await service.CreateAsync(ValidRequest(), account.AccountId);
-        var codeError = await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync(ValidRequest("veh-road-005", "ABC-123"), account.AccountId));
-        Assert.Equal("VEHICLE_CODE_DUPLICATED", codeError.ErrorCode);
-        var plateError = await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync(ValidRequest("VEH-NEW", "29c-99988"), account.AccountId));
+        var plateError = await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync(ValidRequest("29c-99988"), account.AccountId));
         Assert.Equal("LICENSE_PLATE_DUPLICATED", plateError.ErrorCode);
-        var other = await service.CreateAsync(ValidRequest("VEH-NEW", "ABC-123"), account.AccountId);
+        var other = await service.CreateAsync(ValidRequest("ABC-123"), account.AccountId);
         var update = UpdateRequest(other); update.LicensePlate = first.LicensePlate!;
         Assert.Equal("LICENSE_PLATE_DUPLICATED", (await Assert.ThrowsAsync<ConflictException>(() => service.UpdateAsync(other.VehicleId, update, account.AccountId))).ErrorCode);
         await service.UpdateAsync(first.VehicleId, UpdateRequest(first), account.AccountId);
@@ -170,6 +168,21 @@ public class VehicleServiceTests
         Assert.NotEqual(first.VehicleId, reused.VehicleId);
         Assert.Equal(2, (await service.GetListAsync(new(), account.AccountId)).TotalItems);
         Assert.Equal("VEHICLE_NOT_FOUND", (await Assert.ThrowsAsync<NotFoundException>(() => service.GetAsync(first.VehicleId, account.AccountId))).ErrorCode);
+    }
+
+    [Fact]
+    public async Task Create_GeneratesSequentialDailyCodes_AndNeverReusesADeletedOne()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var service = CreateService(db);
+
+        var first = await service.CreateAsync(ValidRequest("PLATE-1"), account.AccountId);
+        var second = await service.CreateAsync(ValidRequest("PLATE-2"), account.AccountId);
+        (await db.Vehicles.SingleAsync(x => x.VehicleId == second.VehicleId)).IsDeleted = true; await db.SaveChangesAsync();
+        var third = await service.CreateAsync(ValidRequest("PLATE-3"), account.AccountId);
+
+        Assert.Equal(new[] { "VEH-20261008-0001", "VEH-20261008-0002", "VEH-20261008-0003" }, new[] { first.VehicleCode, second.VehicleCode, third.VehicleCode });
     }
 
     [Theory]
@@ -307,6 +320,11 @@ public class VehicleServiceTests
         async Task<Response.ListResponse> Available(int from, int to) => await service.GetListAsync(
             new() { AvailableFrom = Today.AddDays(from), AvailableTo = Today.AddDays(to) }, account.AccountId);
         Assert.Empty((await Available(2, 2)).Items);
+        // Segments of one transport plan never overlap, so its own vehicles stay selectable.
+        Assert.Single((await service.GetListAsync(new() { AvailableFrom = Today.AddDays(2), AvailableTo = Today.AddDays(2),
+            TransportPlanId = segment.RoutePlan.TransportPlanId }, account.AccountId)).Items);
+        Assert.Empty((await service.GetListAsync(new() { AvailableFrom = Today.AddDays(2), AvailableTo = Today.AddDays(2),
+            TransportPlanId = Guid.NewGuid() }, account.AccountId)).Items);
         Assert.True(Assert.Single((await Available(3, 4)).Items).IsAvailable);
         segment.PlannedArrivalAt = segment.PlannedDepartureAt!.Value.AddMinutes(-1);
         await db.SaveChangesAsync();
@@ -320,11 +338,6 @@ public class VehicleServiceTests
         segment.ActualDepartureAt = null;
         segment.PlannedDepartureAt = Today.AddDays(2).ToDateTime(new TimeOnly(6, 0));
         segment.PlannedArrivalAt = Today.AddDays(2).ToDateTime(new TimeOnly(8, 0));
-        // Segments of one transport plan never overlap, so its own vehicles stay selectable.
-        Assert.Single((await service.GetListAsync(new() { AvailableFrom = Today.AddDays(2), AvailableTo = Today.AddDays(2),
-            TransportPlanId = segment.RoutePlan.TransportPlanId }, account.AccountId)).Items);
-        Assert.Empty((await service.GetListAsync(new() { AvailableFrom = Today.AddDays(2), AvailableTo = Today.AddDays(2),
-            TransportPlanId = Guid.NewGuid() }, account.AccountId)).Items);
         segment.PlannedDepartureAt = null; await db.SaveChangesAsync();
         Assert.Empty((await Available(3, 4)).Items);
         segment.ActualArrivalAt = DateTime.SpecifyKind(TestClock.GetUtcNow().UtcDateTime, DateTimeKind.Unspecified); await db.SaveChangesAsync();
@@ -360,18 +373,18 @@ public class VehicleServiceTests
         await using var db = TestSupport.CreateDb();
         var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var service = CreateService(db);
-        await service.CreateAsync(ValidRequest("B", "PLATE-B"), account.AccountId);
-        var a = ValidRequest("A", "PLATE-A"); a.CapacityHorses = 2;
+        await service.CreateAsync(ValidRequest("PLATE-B"), account.AccountId);
+        var a = ValidRequest("PLATE-A"); a.CapacityHorses = 2;
         await service.CreateAsync(a, account.AccountId);
-        var c = await service.CreateAsync(ValidRequest("C", "PLATE-C"), account.AccountId);
+        var c = await service.CreateAsync(ValidRequest("PLATE-C"), account.AccountId);
         (await db.Vehicles.SingleAsync(x => x.VehicleId == c.VehicleId)).TransportMode = TransportMode.AIR;
-        var d = await service.CreateAsync(ValidRequest("D", "PLATE-D"), account.AccountId);
+        var d = await service.CreateAsync(ValidRequest("PLATE-D"), account.AccountId);
         (await db.Vehicles.SingleAsync(x => x.VehicleId == d.VehicleId)).IsDeleted = true;
         await db.SaveChangesAsync();
         var list = await service.GetListAsync(new() { PageSize = 1, PageIndex = 2, TransportMode = "ROAD" }, account.AccountId);
-        Assert.Equal("B", Assert.Single(list.Items).VehicleCode); Assert.Equal(2, list.TotalItems); Assert.Equal(2, list.TotalPages);
+        Assert.Equal("VEH-20261008-0002", Assert.Single(list.Items).VehicleCode); Assert.Equal(2, list.TotalItems); Assert.Equal(2, list.TotalPages);
         Assert.Null(list.Items[0].IsAvailable);
-        Assert.Equal("B", Assert.Single((await service.GetListAsync(new() { MinCapacity = 4, VehicleType = "horse_truck", Search = "plate-b", Status = "available" }, account.AccountId)).Items).VehicleCode);
+        Assert.Equal("VEH-20261008-0001", Assert.Single((await service.GetListAsync(new() { MinCapacity = 4, VehicleType = "horse_truck", Search = "plate-b", Status = "available" }, account.AccountId)).Items).VehicleCode);
         Assert.Equal(6, (await service.GetListAsync(new() { SortBy = "capacityHorses:desc" }, account.AccountId)).Items[0].CapacityHorses);
         Assert.Empty((await service.GetListAsync(new() { Search = "missing" }, account.AccountId)).Items);
         Assert.Equal("AIR", (await service.GetAsync(c.VehicleId, account.AccountId)).TransportMode);
@@ -385,15 +398,15 @@ public class VehicleServiceTests
         await using var db = TestSupport.CreateDb();
         var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var service = CreateService(db);
-        var french = ValidRequest("FR-1", "PLATE-FR"); french.Country = " fr ";
+        var french = ValidRequest("PLATE-FR"); french.Country = " fr ";
         var created = await service.CreateAsync(french, account.AccountId);
-        await service.CreateAsync(ValidRequest("GB-1", "PLATE-GB"), account.AccountId);
-        var british = ValidRequest("GB-2", "PLATE-GB2"); british.Country = "GB";
+        await service.CreateAsync(ValidRequest("PLATE-GB"), account.AccountId);
+        var british = ValidRequest("PLATE-GB2"); british.Country = "GB";
         await service.CreateAsync(british, account.AccountId);
 
         Assert.Equal("FR", created.Country);
         var list = await service.GetListAsync(new() { Country = "fr" }, account.AccountId);
-        Assert.Equal("FR-1", Assert.Single(list.Items).VehicleCode);
+        Assert.Equal(created.VehicleCode, Assert.Single(list.Items).VehicleCode);
         Assert.Equal(3, (await service.GetListAsync(new(), account.AccountId)).TotalItems);
 
         var update = UpdateRequest(created); update.Country = "gb";
@@ -418,8 +431,8 @@ public class VehicleServiceTests
         Assert.False(list.Validate(new Request.ListRequest { PageIndex = 0 }).IsValid);
         Assert.False(list.Validate(new Request.ListRequest { PageSize = 101 }).IsValid);
         Assert.False(list.Validate(new Request.ListRequest { PageIndex = int.MaxValue, PageSize = 100 }).IsValid);
-        var request = ValidRequest(); request.VehicleCode = "bad!"; request.LicensePlate = "<script>";
-        Assert.Equal(2, new CreateRequestValidator(TestClock).Validate(request).Errors.Count);
+        var request = ValidRequest(); request.LicensePlate = "<script>";
+        Assert.Single(new CreateRequestValidator(TestClock).Validate(request).Errors);
         var status = StatusRequest(default); status.Reason = " ";
         Assert.Equal(2, new StatusRequestValidator().Validate(status).Errors.Count);
     }
