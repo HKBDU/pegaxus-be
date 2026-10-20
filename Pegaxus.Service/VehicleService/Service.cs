@@ -65,6 +65,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 (!x.RegistrationExpiryDate.HasValue || x.RegistrationExpiryDate > lastDay) &&
                 (!x.InsuranceExpiryDate.HasValue || x.InsuranceExpiryDate > lastDay) &&
                 !assignments.Any(a => a.VehicleId == x.VehicleId &&
+                    (request.TransportPlanId == null || a.RoutePlanRoute.RoutePlan.TransportPlanId != request.TransportPlanId) &&
                     (!a.RoutePlanRoute.PlannedDepartureAt.HasValue || !a.RoutePlanRoute.PlannedArrivalAt.HasValue ||
                      a.RoutePlanRoute.PlannedArrivalAt < a.RoutePlanRoute.PlannedDepartureAt ||
                      a.RoutePlanRoute.ActualDepartureAt.HasValue && a.RoutePlanRoute.PlannedArrivalAt < now ||

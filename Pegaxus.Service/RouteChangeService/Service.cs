@@ -97,7 +97,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
                 var tail = BackupTail(segments);
                 CheckConnections(tail);
                 tail = InheritPersonnel(tail, range);
-                await ValidateResourcesAsync(tail, plan, active, true, cancellationToken);
+                await ValidateResourcesAsync(tail, plan, true, cancellationToken);
                 foreach (var segment in tail)
                 {
                     var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == segment.RoutePlanRouteId, cancellationToken);
@@ -186,7 +186,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             proposed[index] = segment;
         }
         proposed = InheritPersonnel(proposed, active);
-        await ValidateResourcesAsync(proposed, plan, remaining, true, cancellationToken);
+        await ValidateResourcesAsync(proposed, plan, true, cancellationToken);
         var now = NextVersion(plan);
         foreach (var segment in proposed)
         {

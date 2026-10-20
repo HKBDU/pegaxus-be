@@ -320,6 +320,11 @@ public class VehicleServiceTests
         segment.ActualDepartureAt = null;
         segment.PlannedDepartureAt = Today.AddDays(2).ToDateTime(new TimeOnly(6, 0));
         segment.PlannedArrivalAt = Today.AddDays(2).ToDateTime(new TimeOnly(8, 0));
+        // Segments of one transport plan never overlap, so its own vehicles stay selectable.
+        Assert.Single((await service.GetListAsync(new() { AvailableFrom = Today.AddDays(2), AvailableTo = Today.AddDays(2),
+            TransportPlanId = segment.RoutePlan.TransportPlanId }, account.AccountId)).Items);
+        Assert.Empty((await service.GetListAsync(new() { AvailableFrom = Today.AddDays(2), AvailableTo = Today.AddDays(2),
+            TransportPlanId = Guid.NewGuid() }, account.AccountId)).Items);
         segment.PlannedDepartureAt = null; await db.SaveChangesAsync();
         Assert.Empty((await Available(3, 4)).Items);
         segment.ActualArrivalAt = DateTime.SpecifyKind(TestClock.GetUtcNow().UtcDateTime, DateTimeKind.Unspecified); await db.SaveChangesAsync();

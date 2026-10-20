@@ -161,30 +161,26 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             var nowForConflict = Now();
             foreach (var employeeId in new[] { segment.DriverEmployeeId!.Value, segment.EscortEmployeeId!.Value })
             {
-                var conflict = segments.FirstOrDefault(x => x.RoutePlanRouteId != segment.RoutePlanRouteId && !x.TransportProviderId.HasValue &&
-                    (x.DriverEmployeeId == employeeId || x.EscortEmployeeId == employeeId) && x.ActualArrivalAt == null && Overlaps(segment, x));
-                var external = await db.RoutePlanRoutes.AsNoTracking().Where(x => x.RoutePlanId != routePlanId &&
-                    (x.RoutePlan.TransportPlanId != planId || x.RouteType == RouteType.RETURN) &&
+                // Segments of one transport plan run one after another, so only other plans can clash.
+                var external = await db.RoutePlanRoutes.AsNoTracking().Where(x => x.RoutePlan.TransportPlanId != planId &&
                     (x.DriverEmployeeId == employeeId || x.EscortEmployeeId == employeeId) && x.ActualArrivalAt == null &&
                     (x.RoutePlan.Status == RoutePlanStatus.CONFIRMED || x.RoutePlan.Status == RoutePlanStatus.ACTIVE) &&
                     x.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED && x.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED &&
                     x.RoutePlan.TransportPlan.Transport.Status != TransportStatus.CANCELLED && x.RoutePlan.TransportPlan.Transport.Status != TransportStatus.COMPLETED &&
                     (!x.PlannedDepartureAt.HasValue || !x.PlannedArrivalAt.HasValue || x.PlannedArrivalAt <= x.PlannedDepartureAt ||
                      x.ActualDepartureAt.HasValue && x.PlannedArrivalAt < nowForConflict ||
-                     x.PlannedDepartureAt <= segment.PlannedArrivalAt && x.PlannedArrivalAt >= segment.PlannedDepartureAt))
+                     x.PlannedDepartureAt < segment.PlannedArrivalAt && x.PlannedArrivalAt > segment.PlannedDepartureAt))
                     .Select(x => new {
                         x.RoutePlan.TransportPlan.Transport.TransportCode, x.RoutePlan.TransportPlan.PlanCode,
                         FromLocationName = x.Route.FromLocation.LocationName, ToLocationName = x.Route.ToLocation.LocationName,
                         x.PlannedDepartureAt, x.PlannedArrivalAt
                     }).FirstOrDefaultAsync(cancellationToken);
-                if (conflict is not null || external is not null)
-                    throw new ConflictException($"{employees[employeeId].Role} {employees[employeeId].EmployeeCode} is already assigned to Transport {external?.TransportCode ?? plan.Transport.TransportCode} during this time slot.",
+                if (external is not null)
+                    throw new ConflictException($"{employees[employeeId].Role} {employees[employeeId].EmployeeCode} is already assigned to Transport {external.TransportCode} during this time slot.",
                         "SCHEDULE_CONFLICT", new Response.ScheduleConflictResponse(employeeId, employees[employeeId].EmployeeCode,
-                            employees[employeeId].Role.ToString(), segment.RoutePlanRouteId, external?.PlanCode ?? plan.PlanCode,
-                            external?.FromLocationName ?? conflict!.Route.FromLocation.LocationName,
-                            external?.ToLocationName ?? conflict!.Route.ToLocation.LocationName,
-                            AsUtc(external is not null ? external.PlannedDepartureAt : conflict!.PlannedDepartureAt),
-                            AsUtc(external is not null ? external.PlannedArrivalAt : conflict!.PlannedArrivalAt)));
+                            employees[employeeId].Role.ToString(), segment.RoutePlanRouteId, external.PlanCode,
+                            external.FromLocationName, external.ToLocationName,
+                            AsUtc(external.PlannedDepartureAt), AsUtc(external.PlannedArrivalAt)));
             }
         }
         foreach (var segment in segments.Where(x => x.TransportProviderId.HasValue))
@@ -290,6 +286,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             query = query.Where(employee => !db.RoutePlanRoutes.Any(segment =>
                 (segment.DriverEmployeeId == employee.EmployeeId || segment.EscortEmployeeId == employee.EmployeeId) &&
                 (segment.RoutePlan.Status == RoutePlanStatus.CONFIRMED || segment.RoutePlan.Status == RoutePlanStatus.ACTIVE) &&
+                (request.TransportPlanId == null || segment.RoutePlan.TransportPlanId != request.TransportPlanId) &&
                 segment.ActualArrivalAt == null &&
                 segment.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED &&
                 segment.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED &&
@@ -298,7 +295,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 (!segment.PlannedDepartureAt.HasValue || !segment.PlannedArrivalAt.HasValue ||
                  segment.PlannedArrivalAt <= segment.PlannedDepartureAt ||
                  segment.ActualDepartureAt.HasValue && segment.PlannedArrivalAt < now ||
-                 segment.PlannedDepartureAt <= to && segment.PlannedArrivalAt >= from)));
+                 segment.PlannedDepartureAt < to && segment.PlannedArrivalAt > from)));
         }
         var count = await query.CountAsync(cancellationToken);
         var items = await query.OrderBy(x => x.EmployeeCode).ThenBy(x => x.EmployeeId)
@@ -370,8 +367,6 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                     x.DriverEmployee?.EmployeeCode, x.EscortEmployee?.EmployeeCode, x.TransportProvider?.ProviderName)))
         }, now);
     }
-    private static bool Overlaps(RoutePlanRoute a, RoutePlanRoute b) => !b.PlannedDepartureAt.HasValue || !b.PlannedArrivalAt.HasValue ||
-        b.PlannedArrivalAt <= b.PlannedDepartureAt || a.PlannedDepartureAt <= b.PlannedArrivalAt && a.PlannedArrivalAt >= b.PlannedDepartureAt;
     private static Response.EmployeeBrief? Brief(Employee? employee, DateTime? assignedAt = null) => employee is null ? null :
         new(employee.EmployeeId, employee.EmployeeCode, employee.FullName, employee.Role.ToString(),
             employee.Account.Email, employee.Account.AvatarUrl, employee.Country, AsUtc(assignedAt));

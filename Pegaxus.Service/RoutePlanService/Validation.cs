@@ -122,7 +122,13 @@ public sealed partial class Service
             throw new NotFoundException("Vehicle not found", "VEHICLE_NOT_FOUND");
         if (vehicles.Any(item => item.TransportMode != route.TransportMode))
             throw new UnprocessableEntityException("The vehicle transport mode does not match the segment", "VEHICLE_MODE_MISMATCH");
-        if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED)))
+        // A RETURN continues the trip, so the vehicles already driving this plan's primary route are still usable.
+        var ownVehicleIds = routeType == RouteType.RETURN
+            ? await db.RoutePlanRouteVehicles.Where(item => item.RoutePlanRoute.RoutePlan.TransportPlanId == plan.TransportPlanId)
+                .Select(item => item.VehicleId).Distinct().ToListAsync(cancellationToken)
+            : [];
+        if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED) &&
+                !(item.Status == VehicleStatus.IN_USE && ownVehicleIds.Contains(item.VehicleId))))
             throw new UnprocessableEntityException("The vehicle is not available", "VEHICLE_UNAVAILABLE");
         if (vehicles.Sum(item => item.CapacityHorses ?? 0) < plan.Transport.Booking.BookingHorses.Count)
             throw new UnprocessableEntityException("Total vehicle capacity is lower than the number of horses in the booking", "VEHICLE_CAPACITY_EXCEEDED");
@@ -133,7 +139,6 @@ public sealed partial class Service
             throw new UnprocessableEntityException("The vehicle registration or insurance is expired for this segment", "VEHICLE_DOCUMENT_EXPIRED");
 
         var vehicleIds = vehicles.Select(item => item.VehicleId).ToList();
-        var alternativesAreExclusive = routeType is RouteType.PRIMARY or RouteType.BACKUP;
         var departureAt = Truncate(request.PlannedDepartureAt);
         var arrivalAt = Truncate(request.PlannedArrivalAt);
         var overlappingAssignment = await db.RoutePlanRouteVehicles
@@ -142,8 +147,7 @@ public sealed partial class Service
             .Where(item => vehicleIds.Contains(item.VehicleId) &&
                 item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED &&
                 (!excludedRoutePlanId.HasValue || item.RoutePlanRoute.RoutePlanId != excludedRoutePlanId.Value) &&
-                (!alternativesAreExclusive || item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId ||
-                    item.RoutePlanRoute.RoutePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.RETURN)) &&
+                item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId &&
                 item.RoutePlanRoute.PlannedDepartureAt < arrivalAt &&
                 item.RoutePlanRoute.PlannedArrivalAt > departureAt)
             .Select(item => item.VehicleId)
