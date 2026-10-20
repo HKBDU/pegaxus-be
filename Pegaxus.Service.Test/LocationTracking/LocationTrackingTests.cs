@@ -53,6 +53,32 @@ public class LocationTrackingTests
     }
 
     [Fact]
+    public async Task Record_OnlyTheDriverOfTheSegmentInTransitIsTracked_AndTheSignedHandoverMovesTheTurn()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var next = await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.DRIVER);
+        f.Second.DriverEmployeeId = next.EmployeeId; await db.SaveChangesAsync();
+
+        // The next driver's app is already running while the first driver still has the horses, and even sits at the end of segment 1.
+        var early = await f.Service.RecordAsync(f.TransportId, f.Point(1), next.AccountId);
+        Assert.Null(early.Arrival); Assert.Null((await f.Service.GetAsync(f.TransportId, f.Manager.AccountId)).Truck);
+        Assert.Empty(f.Realtime.Points); Assert.Null(f.First.ActualArrivalAt);
+
+        f.Clock.Now = f.Clock.Now.AddSeconds(15);
+        await f.Service.RecordAsync(f.TransportId, f.Point(0.5m), f.Driver.AccountId);
+        Assert.Single(f.Realtime.Points); Assert.Equal(0.5m, (await f.Service.GetAsync(f.TransportId, f.Manager.AccountId)).Truck!.Longitude);
+
+        // The handover is signed: segment 1 is done and segment 2 is now in transit.
+        f.First.ActualArrivalAt = f.Second.ActualDepartureAt = f.Clock.Now.UtcDateTime; await db.SaveChangesAsync();
+        f.Clock.Now = f.Clock.Now.AddSeconds(15);
+        await f.Service.RecordAsync(f.TransportId, f.Point(1), f.Driver.AccountId); // the first driver left the app running at the handover point
+        Assert.Single(f.Realtime.Points);
+        f.Clock.Now = f.Clock.Now.AddSeconds(15);
+        await f.Service.RecordAsync(f.TransportId, f.Point(1.5m), next.AccountId);
+        Assert.Equal(2, f.Realtime.Points.Count); Assert.Equal(1.5m, (await f.Service.GetAsync(f.TransportId, f.Manager.AccountId)).Truck!.Longitude);
+    }
+
+    [Fact]
     public async Task Geofence_FinalBoundaryNeverWritesTimesAndReportsTheArrivalOnEveryCall()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);

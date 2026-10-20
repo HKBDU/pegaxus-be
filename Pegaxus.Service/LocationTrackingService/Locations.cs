@@ -23,10 +23,14 @@ public sealed partial class Service
             await using (var transaction = await db.Database.BeginSerializableAsync(cancellationToken))
             {
                 await db.LockRowsAsync(db.Transports.Where(transport => transport.TransportId == transportId), transport => transport.TransportId, cancellationToken);
-                var (_, transport) = await DriverTransportAsync(transportId, accountId, cancellationToken);
+                var (actor, transport) = await DriverTransportAsync(transportId, accountId, cancellationToken);
                 var segments = await EffectiveSegmentsAsync(transportId, transport.Status, cancellationToken);
                 if (request.RoutePlanRouteId.HasValue && !segments.Any(segment => segment.Id == request.RoutePlanRouteId))
                     throw new BadRequestException("The segment must belong to the transport's effective route", "VALIDATION_ERROR");
+                // Only the driver of the segment in transit tracks the truck. A previous or next driver whose app is still running is acknowledged but
+                // ignored, so two phones cannot make the truck jump between two places. The signed handover moves the turn to the next driver.
+                if (CurrentSegment(segments, transport.Status)?.DriverEmployeeId != actor.EmployeeId)
+                    return new(clock.GetUtcNow());
                 var recordedAt = request.RecordedAt!.Value.ToUniversalTime();
                 // Delayed and duplicate samples cannot move the truck backwards or repeat geofence effects.
                 if (entry.Latest is { } previous && previous.RecordedAt >= recordedAt)
