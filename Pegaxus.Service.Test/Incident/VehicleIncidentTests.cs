@@ -350,6 +350,8 @@ public class VehicleIncidentTests
         var details = new AddHorseDetailsRequestValidator(new HorseDetailValidator(clock));
         return new(db, clock, new ReportVehicleRequestValidator(clock, fields), new UpdateVehicleRequestValidator(fields),
             new ReportHorseHealthRequestValidator(clock, details), details, new FollowUpHorseRequestValidator(clock),
+            new ListRequestValidator(), new ResolveRequestValidator(new SelfResolveRequestValidator()), new CancelRequestValidator(),
+            new SelfResolveRequestValidator(), new RaiseSeverityRequestValidator(),
             storage, storage, TestSupport.CreateNotifications(db));
     }
 }

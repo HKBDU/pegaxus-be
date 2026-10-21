@@ -11,6 +11,82 @@ namespace Pegaxus.API.Controllers;
 [Consumes("application/json")]
 public sealed class IncidentsController(Incidents.IIncidentService service) : ApiControllerBase
 {
+    /// <summary>List incidents visible to the current employee.</summary>
+    /// <remarks>IN7: LM, RC and TS see every incident. Driver/Escort see their reports and assigned transports. Counts cover the visible scope before filters. Reads never accept or change incidents.</remarks>
+    /// <param name="request">Filters, date range, search, sorting and pagination.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with counts and a page of incidents.</returns>
+    [HttpGet]
+    [Authorize(Policy = JwtExtensions.IncidentListViewerPolicy)]
+    public async Task<IActionResult> ListAsync([FromQuery] Incidents.Request.ListRequest request, CancellationToken cancellationToken) =>
+        Success(await service.ListAsync(request, AccountId, cancellationToken), "Incidents retrieved successfully");
+
+    /// <summary>Read an incident without changing its status.</summary>
+    /// <remarks>IN8: employees follow IN7 visibility. Customers may read HIGH/CRITICAL incidents belonging to their bookings; financial fields, action controls and phone numbers are omitted. Incidents outside the caller's scope return 404.</remarks>
+    /// <param name="incidentReportId">The incident identifier.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the role-specific incident detail.</returns>
+    [HttpGet("{incidentReportId}")]
+    [Authorize(Policy = JwtExtensions.IncidentViewerPolicy)]
+    public async Task<IActionResult> GetAsync(Guid incidentReportId, CancellationToken cancellationToken) =>
+        Success(await service.GetAsync(incidentReportId, AccountId, cancellationToken), "Incident retrieved successfully");
+
+    /// <summary>Confirm emergency settlement and resolve an incident.</summary>
+    /// <remarks>IN9: LM only, REPORTED/PENDING, transport IN_TRANSIT or COMPLETED. Pending cost requests block resolution with value.pendingRequests. Confirmation and a summary of at least 20 trimmed characters are required. Vehicle availability and medical history are preserved.</remarks>
+    /// <param name="incidentReportId">The incident identifier.</param>
+    /// <param name="request">The incident version, settlement confirmation and resolution summary.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the resolved incident; 409 for a stale version, 422 for pending costs.</returns>
+    [HttpPost("{incidentReportId}/resolve")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> ResolveAsync(Guid incidentReportId, [FromBody] Incidents.Request.ResolveRequest request, CancellationToken cancellationToken)
+    {
+        var result = await service.ResolveAsync(incidentReportId, request, AccountId, cancellationToken);
+        return Success(result, $"Incident {result.IncidentCode} resolved. Approved emergency costs are ready for the financial report.");
+    }
+
+    /// <summary>Cancel an incorrectly reported incident.</summary>
+    /// <remarks>IN10: LM only, REPORTED/PENDING. Approved costs block cancellation. Pending costs are cancelled atomically with the same reason. The settlement flag, vehicle availability and medical history are preserved.</remarks>
+    /// <param name="incidentReportId">The incident identifier.</param>
+    /// <param name="request">The incident version and a cancellation reason of at least 10 trimmed characters.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the cancelled incident; 422 with value.approvedRequests for approved costs.</returns>
+    [HttpPost("{incidentReportId}/cancel")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> CancelAsync(Guid incidentReportId, [FromBody] Incidents.Request.CancelRequest request, CancellationToken cancellationToken)
+    {
+        var result = await service.CancelAsync(incidentReportId, request, AccountId, cancellationToken);
+        return Success(result, $"Incident {result.IncidentCode} cancelled");
+    }
+
+    /// <summary>Let the assigned crew resolve a reported incident without open costs.</summary>
+    /// <remarks>IN11: assigned Driver/Escort, REPORTED and IN_TRANSIT only. PENDING/APPROVED costs require LM resolution. Severity, vehicle availability and medical history are preserved.</remarks>
+    /// <param name="incidentReportId">The incident identifier.</param>
+    /// <param name="request">The incident version and a resolution summary of at least 20 trimmed characters.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the resolved incident; 422 with value.requests for open costs.</returns>
+    [HttpPost("{incidentReportId}/self-resolve")]
+    [Authorize(Policy = JwtExtensions.DriverOrEscortPolicy)]
+    public async Task<IActionResult> SelfResolveAsync(Guid incidentReportId, [FromBody] Incidents.Request.SelfResolveRequest request, CancellationToken cancellationToken)
+    {
+        var result = await service.SelfResolveAsync(incidentReportId, request, AccountId, cancellationToken);
+        return Success(result, $"Incident {result.IncidentCode} resolved");
+    }
+
+    /// <summary>Raise the severity of an open incident.</summary>
+    /// <remarks>IN12: LM or assigned RC/Driver/Escort. Severity only increases; reason appends with author and UTC time. HIGH/CRITICAL queue urgent staff alerts, manager email and one sanitized customer notification per event. Status remains unchanged.</remarks>
+    /// <param name="incidentReportId">The incident identifier.</param>
+    /// <param name="request">The incident version, a higher severity and a reason of at least 10 trimmed characters.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the incident and notification effects; 422 for equal or decreased severity.</returns>
+    [HttpPost("{incidentReportId}/raise-severity")]
+    [Authorize(Policy = JwtExtensions.IncidentOperatorPolicy)]
+    public async Task<IActionResult> RaiseSeverityAsync(Guid incidentReportId, [FromBody] Incidents.Request.RaiseSeverityRequest request, CancellationToken cancellationToken)
+    {
+        var result = await service.RaiseSeverityAsync(incidentReportId, request, AccountId, cancellationToken);
+        return Success(result.Value, $"Incident {result.Value.IncidentCode} severity raised from {result.PreviousSeverity} to {result.Value.Severity}");
+    }
+
     /// <summary>Report a vehicle or combined vehicle and horse incident.</summary>
     /// <remarks>IN1: Only an assigned Driver or Escort may report while IN_TRANSIT. Upload up to five JPG/PNG images (5MB each) through uploads/signature with entity attachment, then pass their publicIds in photoFiles. BOTH forces CRITICAL. A non-operable vehicle requiring replacement becomes OUT_OF_SERVICE. Alerts and urgent manager email are queued atomically. Replays with the same transport, reporter, vehicle, incident type and occurredAt return the original report without repeated effects.</remarks>
     /// <param name="request">The incident, vehicle, location and optional uploaded photos.</param>

@@ -5,6 +5,17 @@ namespace Pegaxus.Service.IncidentService;
 
 public static class Response
 {
+    public sealed record SeverityResult(Incident Value, string PreviousSeverity);
+    public sealed record Counts(int Reported, int Pending, int Resolved, int UrgentOpen);
+    public sealed record ListResult(DateTimeOffset ServerTime, Counts Counts, IReadOnlyList<ListItem> Items,
+        int PageIndex, int PageSize, int TotalItems, int TotalPages);
+    public sealed record Reporter(Guid EmployeeId, string EmployeeCode, string FullName, string Role);
+    public sealed record ListVehicle(Guid VehicleId, string VehicleCode, string? LicensePlate);
+    public sealed record ListHorse(Guid HorseId, string HorseName);
+    public sealed record ListItem(Guid IncidentReportId, string IncidentCode, TransportBrief Transport, string Category,
+        string Severity, string Status, string Title, DateTimeOffset OccurredAt, DateTimeOffset ReportedAt,
+        LocationBrief? Location, Reporter ReportedBy, ListVehicle? Vehicle, IReadOnlyList<ListHorse> Horses,
+        bool EmergencySettlementRequired, int CostRequestCount, int PendingCostCount, long ApprovedTotal, DateTimeOffset UpdatedAt);
     public sealed record CreateResult(Incident Value, bool Created);
     public sealed record EmergencyContacts(DateTimeOffset ServerTime, Guid TransportId, IReadOnlyList<EmployeeBrief> Contacts);
     public sealed record EmployeeBrief(Guid EmployeeId, string EmployeeCode, string FullName, string Role, string? Phone);
@@ -16,7 +27,8 @@ public static class Response
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? VehicleStatusChanged = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CanAddHorseDetails = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? HealthLogsCreated = null,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? FirstAidGuide = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? FirstAidGuide = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CustomerNotified = null);
     public sealed record Safety(string Message, IReadOnlyList<EmployeeBrief> EmergencyContacts);
     public sealed record CostSummary(long RequestedTotal, long ApprovedTotal, int PendingCount, string Currency = Vnd.Currency);
     public sealed record RouteChange(Guid RoutePlanId, string RoutePlanCode, string RouteType, string Status, DateTimeOffset UpdatedAt);

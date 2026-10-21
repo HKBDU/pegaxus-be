@@ -46,7 +46,7 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
                 errorCode: GetErrorCode(ex, statusCode),
                 code: statusCode,
                 traceId: context.TraceIdentifier,
-                value: (ex as ConflictException)?.Value));
+                value: ex switch { ConflictException conflict => conflict.Value, UnprocessableEntityException rule => rule.Value, _ => null }));
         }
     }
 

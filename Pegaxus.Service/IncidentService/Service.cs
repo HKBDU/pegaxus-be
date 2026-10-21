@@ -15,23 +15,29 @@ namespace Pegaxus.Service.IncidentService;
 public sealed partial class Service(AppDbContext db, TimeProvider clock,
     IValidator<Request.ReportVehicleRequest> reportValidator, IValidator<Request.UpdateVehicleRequest> updateValidator,
     IValidator<Request.ReportHorseHealthRequest> horseReportValidator, IValidator<Request.AddHorseDetailsRequest> detailsValidator,
-    IValidator<Request.FollowUpHorseRequest> followUpValidator, IMediaService media, IDocumentStorageService documentStorage, INotificationService notifications) : IIncidentService
+    IValidator<Request.FollowUpHorseRequest> followUpValidator, IValidator<Request.ListRequest> listValidator,
+    IValidator<Request.ResolveRequest> resolveValidator, IValidator<Request.CancelRequest> cancelValidator,
+    IValidator<Request.SelfResolveRequest> selfResolveValidator, IValidator<Request.RaiseSeverityRequest> severityValidator,
+    IMediaService media, IDocumentStorageService documentStorage, INotificationService notifications) : IIncidentService
 {
     private static readonly RoutePlanStatus[] AssignmentStatuses = [RoutePlanStatus.CONFIRMED, RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED];
     private const string ForbiddenMessage = "Only the assigned driver / escort can report incidents for this transport";
 
     private async Task<Employee> ActorAsync(Guid accountId, CancellationToken ct)
     {
-        var account = await db.Accounts.AsNoTracking().SingleOrDefaultAsync(item => item.AccountId == accountId &&
-            !item.IsDeleted && item.Status == AccountStatus.ACTIVE, ct)
-            ?? throw new UnauthorizedException("The account is inactive or unavailable", "UNAUTHORIZED");
+        var account = await AccountAsync(accountId, ct);
         if (account.AccountType != AccountType.EMPLOYEE) throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");
         var employee = await db.Employees.AsNoTracking().Active().SingleOrDefaultAsync(item => item.AccountId == accountId, ct)
             ?? throw new UnauthorizedException("The account is inactive or unavailable", "UNAUTHORIZED");
-        if (employee.Role is not (EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.FLEET_ROUTE_COORDINATOR or EmployeeRole.DRIVER or EmployeeRole.ESCORT))
+        if (employee.Role is not (EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.FLEET_ROUTE_COORDINATOR or EmployeeRole.TRANSPORT_SPECIALIST or EmployeeRole.DRIVER or EmployeeRole.ESCORT))
             throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");
         return employee;
     }
+
+    private async Task<Account> AccountAsync(Guid accountId, CancellationToken ct) =>
+        await db.Accounts.AsNoTracking().SingleOrDefaultAsync(item => item.AccountId == accountId &&
+            !item.IsDeleted && item.Status == AccountStatus.ACTIVE, ct)
+        ?? throw new UnauthorizedException("The account is inactive or unavailable", "UNAUTHORIZED");
 
     private async Task<Transport> TransportAsync(Guid transportId, CancellationToken ct)
     {
@@ -42,11 +48,14 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock,
     }
 
     private Task<bool> CrewAssignedAsync(Guid transportId, Employee actor, CancellationToken ct) =>
-        db.RoutePlanRoutes.AsNoTracking().AnyAsync(segment => segment.RoutePlan.TransportPlan.TransportId == transportId &&
+        CrewSegments(actor).AnyAsync(segment => segment.RoutePlan.TransportPlan.TransportId == transportId, ct);
+
+    private IQueryable<RoutePlanRoute> CrewSegments(Employee actor) =>
+        db.RoutePlanRoutes.AsNoTracking().Where(segment =>
             AssignmentStatuses.Contains(segment.RoutePlan.Status) && !segment.TransportProviderId.HasValue &&
             (segment.SupersededAt == null || segment.ActualDepartureAt != null) &&
             (actor.Role == EmployeeRole.DRIVER && segment.DriverEmployeeId == actor.EmployeeId ||
-             actor.Role == EmployeeRole.ESCORT && segment.EscortEmployeeId == actor.EmployeeId), ct);
+             actor.Role == EmployeeRole.ESCORT && segment.EscortEmployeeId == actor.EmployeeId));
 
     private Task<Guid?> CurrentPlanIdAsync(Guid transportId, CancellationToken ct) =>
         db.TransportPlans.AsNoTracking().Where(plan => plan.TransportId == transportId && plan.Status != TransportPlanStatus.CANCELLED)
