@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 
 using static Pegaxus.Service.Common.DbTime;
 
@@ -85,13 +86,15 @@ public sealed partial class Service
         new(item.Segment.RoutePlanRouteId, segments.IndexOf(item) + 1, item.Segment.FromLocation.LocationName,
             item.Segment.ToLocation.LocationName, item.Segment.Status);
 
-    private static List<Response.TrackingSegment> ToTrackingSegments(List<SegmentData> segments, TransportStatus status)
+    private static List<Response.TrackingSegment> ToTrackingSegments(List<SegmentData> segments, TransportStatus status, Actor actor)
     {
         var current = CurrentSegment(segments, status);
         return segments.Select((item, index) => item.Segment with
         {
             DisplayOrder = index + 1,
-            IsCurrent = item == current
+            IsCurrent = item == current,
+            IsMine = item == current && actor.EmployeeId.HasValue &&
+                (item.DriverEmployeeId == actor.EmployeeId || item.EscortEmployeeId == actor.EmployeeId)
         }).ToList();
     }
 
@@ -123,13 +126,17 @@ public sealed partial class Service
             var existing = handovers.FirstOrDefault(item => item.FromRoutePlanRouteId == from?.Segment.RoutePlanRouteId &&
                 item.ToRoutePlanRouteId == to?.Segment.RoutePlanRouteId)?.Brief;
             var outsourced = from?.Segment.IsOutsourced == true || to?.Segment.IsOutsourced == true;
+            var required = from is null || to is null || outsourced || HandoverRules.RequiredBetween(from.DriverEmployeeId, to.DriverEmployeeId);
             // shortcut: provider handovers stay disabled until B-03 adds PROVIDER parties.
-            string[] allowed = outsourced ? [] : index == 0 ? ["PICKUP"] : index == segments.Count ? ["DELIVERY"] : ["TRANSFER", "BORDER_HANDOVER"];
-            var canCreate = !outsourced && existing is null && (actor.Role is EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.FLEET_ROUTE_COORDINATOR ||
-                    IsAssigned(from, actor) || IsAssigned(to, actor)) &&
-                (index == 0 ? transport.Status == TransportStatus.READY : transport.Status == TransportStatus.IN_TRANSIT);
+            string[] allowed = outsourced || !required ? [] : index == 0 ? ["PICKUP"] : index == segments.Count ? ["DELIVERY"] : ["TRANSFER", "BORDER_HANDOVER"];
+            var open = !outsourced && required && existing is null && (index == 0 ? transport.Status == TransportStatus.READY : transport.Status == TransportStatus.IN_TRANSIT);
+            var isManager = actor.Role is EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.FLEET_ROUTE_COORDINATOR;
+            // Crew start a handover on the spot; managers and specialists may also schedule one, but specialists cannot start it.
+            var modes = new List<string>();
+            if (open && (isManager || IsAssigned(from, actor) || IsAssigned(to, actor))) modes.Add("START_NOW");
+            if (open && (isManager || actor.Role == EmployeeRole.TRANSPORT_SPECIALIST)) modes.Add("SCHEDULE");
             boundaries.Add(new(index + 1, from?.Segment.RoutePlanRouteId, to?.Segment.RoutePlanRouteId,
-                new(location.LocationName, address, location.Country), allowed, existing, canCreate));
+                new(location.LocationName, address, location.Country), required, from?.Segment.ActualArrivalAt, allowed, existing, modes.Count > 0, modes));
         }
         return boundaries;
     }

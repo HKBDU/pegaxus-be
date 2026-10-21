@@ -13,7 +13,7 @@ public sealed class RoutePlansController(RoutePlanService.IRoutePlanService serv
 {
     /// <summary>Create a route plan.</summary>
     /// <param name="transportPlanId">The transport plan identifier.</param>
-    /// <param name="request">The route plan data.</param>
+    /// <param name="request">The route plan data. RETURN may be created by the assigned RC or any LM and may carry the incident that caused it (incidentReportId).</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>201 Created with the route plan.</returns>
     [HttpPost("/api/v1/transport-plans/{transportPlanId:guid}/route-plans")]

@@ -20,7 +20,11 @@ public static class Response
     {
         [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
         public CompletionEffects? Effects { get; init; }
+
+        [JsonIgnore(Condition = JsonIgnoreCondition.Never)]
+        public Geofence? Geofence { get; init; }
     }
+    public sealed record Geofence(decimal Latitude, decimal Longitude, double RadiusMeters);
     public sealed record CompletionEffects(string TransportStatus, string? RoutePlanStatus, string? TransportPlanStatus,
         Guid? ClosedRoutePlanRouteId, Guid? ActivatedRoutePlanRouteId,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? ClaimWindowEndsAt);

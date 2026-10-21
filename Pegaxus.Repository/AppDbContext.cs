@@ -84,6 +84,8 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<IncidentReport> IncidentReports { get; set; }
 
+    public virtual DbSet<IncidentPhoto> IncidentPhotos { get; set; }
+
     public virtual DbSet<Invoice> Invoices { get; set; }
 
     public virtual DbSet<InvoiceItem> InvoiceItems { get; set; }

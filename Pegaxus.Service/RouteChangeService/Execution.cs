@@ -10,8 +10,7 @@ namespace Pegaxus.Service.RouteChangeService;
 
 public sealed partial class Service
 {
-    private async Task ValidateResourcesAsync(List<Response.Segment> proposed, RoutePlan plan,
-        List<Response.Segment> remaining, bool dispatch, CancellationToken token)
+    private async Task ValidateResourcesAsync(List<Response.Segment> proposed, RoutePlan plan, bool dispatch, CancellationToken token)
     {
         var vehicleIds = proposed.SelectMany(x => x.Vehicles.Select(v => v.VehicleId)).Distinct().Order().ToArray();
         var employeeIds = proposed.SelectMany(x => new[] { x.Driver?.EmployeeId, x.Escort?.EmployeeId }).OfType<Guid>().Distinct().Order().ToArray();
@@ -79,17 +78,12 @@ public sealed partial class Service
             var to = Truncate(segment.PlannedArrivalAt);
             var ids = segment.Vehicles.Select(x => x.VehicleId).ToArray();
             var people = new[] { segment.Driver?.EmployeeId, segment.Escort?.EmployeeId }.OfType<Guid>().ToArray();
-            if (proposed.Any(x => x.RoutePlanRouteId != segment.RoutePlanRouteId && x.ExecutionType == "INTERNAL" &&
-                x.PlannedDepartureAt <= segment.PlannedArrivalAt && x.PlannedArrivalAt >= segment.PlannedDepartureAt &&
-                (x.Vehicles.Any(v => ids.Contains(v.VehicleId)) || x.Driver is not null && people.Contains(x.Driver.EmployeeId) ||
-                    x.Escort is not null && people.Contains(x.Escort.EmployeeId))))
-                throw new ConflictException("Resources overlap within this itinerary.", "SCHEDULE_CONFLICT");
-            var ownRemaining = remaining.Select(x => x.RoutePlanRouteId).ToArray();
+            // The itinerary's own segments and the plan's other route plans run one after another, so only other transport plans can clash.
             if (await db.RoutePlanRoutes.AsNoTracking().AnyAsync(x => x.SupersededAt == null && x.ActualArrivalAt == null &&
-                !ownRemaining.Contains(x.RoutePlanRouteId) && x.RoutePlanId != plan.RoutePlanId &&
+                x.RoutePlan.TransportPlanId != plan.TransportPlanId &&
                 (x.RoutePlan.Status == RoutePlanStatus.ACTIVE || x.RoutePlan.Status == RoutePlanStatus.CONFIRMED && x.RouteType != RouteType.BACKUP) &&
                 (!x.PlannedDepartureAt.HasValue || !x.PlannedArrivalAt.HasValue || x.PlannedArrivalAt <= x.PlannedDepartureAt ||
-                 x.ActualDepartureAt != null && x.RoutePlan.Status == RoutePlanStatus.ACTIVE || x.PlannedDepartureAt <= to && x.PlannedArrivalAt >= from) &&
+                 x.ActualDepartureAt != null && x.RoutePlan.Status == RoutePlanStatus.ACTIVE || x.PlannedDepartureAt < to && x.PlannedArrivalAt > from) &&
                 (x.RoutePlanRouteVehicles.Any(v => ids.Contains(v.VehicleId)) ||
                     x.DriverEmployeeId.HasValue && people.Contains(x.DriverEmployeeId.Value) ||
                     x.EscortEmployeeId.HasValue && people.Contains(x.EscortEmployeeId.Value)), token))

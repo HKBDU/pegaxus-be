@@ -46,28 +46,151 @@ public class LocationTrackingTests
         await f.Service.RecordAsync(f.TransportId, f.Point(1 + LongitudeOffset(distance)), f.Driver.AccountId);
         var first = await db.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.First.RoutePlanRouteId);
         Assert.Equal(arrived, first.ActualArrivalAt.HasValue); Assert.Equal(departure, first.ActualDepartureAt);
-        Assert.Null(f.Second.ActualDepartureAt); Assert.Null(f.Second.ActualArrivalAt);
+        // One driver runs both segments, so the next segment starts at the moment the previous one arrives (M8).
+        Assert.Equal(arrived ? first.ActualArrivalAt : null, f.Second.ActualDepartureAt); Assert.Null(f.Second.ActualArrivalAt);
         Assert.Null(f.Route.TransportPlan.Transport.ActualArrivalAt);
         Assert.Equal(TransportStatus.IN_TRANSIT, f.Route.TransportPlan.Transport.Status);
     }
 
     [Fact]
-    public async Task Geofence_FinalArrivalIsAtomicAndNeverOverwritesRecordedTimesOrCompletesTransport()
+    public async Task Record_OnlyTheDriverOfTheSegmentInTransitIsTracked_AndTheSignedHandoverMovesTheTurn()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var next = await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.DRIVER);
+        f.Second.DriverEmployeeId = next.EmployeeId; await db.SaveChangesAsync();
+
+        // The next driver's app is already running while the first driver still has the horses, and even sits at the end of segment 1.
+        var early = await f.Service.RecordAsync(f.TransportId, f.Point(1), next.AccountId);
+        Assert.Null(early.Arrival); Assert.Null((await f.Service.GetAsync(f.TransportId, f.Manager.AccountId)).Truck);
+        Assert.Empty(f.Realtime.Points); Assert.Null(f.First.ActualArrivalAt);
+
+        f.Clock.Now = f.Clock.Now.AddSeconds(15);
+        await f.Service.RecordAsync(f.TransportId, f.Point(0.5m), f.Driver.AccountId);
+        Assert.Single(f.Realtime.Points); Assert.Equal(0.5m, (await f.Service.GetAsync(f.TransportId, f.Manager.AccountId)).Truck!.Longitude);
+
+        // The handover is signed: segment 1 is done and segment 2 is now in transit.
+        f.First.ActualArrivalAt = f.Second.ActualDepartureAt = f.Clock.Now.UtcDateTime; await db.SaveChangesAsync();
+        f.Clock.Now = f.Clock.Now.AddSeconds(15);
+        await f.Service.RecordAsync(f.TransportId, f.Point(1), f.Driver.AccountId); // the first driver left the app running at the handover point
+        Assert.Single(f.Realtime.Points);
+        f.Clock.Now = f.Clock.Now.AddSeconds(15);
+        await f.Service.RecordAsync(f.TransportId, f.Point(1.5m), next.AccountId);
+        Assert.Equal(2, f.Realtime.Points.Count); Assert.Equal(1.5m, (await f.Service.GetAsync(f.TransportId, f.Manager.AccountId)).Truck!.Longitude);
+    }
+
+    [Fact]
+    public async Task Geofence_FinalBoundaryNeverWritesTimesAndReportsTheArrivalOnEveryCall()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         f.First.ActualArrivalAt = Fixture.Now.AddMinutes(-30); f.Second.ActualDepartureAt = Fixture.Now.AddMinutes(-20);
         await db.SaveChangesAsync();
-        var firstArrival = f.First.ActualArrivalAt; var departure = f.Second.ActualDepartureAt;
         var request = f.Point(2);
-        await f.Service.RecordAsync(f.TransportId, request, f.Driver.AccountId);
-        Assert.Equal(Fixture.Now, f.Second.ActualArrivalAt); Assert.Equal(Fixture.Now, f.Route.TransportPlan.Transport.ActualArrivalAt);
-        Assert.Equal(firstArrival, f.First.ActualArrivalAt); Assert.Equal(departure, f.Second.ActualDepartureAt);
-        Assert.Equal(RoutePlanStatus.ACTIVE, f.Route.Status); Assert.Equal(TransportStatus.IN_TRANSIT, f.Route.TransportPlan.Transport.Status);
+
+        var accepted = await f.Service.RecordAsync(f.TransportId, request, f.Driver.AccountId);
+
+        // The last boundary always needs a signed delivery, so GPS leaves every time alone.
+        Assert.Null(f.Second.ActualArrivalAt); Assert.Null(f.Route.TransportPlan.Transport.ActualArrivalAt);
+        var arrival = accepted.Arrival!;
+        Assert.True(arrival.HandoverRequired); Assert.Null(arrival.ArrivalAt); Assert.Equal(3, arrival.BoundaryNo);
+        Assert.Equal(f.Second.RoutePlanRouteId, arrival.FromRoutePlanRouteId); Assert.Null(arrival.ToRoutePlanRouteId);
+        Assert.Equal(500, arrival.RadiusMeters); Assert.Null(arrival.ExistingHandover); Assert.Equal(2, arrival.Location.Longitude);
         request.RecordedAt = request.RecordedAt!.Value.AddSeconds(15);
-        await f.Service.RecordAsync(f.TransportId, request, f.Driver.AccountId);
-        Assert.Equal(Fixture.Now, f.Second.ActualArrivalAt); Assert.Equal(Fixture.Now, f.Route.TransportPlan.Transport.ActualArrivalAt);
-        Assert.Null((await f.Service.GetAsync(f.TransportId, f.Manager.AccountId)).NextStop);
-        Assert.Equal(0, (await f.Service.GetAsync(f.TransportId, f.Manager.AccountId)).PlannedRemainingDistanceKm);
+        Assert.NotNull((await f.Service.RecordAsync(f.TransportId, request, f.Driver.AccountId)).Arrival);
+        Assert.Equal(TransportStatus.IN_TRANSIT, f.Route.TransportPlan.Transport.Status); Assert.Equal(RoutePlanStatus.ACTIVE, f.Route.Status);
+    }
+
+    [Fact]
+    public async Task Geofence_DifferentDriversNeedAHandover_NothingIsWrittenAndTheExistingRecordIsReported()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        f.Second.DriverEmployeeId = (await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.DRIVER)).EmployeeId;
+        var record = new HandoverRecord { HandoverRecordId = Guid.NewGuid(), TransportId = f.TransportId, SequenceNo = 1, HandoverCode = "HO-1", HandoverType = HandoverType.TRANSFER,
+            Status = HandoverStatus.PLANNED, FromType = HandoverPartyType.EMPLOYEE, ToType = HandoverPartyType.EMPLOYEE, FromRoutePlanRouteId = f.First.RoutePlanRouteId,
+            ToRoutePlanRouteId = f.Second.RoutePlanRouteId, PlannedHandoverAt = Fixture.Now, CreatedAt = Fixture.Now, UpdatedAt = Fixture.Now };
+        db.Add(record); await db.SaveChangesAsync();
+
+        var arrival = (await f.Service.RecordAsync(f.TransportId, f.Point(1), f.Driver.AccountId)).Arrival!;
+
+        Assert.Null(f.First.ActualArrivalAt); Assert.Null(f.Second.ActualDepartureAt);
+        Assert.True(arrival.HandoverRequired); Assert.Null(arrival.ArrivalAt); Assert.Equal(2, arrival.BoundaryNo);
+        Assert.Equal(f.Second.RoutePlanRouteId, arrival.ToRoutePlanRouteId);
+        Assert.Equal(new Tracking.Response.ExistingHandover(record.HandoverRecordId, "PLANNED"), arrival.ExistingHandover);
+    }
+
+    [Fact]
+    public async Task Geofence_SameDriverBoundaryTimesTheArrivalAndReportsItOnlyOnce()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var request = f.Point(1);
+
+        var arrival = (await f.Service.RecordAsync(f.TransportId, request, f.Driver.AccountId)).Arrival!;
+
+        Assert.False(arrival.HandoverRequired); Assert.Equal(DbTime.AsUtc(Fixture.Now), arrival.ArrivalAt); Assert.Equal(2, arrival.BoundaryNo);
+        Assert.Equal(f.Second.RoutePlanRouteId, arrival.ToRoutePlanRouteId); Assert.Null(arrival.ExistingHandover);
+        request.RecordedAt = request.RecordedAt!.Value.AddSeconds(15);
+        Assert.Null((await f.Service.RecordAsync(f.TransportId, request, f.Driver.AccountId)).Arrival);
+    }
+
+    [Fact]
+    public async Task ConfirmArrival_OverwritesTheGpsTimeAndStartsTheNextSegmentAtTheSameMoment()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        await f.Service.RecordAsync(f.TransportId, f.Point(1), f.Driver.AccountId);
+        f.Clock.Now = f.Clock.Now.AddMinutes(6);
+
+        var result = await f.Service.ConfirmArrivalAsync(f.TransportId, f.First.RoutePlanRouteId, new() { Latitude = FixtureLatitude, Longitude = 1 }, f.Driver.AccountId);
+
+        var confirmedAt = f.Clock.Now;
+        Assert.Equal(2, result.BoundaryNo);
+        Assert.Equal(("COMPLETED", confirmedAt), (result.From.Status, result.From.ActualArrivalAt));
+        Assert.Equal(("IN_TRANSIT", confirmedAt, null), (result.To.Status, result.To.ActualDepartureAt, result.To.ActualArrivalAt));
+        Assert.Equal(confirmedAt.UtcDateTime, f.First.ActualArrivalAt); Assert.Equal(confirmedAt.UtcDateTime, f.Second.ActualDepartureAt);
+        Assert.Empty(await db.Notifications.ToListAsync());
+    }
+
+    [Theory]
+    [InlineData("last-segment", "HANDOVER_REQUIRED")]
+    [InlineData("other-driver-next", "HANDOVER_REQUIRED")]
+    [InlineData("not-started", "SEGMENT_NOT_STARTED")]
+    [InlineData("unknown-segment", "SEGMENT_NOT_FOUND")]
+    [InlineData("far-before-gps", "NOT_IN_ARRIVAL_RADIUS")]
+    [InlineData("far-after-gps", "ARRIVAL_LOCKED")]
+    [InlineData("other-segment-driver", "FORBIDDEN")]
+    public async Task ConfirmArrival_RejectsWithoutChangingAnyTime(string scenario, string code)
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var other = await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.DRIVER);
+        var segment = f.First.RoutePlanRouteId; var longitude = 1m;
+        switch (scenario)
+        {
+            case "last-segment": f.Second.ActualDepartureAt = Fixture.Now; segment = f.Second.RoutePlanRouteId; longitude = 2; break;
+            case "other-driver-next": f.Second.DriverEmployeeId = other.EmployeeId; break;
+            case "not-started": f.First.ActualDepartureAt = null; break;
+            case "unknown-segment": segment = Guid.NewGuid(); break;
+            case "far-before-gps": longitude = 1.05m; break;
+            case "far-after-gps": longitude = 1.05m; f.First.ActualArrivalAt = Fixture.Now.AddMinutes(-3); f.Second.ActualDepartureAt = Fixture.Now.AddMinutes(-3); break;
+            case "other-segment-driver": f.First.DriverEmployeeId = other.EmployeeId; break;
+        }
+        await db.SaveChangesAsync();
+        var arrivalBefore = f.First.ActualArrivalAt; var departureBefore = f.Second.ActualDepartureAt;
+
+        var error = await Record.ExceptionAsync(() => f.Service.ConfirmArrivalAsync(f.TransportId, segment, new() { Latitude = FixtureLatitude, Longitude = longitude }, f.Driver.AccountId));
+
+        Assert.Equal(code, Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(error).ErrorCode);
+        Assert.Equal(arrivalBefore, f.First.ActualArrivalAt); Assert.Equal(departureBefore, f.Second.ActualDepartureAt);
+    }
+
+    [Fact]
+    public async Task ConfirmArrival_ValidatesCoordinatesAndRequiresTheTransportInTransit()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        Assert.Equal("VALIDATION_ERROR", Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(await Record.ExceptionAsync(() =>
+            f.Service.ConfirmArrivalAsync(f.TransportId, f.First.RoutePlanRouteId, new() { Latitude = 91, Longitude = 1 }, f.Driver.AccountId))).ErrorCode);
+        Assert.Equal("VALIDATION_ERROR", Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(await Record.ExceptionAsync(() =>
+            f.Service.ConfirmArrivalAsync(f.TransportId, f.First.RoutePlanRouteId, new() { Latitude = FixtureLatitude }, f.Driver.AccountId))).ErrorCode);
+        f.Route.TransportPlan.Transport.Status = TransportStatus.COMPLETED; await db.SaveChangesAsync();
+        Assert.Equal("INVALID_TRANSPORT_STATUS", Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(await Record.ExceptionAsync(() =>
+            f.Service.ConfirmArrivalAsync(f.TransportId, f.First.RoutePlanRouteId, new() { Latitude = FixtureLatitude, Longitude = 1 }, f.Driver.AccountId))).ErrorCode);
     }
 
     [Fact]

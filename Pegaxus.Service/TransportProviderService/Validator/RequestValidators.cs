@@ -47,7 +47,6 @@ public sealed class CreateRequestValidator : AbstractValidator<Request.CreateReq
     public CreateRequestValidator()
     {
         Include(new SaveRequestValidator());
-        RuleFor(request => request.ProviderCode).Must(value => !string.IsNullOrWhiteSpace(value)).MaximumLength(50);
     }
 }
 
@@ -57,8 +56,6 @@ public sealed class UpdateRequestValidator : AbstractValidator<Request.UpdateReq
     {
         Include(new SaveRequestValidator());
         RuleFor(request => request.LastUpdatedAt).NotEmpty();
-        RuleFor(request => request.ProviderCode).Must(value => !string.IsNullOrWhiteSpace(value)).MaximumLength(50)
-            .When(request => request.ProviderCode is not null);
     }
 }
 

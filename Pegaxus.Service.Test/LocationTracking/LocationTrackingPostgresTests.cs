@@ -28,8 +28,8 @@ public class LocationTrackingPostgresTests
                 Assert.Contains(f.CustomerAccountId, f.Realtime.Viewers); Assert.Contains(f.Manager.AccountId, f.Realtime.Viewers);
                 Assert.DoesNotContain(f.Driver.AccountId, f.Realtime.Viewers);
             }
-            f.First.ActualArrivalAt = Fixture.Now.AddMinutes(-30); f.Second.ActualDepartureAt = Fixture.Now.AddMinutes(-20); await seed.SaveChangesAsync();
-            var point = f.Point(2); point.RecordedAt = point.RecordedAt!.Value.AddSeconds(15);
+            // One driver runs both segments, so entering the end of segment 1 is timed by GPS and starts segment 2 in the same save.
+            var point = f.Point(1); point.RecordedAt = point.RecordedAt!.Value.AddSeconds(15);
             var failed = new SaveAudit { FailAfterSave = true };
             await using (var writer = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(failed).Options))
                 await Assert.ThrowsAsync<IOException>(() => f.CreateService(writer).RecordAsync(f.TransportId, point, f.Driver.AccountId));
@@ -37,26 +37,28 @@ public class LocationTrackingPostgresTests
             Assert.Equal(0.5m, f.State.For(f.TransportId).Latest!.Longitude); Assert.Single(f.Realtime.Points);
             await using (var verify = new AppDbContext(options))
             {
-                Assert.Null((await verify.Transports.SingleAsync()).ActualArrivalAt);
-                Assert.Null((await verify.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.Second.RoutePlanRouteId)).ActualArrivalAt);
+                Assert.Null((await verify.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.First.RoutePlanRouteId)).ActualArrivalAt);
+                Assert.Null((await verify.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.Second.RoutePlanRouteId)).ActualDepartureAt);
                 Assert.Empty(await verify.OutboxMessages.ToListAsync());
             }
             var audit = new SaveAudit();
             await using (var writer = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(audit).Options))
             {
-                await writer.Transports.SingleAsync(); await writer.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.Second.RoutePlanRouteId);
+                await writer.RoutePlanRoutes.ToListAsync();
                 await f.CreateService(writer).RecordAsync(f.TransportId, point, f.Driver.AccountId);
                 Assert.Equal(1, audit.Calls); Assert.Equal((2, 0, 0), audit.Added);
-                var later = f.Point(2); later.RecordedAt = point.RecordedAt!.Value.AddSeconds(15);
+                var later = f.Point(1); later.RecordedAt = point.RecordedAt!.Value.AddSeconds(15);
                 await f.CreateService(writer).RecordAsync(f.TransportId, later, f.Driver.AccountId);
                 Assert.Equal(1, audit.Calls);
             }
             await using (var verify = new AppDbContext(options))
             {
-                var transport = await verify.Transports.SingleAsync(); var segment = await verify.RoutePlanRoutes.SingleAsync(item => item.RoutePlanRouteId == f.Second.RoutePlanRouteId);
-                Assert.Equal(DbTime.Truncate(point.RecordedAt!.Value), transport.ActualArrivalAt); Assert.Equal(transport.ActualArrivalAt, segment.ActualArrivalAt);
-                Assert.Equal(DateTimeKind.Unspecified, segment.ActualArrivalAt!.Value.Kind);
-                Assert.Equal(TransportStatus.IN_TRANSIT, transport.Status); Assert.Equal(Fixture.Now.AddMinutes(-20), segment.ActualDepartureAt);
+                var transport = await verify.Transports.SingleAsync();
+                var first = await verify.RoutePlanRoutes.SingleAsync(item => item.RoutePlanRouteId == f.First.RoutePlanRouteId);
+                var second = await verify.RoutePlanRoutes.SingleAsync(item => item.RoutePlanRouteId == f.Second.RoutePlanRouteId);
+                Assert.Equal(DbTime.Truncate(point.RecordedAt!.Value), first.ActualArrivalAt); Assert.Equal(first.ActualArrivalAt, second.ActualDepartureAt);
+                Assert.Equal(DateTimeKind.Unspecified, first.ActualArrivalAt!.Value.Kind);
+                Assert.Null(second.ActualArrivalAt); Assert.Null(transport.ActualArrivalAt); Assert.Equal(TransportStatus.IN_TRANSIT, transport.Status);
             }
             var notificationFailure = new SaveAudit { FailAfterSave = true };
             await using (var writer = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(notificationFailure).Options))

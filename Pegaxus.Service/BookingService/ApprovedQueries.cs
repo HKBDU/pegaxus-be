@@ -222,11 +222,11 @@ public sealed partial class Service
             query = request.HasRoutePlan.Value
                 ? query.Where(booking => booking.Transport != null && booking.Transport.TransportPlans.Any(plan =>
                     plan.CreatedAt == booking.Transport.TransportPlans.Max(current => current.CreatedAt) &&
-                    plan.RoutePlans.Any(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED &&
+                    plan.RoutePlans.Any(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED && routePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                         routePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.PRIMARY))))
                 : query.Where(booking => booking.Transport == null || !booking.Transport.TransportPlans.Any(plan =>
                     plan.CreatedAt == booking.Transport.TransportPlans.Max(current => current.CreatedAt) &&
-                    plan.RoutePlans.Any(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED &&
+                    plan.RoutePlans.Any(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED && routePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                         routePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.PRIMARY))));
         }
 
@@ -236,7 +236,7 @@ public sealed partial class Service
                 throw new BadRequestException("Route plan status is invalid", "INVALID_ROUTE_PLAN_STATUS");
             query = query.Where(booking => booking.Transport != null && booking.Transport.TransportPlans.Any(plan =>
                 plan.CreatedAt == booking.Transport.TransportPlans.Max(current => current.CreatedAt) &&
-                plan.RoutePlans.Any(routePlan => routePlan.Status == status && routePlan.Status != RoutePlanStatus.CANCELLED &&
+                plan.RoutePlans.Any(routePlan => routePlan.Status == status && routePlan.Status != RoutePlanStatus.CANCELLED && routePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                     routePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.PRIMARY))));
         }
 
@@ -310,7 +310,7 @@ public sealed partial class Service
                     : booking.Transport.TransportPlans
                         .OrderByDescending(plan => plan.CreatedAt)
                         .SelectMany(plan => plan.RoutePlans
-                            .Where(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED &&
+                            .Where(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED && routePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                                 routePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.PRIMARY))
                             .OrderByDescending(routePlan => routePlan.CreatedAt)
                             .Select(routePlan => new Response.RoutePlanSummary

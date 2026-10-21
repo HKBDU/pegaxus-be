@@ -77,10 +77,12 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         await RequireEmployeeAsync(accountId, true, cancellationToken);
         Validate(request, createValidator);
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        var createdAt = UtcNowTruncated();
+        var prefix = $"PRV-{createdAt:yyyyMMdd}-";
         var item = new TransportProvider
         {
-            TransportProviderId = Guid.NewGuid(), ProviderCode = request.ProviderCode.Trim().ToUpperInvariant(),
-            Status = ProviderStatus.ACTIVE, CreatedAt = UtcNowTruncated()
+            TransportProviderId = Guid.NewGuid(), Status = ProviderStatus.ACTIVE, CreatedAt = createdAt,
+            ProviderCode = DailyCodes.Next(prefix, await db.TransportProviders.AsNoTracking().Where(other => other.ProviderCode.StartsWith(prefix)).Select(other => other.ProviderCode).ToListAsync(cancellationToken), "PROVIDER_CODE_EXHAUSTED")
         };
         await ApplyAsync(item, request, cancellationToken);
         db.TransportProviders.Add(item);
@@ -97,8 +99,6 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         var item = await GetForUpdateAsync(id, cancellationToken);
         CheckVersion(item, request.LastUpdatedAt);
-        if (request.ProviderCode is not null && !string.Equals(request.ProviderCode.Trim(), item.ProviderCode, StringComparison.OrdinalIgnoreCase))
-            throw new BadRequestException("ProviderCode cannot be changed.");
         var before = Snapshot(item);
         await ApplyAsync(item, request, cancellationToken);
         await SaveAsync(item, accountId, "UPDATE", before, null, cancellationToken);
@@ -150,7 +150,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var item = await GetForUpdateAsync(id, cancellationToken);
         if (await db.RoutePlanRoutes.AnyAsync(route => route.TransportProviderId == id &&
-            route.RoutePlan.Status != RoutePlanStatus.COMPLETED && route.RoutePlan.Status != RoutePlanStatus.CANCELLED, cancellationToken))
+            route.RoutePlan.Status != RoutePlanStatus.COMPLETED && route.RoutePlan.Status != RoutePlanStatus.CANCELLED && route.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER, cancellationToken))
             throw new ConflictException("The provider is assigned to route segments that are not completed or cancelled", "PROVIDER_IN_USE");
         var before = Snapshot(item);
         item.IsDeleted = true;
@@ -184,9 +184,6 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
     private async Task ApplyAsync(TransportProvider item, Request.SaveRequest request, CancellationToken cancellationToken)
     {
         var taxCode = request.TaxCode.Trim().ToUpperInvariant();
-        if (await db.TransportProviders.AnyAsync(other => !other.IsDeleted && other.TransportProviderId != item.TransportProviderId &&
-            other.ProviderCode.ToUpper() == item.ProviderCode.ToUpper(), cancellationToken))
-            throw Duplicate("PROVIDER_CODE_DUPLICATED");
         if (await db.TransportProviders.AnyAsync(other => !other.IsDeleted && other.TransportProviderId != item.TransportProviderId &&
             other.TaxCode != null && other.TaxCode.ToUpper() == taxCode, cancellationToken))
             throw Duplicate("TAX_CODE_DUPLICATED");

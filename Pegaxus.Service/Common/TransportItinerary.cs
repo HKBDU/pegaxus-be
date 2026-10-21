@@ -14,6 +14,8 @@ public static class TransportItinerary
     {
         public bool InvolvesOutsourcedSegment => IsOutsourced(From) || IsOutsourced(To);
 
+        public bool HandoverRequired => Position != BoundaryPosition.Middle || HandoverRules.RequiredBetween(From?.Route.DriverEmployeeId, To?.Route.DriverEmployeeId);
+
         private static bool IsOutsourced(Segment? segment) => segment?.Route.TransportProviderId.HasValue == true;
     }
 
@@ -107,7 +109,7 @@ public static class TransportItinerary
     }
 
     public static bool CanCreate(Boundary boundary, TransportStatus transportStatus, bool callerMayCreate) =>
-        callerMayCreate && boundary.ExistingHandover is null &&
+        callerMayCreate && boundary.HandoverRequired && boundary.ExistingHandover is null &&
         transportStatus == (boundary.Position == BoundaryPosition.Start ? TransportStatus.READY : TransportStatus.IN_TRANSIT);
 
     private static bool IsVisible(RoutePlanRoute route) => route.SupersededAt is null || route.ActualDepartureAt.HasValue;

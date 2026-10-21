@@ -18,6 +18,8 @@ public sealed partial class Service
             throw new BadRequestException("At least one route segment is required");
         if (request.Action is not ("SAVE_DRAFT" or "SUBMIT_FOR_LEGAL_REVIEW"))
             throw new BadRequestException("action must be SAVE_DRAFT or SUBMIT_FOR_LEGAL_REVIEW");
+        if (request.IncidentReportId.HasValue && routeType != RouteType.RETURN)
+            throw new BadRequestException("incidentReportId is only allowed for RETURN route plans", "VALIDATION_ERROR");
         if (routeType == RouteType.RETURN && !updating && request.Action != "SAVE_DRAFT")
             throw new BadRequestException("RETURN route plans only support SAVE_DRAFT");
         if (routeType is RouteType.BACKUP or RouteType.RETURN && string.IsNullOrWhiteSpace(request.RouteNote) || routeType is RouteType.BACKUP or RouteType.RETURN && request.RouteNote!.Trim().Length < 10)
@@ -122,7 +124,13 @@ public sealed partial class Service
             throw new NotFoundException("Vehicle not found", "VEHICLE_NOT_FOUND");
         if (vehicles.Any(item => item.TransportMode != route.TransportMode))
             throw new UnprocessableEntityException("The vehicle transport mode does not match the segment", "VEHICLE_MODE_MISMATCH");
-        if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED)))
+        // A RETURN continues the trip, so the vehicles already driving this plan's primary route are still usable.
+        var ownVehicleIds = routeType == RouteType.RETURN
+            ? await db.RoutePlanRouteVehicles.Where(item => item.RoutePlanRoute.RoutePlan.TransportPlanId == plan.TransportPlanId)
+                .Select(item => item.VehicleId).Distinct().ToListAsync(cancellationToken)
+            : [];
+        if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED) &&
+                !(item.Status == VehicleStatus.IN_USE && ownVehicleIds.Contains(item.VehicleId))))
             throw new UnprocessableEntityException("The vehicle is not available", "VEHICLE_UNAVAILABLE");
         if (vehicles.Sum(item => item.CapacityHorses ?? 0) < plan.Transport.Booking.BookingHorses.Count)
             throw new UnprocessableEntityException("Total vehicle capacity is lower than the number of horses in the booking", "VEHICLE_CAPACITY_EXCEEDED");
@@ -133,17 +141,15 @@ public sealed partial class Service
             throw new UnprocessableEntityException("The vehicle registration or insurance is expired for this segment", "VEHICLE_DOCUMENT_EXPIRED");
 
         var vehicleIds = vehicles.Select(item => item.VehicleId).ToList();
-        var alternativesAreExclusive = routeType is RouteType.PRIMARY or RouteType.BACKUP;
         var departureAt = Truncate(request.PlannedDepartureAt);
         var arrivalAt = Truncate(request.PlannedArrivalAt);
         var overlappingAssignment = await db.RoutePlanRouteVehicles
             .Include(item => item.RoutePlanRoute)
                 .ThenInclude(item => item.RoutePlan)
             .Where(item => vehicleIds.Contains(item.VehicleId) &&
-                item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED &&
+                item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                 (!excludedRoutePlanId.HasValue || item.RoutePlanRoute.RoutePlanId != excludedRoutePlanId.Value) &&
-                (!alternativesAreExclusive || item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId ||
-                    item.RoutePlanRoute.RoutePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.RETURN)) &&
+                item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId &&
                 item.RoutePlanRoute.PlannedDepartureAt < arrivalAt &&
                 item.RoutePlanRoute.PlannedArrivalAt > departureAt)
             .Select(item => item.VehicleId)
@@ -204,7 +210,7 @@ public sealed partial class Service
     {
         if (role == EmployeeRole.FLEET_ROUTE_COORDINATOR)
             return;
-        if (role == EmployeeRole.LOGISTICS_MANAGER && type == RouteType.BACKUP)
+        if (role == EmployeeRole.LOGISTICS_MANAGER && type is RouteType.BACKUP or RouteType.RETURN)
             return;
         throw new ForbiddenException("The current role cannot manage this route plan type");
     }

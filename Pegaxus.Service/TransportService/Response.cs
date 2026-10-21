@@ -55,6 +55,7 @@ public static class Response
         public decimal? DistanceKm { get; init; }
         public required string Status { get; init; }
         public bool IsCurrent { get; init; }
+        public bool IsMine { get; init; }
         public DateTimeOffset? PlannedDepartureAt { get; init; }
         public DateTimeOffset? PlannedArrivalAt { get; init; }
         public DateTimeOffset? ActualDepartureAt { get; init; }
@@ -75,7 +76,8 @@ public static class Response
     public sealed record VehicleBrief(Guid VehicleId, string VehicleCode, string? LicensePlate);
 
     public sealed record HandoverBoundary(int BoundaryNo, Guid? FromRoutePlanRouteId, Guid? ToRoutePlanRouteId,
-        HandoverLocation Location, IReadOnlyList<string> AllowedHandoverTypes, HandoverBrief? ExistingHandover, bool CanCreate);
+        HandoverLocation Location, bool HandoverRequired, DateTimeOffset? ArrivalAt, IReadOnlyList<string> AllowedHandoverTypes,
+        HandoverBrief? ExistingHandover, bool CanCreate, IReadOnlyList<string> CreateModes);
     public sealed record HandoverLocation(string LocationName, string? Address, string Country);
     public sealed record HandoverBrief(Guid HandoverRecordId, string HandoverCode, string HandoverType, string Status);
 }

@@ -161,14 +161,34 @@ public class JourneyProgressTests
         Assert.False(result.HandoverBoundaries[3].CanCreate);
         Assert.Null(result.HandoverBoundaries[2].ExistingHandover);
         Assert.Equal(new[] { "TRANSFER", "BORDER_HANDOVER" }, result.HandoverBoundaries[2].AllowedHandoverTypes);
-        Assert.False((await f.Service.GetSegmentsAsync(f.Specialist.AccountId, f.Transport.TransportId)).HandoverBoundaries[2].CanCreate);
-        Assert.True((await f.Service.GetSegmentsAsync(f.Coordinator.AccountId, f.Transport.TransportId)).HandoverBoundaries[3].CanCreate);
+        Assert.Equal(new[] { "START_NOW" }, result.HandoverBoundaries[2].CreateModes);
+        // A specialist can only schedule; a coordinator can also start on the spot.
+        var specialist = (await f.Service.GetSegmentsAsync(f.Specialist.AccountId, f.Transport.TransportId)).HandoverBoundaries[2];
+        Assert.True(specialist.CanCreate); Assert.Equal(new[] { "SCHEDULE" }, specialist.CreateModes);
+        var coordinator = (await f.Service.GetSegmentsAsync(f.Coordinator.AccountId, f.Transport.TransportId)).HandoverBoundaries[3];
+        Assert.True(coordinator.CanCreate); Assert.Equal(new[] { "START_NOW", "SCHEDULE" }, coordinator.CreateModes);
         var live = f.AddHandover(db, HandoverType.BORDER_HANDOVER, HandoverStatus.IN_PROGRESS, f.Segments[1], f.Segments[2], 4);
         await db.SaveChangesAsync();
         result = await f.Service.GetSegmentsAsync(f.Manager.AccountId, f.Transport.TransportId);
         Assert.Equal(live.HandoverRecordId, result.HandoverBoundaries[2].ExistingHandover?.HandoverRecordId);
         Assert.False(result.HandoverBoundaries[2].CanCreate);
         Assert.NotEqual(cancelled.HandoverRecordId, result.HandoverBoundaries[2].ExistingHandover?.HandoverRecordId);
+    }
+
+    [Fact]
+    public async Task Boundaries_ReportWhetherAHandoverIsRequiredAndWhenTheSegmentArrived()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+
+        var boundaries = (await f.Service.GetSegmentsAsync(f.Manager.AccountId, f.Transport.TransportId)).HandoverBoundaries;
+
+        // Segments 1 and 2 share a driver, so their boundary is waived; pickup, delivery and a change of driver are not.
+        Assert.Equal(new[] { true, false, true, true }, boundaries.Select(item => item.HandoverRequired));
+        Assert.Null(boundaries[0].ArrivalAt); Assert.Equal(new DateTimeOffset(DateTime.SpecifyKind(Fixture.Day(2), DateTimeKind.Utc)), boundaries[1].ArrivalAt);
+        Assert.Null(boundaries[2].ArrivalAt);
+        Assert.Empty(boundaries[1].AllowedHandoverTypes); Assert.False(boundaries[1].CanCreate); Assert.Empty(boundaries[1].CreateModes);
+        Assert.Equal(new[] { "DELIVERY" }, boundaries[3].AllowedHandoverTypes);
     }
 
     [Fact]

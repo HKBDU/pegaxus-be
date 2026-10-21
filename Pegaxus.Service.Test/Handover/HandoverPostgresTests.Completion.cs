@@ -20,7 +20,7 @@ public partial class HandoverPostgresTests
     {
         await WithDatabaseAsync(async options =>
         {
-            await using var seed = new AppDbContext(options); var f = await Fixture.CreateAsync(seed); var vehicle = AddVehicle(seed, f.First, f.Second); await seed.SaveChangesAsync();
+            await using var seed = new AppDbContext(options); var f = await Fixture.CreateStartedAsync(seed); var vehicle = AddVehicle(seed, f.First, f.Second); await seed.SaveChangesAsync();
             var audit = new SaveAudit();
             await using (var writer = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(audit).Options))
             {
@@ -34,7 +34,8 @@ public partial class HandoverPostgresTests
                         .ExecuteUpdateAsync(setters => setters.SetProperty(segment => segment.ActualArrivalAt, gpsArrival));
                 f.Clock.Now = f.Clock.Now.AddHours(1);
                 await service.CompleteAsync(f.Transfer.HandoverRecordId, Request(f.Transfer), f.Receiver.AccountId);
-                Assert.Equal(gpsArrival, (await writer.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.First.RoutePlanRouteId)).ActualArrivalAt);
+                // The signing time is the official handover moment, so it replaces the earlier GPS time.
+                Assert.Equal(f.Clock.Now.UtcDateTime.Ticks, (await writer.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.First.RoutePlanRouteId)).ActualArrivalAt!.Value.Ticks);
                 f.Clock.Now = f.Clock.Now.AddHours(1);
                 var result = await service.CompleteAsync(f.Delivery.HandoverRecordId, Request(f.Delivery), f.Coordinator.AccountId);
                 Assert.Equal(f.Clock.Now.AddHours(24), result.Effects!.ClaimWindowEndsAt); Assert.Equal("COMPLETED", result.Transport.Status);
@@ -56,7 +57,7 @@ public partial class HandoverPostgresTests
     {
         await WithDatabaseAsync(async options =>
         {
-            await using var seed = new AppDbContext(options); var f = await Fixture.CreateAsync(seed); var vehicle = AddVehicle(seed, f.First, f.Second);
+            await using var seed = new AppDbContext(options); var f = await Fixture.CreateStartedAsync(seed); var vehicle = AddVehicle(seed, f.First, f.Second);
             f.Route.Status = RoutePlanStatus.ACTIVE; f.Route.TransportPlan.Status = TransportPlanStatus.IN_PROGRESS; f.Route.TransportPlan.Transport.Status = TransportStatus.IN_TRANSIT;
             f.First.ActualDepartureAt = f.First.ActualArrivalAt = f.Second.ActualDepartureAt = Fixture.Now.AddHours(-1); vehicle.Status = VehicleStatus.IN_USE; await seed.SaveChangesAsync();
             var failure = new SaveAudit { FailAfterSave = true };
@@ -65,7 +66,7 @@ public partial class HandoverPostgresTests
             Assert.Equal(1, failure.Calls); Assert.Equal((1, 3, 4), failure.Writes); Assert.Equal(2, f.Media.Confirmed.Count);
             await using var verify = new AppDbContext(options);
             var record = await verify.HandoverRecords.SingleAsync(item => item.HandoverRecordId == f.Delivery.HandoverRecordId);
-            Assert.Equal(HandoverStatus.PLANNED, record.Status); Assert.Null(record.CompletedAt); Assert.Null(record.SenderSignatureUrl); Assert.Null(record.ReceiverSignatureUrl);
+            Assert.Equal(HandoverStatus.IN_PROGRESS, record.Status); Assert.Null(record.CompletedAt); Assert.Null(record.SenderSignatureUrl); Assert.Null(record.ReceiverSignatureUrl);
             var transport = await verify.Transports.SingleAsync(); Assert.Equal(TransportStatus.IN_TRANSIT, transport.Status); Assert.Null(transport.CompletedAt); Assert.Null(transport.ActualArrivalAt);
             Assert.Null((await verify.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.Second.RoutePlanRouteId)).ActualArrivalAt);
             Assert.Equal(RoutePlanStatus.ACTIVE, (await verify.RoutePlans.SingleAsync()).Status); Assert.Equal(TransportPlanStatus.IN_PROGRESS, (await verify.TransportPlans.SingleAsync()).Status);
@@ -79,7 +80,7 @@ public partial class HandoverPostgresTests
     {
         await WithDatabaseAsync(async options =>
         {
-            await using var seed = new AppDbContext(options); var f = await Fixture.CreateAsync(seed);
+            await using var seed = new AppDbContext(options); var f = await Fixture.CreateStartedAsync(seed);
             await using (var writer = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(new CommitFailure()).Options))
                 await Assert.ThrowsAsync<IOException>(() => f.CreateService(writer).CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId));
             await using var verify = new AppDbContext(options);
@@ -94,7 +95,7 @@ public partial class HandoverPostgresTests
     {
         await WithDatabaseAsync(async options =>
         {
-            await using var seed = new AppDbContext(options); var f = await Fixture.CreateAsync(seed); AddVehicle(seed, f.First); await seed.SaveChangesAsync();
+            await using var seed = new AppDbContext(options); var f = await Fixture.CreateStartedAsync(seed); AddVehicle(seed, f.First); await seed.SaveChangesAsync();
             var saved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
             var competingLock = new LockSignal();
@@ -106,7 +107,7 @@ public partial class HandoverPostgresTests
             {
                 await saved.Task.WaitAsync(TimeSpan.FromSeconds(15));
                 await using (var pending = new AppDbContext(options))
-                { Assert.Equal(HandoverStatus.PLANNED, (await pending.HandoverRecords.SingleAsync(item => item.HandoverRecordId == f.Pickup.HandoverRecordId)).Status); Assert.Empty(await pending.OutboxMessages.ToArrayAsync()); }
+                { Assert.Equal(HandoverStatus.IN_PROGRESS, (await pending.HandoverRecords.SingleAsync(item => item.HandoverRecordId == f.Pickup.HandoverRecordId)).Status); Assert.Empty(await pending.OutboxMessages.ToArrayAsync()); }
                 var loser = Record.ExceptionAsync(() => f.CreateService(second).CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId));
                 await competingLock.Entered.Task.WaitAsync(TimeSpan.FromSeconds(15)); release.TrySetResult();
                 Assert.Equal("COMPLETED", (await winner).Status);

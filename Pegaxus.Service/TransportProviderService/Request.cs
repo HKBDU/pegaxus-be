@@ -26,14 +26,10 @@ public static class Request
         public string? Note { get; set; }
     }
 
-    public sealed class CreateRequest : SaveRequest
-    {
-        public string ProviderCode { get; set; } = string.Empty;
-    }
+    public sealed class CreateRequest : SaveRequest;
 
     public sealed class UpdateRequest : SaveRequest
     {
-        public string? ProviderCode { get; set; }
         public DateTimeOffset LastUpdatedAt { get; set; }
     }
 

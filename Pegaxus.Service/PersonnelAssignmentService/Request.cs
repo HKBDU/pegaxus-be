@@ -10,6 +10,7 @@ public static class Request
         public DateTimeOffset? AvailableFrom { get; set; }
         public DateTimeOffset? AvailableTo { get; set; }
         public string? Country { get; set; }
+        public Guid? TransportPlanId { get; set; }
         public string? Search { get; set; }
         public int PageIndex { get; set; } = 1;
         public int PageSize { get; set; } = 20;

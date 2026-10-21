@@ -33,6 +33,7 @@ public static class PostgresEnumConfiguration
             .HasPostgresEnum("dossier_template_status", new[] { "DRAFT", "ACTIVE", "INACTIVE" })
             .HasPostgresEnum("emergency_cost_category", new[] { "VETERINARY", "MEDICATION", "VEHICLE_REPAIR", "TOWING", "REPLACEMENT_VEHICLE", "EMERGENCY_STABLE", "ROUTE_CHANGE", "ACCOMMODATION", "OTHER" })
             .HasPostgresEnum("emergency_cost_status", new[] { "PENDING", "APPROVED", "REJECTED", "CANCELLED" })
+            .HasPostgresEnum("emergency_receipt_status", new[] { "NOT_REQUIRED", "PENDING", "SUBMITTED", "APPROVED", "REJECTED" })
             .HasPostgresEnum("employee_role", new[] { "LOGISTICS_MANAGER", "TRANSPORT_SPECIALIST", "FLEET_ROUTE_COORDINATOR", "DRIVER", "ESCORT" })
             .HasPostgresEnum("handover_party_type", new[] { "CUSTOMER", "EMPLOYEE", "PROVIDER" })
             .HasPostgresEnum("handover_status", new[] { "PLANNED", "IN_PROGRESS", "COMPLETED", "CANCELLED" })

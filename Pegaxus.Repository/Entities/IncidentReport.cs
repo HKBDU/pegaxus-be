@@ -50,6 +50,8 @@ public partial class IncidentReport
 
     public virtual ICollection<EmergencyCostRequest> EmergencyCostRequests { get; set; } = new List<EmergencyCostRequest>();
 
+    public virtual ICollection<IncidentPhoto> IncidentPhotos { get; set; } = new List<IncidentPhoto>();
+
     public virtual Employee Employee { get; set; } = null!;
 
     public virtual ICollection<HorseHealthIncidentDetail> HorseHealthIncidentDetails { get; set; } = new List<HorseHealthIncidentDetail>();

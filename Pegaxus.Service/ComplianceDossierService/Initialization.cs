@@ -60,7 +60,7 @@ public sealed partial class Service
         {
             ComplianceDossierId = Guid.NewGuid(), DossierCode = await NextDossierCodeAsync(now, cancellationToken),
             TransportId = booking.Transport!.TransportId, DossierTemplateId = request.DossierTemplateId,
-            Status = ComplianceDossierStatus.IN_PREPARATION, Note = request.Note?.Trim(),
+            Status = ComplianceDossierStatus.DRAFT, Note = request.Note?.Trim(),
             OpenedAt = now, CreatedAt = now, UpdatedAt = now
         };
         foreach (var item in requirements)
@@ -75,9 +75,6 @@ public sealed partial class Service
             });
         }
         _db.ComplianceDossiers.Add(dossier);
-        AddNotification(booking.Customer.AccountId, null, dossier, "Compliance dossier opened",
-            $"Compliance dossier {dossier.DossierCode} is ready for booking {booking.BookingCode}. Open it to see the documents you need to upload.", now);
-        await QueueDossierUpdateMailAsync(booking.Customer.AccountId, dossier, MailService.EmailBodies.DossierUpdateKind.Opened, null, null, now, cancellationToken);
         try
         {
             await _db.SaveChangesAsync(cancellationToken);
@@ -228,6 +225,7 @@ public sealed partial class Service
         ComplianceDossierId = dossier?.ComplianceDossierId, DossierCode = dossier?.DossierCode,
         BookingId = booking.BookingId, BookingUpdatedAt = new DateTimeOffset(DateTime.SpecifyKind(booking.UpdatedAt, DateTimeKind.Utc)),
         TransportId = booking.Transport!.TransportId, DossierTemplateId = request.DossierTemplateId, Requirements = requirements,
+        Status = dossier?.Status.ToString() ?? ComplianceDossierStatus.DRAFT.ToString(),
         Items = requirements.GroupBy(item => item.ComplianceRequirementId).Select(group => new Request.InitializationItemRequest
         {
             ComplianceRequirementId = group.Key, AppliesPerHorse = group.First().HorseId.HasValue,

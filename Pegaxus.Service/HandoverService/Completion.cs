@@ -25,7 +25,8 @@ public sealed partial class Service
         var actor = await ActorAsync(accountId, cancellationToken);
         var item = await LockAsync(handoverRecordId, cancellationToken);
         if (!await CanOperateAsync(item, actor, cancellationToken)) throw Forbidden();
-        if (item.Status is not (HandoverStatus.PLANNED or HandoverStatus.IN_PROGRESS)) throw InvalidStatus(item);
+        // A scheduled record must be started first, so completion always follows a deliberate start.
+        if (item.Status != HandoverStatus.IN_PROGRESS) throw InvalidStatus(item);
         if (Truncate(request.LastUpdatedAt!.Value) != Truncate(item.UpdatedAt))
             throw new ConflictException("The handover record was just modified. Please reload the page", "HANDOVER_MODIFIED");
         var (transport, segments) = await LockJourneyAsync(item.TransportId, cancellationToken);
@@ -35,6 +36,10 @@ public sealed partial class Service
         var effective = ordered.Select(entry => segments.Single(segment => segment.RoutePlanRouteId == entry.Id)).ToArray();
         var customerId = await db.Bookings.Where(booking => booking.BookingId == transport.BookingId).Select(booking => booking.CustomerId).SingleAsync(cancellationToken);
         ValidateBoundary(item, segments, effective, customerId);
+        // Coordinates only prove the device is at the meeting point; they are discarded. A location without coordinates cannot be checked.
+        if (await GeofenceAsync(item, cancellationToken) is { } geofence &&
+            Geo.DistanceMeters(request.Latitude!.Value, request.Longitude!.Value, geofence.Latitude, geofence.Longitude) > geofence.RadiusMeters)
+            throw new UnprocessableEntityException("You are not within the handover radius of the handover point", "NOT_IN_HANDOVER_RADIUS");
         var now = Truncate(clock.GetUtcNow());
         ApplyCompletion(item, request, senderUrl, receiverUrl, now);
         var effects = await ApplyEffectsAsync(item, transport, segments, effective, now, cancellationToken);

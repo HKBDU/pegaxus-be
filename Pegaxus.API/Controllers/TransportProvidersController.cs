@@ -39,10 +39,10 @@ public sealed class TransportProvidersController(Providers.ITransportProviderSer
     /// <summary>
     /// Create a transport provider.
     /// </summary>
-    /// <remarks>Only Logistics Managers may create providers. Code and tax code must be unique among undeleted providers. Status defaults to ACTIVE.</remarks>
-    /// <param name="request">The provider code, name, tax code, supported modes and optional contact details.</param>
+    /// <remarks>Only Logistics Managers may create providers. The server generates the provider code (PRV-yyyyMMdd-0001); the tax code must be unique among undeleted providers. Status defaults to ACTIVE.</remarks>
+    /// <param name="request">The name, tax code, supported modes and optional contact details. The provider code is generated and returned in the response.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
-    /// <returns>201 Created with provider master data, or 409 when the code or tax code is duplicated.</returns>
+    /// <returns>201 Created with provider master data, or 409 TAX_CODE_DUPLICATED when the tax code is already used.</returns>
     [HttpPost]
     [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
     public async Task<IActionResult> Create([FromBody] Providers.Request.CreateRequest request, CancellationToken cancellationToken)

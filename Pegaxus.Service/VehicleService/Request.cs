@@ -12,6 +12,7 @@ public static class Request
         public string? Status { get; set; }
         public string? VehicleType { get; set; }
         public string? Country { get; set; }
+        public Guid? TransportPlanId { get; set; }
         public int? MinCapacity { get; set; }
         public DateOnly? AvailableFrom { get; set; }
         public DateOnly? AvailableTo { get; set; }
@@ -37,10 +38,7 @@ public static class Request
     }
 
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
-    public sealed class CreateRequest : VehicleFields
-    {
-        public string VehicleCode { get; set; } = "";
-    }
+    public sealed class CreateRequest : VehicleFields;
 
     [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
     public sealed class UpdateRequest : VehicleFields
