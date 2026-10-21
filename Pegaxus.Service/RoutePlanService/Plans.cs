@@ -27,7 +27,7 @@ public sealed partial class Service
             throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan or a Logistics Manager may create RETURN.");
         ValidateSaveRequest(request, routeType);
 
-        var primary = plan.RoutePlans.FirstOrDefault(item => item.Status != RoutePlanStatus.CANCELLED && GetRouteType(item) == RouteType.PRIMARY);
+        var primary = plan.RoutePlans.FirstOrDefault(item => item.Status is not (RoutePlanStatus.CANCELLED or RoutePlanStatus.REJECTED_BY_MANAGER) && GetRouteType(item) == RouteType.PRIMARY);
         if (routeType == RouteType.PRIMARY && primary is not null)
             throw new ConflictException("A primary route plan already exists for this transport plan", "PRIMARY_ROUTE_PLAN_EXISTS");
         if (routeType == RouteType.BACKUP && primary is null)
@@ -39,7 +39,7 @@ public sealed partial class Service
                 throw new ConflictException("A return route plan can only be created while the transport is in transit", "TRANSPORT_NOT_IN_TRANSIT");
             if (plan.Transport.MainDossier?.Status != ComplianceDossierStatus.APPROVED)
                 throw new ConflictException("A return route plan requires an approved compliance dossier (Transport is in transit)", "DOSSIER_NOT_APPROVED");
-            if (plan.RoutePlans.Any(item => item.Status != RoutePlanStatus.CANCELLED && GetRouteType(item) == RouteType.RETURN))
+            if (plan.RoutePlans.Any(item => item.Status is not (RoutePlanStatus.CANCELLED or RoutePlanStatus.REJECTED_BY_MANAGER) && GetRouteType(item) == RouteType.RETURN))
                 throw new ConflictException("A return route plan already exists for this transport plan", "RETURN_ROUTE_PLAN_EXISTS");
         }
 
@@ -115,7 +115,7 @@ public sealed partial class Service
         }
         var items = plan.RoutePlans.AsEnumerable();
         if (!request.IncludeCancelled)
-            items = items.Where(item => item.Status != RoutePlanStatus.CANCELLED);
+            items = items.Where(item => item.Status is not (RoutePlanStatus.CANCELLED or RoutePlanStatus.REJECTED_BY_MANAGER));
         if (routeType.HasValue)
             items = items.Where(item => GetRouteType(item) == routeType.Value);
         if (status.HasValue)
@@ -167,7 +167,7 @@ public sealed partial class Service
             Action = request.Action
         }, routeType, true);
 
-        var primary = routePlan.TransportPlan.RoutePlans.FirstOrDefault(item => item.Status != RoutePlanStatus.CANCELLED && GetRouteType(item) == RouteType.PRIMARY);
+        var primary = routePlan.TransportPlan.RoutePlans.FirstOrDefault(item => item.Status is not (RoutePlanStatus.CANCELLED or RoutePlanStatus.REJECTED_BY_MANAGER) && GetRouteType(item) == RouteType.PRIMARY);
         var existingTypes = routePlan.RoutePlanRoutes.ToDictionary(item => item.SequenceNo, item => item.RouteType);
         var materializedSegments = await MaterializeSegmentsAsync(request.Segments, routeType, routePlan.TransportPlan, routePlan.RoutePlanId,
             segment => SegmentType(segment, routeType, existingTypes), cancellationToken);

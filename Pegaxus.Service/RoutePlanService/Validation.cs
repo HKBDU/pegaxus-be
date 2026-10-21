@@ -147,7 +147,7 @@ public sealed partial class Service
             .Include(item => item.RoutePlanRoute)
                 .ThenInclude(item => item.RoutePlan)
             .Where(item => vehicleIds.Contains(item.VehicleId) &&
-                item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED &&
+                item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                 (!excludedRoutePlanId.HasValue || item.RoutePlanRoute.RoutePlanId != excludedRoutePlanId.Value) &&
                 item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId &&
                 item.RoutePlanRoute.PlannedDepartureAt < arrivalAt &&

@@ -64,7 +64,7 @@ public sealed partial class Service
         {
             TotalActive = dashboardItems.Count(item => item.Dossier.Status is not (ComplianceDossierStatus.APPROVED or ComplianceDossierStatus.CLOSED)),
             ReadyForDeparture = dashboardItems.Count(item => item.Dossier.Status == ComplianceDossierStatus.READY_FOR_SUBMISSION),
-            ActionRequired = dashboardItems.Count(item => item.Dossier.Status is ComplianceDossierStatus.REJECTED or ComplianceDossierStatus.IN_PREPARATION),
+            ActionRequired = dashboardItems.Count(item => item.Dossier.Status is ComplianceDossierStatus.DRAFT or ComplianceDossierStatus.REJECTED or ComplianceDossierStatus.IN_PREPARATION),
             SubmittedToAuthorities = dashboardItems.Count(item => item.Dossier.Status is ComplianceDossierStatus.SUBMITTED or ComplianceDossierStatus.PENDING),
             UrgentRisk = dashboardItems.Count(item => item.IsUrgentRisk)
         };

@@ -69,7 +69,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                     (!a.RoutePlanRoute.PlannedDepartureAt.HasValue || !a.RoutePlanRoute.PlannedArrivalAt.HasValue ||
                      a.RoutePlanRoute.PlannedArrivalAt < a.RoutePlanRoute.PlannedDepartureAt ||
                      a.RoutePlanRoute.ActualDepartureAt.HasValue && a.RoutePlanRoute.PlannedArrivalAt < now ||
-                     a.RoutePlanRoute.PlannedDepartureAt < end && a.RoutePlanRoute.PlannedArrivalAt >= start)));
+                     a.RoutePlanRoute.PlannedDepartureAt < end && a.RoutePlanRoute.PlannedArrivalAt > start)));
         }
         var count = await query.CountAsync(cancellationToken);
         var ordered = request.SortBy.Trim().ToLowerInvariant() switch
@@ -188,7 +188,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
 
     private IQueryable<RoutePlanRouteVehicle> UnfinishedAssignments() => db.RoutePlanRouteVehicles.AsNoTracking().Where(x =>
         x.RoutePlanRoute.ActualArrivalAt == null &&
-        x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.COMPLETED && x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED &&
+        x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.COMPLETED && x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
         x.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED &&
         x.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED &&
         x.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.COMPLETED &&

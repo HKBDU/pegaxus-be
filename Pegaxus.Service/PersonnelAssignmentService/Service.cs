@@ -308,7 +308,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
 
     private async Task SyncPlanLinksAsync(Guid planId, DateTime now, CancellationToken cancellationToken)
     {
-        var references = await db.RoutePlanRoutes.Where(x => x.RoutePlan.TransportPlanId == planId && x.RoutePlan.Status != RoutePlanStatus.CANCELLED).ToListAsync(cancellationToken);
+        var references = await db.RoutePlanRoutes.Where(x => x.RoutePlan.TransportPlanId == planId && x.RoutePlan.Status != RoutePlanStatus.CANCELLED && x.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER).ToListAsync(cancellationToken);
         var desired = references.SelectMany(x => new[] { (Id: x.DriverEmployeeId, Role: "DRIVER"), (Id: x.EscortEmployeeId, Role: "ESCORT") })
             .Where(x => x.Id.HasValue).Distinct().ToArray();
         var links = await db.EmployeeTransportPlans.Where(x => x.TransportPlanId == planId).ToListAsync(cancellationToken);

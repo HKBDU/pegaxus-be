@@ -30,7 +30,7 @@ public sealed partial class Service
                 // Only the driver of the segment in transit tracks the truck. A previous or next driver whose app is still running is acknowledged but
                 // ignored, so two phones cannot make the truck jump between two places. The signed handover moves the turn to the next driver.
                 if (CurrentSegment(segments, transport.Status)?.DriverEmployeeId != actor.EmployeeId)
-                    return new(clock.GetUtcNow());
+                    return new(clock.GetUtcNow(), false, "NOT_CURRENT_SEGMENT_DRIVER");
                 var recordedAt = request.RecordedAt!.Value.ToUniversalTime();
                 // Delayed and duplicate samples cannot move the truck backwards or repeat geofence effects.
                 if (entry.Latest is { } previous && previous.RecordedAt >= recordedAt)
@@ -74,7 +74,7 @@ public sealed partial class Service
                 await realtime.PublishAsync(point, viewers, CancellationToken.None);
             }
             catch (Exception error) { logger.LogWarning(error, "Could not stream location for transport {TransportId}; snapshot remains available", transportId); }
-            return new(clock.GetUtcNow(), arrival);
+            return new(clock.GetUtcNow(), true, null, arrival);
         }
         finally { entry.Gate.Release(); }
     }

@@ -55,6 +55,7 @@ public static class Response
         public decimal? DistanceKm { get; init; }
         public required string Status { get; init; }
         public bool IsCurrent { get; init; }
+        public bool IsMine { get; init; }
         public DateTimeOffset? PlannedDepartureAt { get; init; }
         public DateTimeOffset? PlannedArrivalAt { get; init; }
         public DateTimeOffset? ActualDepartureAt { get; init; }

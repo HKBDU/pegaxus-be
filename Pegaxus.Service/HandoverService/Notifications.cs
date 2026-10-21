@@ -22,7 +22,8 @@ public sealed partial class Service
             var crew = await db.Employees.AsNoTracking().Active().Where(employee => employee.Account.AccountType == AccountType.EMPLOYEE &&
                     (employee.EmployeeId == to.DriverEmployeeId || employee.EmployeeId == to.EscortEmployeeId))
                 .Select(employee => employee.AccountId).Distinct().ToArrayAsync(cancellationToken);
-            foreach (var recipient in crew) Queue(recipient, NotificationType.ROUTE, NotificationPriority.HIGH, "You can start your segment", $"/crew/transports/{transport.TransportId}");
+            foreach (var recipient in crew) Queue(recipient, NotificationType.ROUTE, NotificationPriority.HIGH,
+                "Open the trip and turn on location sharing", $"/crew/transports/{transport.TransportId}");
         }
         if (item.HandoverType is not (HandoverType.PICKUP or HandoverType.DELIVERY)) return;
         var delivery = item.HandoverType == HandoverType.DELIVERY;

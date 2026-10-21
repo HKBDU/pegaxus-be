@@ -86,13 +86,15 @@ public sealed partial class Service
         new(item.Segment.RoutePlanRouteId, segments.IndexOf(item) + 1, item.Segment.FromLocation.LocationName,
             item.Segment.ToLocation.LocationName, item.Segment.Status);
 
-    private static List<Response.TrackingSegment> ToTrackingSegments(List<SegmentData> segments, TransportStatus status)
+    private static List<Response.TrackingSegment> ToTrackingSegments(List<SegmentData> segments, TransportStatus status, Actor actor)
     {
         var current = CurrentSegment(segments, status);
         return segments.Select((item, index) => item.Segment with
         {
             DisplayOrder = index + 1,
-            IsCurrent = item == current
+            IsCurrent = item == current,
+            IsMine = item == current && actor.EmployeeId.HasValue &&
+                (item.DriverEmployeeId == actor.EmployeeId || item.EscortEmployeeId == actor.EmployeeId)
         }).ToList();
     }
 

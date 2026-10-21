@@ -126,8 +126,9 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         }
         else if (type == "RETURN")
         {
-            plan.Status = RoutePlanStatus.CANCELLED;
+            plan.Status = RoutePlanStatus.REJECTED_BY_MANAGER;
             plan.RouteNote = request.Note!.Trim();
+            await NotifyCurrentCrewAsync(plan, request.Note, now, cancellationToken);
         }
         plan.UpdatedAt = now;
         var decided = request.Decision == "APPROVE" ? "approved" : "rejected";
@@ -143,6 +144,29 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         var branch = type == "BACKUP" ? segments.FirstOrDefault(x => x.RouteType == "BACKUP") : null;
         return new(routePlanId, type, request.Decision, plan.Status.ToString(), extraBrief,
             branch?.SequenceNo, branch?.FromLocation, AsUtc(now));
+    }
+
+    private async Task NotifyCurrentCrewAsync(RoutePlan plan, string? note,
+        DateTime now, CancellationToken cancellationToken)
+    {
+        var current = await db.RoutePlanRoutes.AsNoTracking()
+            .Where(segment => segment.RoutePlan.TransportPlanId == plan.TransportPlanId &&
+                segment.RoutePlan.Status == RoutePlanStatus.ACTIVE && segment.ActualDepartureAt.HasValue &&
+                segment.ActualArrivalAt == null)
+            .OrderBy(segment => segment.SequenceNo)
+            .Select(segment => new { segment.DriverEmployeeId, segment.EscortEmployeeId })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (current is null) return;
+        var employeeIds = new[] { current.DriverEmployeeId, current.EscortEmployeeId }
+            .OfType<Guid>().Distinct().ToArray();
+        var recipients = await db.Employees.AsNoTracking().Active()
+            .Where(employee => employeeIds.Contains(employee.EmployeeId))
+            .Select(employee => employee.AccountId)
+            .ToArrayAsync(cancellationToken);
+        foreach (var recipient in recipients)
+            Notify(recipient, plan, "Return route rejected",
+                $"The return route was rejected by the Logistics Manager. Note: {note!.Trim()}",
+                NotificationPriority.URGENT, now, null);
     }
 
     public async Task<Response.ActivationResult> ActivateReturnAsync(Guid routePlanId, Guid accountId, Request.ActivationRequest request, CancellationToken cancellationToken = default)

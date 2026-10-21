@@ -150,7 +150,7 @@ public sealed class Service(AppDbContext db, IValidator<Request.ListRequest> lis
         await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var item = await GetForUpdateAsync(id, cancellationToken);
         if (await db.RoutePlanRoutes.AnyAsync(route => route.TransportProviderId == id &&
-            route.RoutePlan.Status != RoutePlanStatus.COMPLETED && route.RoutePlan.Status != RoutePlanStatus.CANCELLED, cancellationToken))
+            route.RoutePlan.Status != RoutePlanStatus.COMPLETED && route.RoutePlan.Status != RoutePlanStatus.CANCELLED && route.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER, cancellationToken))
             throw new ConflictException("The provider is assigned to route segments that are not completed or cancelled", "PROVIDER_IN_USE");
         var before = Snapshot(item);
         item.IsDeleted = true;

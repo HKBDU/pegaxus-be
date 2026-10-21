@@ -101,7 +101,7 @@ public sealed partial class Service
             var busy = await db.RoutePlanRouteVehicles.AsNoTracking().Where(link => vehicleIds.Contains(link.VehicleId) &&
                     link.RoutePlanRoute.RoutePlan.TransportPlan.TransportId != transport.TransportId && link.RoutePlanRoute.ActualArrivalAt == null &&
                     (link.RoutePlanRoute.SupersededAt == null || link.RoutePlanRoute.ActualDepartureAt != null) &&
-                    link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED &&
+                    link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                     link.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED &&
                     link.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.CANCELLED)
                 .Select(link => link.VehicleId).Distinct().ToArrayAsync(cancellationToken);

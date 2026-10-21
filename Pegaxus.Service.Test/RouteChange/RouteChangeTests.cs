@@ -211,7 +211,7 @@ public class RouteChangeTests
         var f = await Fixture.CreateAsync(db); var plan = await f.AlternateAsync(type);
         var result = await f.Service.DecideAsync(plan.RoutePlanId, f.Manager.AccountId, new() {
             Decision = "REJECT", LastUpdatedAt = Fixture.Version(plan), Note = "Choose a safer itinerary" });
-        Assert.Equal(type == RouteType.BACKUP ? "CONFIRMED" : "CANCELLED", result.Status);
+        Assert.Equal(type == RouteType.BACKUP ? "CONFIRMED" : "REJECTED_BY_MANAGER", result.Status);
         Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
         if (type == RouteType.RETURN) Assert.Equal("Choose a safer itinerary", plan.RouteNote);
         Assert.Equal(f.Coordinator.AccountId, Assert.Single(db.AccountNotifications).AccountId);
