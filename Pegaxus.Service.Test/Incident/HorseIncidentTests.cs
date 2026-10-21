@@ -358,6 +358,7 @@ public class HorseIncidentTests
             new ReportHorseHealthRequestValidator(clock, details), details, new FollowUpHorseRequestValidator(clock),
             new ListRequestValidator(), new ResolveRequestValidator(new SelfResolveRequestValidator()), new CancelRequestValidator(),
             new SelfResolveRequestValidator(), new RaiseSeverityRequestValidator(),
+            new RerouteEscalationRequestValidator(), new RouteHoldRequestValidator(),
             storage, storage, TestSupport.CreateNotifications(db));
     }
 }

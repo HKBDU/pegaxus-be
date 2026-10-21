@@ -344,14 +344,15 @@ public class VehicleIncidentTests
         }
     }
 
-    internal static Incidents.Service CreateService(AppDbContext db, Storage storage)
+    internal static Incidents.Service CreateService(AppDbContext db, Storage storage, TimeProvider? clock = null)
     {
-        var fields = new VehicleFieldsValidator(); var clock = new FixedClock();
+        var fields = new VehicleFieldsValidator(); clock ??= new FixedClock();
         var details = new AddHorseDetailsRequestValidator(new HorseDetailValidator(clock));
         return new(db, clock, new ReportVehicleRequestValidator(clock, fields), new UpdateVehicleRequestValidator(fields),
             new ReportHorseHealthRequestValidator(clock, details), details, new FollowUpHorseRequestValidator(clock),
             new ListRequestValidator(), new ResolveRequestValidator(new SelfResolveRequestValidator()), new CancelRequestValidator(),
             new SelfResolveRequestValidator(), new RaiseSeverityRequestValidator(),
+            new RerouteEscalationRequestValidator(), new RouteHoldRequestValidator(),
             storage, storage, TestSupport.CreateNotifications(db));
     }
 }

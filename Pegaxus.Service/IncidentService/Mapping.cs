@@ -68,6 +68,7 @@ public sealed partial class Service
                 .Sum(cost => cost.ApprovedAmount ?? 0), pending),
             RouteChanges = plans.Select(plan => new Response.RouteChange(plan.RoutePlanId, plan.RoutePlanCode, TransportItinerary.PlanType(plan).ToString(),
                 plan.Status.ToString(), AsUtc(plan.UpdatedAt))).ToArray(),
+            Hold = await ReadHoldAsync(incidentReportId, ct),
             CanResolve = canResolve, AvailableActions = actor is null ? [] : await ActionsAsync(item, transport, actor, canResolve, ct),
             ServerTime = clock.GetUtcNow(), CreatedAt = AsUtc(item.CreatedAt), UpdatedAt = AsUtc(item.UpdatedAt)
         };
@@ -88,7 +89,7 @@ public sealed partial class Service
         {
             if (crew || coordinator) actions.Add("REQUEST_COST");
             if (coordinator) actions.AddRange(["PROPOSE_REROUTE", "ESCALATE_REROUTE"]);
-            if (manager) actions.Add("HOLD_ROUTE");
+            if (manager && await ActiveTransportHoldAsync(transport.TransportId, ct) is null) actions.Add("HOLD_ROUTE");
             if (crew && incident.Status == IncidentStatus.REPORTED && !incident.EmergencyCostRequests.Any(cost => cost.Status is EmergencyCostStatus.PENDING or EmergencyCostStatus.APPROVED))
                 actions.Add("SELF_RESOLVE");
         }

@@ -5,6 +5,22 @@ namespace Pegaxus.Service.IncidentService;
 
 public static class Request
 {
+    public sealed class RerouteEscalationRequest
+    {
+        public string Reason { get; set; } = string.Empty;
+        public string? SuggestedAction { get; set; }
+        public int? SuggestedHoldMinutes { get; set; }
+        public List<Guid> BlockedRoutePlanIds { get; set; } = [];
+    }
+
+    public sealed class RouteHoldRequest
+    {
+        public int HoldMinutes { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public int MonitorIntervalMinutes { get; set; } = 30;
+        public Guid? SafeStopLocationId { get; set; }
+    }
+
     public sealed class ListRequest
     {
         public string? Status { get; set; }

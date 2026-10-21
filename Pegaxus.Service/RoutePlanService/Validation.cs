@@ -171,26 +171,11 @@ public sealed partial class Service
                 item.Route.FromLocation.LocationType is LocationType.BORDER_GATE or LocationType.AIRPORT or LocationType.SEAPORT ||
                 item.Route.ToLocation.LocationType is LocationType.BORDER_GATE or LocationType.AIRPORT or LocationType.SEAPORT))
             throw new UnprocessableEntityException("A cross-border transport requires at least one border control point", "BCP_REQUIRED");
-        if (segments.Any(item => item.Route.TransportMode == TransportMode.ROAD && item.Request.PlannedArrivalAt - item.Request.PlannedDepartureAt > TimeSpan.FromHours(8)))
-            throw new UnprocessableEntityException("Maximum continuous driving time is 8 hours", "REST_RULE_VIOLATION");
-        for (var index = 0; index < segments.Count; index++)
-        {
-            var segment = segments[index];
-            if (segment.Route.TransportMode != TransportMode.ROAD || segment.Request.PlannedArrivalAt - segment.Request.PlannedDepartureAt <= TimeSpan.FromMinutes(270))
-                continue;
-            var restAfter = index < segments.Count - 1
-                ? segments[index + 1].Request.PlannedDepartureAt - segment.Request.PlannedArrivalAt
-                : TimeSpan.Zero;
-            if (restAfter < TimeSpan.FromMinutes(45))
-                throw new UnprocessableEntityException("Road segments exceeding 4.5 hours require a rest stop of at least 45 minutes", "REST_RULE_VIOLATION");
-        }
-        if (segments.Count > 0 && segments[^1].Request.PlannedArrivalAt - segments[0].Request.PlannedDepartureAt > TimeSpan.FromHours(24) &&
-            !segments.Zip(segments.Skip(1), (first, second) => new
-            {
-                Gap = second.Request.PlannedDepartureAt - first.Request.PlannedArrivalAt,
-                IsRestStop = first.Route.ToLocation.LocationType == LocationType.REST_STOP || second.Route.FromLocation.LocationType == LocationType.REST_STOP
-            }).Any(item => item.Gap >= TimeSpan.FromHours(24) && item.IsRestStop))
-            throw new UnprocessableEntityException("Trips over 24 hours require a mandatory 24 hour rest", "REST_RULE_VIOLATION");
+        var restFailure = RouteRestRules.Evaluate(segments.Select(item => new RouteRestRules.Leg(
+            item.Request.PlannedDepartureAt.UtcDateTime, item.Request.PlannedArrivalAt.UtcDateTime, item.Route.TransportMode,
+            item.Route.FromLocation.LocationType, item.Route.ToLocation.LocationType)).ToArray()).FirstOrDefault(check => !check.Passed);
+        if (restFailure is not null)
+            throw new UnprocessableEntityException(restFailure.Message, "REST_RULE_VIOLATION");
         if (routeType == RouteType.BACKUP && primary is not null)
         {
             var primarySegments = primary.RoutePlanRoutes.OrderBy(item => item.SequenceNo).ToList();

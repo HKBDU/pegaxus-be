@@ -57,6 +57,7 @@ builder.Services.AddTransportPlanningModule();
 builder.Services.AddFleetModule();
 builder.Services.AddComplianceModule();
 builder.Services.AddMessagingModule();
+builder.Services.AddHostedService<Pegaxus.API.Services.IncidentHoldExpiryWorker>();
 
 var app = builder.Build();
 
