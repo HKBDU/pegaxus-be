@@ -14,7 +14,6 @@ public class EmailBodiesTests
     [
         ("otp-verify", Mail.OtpBody(true, "Ada", "123456", 5)),
         ("otp-reset", Mail.OtpBody(false, "Ada", "123456", 5)),
-        ("incident", Mail.IncidentReportedBody("Ada", "INC-1", "CRITICAL", "Horse incident", "Vet required", Link)),
         ("booking-approved", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", new DateOnly(2026, 12, 1), Link)),
         ("booking-rejected", Mail.BookingRejectedBody("Ada", "REQ-1", "No capacity", Link)),
         ("delivered", Mail.TransportDeliveredBody("Ada", "TR-1", new DateTime(2026, 10, 16, 12, 0, 0), Link)),
@@ -52,7 +51,6 @@ public class EmailBodiesTests
         var html = new[]
         {
             Mail.OtpBody(true, Evil, "123456", 5),
-            Mail.IncidentReportedBody(Evil, Evil, Evil, Evil, Evil, null),
             Mail.BookingApprovedBody(Evil, Evil, Evil, null, null),
             Mail.BookingRejectedBody(Evil, Evil, Evil, null),
             Mail.TransportDeliveredBody(Evil, Evil, new DateTime(2026, 10, 16, 12, 0, 0), null),
