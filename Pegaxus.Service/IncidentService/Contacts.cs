@@ -2,11 +2,23 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Exceptions;
 
 namespace Pegaxus.Service.IncidentService;
 
 public sealed partial class Service
 {
+    public async Task<Response.EmergencyContacts> GetEmergencyContactsAsync(Guid transportId, Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var actor = await ActorAsync(accountId, cancellationToken);
+        var transport = await TransportAsync(transportId, cancellationToken);
+        if (Crew(actor) && !await CrewAssignedAsync(transportId, actor, cancellationToken))
+            throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");
+        if (transport.Status is not (TransportStatus.READY or TransportStatus.IN_TRANSIT or TransportStatus.COMPLETED))
+            throw new ConflictException("Emergency contacts are only available for READY, IN_TRANSIT or COMPLETED transports", "INVALID_TRANSPORT_STATUS");
+        return new(clock.GetUtcNow(), transportId, await ContactsAsync(transport, cancellationToken));
+    }
+
     private async Task<IReadOnlyList<Response.EmployeeBrief>> ContactsAsync(Transport transport, CancellationToken ct)
     {
         var planId = await CurrentPlanIdAsync(transport.TransportId, ct);

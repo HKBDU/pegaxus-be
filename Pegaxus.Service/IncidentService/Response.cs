@@ -6,12 +6,16 @@ namespace Pegaxus.Service.IncidentService;
 public static class Response
 {
     public sealed record CreateResult(Incident Value, bool Created);
+    public sealed record EmergencyContacts(DateTimeOffset ServerTime, Guid TransportId, IReadOnlyList<EmployeeBrief> Contacts);
     public sealed record EmployeeBrief(Guid EmployeeId, string EmployeeCode, string FullName, string Role, string? Phone);
     public sealed record TransportBrief(Guid TransportId, string TransportCode, string Status, string BookingCode);
     public sealed record VehicleBrief(Guid VehicleId, string VehicleCode, string? LicensePlate, string? VehicleName, string Status);
     public sealed record HorseBrief(Guid HorseId, string HorseName, string? MicrochipNumber, string? Breed, int? StallNo);
     public sealed record Photo(Guid PhotoId, string PhotoUrl, string? Caption, Guid? HorseHealthIncidentDetailId, int SortOrder);
-    public sealed record Effects(int HealthLogsCreated, object NotifiedPriority, bool EmailQueued,
+    public sealed record Effects(object NotifiedPriority, bool EmailQueued,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? VehicleStatusChanged = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CanAddHorseDetails = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? HealthLogsCreated = null,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? FirstAidGuide = null);
     public sealed record Safety(string Message, IReadOnlyList<EmployeeBrief> EmergencyContacts);
     public sealed record CostSummary(long RequestedTotal, long ApprovedTotal, int PendingCount, string Currency = Vnd.Currency);

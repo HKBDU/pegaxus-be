@@ -15,7 +15,7 @@ public sealed partial class Service
     public async Task<Response.CreateResult> ReportHorseHealthAsync(Request.ReportHorseHealthRequest request, Guid accountId, CancellationToken cancellationToken = default)
     {
         CheckPhotoCount(request);
-        Validation.ValidateFields(request, reportValidator);
+        Validation.ValidateFields(request, horseReportValidator);
         CheckVitals(request.Horses);
         var occurredAt = Truncate(request.OccurredAt ?? clock.GetUtcNow());
         for (var attempt = 0; ; attempt++)
@@ -43,7 +43,7 @@ public sealed partial class Service
                     var replay = await ReadIncidentAsync(existing.IncidentReportId, transport, actor, cancellationToken, true);
                     var safety = await HorseSafetyAsync(transport, cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
-                    return new(replay with { Effects = new(0, false, false, []), Safety = safety }, false);
+                    return new(replay with { Effects = new(false, false, HealthLogsCreated: 0, FirstAidGuide: []), Safety = safety }, false);
                 }
                 if (transport.Status != TransportStatus.IN_TRANSIT)
                     throw new ConflictException("Incidents can only be reported while the transport is IN_TRANSIT", "INVALID_TRANSPORT_STATUS");
@@ -71,8 +71,8 @@ public sealed partial class Service
                 await transaction.CommitAsync(cancellationToken);
                 committed = true;
                 await notifications.FlushAsync(cancellationToken);
-                return new(response with { Effects = new(request.Horses.Count, "URGENT", emailQueued,
-                    request.Horses.Select(horse => horse.IncidentType).Distinct().ToArray()), Safety = safetyResponse }, true);
+                return new(response with { Effects = new("URGENT", emailQueued, HealthLogsCreated: request.Horses.Count,
+                    FirstAidGuide: request.Horses.Select(horse => horse.IncidentType).Distinct().ToArray()), Safety = safetyResponse }, true);
             }
             catch (Exception error) when (!committed && PostgresErrors.IsWriteConflict(error))
             {

@@ -47,6 +47,8 @@ public class HorseIncidentHttpTests
         Assert.Equal(Storage.SignedUrl, Assert.Single(incident.GetProperty("photos").EnumerateArray()).GetProperty("photoUrl").GetString());
         Assert.Equal("URGENT", incident.GetProperty("effects").GetProperty("notifiedPriority").GetString());
         Assert.Equal(1, incident.GetProperty("effects").GetProperty("healthLogsCreated").GetInt32());
+        Assert.False(incident.GetProperty("effects").TryGetProperty("vehicleStatusChanged", out _));
+        Assert.False(incident.GetProperty("effects").TryGetProperty("canAddHorseDetails", out _));
         Assert.Equal("COLIC", Assert.Single(incident.GetProperty("effects").GetProperty("firstAidGuide").EnumerateArray()).GetString());
         Assert.Equal(4, incident.GetProperty("safety").GetProperty("emergencyContacts").GetArrayLength());
         foreach (var field in new[] { "transport", "location", "reportedBy", "description", "costSummary", "routeChanges", "availableActions", "canResolve", "serverTime", "updatedAt" })

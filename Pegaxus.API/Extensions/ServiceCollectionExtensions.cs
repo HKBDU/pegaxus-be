@@ -275,6 +275,9 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.AddHorseDetailsRequest>, Pegaxus.Service.IncidentService.Validator.AddHorseDetailsRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ReportHorseHealthRequest>, Pegaxus.Service.IncidentService.Validator.ReportHorseHealthRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.FollowUpHorseRequest>, Pegaxus.Service.IncidentService.Validator.FollowUpHorseRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.VehicleFields>, Pegaxus.Service.IncidentService.Validator.VehicleFieldsValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ReportVehicleRequest>, Pegaxus.Service.IncidentService.Validator.ReportVehicleRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.UpdateVehicleRequest>, Pegaxus.Service.IncidentService.Validator.UpdateVehicleRequestValidator>();
         services.AddScoped<Pegaxus.Service.HandoverService.IHandoverService, Pegaxus.Service.HandoverService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CreateRequest>, Pegaxus.Service.HandoverService.Validator.CreateRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.ListRequest>, Pegaxus.Service.HandoverService.Validator.ListRequestValidator>();

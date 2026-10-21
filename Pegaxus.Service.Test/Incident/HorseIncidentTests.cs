@@ -85,7 +85,7 @@ public class HorseIncidentTests
         var replay = await f.Service.ReportHorseHealthAsync(request, f.Escort.AccountId);
         Assert.False(replay.Created); Assert.Equal(created.Value.IncidentReportId, replay.Value.IncidentReportId);
         Assert.Equal(created.Value.Title, replay.Value.Title); Assert.Equal("HIGH", replay.Value.Severity); Assert.Equal(2, replay.Value.HorseDetails.Count);
-        Assert.Equal(new Incidents.Response.Effects(0, false, false, []), replay.Value.Effects);
+        Assert.Equal(new Incidents.Response.Effects(false, false, HealthLogsCreated: 0, FirstAidGuide: []), replay.Value.Effects);
         Assert.Equal(added.UpdatedAt, replay.Value.UpdatedAt); Assert.Equal(notifications, await db.Notifications.CountAsync());
         Assert.Equal(mail, await db.OutboxMessages.CountAsync()); Assert.Equal(2, await db.IncidentPhotos.CountAsync());
         Assert.Equal(2, f.Storage.Confirmations.Count); Assert.Equal(2, await db.HorseHealthLogs.CountAsync()); Assert.Single(db.IncidentReports);
@@ -353,7 +353,9 @@ public class HorseIncidentTests
     internal static Incidents.Service CreateIncidentService(AppDbContext db, Storage storage)
     {
         var clock = new FixedClock(); var horse = new HorseDetailValidator(clock); var details = new AddHorseDetailsRequestValidator(horse);
-        return new(db, clock, new ReportHorseHealthRequestValidator(clock, details), details, new FollowUpHorseRequestValidator(clock),
+        var fields = new VehicleFieldsValidator();
+        return new(db, clock, new ReportVehicleRequestValidator(clock, fields), new UpdateVehicleRequestValidator(fields),
+            new ReportHorseHealthRequestValidator(clock, details), details, new FollowUpHorseRequestValidator(clock),
             storage, storage, TestSupport.CreateNotifications(db));
     }
 }

@@ -13,9 +13,9 @@ using Pegaxus.Service.NotificationService;
 namespace Pegaxus.Service.IncidentService;
 
 public sealed partial class Service(AppDbContext db, TimeProvider clock,
-    IValidator<Request.ReportHorseHealthRequest> reportValidator, IValidator<Request.AddHorseDetailsRequest> detailsValidator,
-    IValidator<Request.FollowUpHorseRequest> followUpValidator, IMediaService media,
-    IDocumentStorageService documentStorage, INotificationService notifications) : IIncidentService
+    IValidator<Request.ReportVehicleRequest> reportValidator, IValidator<Request.UpdateVehicleRequest> updateValidator,
+    IValidator<Request.ReportHorseHealthRequest> horseReportValidator, IValidator<Request.AddHorseDetailsRequest> detailsValidator,
+    IValidator<Request.FollowUpHorseRequest> followUpValidator, IMediaService media, IDocumentStorageService documentStorage, INotificationService notifications) : IIncidentService
 {
     private static readonly RoutePlanStatus[] AssignmentStatuses = [RoutePlanStatus.CONFIRMED, RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED];
     private const string ForbiddenMessage = "Only the assigned driver / escort can report incidents for this transport";
@@ -33,10 +33,13 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock,
         return employee;
     }
 
-    private async Task<Transport> TransportAsync(Guid transportId, CancellationToken ct) =>
-        await db.Transports.AsNoTracking().Include(item => item.Booking).ThenInclude(item => item.Customer)
+    private async Task<Transport> TransportAsync(Guid transportId, CancellationToken ct)
+    {
+        if (transportId == Guid.Empty) throw new BadRequestException("Transport ID must be a non-empty UUID.", "VALIDATION_ERROR");
+        return await db.Transports.AsNoTracking().Include(item => item.Booking).ThenInclude(item => item.Customer)
             .SingleOrDefaultAsync(item => item.TransportId == transportId, ct)
             ?? throw new NotFoundException("Transport not found", "TRANSPORT_NOT_FOUND");
+    }
 
     private Task<bool> CrewAssignedAsync(Guid transportId, Employee actor, CancellationToken ct) =>
         db.RoutePlanRoutes.AsNoTracking().AnyAsync(segment => segment.RoutePlan.TransportPlan.TransportId == transportId &&

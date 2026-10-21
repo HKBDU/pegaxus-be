@@ -46,7 +46,7 @@ public sealed partial class Service
                 await transaction.CommitAsync(cancellationToken);
                 committed = true;
                 await notifications.FlushAsync(cancellationToken);
-                return response with { Effects = new(request.Horses.Count, "URGENT", emailQueued) };
+                return response with { Effects = new("URGENT", emailQueued, HealthLogsCreated: request.Horses.Count) };
             }
             catch (Exception error) when (!committed && PostgresErrors.IsWriteConflict(error))
             {

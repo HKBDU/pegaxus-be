@@ -23,6 +23,7 @@ public class EmailBodiesTests
             [new Mail.MissingItem("Passport", "Storm", null)])),
         ("route", Mail.RouteAssignmentBody("Ada", "RP-1", true, "Driver sick", Link,
             [new Mail.RouteSegment(1, new DateTime(2026, 11, 28, 6, 0, 0), new DateTime(2026, 11, 28, 10, 0, 0), "EMP-4", "EMP-5", null)])),
+        ("incident", Mail.IncidentReportedBody("Ada", "INC-1", "HIGH", "Engine failure", "The engine stopped", Link)),
         ("invoice-issued", Mail.InvoiceIssuedBody("Ada", "INV-1", "DEPOSIT", "REQ-1", Mail.InvoiceMailKind.Invoice, 120m, "EUR", new DateOnly(2026, 11, 15), Link)),
         ("invoice-cancelled", Mail.InvoiceCancelledBody("Ada", "INV-1", "DEPOSIT", "Wrong amount", Link)),
         ("payment-confirmed", Mail.PaymentConfirmedBody("Ada", "INV-1", "RCP-1", 120m, "EUR", false, Link)),
@@ -162,6 +163,14 @@ public class EmailBodiesTests
         Assert.Contains("Payout confirmed", payout); Assert.DoesNotContain("Payment confirmed", payout);
         var payment = Mail.PaymentConfirmedBody("Ada", "INV-1", "RCP-1", 120m, "EUR", false, null);
         Assert.Contains("Payment confirmed", payment); Assert.Contains("RCP-1", payment);
+    }
+
+    [Fact]
+    public void UrgentIncident_EncodesUntrustedFieldsAndKeepsIncidentLink()
+    {
+        var body = Mail.IncidentReportedBody("<staff>", "<code>", "<severity>", "<title>", Evil, "/admin/incidents/test");
+        Assert.DoesNotContain(Evil, body); Assert.Contains("&lt;title&gt;", body); Assert.Contains(EncodedEvil, body);
+        Assert.Contains("/admin/incidents/test", body); Assert.Contains("&lt;staff&gt;", body);
     }
 
     [Fact]
