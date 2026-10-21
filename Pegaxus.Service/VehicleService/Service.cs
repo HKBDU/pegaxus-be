@@ -117,20 +117,33 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         await AuthorizeAsync(accountId, cancellationToken);
         Normalize(request);
         Validate(request, createValidator);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        await CheckPlateAsync(request.LicensePlate, null, cancellationToken);
-        var now = Now();
-        var prefix = $"VEH-{now:yyyyMMdd}-";
-        var vehicle = new Vehicle { VehicleId = Guid.NewGuid(),
-            VehicleCode = DailyCodes.Next(prefix, await db.Vehicles.AsNoTracking().Where(x => x.VehicleCode.StartsWith(prefix)).Select(x => x.VehicleCode).ToListAsync(cancellationToken), "VEHICLE_CODE_EXHAUSTED"),
-            Status = VehicleStatus.AVAILABLE, CreatedAt = now, UpdatedAt = now };
-        Apply(vehicle, request);
-        db.Vehicles.Add(vehicle);
-        await SaveAsync(vehicle, accountId, "CREATE", JsonSerializer.SerializeToDocument(new { }), null, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        logger.LogInformation("Vehicle {VehicleId} created by account {AccountId}", vehicle.VehicleId, accountId);
-        await notifications.FlushAsync(cancellationToken);
-        return Map(vehicle);
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+                await CheckPlateAsync(request.LicensePlate, null, cancellationToken);
+                var now = Now();
+                var prefix = $"VEH-{now:yyyyMMdd}-";
+                var vehicle = new Vehicle { VehicleId = Guid.NewGuid(),
+                    VehicleCode = DailyCodes.Next(prefix, await db.Vehicles.AsNoTracking().Where(x => x.VehicleCode.StartsWith(prefix)).Select(x => x.VehicleCode).ToListAsync(cancellationToken), "VEHICLE_CODE_EXHAUSTED"),
+                    Status = VehicleStatus.AVAILABLE, CreatedAt = now, UpdatedAt = now };
+                Apply(vehicle, request);
+                db.Vehicles.Add(vehicle);
+                await SaveAsync(vehicle, accountId, "CREATE", JsonSerializer.SerializeToDocument(new { }), null, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                logger.LogInformation("Vehicle {VehicleId} created by account {AccountId}", vehicle.VehicleId, accountId);
+                await notifications.FlushAsync(cancellationToken);
+                return Map(vehicle);
+            }
+            catch (ConflictException error) when (error.ErrorCode == "VEHICLE_CODE_DUPLICATED" && attempt < 19)
+            {
+                // Another concurrent creator selected the same daily code. Clear the
+                // failed transaction's tracked graph and retry so the plate check runs
+                // again and returns LICENSE_PLATE_DUPLICATED when appropriate.
+                db.ChangeTracker.Clear();
+            }
+        }
     }
 
     public async Task<Response.UpdateResponse> UpdateAsync(Guid vehicleId, Request.UpdateRequest request, Guid accountId, CancellationToken cancellationToken = default)
