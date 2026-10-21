@@ -271,6 +271,11 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddTransportPlanningModule(this IServiceCollection services)
     {
         services.AddScoped<Pegaxus.Service.IncidentService.IIncidentService, Pegaxus.Service.IncidentService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ListRequest>, Pegaxus.Service.IncidentService.Validator.ListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ResolveRequest>, Pegaxus.Service.IncidentService.Validator.ResolveRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CancelRequest>, Pegaxus.Service.IncidentService.Validator.CancelRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.SelfResolveRequest>, Pegaxus.Service.IncidentService.Validator.SelfResolveRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.RaiseSeverityRequest>, Pegaxus.Service.IncidentService.Validator.RaiseSeverityRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.HorseDetail>, Pegaxus.Service.IncidentService.Validator.HorseDetailValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.AddHorseDetailsRequest>, Pegaxus.Service.IncidentService.Validator.AddHorseDetailsRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ReportHorseHealthRequest>, Pegaxus.Service.IncidentService.Validator.ReportHorseHealthRequestValidator>();

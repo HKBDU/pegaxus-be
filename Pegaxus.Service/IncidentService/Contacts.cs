@@ -11,6 +11,7 @@ public sealed partial class Service
     public async Task<Response.EmergencyContacts> GetEmergencyContactsAsync(Guid transportId, Guid accountId, CancellationToken cancellationToken = default)
     {
         var actor = await ActorAsync(accountId, cancellationToken);
+        if (actor.Role == EmployeeRole.TRANSPORT_SPECIALIST) throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");
         var transport = await TransportAsync(transportId, cancellationToken);
         if (Crew(actor) && !await CrewAssignedAsync(transportId, actor, cancellationToken))
             throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");

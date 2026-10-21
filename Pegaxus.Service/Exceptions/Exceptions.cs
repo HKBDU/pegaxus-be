@@ -56,5 +56,6 @@ public class TooManyRequestsException : Exceptions
 
 public class UnprocessableEntityException : Exceptions
 {
-    public UnprocessableEntityException(string message, string errorCode) : base(message, 422, errorCode) { }
+    public object? Value { get; }
+    public UnprocessableEntityException(string message, string errorCode, object? value = null) : base(message, 422, errorCode) => Value = value;
 }

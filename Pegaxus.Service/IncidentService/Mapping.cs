@@ -9,7 +9,7 @@ namespace Pegaxus.Service.IncidentService;
 
 public sealed partial class Service
 {
-    private async Task<Response.Incident> ReadIncidentAsync(Guid incidentReportId, Transport transport, Employee actor, CancellationToken ct, bool includeVitalWarnings = false)
+    private async Task<Response.Incident> ReadIncidentAsync(Guid incidentReportId, Transport transport, Employee? actor, CancellationToken ct, bool includeVitalWarnings = false)
     {
         var item = await db.IncidentReports.AsNoTracking().AsSplitQuery().Include(incident => incident.Employee).Include(incident => incident.Location)
             .Include(incident => incident.VehicleIncidentDetail).ThenInclude(detail => detail!.Vehicle)
@@ -47,7 +47,7 @@ public sealed partial class Service
             .OrderBy(plan => plan.CreatedAt).ToArrayAsync(ct);
         var pending = costs.Count(cost => cost.Status == nameof(EmergencyCostStatus.PENDING));
         var active = item.Status is IncidentStatus.REPORTED or IncidentStatus.PENDING;
-        var canResolve = actor.Role == EmployeeRole.LOGISTICS_MANAGER && active && pending == 0 && transport.Status is TransportStatus.IN_TRANSIT or TransportStatus.COMPLETED;
+        var canResolve = actor?.Role == EmployeeRole.LOGISTICS_MANAGER && active && pending == 0 && transport.Status is TransportStatus.IN_TRANSIT or TransportStatus.COMPLETED;
         var detail = item.VehicleIncidentDetail;
         return new()
         {
@@ -68,7 +68,7 @@ public sealed partial class Service
                 .Sum(cost => cost.ApprovedAmount ?? 0), pending),
             RouteChanges = plans.Select(plan => new Response.RouteChange(plan.RoutePlanId, plan.RoutePlanCode, TransportItinerary.PlanType(plan).ToString(),
                 plan.Status.ToString(), AsUtc(plan.UpdatedAt))).ToArray(),
-            CanResolve = canResolve, AvailableActions = await ActionsAsync(item, transport, actor, canResolve, ct),
+            CanResolve = canResolve, AvailableActions = actor is null ? [] : await ActionsAsync(item, transport, actor, canResolve, ct),
             ServerTime = clock.GetUtcNow(), CreatedAt = AsUtc(item.CreatedAt), UpdatedAt = AsUtc(item.UpdatedAt)
         };
     }

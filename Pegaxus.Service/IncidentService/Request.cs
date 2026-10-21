@@ -5,6 +5,48 @@ namespace Pegaxus.Service.IncidentService;
 
 public static class Request
 {
+    public sealed class ListRequest
+    {
+        public string? Status { get; set; }
+        public string? Category { get; set; }
+        public string? Severity { get; set; }
+        public Guid? TransportId { get; set; }
+        public bool? HasPendingCost { get; set; }
+        public bool? EmergencySettlementRequired { get; set; }
+        public DateOnly? OccurredFrom { get; set; }
+        public DateOnly? OccurredTo { get; set; }
+        public string? Search { get; set; }
+        public int PageIndex { get; set; } = 1;
+        public int PageSize { get; set; } = 20;
+        public string SortBy { get; set; } = "severity:desc,occurredAt:desc";
+    }
+
+    public abstract class VersionedRequest
+    {
+        public DateTimeOffset? LastUpdatedAt { get; set; }
+    }
+
+    public class SelfResolveRequest : VersionedRequest
+    {
+        public string ResolutionSummary { get; set; } = string.Empty;
+    }
+
+    public sealed class ResolveRequest : SelfResolveRequest
+    {
+        public bool EmergencySettlementConfirmed { get; set; }
+    }
+
+    public sealed class CancelRequest : VersionedRequest
+    {
+        public string CancellationReason { get; set; } = string.Empty;
+    }
+
+    public sealed class RaiseSeverityRequest : VersionedRequest
+    {
+        public string Severity { get; set; } = string.Empty;
+        public string Reason { get; set; } = string.Empty;
+    }
+
     public class VehicleFields
     {
         public bool? VehicleOperable { get; set; }

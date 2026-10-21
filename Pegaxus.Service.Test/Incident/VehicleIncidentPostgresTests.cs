@@ -145,7 +145,7 @@ public class VehicleIncidentPostgresTests
         });
     }
 
-    private static async Task WithDatabaseAsync(Func<DbContextOptions<AppDbContext>, Task> test)
+    internal static async Task WithDatabaseAsync(Func<DbContextOptions<AppDbContext>, Task> test)
     {
         var settings = new NpgsqlConnectionStringBuilder(Environment.GetEnvironmentVariable("PEGAXUS_TEST_CONNECTION_STRING"))
             { Database = "pegaxus_incident202_" + Guid.NewGuid().ToString("N") };
@@ -165,7 +165,7 @@ public class VehicleIncidentPostgresTests
         public string TranslateMemberName(string name) => name;
     }
 
-    private sealed class SaveAudit : SaveChangesInterceptor
+    internal sealed class SaveAudit : SaveChangesInterceptor
     {
         internal int Calls { get; private set; }
         internal bool FailAfterSave { get; init; }
@@ -189,7 +189,7 @@ public class VehicleIncidentPostgresTests
             throw new IOException("Planned lost commit acknowledgment");
     }
 
-    private sealed class CompetingSnapshot : DbCommandInterceptor
+    internal sealed class CompetingSnapshot : DbCommandInterceptor
     {
         internal TaskCompletionSource Started { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal int Attempts { get; private set; }

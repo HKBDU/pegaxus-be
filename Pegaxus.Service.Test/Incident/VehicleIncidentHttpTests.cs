@@ -214,7 +214,7 @@ public class VehicleIncidentHttpTests
         using var anonymous = await client.PostAsJsonAsync("/api/v1/incidents/vehicle", f.Report()); Assert.Equal(HttpStatusCode.Unauthorized, anonymous.StatusCode);
     }
 
-    private static async Task<WebApplication> StartAsync(AppDbContext db, Storage storage)
+    internal static async Task<WebApplication> StartAsync(AppDbContext db, Storage storage)
     {
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions { EnvironmentName = "Testing" });
         builder.Logging.ClearProviders(); builder.WebHost.UseUrls("http://127.0.0.1:0");
@@ -230,7 +230,7 @@ public class VehicleIncidentHttpTests
         app.MapControllers(); await app.StartAsync(); return app;
     }
 
-    private static HttpClient Client(WebApplication host, Guid accountId, EmployeeRole role)
+    internal static HttpClient Client(WebApplication host, Guid accountId, EmployeeRole role)
     {
         var client = new HttpClient { BaseAddress = new Uri(host.Services.GetRequiredService<IServer>().Features.Get<IServerAddressesFeature>()!.Addresses.Single()) };
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", new JwtServices(host.Configuration).GenerateAccessToken(
