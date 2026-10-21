@@ -34,7 +34,8 @@ public partial class HandoverPostgresTests
                         .ExecuteUpdateAsync(setters => setters.SetProperty(segment => segment.ActualArrivalAt, gpsArrival));
                 f.Clock.Now = f.Clock.Now.AddHours(1);
                 await service.CompleteAsync(f.Transfer.HandoverRecordId, Request(f.Transfer), f.Receiver.AccountId);
-                Assert.Equal(gpsArrival, (await writer.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.First.RoutePlanRouteId)).ActualArrivalAt);
+                // The signing time is the official handover moment, so it replaces the earlier GPS time.
+                Assert.Equal(f.Clock.Now.UtcDateTime.Ticks, (await writer.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.First.RoutePlanRouteId)).ActualArrivalAt!.Value.Ticks);
                 f.Clock.Now = f.Clock.Now.AddHours(1);
                 var result = await service.CompleteAsync(f.Delivery.HandoverRecordId, Request(f.Delivery), f.Coordinator.AccountId);
                 Assert.Equal(f.Clock.Now.AddHours(24), result.Effects!.ClaimWindowEndsAt); Assert.Equal("COMPLETED", result.Transport.Status);
