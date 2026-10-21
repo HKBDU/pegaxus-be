@@ -5,6 +5,39 @@ namespace Pegaxus.Service.IncidentService;
 
 public static class Request
 {
+    public sealed class CreateCostRequest
+    {
+        public string Category { get; set; } = string.Empty;
+        [JsonNumberHandling(JsonNumberHandling.Strict)]
+        public decimal? RequestedAmount { get; set; }
+        public string Description { get; set; } = string.Empty;
+        public string Justification { get; set; } = string.Empty;
+        public bool InvoiceRequired { get; set; }
+        public List<UploadService.Request.UploadedAssetReference> PhotoFiles { get; set; } = [];
+    }
+
+    public sealed class CostListRequest
+    {
+        public string? Status { get; set; }
+        public string? Category { get; set; }
+        public Guid? IncidentReportId { get; set; }
+        public Guid? TransportId { get; set; }
+        public DateOnly? FromDate { get; set; }
+        public DateOnly? ToDate { get; set; }
+        public string? Keyword { get; set; }
+        public int PageIndex { get; set; } = 1;
+        public int PageSize { get; set; } = 20;
+        public string SortBy { get; set; } = "requestedAt:desc";
+    }
+
+    public sealed class CostDecisionRequest : VersionedRequest
+    {
+        public string Decision { get; set; } = string.Empty;
+        [JsonNumberHandling(JsonNumberHandling.Strict)]
+        public decimal? ApprovedAmount { get; set; }
+        public string? DecisionReason { get; set; }
+    }
+
     public sealed class RerouteEscalationRequest
     {
         public string Reason { get; set; } = string.Empty;
