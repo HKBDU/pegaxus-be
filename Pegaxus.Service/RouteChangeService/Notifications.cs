@@ -17,10 +17,11 @@ public sealed partial class Service
     public async Task<Response.DriverNoticeResult> NotifyDriversAsync(Guid routePlanId, Guid accountId, Request.DriverNoticeRequest request, CancellationToken cancellationToken = default)
     {
         if (request.Message?.Length > 4000) throw new BadRequestException("Message must not exceed 4000 characters.");
-        var actor = await ActorAsync(accountId, [EmployeeRole.FLEET_ROUTE_COORDINATOR], cancellationToken);
+        var actor = await ActorAsync(accountId, [EmployeeRole.FLEET_ROUTE_COORDINATOR, EmployeeRole.LOGISTICS_MANAGER], cancellationToken);
         await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var plan = await LockPlanAsync(routePlanId, cancellationToken);
-        await EnsureCoordinatorAsync(plan, actor, cancellationToken);
+        // A manager covers for an absent coordinator, so only a coordinator must be assigned to the plan.
+        if (actor.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR) await EnsureCoordinatorAsync(plan, actor, cancellationToken);
         var segments = await SegmentsAsync(routePlanId, cancellationToken);
         if (plan.Status is not (RoutePlanStatus.CONFIRMED or RoutePlanStatus.ACTIVE)) throw InvalidStatus(plan);
         EnsureTypeStatus(plan, segments, "RETURN", plan.Status);
@@ -71,6 +72,15 @@ public sealed partial class Service
         var drivers = await db.Employees.AsNoTracking().Active().Where(x => driverIds.Contains(x.EmployeeId) && x.Role == EmployeeRole.DRIVER).OrderBy(x => x.EmployeeCode).ToListAsync(token);
         foreach (var driver in drivers) Notify(driver.AccountId, plan, title, message, NotificationPriority.URGENT, now, null);
         return drivers;
+    }
+
+    private async Task NotifyPrimaryEscortsAsync(RoutePlan plan, Guid primaryId, string title, string message, DateTime now, CancellationToken token)
+    {
+        var escortIds = db.RoutePlanRoutes.Where(x => x.RoutePlanId == primaryId &&
+            x.ActualArrivalAt == null && x.EscortEmployeeId.HasValue)
+            .OrderBy(x => x.SequenceNo).Take(1).Select(x => x.EscortEmployeeId!.Value);
+        var escorts = await db.Employees.AsNoTracking().Active().Where(x => escortIds.Contains(x.EmployeeId) && x.Role == EmployeeRole.ESCORT).ToListAsync(token);
+        foreach (var escort in escorts) Notify(escort.AccountId, plan, title, message, NotificationPriority.URGENT, now, null);
     }
 
     private void Notify(Guid accountId, RoutePlan plan, string title, string message, NotificationPriority priority, DateTime now, string? actionUrl) =>

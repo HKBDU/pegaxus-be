@@ -44,7 +44,7 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
 
         var count = await query.CountAsync(cancellationToken);
         var items = await Project(query.OrderBy(template => template.TemplateCode).ThenBy(template => template.DossierTemplateId)
-                .Skip((request.PageIndex - 1) * request.PageSize).Take(request.PageSize))
+                .Skip(Paging.Offset(request.PageIndex, request.PageSize)).Take(request.PageSize))
             .ToListAsync(cancellationToken);
         return new Response.ListResponse
         {

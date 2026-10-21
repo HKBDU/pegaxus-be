@@ -35,4 +35,26 @@ public sealed partial class Service
         await _documentStorage.ValidateContentAsync(content, cancellationToken);
         return asset;
     }
+
+    // Authority files may be PDFs, so they cannot use the image-only proof check above.
+    private async Task<ConfirmedUploadResult> ConfirmAuthorityFileAsync(Guid accountId, UploadService.Request.UploadedAssetReference reference,
+        string label, CancellationToken cancellationToken)
+    {
+        ConfirmedUploadResult asset;
+        try
+        {
+            asset = await _mediaService.ConfirmUploadAsync(accountId, reference.PublicId, cancellationToken);
+        }
+        catch (Pegaxus.Service.Exceptions.Exceptions exception) when (exception.ErrorCode == "FILE_TOO_LARGE")
+        {
+            throw new Pegaxus.Service.Exceptions.Exceptions($"{label} must not exceed 2 MB", 413, "FILE_TOO_LARGE");
+        }
+        if (asset.SizeBytes > MaxProofFileSize)
+            throw new Pegaxus.Service.Exceptions.Exceptions($"{label} must not exceed 2 MB", 413, "FILE_TOO_LARGE");
+        var content = await _mediaService.DownloadPreviewAsync(asset.FileUrl, cancellationToken);
+        if (content.Content.Length != asset.SizeBytes || content.ContentType != asset.MimeType)
+            throw new BadRequestException("Uploaded file content does not match its metadata.", "INVALID_FILE_TYPE");
+        await _documentStorage.ValidateContentAsync(content, cancellationToken);
+        return asset;
+    }
 }

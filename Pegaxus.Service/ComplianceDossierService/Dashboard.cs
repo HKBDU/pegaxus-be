@@ -64,7 +64,7 @@ public sealed partial class Service
         {
             TotalActive = dashboardItems.Count(item => item.Dossier.Status is not (ComplianceDossierStatus.APPROVED or ComplianceDossierStatus.CLOSED)),
             ReadyForDeparture = dashboardItems.Count(item => item.Dossier.Status == ComplianceDossierStatus.READY_FOR_SUBMISSION),
-            ActionRequired = dashboardItems.Count(item => item.Dossier.Status is ComplianceDossierStatus.REJECTED or ComplianceDossierStatus.IN_PREPARATION),
+            ActionRequired = dashboardItems.Count(item => item.Dossier.Status is ComplianceDossierStatus.DRAFT or ComplianceDossierStatus.REJECTED or ComplianceDossierStatus.IN_PREPARATION),
             SubmittedToAuthorities = dashboardItems.Count(item => item.Dossier.Status is ComplianceDossierStatus.SUBMITTED or ComplianceDossierStatus.PENDING),
             UrgentRisk = dashboardItems.Count(item => item.IsUrgentRisk)
         };
@@ -72,7 +72,7 @@ public sealed partial class Service
         var filtered = dashboardItems.AsEnumerable();
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            if (!Enum.TryParse<ComplianceDossierStatus>(request.Status.Trim(), true, out var status))
+            if (!EnumParser.TryParseDefined<ComplianceDossierStatus>(request.Status.Trim(), out var status))
                 throw new BadRequestException("Status is invalid", "INVALID_STATUS_PARAMETER");
             filtered = filtered.Where(item => item.Dossier.Status == status);
         }
@@ -117,7 +117,7 @@ public sealed partial class Service
         var totalItems = filteredItems.Count;
         var totalPages = totalItems == 0 ? 0 : Paging.TotalPages(totalItems, request.PageSize);
         var items = filteredItems
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .Select(item => new Response.DashboardItemResponse
             {
@@ -383,7 +383,7 @@ public sealed partial class Service
         var totalItems = await query.CountAsync(cancellationToken);
         var totalPages = totalItems == 0 ? 0 : Paging.TotalPages(totalItems, request.PageSize);
         var audits = await query
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .ToListAsync(cancellationToken);
 

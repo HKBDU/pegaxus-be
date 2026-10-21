@@ -23,6 +23,7 @@ public static class Request
         public List<SegmentRequest> Segments { get; set; } = [];
         public string? RouteNote { get; set; }
         public string Action { get; set; } = string.Empty;
+        public Guid? IncidentReportId { get; set; }
     }
 
     public sealed class UpdateRequest

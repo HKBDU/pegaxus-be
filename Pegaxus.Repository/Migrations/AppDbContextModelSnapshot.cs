@@ -46,6 +46,7 @@ namespace Pegaxus.Repository.Migrations
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "dossier_type", new[] { "MAIN", "EXTRA" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "emergency_cost_category", new[] { "VETERINARY", "MEDICATION", "VEHICLE_REPAIR", "TOWING", "REPLACEMENT_VEHICLE", "EMERGENCY_STABLE", "ROUTE_CHANGE", "ACCOMMODATION", "OTHER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "emergency_cost_status", new[] { "PENDING", "APPROVED", "REJECTED", "CANCELLED" });
+            NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "emergency_receipt_status", new[] { "NOT_REQUIRED", "PENDING", "SUBMITTED", "APPROVED", "REJECTED" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "employee_role", new[] { "LOGISTICS_MANAGER", "TRANSPORT_SPECIALIST", "FLEET_ROUTE_COORDINATOR", "DRIVER", "ESCORT" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "handover_party_type", new[] { "CUSTOMER", "EMPLOYEE", "PROVIDER" });
             NpgsqlModelBuilderExtensions.HasPostgresEnum(modelBuilder, "handover_status", new[] { "PLANNED", "IN_PROGRESS", "COMPLETED", "CANCELLED" });
@@ -2037,10 +2038,22 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("incident_report_id");
 
+                    b.Property<bool>("InvoiceRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("invoice_required");
+
                     b.Property<string>("Justification")
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("justification");
+
+                    b.Property<EmergencyReceiptStatus>("ReceiptStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("emergency_receipt_status")
+                        .HasColumnName("receipt_status")
+                        .HasDefaultValueSql("'NOT_REQUIRED'::emergency_receipt_status");
 
                     b.Property<string>("RequestCode")
                         .IsRequired()
@@ -2056,6 +2069,10 @@ namespace Pegaxus.Repository.Migrations
                     b.Property<DateTime>("RequestedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("requested_at");
+
+                    b.Property<Guid>("RequestedByEmployeeId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("requested_by_employee_id");
 
                     b.Property<EmergencyCostStatus>("Status")
                         .ValueGeneratedOnAdd()
@@ -2073,6 +2090,9 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex("Category")
                         .HasDatabaseName("EmergencyCostRequest_category_idx");
 
+                    b.HasIndex("ReceiptStatus")
+                        .HasDatabaseName("EmergencyCostRequest_receipt_status_idx");
+
                     b.HasIndex("Status")
                         .HasDatabaseName("EmergencyCostRequest_status_idx");
 
@@ -2080,6 +2100,8 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex(new[] { "RequestCode" }, "EmergencyCostRequest_request_code_key")
                         .IsUnique();
+
+                    b.HasIndex(new[] { "RequestedByEmployeeId" }, "EmergencyCostRequest_requested_by_employee_id_idx");
 
                     b.ToTable("EmergencyCostRequest", (string)null);
                 });
@@ -2655,6 +2677,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("horse_incident_type")
                         .HasColumnName("incident_type");
 
+                    b.Property<bool>("IsolationRequired")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false)
+                        .HasColumnName("isolation_required");
+
                     b.Property<string>("MedicationGiven")
                         .HasColumnType("text")
                         .HasColumnName("medication_given");
@@ -2834,6 +2862,64 @@ namespace Pegaxus.Repository.Migrations
                         {
                             t.HasCheckConstraint("HorseHealthLog_photos_check", "cardinality(photo_urls) <= 5 AND array_position(photo_urls, NULL) IS NULL");
                         });
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.IncidentPhoto", b =>
+                {
+                    b.Property<Guid>("IncidentPhotoId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("incident_photo_id");
+
+                    b.Property<string>("Caption")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("caption");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("EmergencyCostRequestId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("emergency_cost_request_id");
+
+                    b.Property<Guid?>("HorseHealthIncidentDetailId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("horse_health_incident_detail_id");
+
+                    b.Property<Guid>("IncidentReportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("incident_report_id");
+
+                    b.Property<string>("PhotoUrl")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("photo_url");
+
+                    b.Property<int>("SortOrder")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("sort_order");
+
+                    b.Property<Guid?>("VehicleIncidentDetailId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("vehicle_incident_detail_id");
+
+                    b.HasKey("IncidentPhotoId")
+                        .HasName("IncidentPhoto_pkey");
+
+                    b.HasIndex(new[] { "EmergencyCostRequestId" }, "IncidentPhoto_emergency_cost_request_id_idx");
+
+                    b.HasIndex(new[] { "HorseHealthIncidentDetailId" }, "IncidentPhoto_horse_health_incident_detail_id_idx");
+
+                    b.HasIndex(new[] { "IncidentReportId" }, "IncidentPhoto_incident_report_id_idx");
+
+                    b.HasIndex(new[] { "VehicleIncidentDetailId" }, "IncidentPhoto_vehicle_incident_detail_id_idx");
+
+                    b.ToTable("IncidentPhoto", (string)null);
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.IncidentReport", b =>
@@ -4430,6 +4516,11 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("capacity_horses");
 
+                    b.Property<string>("Country")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("country");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
@@ -4550,6 +4641,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("vehicle_incident_detail_id");
 
+                    b.Property<string>("CargoConditionNote")
+                        .HasColumnType("text")
+                        .HasColumnName("cargo_condition_note");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
@@ -4558,10 +4653,19 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("text")
                         .HasColumnName("damage_description");
 
+                    b.Property<string>("DriverSafetyStatus")
+                        .HasColumnType("text")
+                        .HasColumnName("driver_safety_status");
+
                     b.Property<decimal?>("EstimatedRepairCost")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("estimated_repair_cost");
+
+                    b.Property<decimal?>("EstimatedRepairHours")
+                        .HasPrecision(4, 1)
+                        .HasColumnType("numeric(4,1)")
+                        .HasColumnName("estimated_repair_hours");
 
                     b.Property<Guid>("IncidentReportId")
                         .HasColumnType("uuid")
@@ -5099,7 +5203,15 @@ namespace Pegaxus.Repository.Migrations
                         .IsRequired()
                         .HasConstraintName("EmergencyCostRequest_incident_report_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.Employee", "RequestedByEmployee")
+                        .WithMany("RequestedEmergencyCostRequests")
+                        .HasForeignKey("RequestedByEmployeeId")
+                        .IsRequired()
+                        .HasConstraintName("EmergencyCostRequest_requested_by_employee_id_fkey");
+
                     b.Navigation("IncidentReport");
+
+                    b.Navigation("RequestedByEmployee");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.Employee", b =>
@@ -5281,6 +5393,38 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("Horse");
 
                     b.Navigation("Transport");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.IncidentPhoto", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.EmergencyCostRequest", "EmergencyCostRequest")
+                        .WithMany("IncidentPhotos")
+                        .HasForeignKey("EmergencyCostRequestId")
+                        .HasConstraintName("IncidentPhoto_emergency_cost_request_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.HorseHealthIncidentDetail", "HorseHealthIncidentDetail")
+                        .WithMany("IncidentPhotos")
+                        .HasForeignKey("HorseHealthIncidentDetailId")
+                        .HasConstraintName("IncidentPhoto_horse_health_incident_detail_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.IncidentReport", "IncidentReport")
+                        .WithMany("IncidentPhotos")
+                        .HasForeignKey("IncidentReportId")
+                        .IsRequired()
+                        .HasConstraintName("IncidentPhoto_incident_report_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.VehicleIncidentDetail", "VehicleIncidentDetail")
+                        .WithMany("IncidentPhotos")
+                        .HasForeignKey("VehicleIncidentDetailId")
+                        .HasConstraintName("IncidentPhoto_vehicle_incident_detail_id_fkey");
+
+                    b.Navigation("EmergencyCostRequest");
+
+                    b.Navigation("HorseHealthIncidentDetail");
+
+                    b.Navigation("IncidentReport");
+
+                    b.Navigation("VehicleIncidentDetail");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.IncidentReport", b =>
@@ -5803,6 +5947,8 @@ namespace Pegaxus.Repository.Migrations
                 {
                     b.Navigation("CostApprovalDecision");
 
+                    b.Navigation("IncidentPhotos");
+
                     b.Navigation("InvoiceItem");
                 });
 
@@ -5826,6 +5972,8 @@ namespace Pegaxus.Repository.Migrations
 
                     b.Navigation("Invoices");
 
+                    b.Navigation("RequestedEmergencyCostRequests");
+
                     b.Navigation("RoutePlanRoutes");
 
                     b.Navigation("TransportPlans");
@@ -5847,11 +5995,18 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("InvoiceItems");
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.HorseHealthIncidentDetail", b =>
+                {
+                    b.Navigation("IncidentPhotos");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.IncidentReport", b =>
                 {
                     b.Navigation("EmergencyCostRequests");
 
                     b.Navigation("HorseHealthIncidentDetails");
+
+                    b.Navigation("IncidentPhotos");
 
                     b.Navigation("VehicleIncidentDetail");
                 });
@@ -5948,6 +6103,11 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("RoutePlanRouteVehicles");
 
                     b.Navigation("VehicleIncidentDetails");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.VehicleIncidentDetail", b =>
+                {
+                    b.Navigation("IncidentPhotos");
                 });
 #pragma warning restore 612, 618
         }

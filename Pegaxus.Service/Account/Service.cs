@@ -1,8 +1,8 @@
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 using static Pegaxus.Service.Common.DbTime;
@@ -96,10 +96,13 @@ public sealed class Service : IAccountService
         if (account is null)
             throw new KeyNotFoundException("Account not found");
 
-        ValidateText(request.FullName, 150, "FullName");
+        ValidateText(request.FullName is null ? null : Text.NormalizeName(request.FullName), 150, "FullName");
         ValidateText(request.Phone, 30, "Phone");
+        Phones.EnsureValid(request.Phone);
         ValidateText(request.Address, 500, "Address");
         ValidateText(request.Country, 100, "Country");
+        // Assignment filters match employees by ISO code, so an employee's country must use it.
+        if (account.EmployeeAccount is { IsDeleted: false }) CountryCodes.EnsureValid(request.Country);
         ValidateText(request.IdentityNumber, 100, "IdentityNumber");
 
         if (request.IdentityNumber is not null && account.CustomerAccount is null)
@@ -107,16 +110,23 @@ public sealed class Service : IAccountService
 
         if (request.DateOfBirth is { } dateOfBirth && dateOfBirth > DateOnly.FromDateTime(DateTime.UtcNow))
             throw new BadRequestException("Date of birth cannot be in the future");
+        if (request.DateOfBirth is { } birth)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (birth > today.AddYears(-Limits.AccountMinAgeYears))
+                throw new BadRequestException($"You must be at least {Limits.AccountMinAgeYears} years old");
+            if (birth < today.AddYears(-Limits.AccountMaxAgeYears))
+                throw new BadRequestException($"Date of birth cannot be more than {Limits.AccountMaxAgeYears} years ago");
+        }
 
-        if (request.Avatar is not null)
-            ValidateAvatar(request.Avatar);
+        var avatarUrl = request.Avatar is null ? null : await ConfirmAvatarAsync(accountId, request.Avatar, cancellationToken);
 
         if (request.FullName is not null)
         {
             if (account.CustomerAccount is { IsDeleted: false } customer)
-                customer.FullName = request.FullName.Trim();
+                customer.FullName = Text.NormalizeName(request.FullName);
             if (account.EmployeeAccount is { IsDeleted: false } employee)
-                employee.FullName = request.FullName.Trim();
+                employee.FullName = Text.NormalizeName(request.FullName);
         }
         if (request.DateOfBirth is not null)
         {
@@ -144,12 +154,12 @@ public sealed class Service : IAccountService
             if (account.CustomerAccount is { IsDeleted: false } customer)
                 customer.Country = request.Country.Trim();
             if (account.EmployeeAccount is { IsDeleted: false } employee)
-                employee.Country = request.Country.Trim();
+                employee.Country = CountryCodes.Normalize(request.Country);
         }
         if (request.IdentityNumber is not null && account.CustomerAccount is { IsDeleted: false } customerAccount)
             customerAccount.IdentityNumber = request.IdentityNumber.Trim();
-        if (request.Avatar is not null)
-            account.AvatarUrl = await _mediaService.UploadImageAsync(request.Avatar);
+        if (avatarUrl is not null)
+            account.AvatarUrl = avatarUrl;
 
         account.UpdatedAt = UtcNow();
         await _appDbContext.SaveChangesAsync(cancellationToken);
@@ -163,15 +173,13 @@ public sealed class Service : IAccountService
             throw new BadRequestException($"{fieldName} must not exceed {maxLength} characters");
     }
 
-    private static void ValidateAvatar(IFormFile file)
+    private async Task<string> ConfirmAvatarAsync(Guid accountId, UploadService.Request.UploadedAssetReference avatar, CancellationToken cancellationToken)
     {
-        const long maxFileSize = 2 * 1024 * 1024;
-        var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-        var validExtension = extension is ".jpg" or ".jpeg" or ".png";
-        var validContentType = file.ContentType is "image/jpeg" or "image/png";
-
-        if (file.Length == 0 || file.Length > maxFileSize || !validExtension || !validContentType)
+        var asset = await _mediaService.ConfirmAvatarAsync(accountId, avatar.PublicId, cancellationToken);
+        var content = await _mediaService.DownloadPreviewAsync(asset.FileUrl, cancellationToken);
+        if (content.Content.Length != asset.SizeBytes || content.ContentType != asset.MimeType)
             throw new BadRequestException("Image must be JPG/PNG and no larger than 2 MB", "INVALID_FILE");
+        return asset.FileUrl;
     }
 
     public async Task ChangePasswordAsync(

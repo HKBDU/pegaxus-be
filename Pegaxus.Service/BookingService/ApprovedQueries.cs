@@ -208,7 +208,7 @@ public sealed partial class Service
 
         if (!string.IsNullOrWhiteSpace(request.TransportPlanStatus))
         {
-            if (!Enum.TryParse<TransportPlanStatus>(request.TransportPlanStatus.Trim(), true, out var status))
+            if (!EnumParser.TryParseDefined<TransportPlanStatus>(request.TransportPlanStatus.Trim(), out var status))
                 throw new BadRequestException("Transport plan status is invalid", "INVALID_TRANSPORT_PLAN_STATUS");
             query = query.Where(booking => booking.Transport != null &&
                 booking.Transport.TransportPlans
@@ -222,21 +222,21 @@ public sealed partial class Service
             query = request.HasRoutePlan.Value
                 ? query.Where(booking => booking.Transport != null && booking.Transport.TransportPlans.Any(plan =>
                     plan.CreatedAt == booking.Transport.TransportPlans.Max(current => current.CreatedAt) &&
-                    plan.RoutePlans.Any(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED &&
+                    plan.RoutePlans.Any(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED && routePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                         routePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.PRIMARY))))
                 : query.Where(booking => booking.Transport == null || !booking.Transport.TransportPlans.Any(plan =>
                     plan.CreatedAt == booking.Transport.TransportPlans.Max(current => current.CreatedAt) &&
-                    plan.RoutePlans.Any(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED &&
+                    plan.RoutePlans.Any(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED && routePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                         routePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.PRIMARY))));
         }
 
         if (!string.IsNullOrWhiteSpace(request.RoutePlanStatus))
         {
-            if (!Enum.TryParse<RoutePlanStatus>(request.RoutePlanStatus.Trim(), true, out var status))
+            if (!EnumParser.TryParseDefined<RoutePlanStatus>(request.RoutePlanStatus.Trim(), out var status))
                 throw new BadRequestException("Route plan status is invalid", "INVALID_ROUTE_PLAN_STATUS");
             query = query.Where(booking => booking.Transport != null && booking.Transport.TransportPlans.Any(plan =>
                 plan.CreatedAt == booking.Transport.TransportPlans.Max(current => current.CreatedAt) &&
-                plan.RoutePlans.Any(routePlan => routePlan.Status == status && routePlan.Status != RoutePlanStatus.CANCELLED &&
+                plan.RoutePlans.Any(routePlan => routePlan.Status == status && routePlan.Status != RoutePlanStatus.CANCELLED && routePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                     routePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.PRIMARY))));
         }
 
@@ -249,7 +249,7 @@ public sealed partial class Service
 
         if (!string.IsNullOrWhiteSpace(request.ComplianceDossierStatus))
         {
-            if (!Enum.TryParse<ComplianceDossierStatus>(request.ComplianceDossierStatus.Trim(), true, out var status))
+            if (!EnumParser.TryParseDefined<ComplianceDossierStatus>(request.ComplianceDossierStatus.Trim(), out var status))
                 throw new BadRequestException("Compliance dossier status is invalid", "INVALID_COMPLIANCE_DOSSIER_STATUS");
             query = query.Where(booking => booking.Transport != null &&
                 booking.Transport.ComplianceDossiers.Any(dossier => dossier.DossierType == DossierType.MAIN && dossier.Status == status));
@@ -258,7 +258,7 @@ public sealed partial class Service
         query = ApplyApprovedBookingSorting(query, request.SortBy);
         var totalItems = await query.CountAsync(cancellationToken);
         var items = await query
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .Select(booking => new Response.ApprovedBookingListItemResponse
             {
@@ -310,7 +310,7 @@ public sealed partial class Service
                     : booking.Transport.TransportPlans
                         .OrderByDescending(plan => plan.CreatedAt)
                         .SelectMany(plan => plan.RoutePlans
-                            .Where(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED &&
+                            .Where(routePlan => routePlan.Status != RoutePlanStatus.CANCELLED && routePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                                 routePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.PRIMARY))
                             .OrderByDescending(routePlan => routePlan.CreatedAt)
                             .Select(routePlan => new Response.RoutePlanSummary

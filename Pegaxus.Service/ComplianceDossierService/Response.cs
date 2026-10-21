@@ -314,7 +314,7 @@ public class Response
         public DateTimeOffset BookingUpdatedAt { get; init; }
         public Guid TransportId { get; init; }
         public Guid? DossierTemplateId { get; init; }
-        public string Status { get; init; } = "IN_PREPARATION";
+        public string Status { get; init; } = "DRAFT";
         public IReadOnlyList<Request.InitializationItemRequest> Items { get; init; } = [];
         public IReadOnlyList<GeneratedRequirementResponse> Requirements { get; init; } = [];
     }

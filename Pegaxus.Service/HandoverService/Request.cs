@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Http;
-
 namespace Pegaxus.Service.HandoverService;
 
 public static class Request
@@ -46,6 +44,8 @@ public static class Request
     public sealed class CompleteRequest
     {
         public DateTimeOffset? LastUpdatedAt { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
         public string? HorseConditionNote { get; set; }
         public string? DocumentHandoverNote { get; set; }
         public string? EquipmentHandoverNote { get; set; }
@@ -59,7 +59,7 @@ public static class Request
         public string? ToPartyName { get; set; }
         public string? ToContactName { get; set; }
         public string? ToContactPhone { get; set; }
-        public IFormFile? SenderSignature { get; set; }
-        public IFormFile? ReceiverSignature { get; set; }
+        public UploadService.Request.UploadedAssetReference? SenderSignature { get; set; }
+        public UploadService.Request.UploadedAssetReference? ReceiverSignature { get; set; }
     }
 }

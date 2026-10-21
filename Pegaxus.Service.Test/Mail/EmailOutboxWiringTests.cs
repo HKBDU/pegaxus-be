@@ -22,7 +22,7 @@ public class EmailOutboxWiringTests
         var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var service = new EmployeeServiceImpl(db, new PasswordHasher<Account>());
 
-        var created = await service.CreateAsync(new() { Role = "DRIVER", Email = "New.Driver@Example.com", Phone = "0900000000", FullName = "New Driver" }, manager.AccountId);
+        var created = await service.CreateAsync(new() { Role = "DRIVER", Email = "New.Driver@Example.com", Phone = "+33123456789", FullName = "New Driver" }, manager.AccountId);
 
         var mail = Assert.Single(await EmailsAsync(db));
         Assert.Equal("new.driver@example.com", mail.To);

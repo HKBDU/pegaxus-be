@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.Http;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
@@ -131,7 +130,7 @@ public class Request
 
         public bool IsRequired { get; set; } = true;
 
-        public IFormFile? ProofFile { get; set; }
+        public UploadService.Request.UploadedAssetReference? ProofFile { get; set; }
 
         public string? DecisionNote { get; set; }
     }
@@ -146,7 +145,7 @@ public class Request
 
         public DateOnly? PermitExpiryDate { get; set; }
 
-        public IFormFile? DecisionFile { get; set; }
+        public UploadService.Request.UploadedAssetReference? DecisionFile { get; set; }
 
         public string? DecisionNote { get; set; }
 

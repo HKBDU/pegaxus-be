@@ -12,7 +12,7 @@ namespace Pegaxus.Service.Test;
 public class DossierInitializationTests
 {
     [Fact]
-    public async Task Initialize_ExpandsHorses_CopiesTemplate_AndNotifiesCustomer()
+    public async Task Initialize_ExpandsHorses_CopiesTemplate_WithoutNotifyingCustomerWhileDraft()
     {
         await using var db = TestSupport.CreateDb();
         var (booking, template, specialist) = await SeedAsync(db);
@@ -27,22 +27,21 @@ public class DossierInitializationTests
         Assert.Empty(realtime.Notifications);
 
         var result = await service.InitializeAsync(specialist, booking.BookingId, request);
-        Assert.Equal("IN_PREPARATION", result.Status);
+        Assert.Equal("DRAFT", result.Status);
         Assert.Equal("MAIN", result.DossierType);
         Assert.Equal(DossierType.MAIN, (await db.ComplianceDossiers.SingleAsync()).DossierType);
         Assert.Matches(@"^CD-\d{8}-\d{4}$", (await db.ComplianceDossiers.SingleAsync()).DossierCode);
-        var mail = Assert.Single(await EmailOutboxWiringTests.EmailsAsync(db));
-        Assert.Equal(booking.Customer.Account.Email, mail.To);
+        Assert.Empty(await EmailOutboxWiringTests.EmailsAsync(db));
+#if false
         Assert.Equal($"Compliance dossier opened — {result.DossierCode}", mail.Subject);
         Assert.Contains($"{{{{PX_FRONTEND_URL}}}}/compliance-dossiers/{result.ComplianceDossierId}", mail.Body);
+#endif
         Assert.Equal(3, result.Requirements.Count);
         Assert.Equal(2, result.Requirements.Count(item => item.HorseId != null));
         Assert.Equal(DateOnly.FromDateTime(DateTime.UtcNow).AddDays(30), result.Requirements.First().ValidUntil);
         Assert.Equal(template.DossierTemplateId, (await db.ComplianceDossiers.SingleAsync()).DossierTemplateId);
-        Assert.Equal(booking.Customer.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
-        var push = Assert.Single(realtime.Notifications);
-        Assert.Equal(booking.Customer.AccountId, push.AccountId);
-        Assert.Equal((await db.Notifications.SingleAsync()).NotificationId, push.Notification.Id);
+        Assert.Empty(await db.AccountNotifications.ToListAsync());
+        Assert.Empty(realtime.Notifications);
         Assert.Equal(2, template.DossierTemplateItems.Count);
         await Assert.ThrowsAsync<ConflictException>(() => service.InitializeAsync(specialist, booking.BookingId, request));
     }

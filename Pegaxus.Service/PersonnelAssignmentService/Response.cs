@@ -5,7 +5,7 @@ namespace Pegaxus.Service.PersonnelAssignmentService;
 public static class Response
 {
     public sealed record EmployeeBrief(Guid EmployeeId, string EmployeeCode, string FullName, string Role,
-        string Email, string? AvatarUrl,
+        string Email, string? AvatarUrl, string? Country,
         [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? AssignedAt = null);
     public sealed record ComplianceDossierBrief(Guid ComplianceDossierId, string DossierCode, string Status);
     public sealed record ScheduleConflictResponse(Guid EmployeeId, string EmployeeCode, string Role, Guid RoutePlanRouteId,

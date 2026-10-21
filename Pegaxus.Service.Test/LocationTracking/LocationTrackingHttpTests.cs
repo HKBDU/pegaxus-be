@@ -33,6 +33,35 @@ namespace Pegaxus.Service.Test;
 public class LocationTrackingHttpTests
 {
     [Fact]
+    public async Task Http_GpsReportsTheArrivalAndTheDriverConfirmsIt()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        await using var host = await StartAsync(db, f);
+        using var driver = Client(host, f.Driver.AccountId, EmployeeRole.DRIVER);
+        var url = $"/api/v1/transports/{f.TransportId}";
+
+        using var sent = await driver.PostAsJsonAsync(url + "/locations", f.Point(1));
+        var arrival = (await sent.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value").GetProperty("arrival");
+        Assert.False(arrival.GetProperty("handoverRequired").GetBoolean());
+        Assert.Equal(f.First.RoutePlanRouteId, arrival.GetProperty("fromRoutePlanRouteId").GetGuid());
+        Assert.Equal(f.Second.RoutePlanRouteId, arrival.GetProperty("toRoutePlanRouteId").GetGuid());
+        Assert.Equal(500, arrival.GetProperty("radiusMeters").GetDouble()); Assert.Equal(JsonValueKind.Null, arrival.GetProperty("existingHandover").ValueKind);
+
+        f.Clock.Now = f.Clock.Now.AddMinutes(6);
+        using var confirmed = await driver.PostAsJsonAsync($"{url}/segments/{f.First.RoutePlanRouteId}/arrival", new { latitude = 10, longitude = 1 });
+        var body = await confirmed.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(HttpStatusCode.OK, confirmed.StatusCode); Assert.Equal("Segment arrival confirmed successfully", body.GetProperty("message").GetString());
+        Assert.Equal("COMPLETED", body.GetProperty("value").GetProperty("from").GetProperty("status").GetString());
+        Assert.Equal("IN_TRANSIT", body.GetProperty("value").GetProperty("to").GetProperty("status").GetString());
+
+        using var late = await driver.PostAsJsonAsync($"{url}/segments/{f.First.RoutePlanRouteId}/arrival", new { latitude = 10, longitude = 1.05 });
+        Assert.Equal(HttpStatusCode.Conflict, late.StatusCode);
+        Assert.Equal("ARRIVAL_LOCKED", (await late.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        using var manager = Client(host, f.Manager.AccountId, EmployeeRole.LOGISTICS_MANAGER);
+        Assert.Equal(HttpStatusCode.Forbidden, (await manager.PostAsJsonAsync($"{url}/segments/{f.First.RoutePlanRouteId}/arrival", new { latitude = 10, longitude = 1 })).StatusCode);
+    }
+
+    [Fact]
     public async Task Http_GpsSnapshotAndPermissionDeniedUseContractEnvelopes()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);

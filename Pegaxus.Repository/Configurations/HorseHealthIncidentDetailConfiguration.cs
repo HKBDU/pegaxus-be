@@ -33,6 +33,9 @@ public sealed class HorseHealthIncidentDetailConfiguration : IEntityTypeConfigur
         entity.Property(e => e.HorseId).HasColumnName("horse_id");
         entity.Property(e => e.HorseTransportable).HasColumnName("horse_transportable");
         entity.Property(e => e.IncidentReportId).HasColumnName("incident_report_id");
+        entity.Property(e => e.IsolationRequired)
+            .HasDefaultValue(false)
+            .HasColumnName("isolation_required");
         entity.Property(e => e.MedicationGiven).HasColumnName("medication_given");
         entity.Property(e => e.OutcomeNote).HasColumnName("outcome_note");
         entity.Property(e => e.RespiratoryRateBpm).HasColumnName("respiratory_rate_bpm");

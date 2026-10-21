@@ -1,5 +1,4 @@
 using System.Buffers.Binary;
-using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Pegaxus.Repository.Entities;
@@ -7,6 +6,7 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.MediaService;
 
 using static Pegaxus.Service.Common.DbTime;
 
@@ -16,72 +16,57 @@ public sealed partial class Service
 {
     public async Task<Response.DetailResponse> CompleteAsync(Guid handoverRecordId, Request.CompleteRequest request, Guid accountId, CancellationToken cancellationToken = default)
     {
-        if (request.SenderSignature is null || request.ReceiverSignature is null)
+        if (string.IsNullOrWhiteSpace(request.SenderSignature?.PublicId) || string.IsNullOrWhiteSpace(request.ReceiverSignature?.PublicId))
             throw new BadRequestException("Both sender and receiver signatures are required", "SIGNATURE_REQUIRED");
         Validation.Validate(request, completeValidator);
-        await ValidateSignatureAsync(request.SenderSignature, cancellationToken);
-        await ValidateSignatureAsync(request.ReceiverSignature, cancellationToken);
-        var uploaded = new List<string>();
-        string? senderUrl = null, receiverUrl = null;
-        var commitStarted = false;
-        Response.DetailResponse result;
-        try
-        {
-            await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
-            var actor = await ActorAsync(accountId, cancellationToken);
-            var item = await LockAsync(handoverRecordId, cancellationToken);
-            if (!await CanOperateAsync(item, actor, cancellationToken)) throw Forbidden();
-            if (item.Status is not (HandoverStatus.PLANNED or HandoverStatus.IN_PROGRESS)) throw InvalidStatus(item);
-            if (Truncate(request.LastUpdatedAt!.Value) != Truncate(item.UpdatedAt))
-                throw new ConflictException("The handover record was just modified. Please reload the page", "HANDOVER_MODIFIED");
-            var (transport, segments) = await LockJourneyAsync(item.TransportId, cancellationToken);
-            var ordered = EffectiveSegments(segments.Where(segment => EligibleStatuses.Contains(segment.RoutePlan.Status))
-                .Select(segment => new SegmentData(segment.RoutePlanRouteId, segment.RoutePlanId, segment.RoutePlan.Status, segment.RoutePlan.UpdatedAt,
-                    segment.SequenceNo, segment.RouteType, segment.SupersededAt, segment.ActualDepartureAt, "", "")).ToArray(), transport.Status);
-            var effective = ordered.Select(entry => segments.Single(segment => segment.RoutePlanRouteId == entry.Id)).ToArray();
-            var customerId = await db.Bookings.Where(booking => booking.BookingId == transport.BookingId).Select(booking => booking.CustomerId).SingleAsync(cancellationToken);
-            ValidateBoundary(item, segments, effective, customerId);
-            var sender = await media.UploadFileAsync(request.SenderSignature); uploaded.Add(sender.PublicId);
-            var receiver = await media.UploadFileAsync(request.ReceiverSignature); uploaded.Add(receiver.PublicId);
-            senderUrl = sender.FileUrl; receiverUrl = receiver.FileUrl;
-            var now = Truncate(clock.GetUtcNow());
-            ApplyCompletion(item, request, sender.FileUrl, receiver.FileUrl, now);
-            var effects = await ApplyEffectsAsync(item, transport, segments, effective, now, cancellationToken);
-            await QueueCompletionAsync(item, transport, segments, now, cancellationToken);
-            result = (await DetailAsync(item, (await HeaderAsync(item.TransportId, cancellationToken)) with { Status = transport.Status }, actor, cancellationToken))
-                with { Effects = effects };
-            await db.SaveChangesAsync(cancellationToken);
-            commitStarted = true;
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch
-        {
-            // A failed commit can have succeeded remotely; do not delete a persisted signature.
-            var keepFiles = false;
-            if (commitStarted)
-            {
-                try { keepFiles = await db.HandoverRecords.AsNoTracking().AnyAsync(item => item.HandoverRecordId == handoverRecordId &&
-                    item.Status == HandoverStatus.COMPLETED && item.SenderSignatureUrl == senderUrl && item.ReceiverSignatureUrl == receiverUrl, CancellationToken.None); }
-                catch (Exception error) { keepFiles = true; logger.LogWarning(error, "Could not verify handover {HandoverRecordId} after a failed commit; retaining signatures", handoverRecordId); }
-            }
-            if (!keepFiles)
-                foreach (var publicId in uploaded)
-                    try { await media.DeleteFileAsync(publicId); }
-                    catch (Exception error) { logger.LogWarning(error, "Could not delete orphaned handover signature {PublicId}", publicId); }
-            throw;
-        }
+        var senderUrl = await ConfirmSignatureAsync(accountId, request.SenderSignature, cancellationToken);
+        var receiverUrl = await ConfirmSignatureAsync(accountId, request.ReceiverSignature, cancellationToken);
+        await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
+        var actor = await ActorAsync(accountId, cancellationToken);
+        var item = await LockAsync(handoverRecordId, cancellationToken);
+        if (!await CanOperateAsync(item, actor, cancellationToken)) throw Forbidden();
+        // A scheduled record must be started first, so completion always follows a deliberate start.
+        if (item.Status != HandoverStatus.IN_PROGRESS) throw InvalidStatus(item);
+        if (Truncate(request.LastUpdatedAt!.Value) != Truncate(item.UpdatedAt))
+            throw new ConflictException("The handover record was just modified. Please reload the page", "HANDOVER_MODIFIED");
+        var (transport, segments) = await LockJourneyAsync(item.TransportId, cancellationToken);
+        var ordered = EffectiveSegments(segments.Where(segment => EligibleStatuses.Contains(segment.RoutePlan.Status))
+            .Select(segment => new SegmentData(segment.RoutePlanRouteId, segment.RoutePlanId, segment.RoutePlan.Status, segment.RoutePlan.UpdatedAt,
+                segment.SequenceNo, segment.RouteType, segment.SupersededAt, segment.ActualDepartureAt, "", "")).ToArray(), transport.Status);
+        var effective = ordered.Select(entry => segments.Single(segment => segment.RoutePlanRouteId == entry.Id)).ToArray();
+        var customerId = await db.Bookings.Where(booking => booking.BookingId == transport.BookingId).Select(booking => booking.CustomerId).SingleAsync(cancellationToken);
+        ValidateBoundary(item, segments, effective, customerId);
+        // Coordinates only prove the device is at the meeting point; they are discarded. A location without coordinates cannot be checked.
+        if (await GeofenceAsync(item, cancellationToken) is { } geofence &&
+            Geo.DistanceMeters(request.Latitude!.Value, request.Longitude!.Value, geofence.Latitude, geofence.Longitude) > geofence.RadiusMeters)
+            throw new UnprocessableEntityException("You are not within the handover radius of the handover point", "NOT_IN_HANDOVER_RADIUS");
+        var now = Truncate(clock.GetUtcNow());
+        ApplyCompletion(item, request, senderUrl, receiverUrl, now);
+        var effects = await ApplyEffectsAsync(item, transport, segments, effective, now, cancellationToken);
+        await QueueCompletionAsync(item, transport, segments, now, cancellationToken);
+        var result = (await DetailAsync(item, (await HeaderAsync(item.TransportId, cancellationToken)) with { Status = transport.Status }, actor, cancellationToken))
+            with { Effects = effects };
+        await db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
         return result;
     }
 
-    private static async Task ValidateSignatureAsync(IFormFile file, CancellationToken cancellationToken)
+    private async Task<string> ConfirmSignatureAsync(Guid accountId, UploadService.Request.UploadedAssetReference? reference, CancellationToken cancellationToken)
     {
-        if (file.Length is < 45 or > 200 * 1024 || !string.Equals(file.ContentType, "image/png", StringComparison.OrdinalIgnoreCase) ||
-            !string.Equals(Path.GetExtension(file.FileName), ".png", StringComparison.OrdinalIgnoreCase)) throw InvalidImage();
-        await using var stream = file.OpenReadStream();
-        var bytes = new byte[file.Length];
-        try { await stream.ReadExactlyAsync(bytes, cancellationToken); }
-        catch (EndOfStreamException) { throw InvalidImage(); }
+        ConfirmedUploadResult asset;
+        try { asset = await media.ConfirmUploadAsync(accountId, reference!.PublicId, cancellationToken); }
+        catch (Pegaxus.Service.Exceptions.Exceptions error) when (error.ErrorCode == "FILE_TOO_LARGE") { throw InvalidImage(); }
+        if (asset.MimeType != "image/png" || asset.SizeBytes is < 45 or > 200 * 1024) throw InvalidImage();
+        var content = await media.DownloadPreviewAsync(asset.FileUrl, cancellationToken);
+        if (content.ContentType != "image/png" || content.Content.Length != asset.SizeBytes) throw InvalidImage();
+        ValidatePng(content.Content);
+        return asset.FileUrl;
+    }
+
+    private static void ValidatePng(byte[] bytes)
+    {
+        if (bytes.Length < 45) throw InvalidImage();
         if (!bytes.AsSpan().StartsWith(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }) ||
             !bytes.AsSpan(8, 8).SequenceEqual(new byte[] { 0, 0, 0, 13, 73, 72, 68, 82 }) ||
             !bytes.AsSpan(bytes.Length - 12).SequenceEqual(new byte[] { 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130 }) ||

@@ -58,6 +58,8 @@ public partial class Employee
 
     public virtual ICollection<IncidentReport> IncidentReports { get; set; } = new List<IncidentReport>();
 
+    public virtual ICollection<EmergencyCostRequest> RequestedEmergencyCostRequests { get; set; } = new List<EmergencyCostRequest>();
+
     public virtual ICollection<Invoice> Invoices { get; set; } = new List<Invoice>();
 
     public virtual ICollection<RoutePlanRoute> RoutePlanRoutes { get; set; } = new List<RoutePlanRoute>();

@@ -29,7 +29,7 @@ public partial class HandoverPostgresTests
                 Assert.Equal(3, (await service.GetListAsync(f.TransportId, new() { Status = "PLANNED,COMPLETED" }, f.Manager.AccountId)).TotalItems);
                 Assert.Equal(2, (await service.GetListAsync(f.TransportId, new(), f.CustomerAccountId)).TotalItems);
                 Assert.Null((await service.GetAsync(f.Pickup.HandoverRecordId, f.CustomerAccountId)).To.ContactPhone);
-                Assert.Equal(new[] { "START", "COMPLETE" }, (await service.GetAsync(f.Transfer.HandoverRecordId, f.Driver.AccountId)).AvailableActions);
+                Assert.Equal(new[] { "START" }, (await service.GetAsync(f.Transfer.HandoverRecordId, f.Driver.AccountId)).AvailableActions);
             }
             await using (var stale = new AppDbContext(options))
             {

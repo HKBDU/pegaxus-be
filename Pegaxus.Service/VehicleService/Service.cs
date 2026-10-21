@@ -42,6 +42,8 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             var type = request.VehicleType.Trim().ToUpperInvariant();
             query = query.Where(x => x.VehicleType != null && x.VehicleType.ToUpper() == type);
         }
+        if (CountryCodes.Normalize(request.Country) is { } country)
+            query = query.Where(x => x.Country == country);
         if (request.MinCapacity.HasValue)
             query = query.Where(x => x.CapacityHorses >= request.MinCapacity);
         if (!string.IsNullOrWhiteSpace(request.Search))
@@ -63,10 +65,11 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 (!x.RegistrationExpiryDate.HasValue || x.RegistrationExpiryDate > lastDay) &&
                 (!x.InsuranceExpiryDate.HasValue || x.InsuranceExpiryDate > lastDay) &&
                 !assignments.Any(a => a.VehicleId == x.VehicleId &&
+                    (request.TransportPlanId == null || a.RoutePlanRoute.RoutePlan.TransportPlanId != request.TransportPlanId) &&
                     (!a.RoutePlanRoute.PlannedDepartureAt.HasValue || !a.RoutePlanRoute.PlannedArrivalAt.HasValue ||
                      a.RoutePlanRoute.PlannedArrivalAt < a.RoutePlanRoute.PlannedDepartureAt ||
                      a.RoutePlanRoute.ActualDepartureAt.HasValue && a.RoutePlanRoute.PlannedArrivalAt < now ||
-                     a.RoutePlanRoute.PlannedDepartureAt < end && a.RoutePlanRoute.PlannedArrivalAt >= start)));
+                     a.RoutePlanRoute.PlannedDepartureAt < end && a.RoutePlanRoute.PlannedArrivalAt > start)));
         }
         var count = await query.CountAsync(cancellationToken);
         var ordered = request.SortBy.Trim().ToLowerInvariant() switch
@@ -78,7 +81,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             "updatedat:desc" => query.OrderByDescending(x => x.UpdatedAt),
             _ => query.OrderBy(x => x.VehicleCode)
         };
-        var items = await ordered.ThenBy(x => x.VehicleId).Skip((request.PageIndex - 1) * request.PageSize)
+        var items = await ordered.ThenBy(x => x.VehicleId).Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize).ToListAsync(cancellationToken);
         return new(items.Select(x => Map(x, request.AvailableFrom.HasValue ? true : null)).ToArray(),
             request.PageIndex, request.PageSize, count, Paging.TotalPages(count, request.PageSize));
@@ -113,22 +116,34 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     {
         await AuthorizeAsync(accountId, cancellationToken);
         Normalize(request);
-        request.VehicleCode = request.VehicleCode?.Trim().ToUpperInvariant()!;
         Validate(request, createValidator);
-        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
-        if (await db.Vehicles.AnyAsync(x => !x.IsDeleted && x.VehicleCode.ToUpper() == request.VehicleCode, cancellationToken))
-            throw DuplicateCode();
-        await CheckPlateAsync(request.LicensePlate, null, cancellationToken);
-        var now = Now();
-        var vehicle = new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = request.VehicleCode,
-            Status = VehicleStatus.AVAILABLE, CreatedAt = now, UpdatedAt = now };
-        Apply(vehicle, request);
-        db.Vehicles.Add(vehicle);
-        await SaveAsync(vehicle, accountId, "CREATE", JsonSerializer.SerializeToDocument(new { }), null, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
-        logger.LogInformation("Vehicle {VehicleId} created by account {AccountId}", vehicle.VehicleId, accountId);
-        await notifications.FlushAsync(cancellationToken);
-        return Map(vehicle);
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+                await CheckPlateAsync(request.LicensePlate, null, cancellationToken);
+                var now = Now();
+                var prefix = $"VEH-{now:yyyyMMdd}-";
+                var vehicle = new Vehicle { VehicleId = Guid.NewGuid(),
+                    VehicleCode = DailyCodes.Next(prefix, await db.Vehicles.AsNoTracking().Where(x => x.VehicleCode.StartsWith(prefix)).Select(x => x.VehicleCode).ToListAsync(cancellationToken), "VEHICLE_CODE_EXHAUSTED"),
+                    Status = VehicleStatus.AVAILABLE, CreatedAt = now, UpdatedAt = now };
+                Apply(vehicle, request);
+                db.Vehicles.Add(vehicle);
+                await SaveAsync(vehicle, accountId, "CREATE", JsonSerializer.SerializeToDocument(new { }), null, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                logger.LogInformation("Vehicle {VehicleId} created by account {AccountId}", vehicle.VehicleId, accountId);
+                await notifications.FlushAsync(cancellationToken);
+                return Map(vehicle);
+            }
+            catch (ConflictException error) when (error.ErrorCode == "VEHICLE_CODE_DUPLICATED" && attempt < 19)
+            {
+                // Another concurrent creator selected the same daily code. Clear the
+                // failed transaction's tracked graph and retry so the plate check runs
+                // again and returns LICENSE_PLATE_DUPLICATED when appropriate.
+                db.ChangeTracker.Clear();
+            }
+        }
     }
 
     public async Task<Response.UpdateResponse> UpdateAsync(Guid vehicleId, Request.UpdateRequest request, Guid accountId, CancellationToken cancellationToken = default)
@@ -186,7 +201,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
 
     private IQueryable<RoutePlanRouteVehicle> UnfinishedAssignments() => db.RoutePlanRouteVehicles.AsNoTracking().Where(x =>
         x.RoutePlanRoute.ActualArrivalAt == null &&
-        x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.COMPLETED && x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED &&
+        x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.COMPLETED && x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
         x.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED &&
         x.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED &&
         x.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.COMPLETED &&
@@ -267,7 +282,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             Manufacturer = x.Manufacturer, Model = x.Model, CapacityHorses = x.CapacityHorses, Status = x.Status.ToString(),
             RegistrationNumber = x.RegistrationNumber, RegistrationExpiryDate = x.RegistrationExpiryDate,
             RegistrationStatus = registration, InsuranceNumber = x.InsuranceNumber, InsuranceExpiryDate = x.InsuranceExpiryDate,
-            InsuranceStatus = insurance, SpecialEquipment = x.SpecialEquipment, Warnings = warnings,
+            InsuranceStatus = insurance, SpecialEquipment = x.SpecialEquipment, Country = x.Country, Warnings = warnings,
             IsAvailable = available, CreatedAt = AsUtc(x.CreatedAt), UpdatedAt = AsUtc(x.UpdatedAt) };
     }
 
@@ -289,6 +304,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         vehicle.RegistrationNumber = EmptyToNull(request.RegistrationNumber); vehicle.RegistrationExpiryDate = request.RegistrationExpiryDate;
         vehicle.InsuranceNumber = EmptyToNull(request.InsuranceNumber); vehicle.InsuranceExpiryDate = request.InsuranceExpiryDate;
         vehicle.SpecialEquipment = EmptyToNull(request.SpecialEquipment);
+        vehicle.Country = CountryCodes.Normalize(request.Country);
     }
     private static void Validate<T>(T request, IValidator<T> validator)
     {

@@ -41,6 +41,8 @@ public partial class Vehicle
 
     public string? SpecialEquipment { get; set; }
 
+    public string? Country { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public DateTime? DeletedAt { get; set; }

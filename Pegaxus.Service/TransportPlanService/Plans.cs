@@ -26,6 +26,7 @@ public sealed partial class Service
             throw new BadRequestException("estimatedDistanceKm must not be negative");
         if (request.EstimatedDurationMinutes < 0)
             throw new BadRequestException("estimatedDurationMinutes must not be negative");
+        ValidateEstimates(request.EstimatedDistanceKm, request.EstimatedDurationMinutes);
         if (request.PlannedStartAt.HasValue && request.PlannedEndAt.HasValue &&
             request.PlannedEndAt <= request.PlannedStartAt)
             throw new BadRequestException("plannedEndAt must be after plannedStartAt");
@@ -273,14 +274,14 @@ public sealed partial class Service
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            if (!Enum.TryParse<TransportPlanStatus>(request.Status.Trim(), true, out var status))
+            if (!EnumParser.TryParseDefined<TransportPlanStatus>(request.Status.Trim(), out var status))
                 throw new BadRequestException("Transport plan status is invalid", "INVALID_TRANSPORT_PLAN_STATUS");
             query = query.Where(plan => plan.Status == status);
         }
 
         if (!string.IsNullOrWhiteSpace(request.RoutePlanStatus))
         {
-            if (!Enum.TryParse<RoutePlanStatus>(request.RoutePlanStatus.Trim(), true, out var status))
+            if (!EnumParser.TryParseDefined<RoutePlanStatus>(request.RoutePlanStatus.Trim(), out var status))
                 throw new BadRequestException("Route plan status is invalid", "INVALID_ROUTE_PLAN_STATUS");
             query = query.Where(plan => plan.RoutePlans.Any(routePlan =>
                 routePlan.Status == status &&
@@ -299,7 +300,7 @@ public sealed partial class Service
         query = ApplySorting(query, request.SortBy);
         var totalItems = await query.CountAsync(cancellationToken);
         var items = await query
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .Select(plan => new Response.ListItemResponse
             {
@@ -340,6 +341,7 @@ public sealed partial class Service
             throw new BadRequestException("estimatedDistanceKm must not be negative");
         if (request.EstimatedDurationMinutes < 0)
             throw new BadRequestException("estimatedDurationMinutes must not be negative");
+        ValidateEstimates(request.EstimatedDistanceKm, request.EstimatedDurationMinutes);
 
         await using var transaction = await db.Database.BeginSerializableOrNoneAsync(cancellationToken);
 
@@ -478,4 +480,11 @@ public sealed partial class Service
         };
     }
 
+
+    private static void ValidateEstimates(decimal? distanceKm, int? durationMinutes)
+    {
+        InputRules.Measurement(distanceKm, Limits.PlanDistanceKm, "estimatedDistanceKm");
+        if (durationMinutes is < 1 or > Limits.PlanDurationMinutesMax)
+            throw new BadRequestException($"estimatedDurationMinutes must be between 1 and {Limits.PlanDurationMinutesMax} (whole number).");
+    }
 }

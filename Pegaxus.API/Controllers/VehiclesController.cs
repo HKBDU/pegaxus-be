@@ -14,7 +14,7 @@ public sealed class VehiclesController(Vehicles.IVehicleService service) : ApiCo
 {
     /// <summary>List specialized vehicles.</summary>
     /// <remarks>Lists undeleted ROAD, SEA and AIR vehicles. Optional date filters return vehicles without unfinished schedule conflicts.</remarks>
-    /// <param name="request">Pagination, search, status, capacity, dates, and sorting.</param>
+    /// <param name="request">Pagination, search, status, capacity, dates, operating country (2-letter ISO code), transportPlanId (keeps vehicles already assigned to that plan when filtering by availability), and sorting.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with a paginated vehicle catalog and expiry warnings.</returns>
     [HttpGet]
@@ -31,8 +31,8 @@ public sealed class VehiclesController(Vehicles.IVehicleService service) : ApiCo
         => Success(await service.GetAsync(vehicleId, AccountId, cancellationToken), "Vehicle retrieved successfully");
 
     /// <summary>Create a specialized vehicle.</summary>
-    /// <remarks>Creates an AVAILABLE vehicle with unique code and license plate and capacity between 2 and 9.</remarks>
-    /// <param name="request">The vehicle code and editable technical and document fields.</param>
+    /// <remarks>Creates an AVAILABLE vehicle with a unique license plate and capacity between 2 and 9. The server generates the vehicle code (VEH-yyyyMMdd-0001); sending vehicleCode is rejected.</remarks>
+    /// <param name="request">The editable technical and document fields. The vehicle code is generated and returned in the response.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>201 Created with vehicle details, or field errors and duplicate conflicts.</returns>
     [HttpPost]

@@ -182,7 +182,7 @@ public class PersonnelAssignmentTests
     }
 
     [Fact]
-    public async Task Schedule_SamePlanOverlapsRejected_AdjacentNonoverlapAllowed_UnknownTimesRejected()
+    public async Task Schedule_SamePlanSegmentsNeverConflict_UnknownTimesRejected()
     {
         await using var db = TestSupport.CreateDb();
         var manager = await EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER); var driver = await EmployeeAsync(db, EmployeeRole.DRIVER); var escort = await EmployeeAsync(db, EmployeeRole.ESCORT);
@@ -191,21 +191,48 @@ public class PersonnelAssignmentTests
         var request = Assign(route, first, driver, escort);
         request.Segments.Add(new() { RoutePlanRouteId = second.RoutePlanRouteId, DriverEmployeeId = driver.EmployeeId, EscortEmployeeId = escort.EmployeeId });
         var service = CreateService(db);
-        var error = await Assert.ThrowsAsync<ConflictException>(() => service.AssignAsync(route.RoutePlanId, request, manager.AccountId));
-        Assert.Equal("SCHEDULE_CONFLICT", error.ErrorCode);
-        var conflict = Assert.IsType<Response.ScheduleConflictResponse>(error.Value);
-        Assert.Equal(driver.EmployeeId, conflict.EmployeeId); Assert.Equal(driver.EmployeeCode, conflict.EmployeeCode);
-        Assert.Equal("DRIVER", conflict.Role); Assert.Equal(first.RoutePlanRouteId, conflict.RoutePlanRouteId);
-        Assert.Equal(route.TransportPlan.PlanCode, conflict.ConflictingTransportPlanCode);
-        Assert.Equal(second.Route.FromLocation.LocationName, conflict.ConflictingFromLocationName);
-        Assert.Equal(second.Route.ToLocation.LocationName, conflict.ConflictingToLocationName);
-        Assert.Equal(new DateTimeOffset(DateTime.SpecifyKind(second.PlannedDepartureAt!.Value, DateTimeKind.Utc)), conflict.ConflictingPlannedDepartureAt);
-        Assert.Equal(new DateTimeOffset(DateTime.SpecifyKind(second.PlannedArrivalAt!.Value, DateTimeKind.Utc)), conflict.ConflictingPlannedArrivalAt);
-        Assert.Empty(db.EmployeeTransportPlans); Assert.Empty(db.CatalogAuditLogs);
         second.PlannedDepartureAt = null; await db.SaveChangesAsync();
         Assert.Equal("INVALID_SEGMENT_SCHEDULE", (await Assert.ThrowsAsync<BadRequestException>(() => service.AssignAsync(route.RoutePlanId, request, manager.AccountId))).ErrorCode);
-        second.PlannedDepartureAt = first.PlannedArrivalAt!.Value.AddMinutes(1); await db.SaveChangesAsync();
+        // Even a full overlap is fine inside one transport plan: its segments run one after another.
+        second.PlannedDepartureAt = first.PlannedDepartureAt; await db.SaveChangesAsync();
         Assert.True((await service.AssignAsync(route.RoutePlanId, request, manager.AccountId)).IsPersonnelComplete);
+    }
+
+    [Fact]
+    public async Task Schedule_OtherPlanTouchingEndpointsAllowed_RealOverlapReportsConflict()
+    {
+        await using var db = TestSupport.CreateDb();
+        var manager = await EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER); var driver = await EmployeeAsync(db, EmployeeRole.DRIVER); var escort = await EmployeeAsync(db, EmployeeRole.ESCORT);
+        var (route, segment) = await RouteAsync(db); var (other, otherSegment) = await RouteAsync(db);
+        var service = CreateService(db);
+        await service.AssignAsync(other.RoutePlanId, Assign(other, otherSegment, driver, escort), manager.AccountId);
+
+        segment.PlannedDepartureAt = otherSegment.PlannedArrivalAt; segment.PlannedArrivalAt = otherSegment.PlannedArrivalAt!.Value.AddHours(1); await db.SaveChangesAsync();
+        Assert.True((await service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId)).IsPersonnelComplete);
+
+        segment.DriverEmployeeId = null; segment.EscortEmployeeId = null;
+        segment.PlannedDepartureAt = otherSegment.PlannedArrivalAt!.Value.AddMinutes(-1); await db.SaveChangesAsync();
+        var error = await Assert.ThrowsAsync<ConflictException>(() => service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId));
+        Assert.Equal("SCHEDULE_CONFLICT", error.ErrorCode);
+        var conflict = Assert.IsType<Response.ScheduleConflictResponse>(error.Value);
+        Assert.Equal(driver.EmployeeId, conflict.EmployeeId); Assert.Equal(segment.RoutePlanRouteId, conflict.RoutePlanRouteId);
+        Assert.Equal(other.TransportPlan.PlanCode, conflict.ConflictingTransportPlanCode);
+    }
+
+    [Fact]
+    public async Task Assignable_WithTransportPlanId_KeepsEmployeesAssignedToThatPlan()
+    {
+        await using var db = TestSupport.CreateDb();
+        var manager = await EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER); var driver = await EmployeeAsync(db, EmployeeRole.DRIVER); var escort = await EmployeeAsync(db, EmployeeRole.ESCORT);
+        var (route, segment) = await RouteAsync(db);
+        var service = CreateService(db);
+        await service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId);
+        Request.AssignableRequest Query(Guid? plan) => new() { Role = "DRIVER", AvailableFrom = new DateTimeOffset(segment.PlannedDepartureAt!.Value, TimeSpan.Zero),
+            AvailableTo = new DateTimeOffset(segment.PlannedArrivalAt!.Value, TimeSpan.Zero), TransportPlanId = plan };
+
+        Assert.DoesNotContain(driver.EmployeeId, (await service.GetAssignableAsync(Query(null), manager.AccountId)).Items.Select(x => x.EmployeeId));
+        Assert.Contains(driver.EmployeeId, (await service.GetAssignableAsync(Query(route.TransportPlanId), manager.AccountId)).Items.Select(x => x.EmployeeId));
+        Assert.DoesNotContain(driver.EmployeeId, (await service.GetAssignableAsync(Query(Guid.NewGuid()), manager.AccountId)).Items.Select(x => x.EmployeeId));
     }
 
     [Theory]
@@ -413,6 +440,29 @@ public class PersonnelAssignmentTests
         await Assert.ThrowsAsync<BadRequestException>(() => service.GetAssignableAsync(new() { Role = "DRIVER" }, manager.AccountId));
         await Assert.ThrowsAsync<BadRequestException>(() => service.GetAssignableAsync(new() { Role = "LOGISTICS_MANAGER" }, manager.AccountId));
         await Assert.ThrowsAsync<ForbiddenException>(() => service.GetAssignableAsync(query, free.AccountId));
+    }
+
+    [Fact]
+    public async Task Assignable_FiltersByDepartureCountryAndReturnsEmployeeCountry()
+    {
+        await using var db = TestSupport.CreateDb();
+        var manager = await EmployeeAsync(db, EmployeeRole.LOGISTICS_MANAGER);
+        var french = await EmployeeAsync(db, EmployeeRole.ESCORT); french.Country = "FR";
+        var british = await EmployeeAsync(db, EmployeeRole.ESCORT); british.Country = "GB";
+        await EmployeeAsync(db, EmployeeRole.ESCORT);
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+        var from = DateTimeOffset.UtcNow.AddDays(10);
+        var query = new Request.AssignableRequest { Role = "ESCORT", AvailableFrom = from, AvailableTo = from.AddHours(5) };
+
+        Assert.Equal(3, (await service.GetAssignableAsync(query, manager.AccountId)).TotalItems);
+        query.Country = " fr ";
+        var result = await service.GetAssignableAsync(query, manager.AccountId);
+        Assert.Equal(french.EmployeeId, Assert.Single(result.Items).EmployeeId);
+        Assert.Equal("FR", result.Items[0].Country);
+        query.Country = "France";
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => service.GetAssignableAsync(query, manager.AccountId));
+        Assert.Equal("INVALID_COUNTRY", error.ErrorCode);
     }
 
     [Fact]

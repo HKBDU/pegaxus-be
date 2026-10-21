@@ -123,6 +123,75 @@ public class CloudinaryUploadTests
         Assert.Equal("UPLOAD_NOT_FOUND", error.ErrorCode);
     }
 
+    [Fact]
+    public async Task AvatarSignature_IsPublicLimitedToTwoMegabytesAndScopedToTheAccount()
+    {
+        var result = await new TestCloudinary().CreateSignedUploadAsync(AccountId, " Avatar ", "image/png", 2 * 1024 * 1024);
+        Assert.StartsWith($"avatars/{AccountId:D}/", result.PublicId);
+        Assert.Equal("upload", result.Parameters["type"]);
+        Assert.Equal("jpg,jpeg,png", result.Parameters["allowed_formats"]);
+        Assert.Equal("false", result.Parameters["overwrite"]);
+        var tooLarge = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() =>
+            new TestCloudinary().CreateSignedUploadAsync(AccountId, "avatar", "image/png", 2 * 1024 * 1024 + 1));
+        Assert.Equal(413, tooLarge.StatusCode);
+        var pdf = await Assert.ThrowsAsync<BadRequestException>(() => new TestCloudinary().CreateSignedUploadAsync(AccountId, "avatar", "application/pdf", 1000));
+        Assert.Equal("INVALID_FILE_TYPE", pdf.ErrorCode);
+        var entity = await Assert.ThrowsAsync<BadRequestException>(() => new TestCloudinary().CreateSignedUploadAsync(AccountId, "banner", "image/png", 1000));
+        Assert.Equal("INVALID_UPLOAD_ENTITY", entity.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AvatarConfirmation_ReturnsThePublicUrlAndReadUrlsAreNotSigned()
+    {
+        var avatarId = $"avatars/{AccountId:D}/{Guid.NewGuid():N}";
+        var service = new TestAvatarCloudinary(AvatarResource(avatarId));
+        var confirmed = await service.ConfirmAvatarAsync(AccountId, avatarId);
+        Assert.Equal("image/png", confirmed.MimeType);
+        Assert.Equal(1000, confirmed.SizeBytes);
+        Assert.Equal($"https://res.cloudinary.com/test-cloud/image/upload/v1/{avatarId}.png", confirmed.FileUrl);
+        Assert.Equal(confirmed.FileUrl, (await service.CreateReadUrlAsync(confirmed.FileUrl)).Url);
+    }
+
+    [Theory]
+    [InlineData("foreign-owner", 400)]
+    [InlineData("authenticated", 400)]
+    [InlineData("oversized", 413)]
+    [InlineData("format", 400)]
+    [InlineData("missing", 404)]
+    public async Task AvatarConfirmation_RejectsIneligibleResources(string invalid, int status)
+    {
+        var avatarId = $"avatars/{AccountId:D}/{Guid.NewGuid():N}";
+        var resource = AvatarResource(avatarId);
+        var requested = avatarId;
+        switch (invalid)
+        {
+            case "foreign-owner": requested = $"avatars/{Guid.NewGuid():D}/file"; break;
+            case "authenticated": resource.Type = "authenticated"; break;
+            case "oversized": resource.Bytes = 2 * 1024 * 1024 + 1; break;
+            case "format": resource.Format = "pdf"; break;
+            case "missing": resource.StatusCode = HttpStatusCode.NotFound; break;
+        }
+        var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => new TestAvatarCloudinary(resource).ConfirmAvatarAsync(AccountId, requested));
+        Assert.Equal(status, error.StatusCode);
+    }
+
+    private static GetResourceResult AvatarResource(string publicId) =>
+        JsonConvert.DeserializeObject<GetResourceResult>(JsonConvert.SerializeObject(new
+        {
+            public_id = publicId, format = "png", bytes = 1000, type = "upload", resource_type = "image",
+            secure_url = $"https://res.cloudinary.com/test-cloud/image/upload/v1/{publicId}.png"
+        }))!;
+
+    internal sealed class TestAvatarCloudinary(GetResourceResult resource) : CloudinaryUploadService(Configuration(), new NoNetworkFactory())
+    {
+        protected override Task<GetResourceResult> GetResourceAsync(GetResourceParams parameters, CancellationToken cancellationToken)
+        {
+            Assert.Equal("upload", parameters.Type);
+            Assert.Equal(ResourceType.Image, parameters.ResourceType);
+            return Task.FromResult(resource);
+        }
+    }
+
     internal static GetResourceResult Resource(string resourceType = "image") =>
         JsonConvert.DeserializeObject<GetResourceResult>(JsonConvert.SerializeObject(new
         {

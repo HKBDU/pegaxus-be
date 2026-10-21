@@ -1,5 +1,6 @@
 using FluentValidation;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.VehicleService.Validator;
 
@@ -18,6 +19,8 @@ public sealed class ListRequestValidator : AbstractValidator<Request.ListRequest
         RuleFor(x => x.MinCapacity).InclusiveBetween(2, 9).When(x => x.MinCapacity.HasValue);
         RuleFor(x => x.Search).MaximumLength(200);
         RuleFor(x => x.VehicleType).MaximumLength(100);
+        RuleFor(x => x.Country).Must(x => string.IsNullOrWhiteSpace(x) || CountryCodes.IsValid(x))
+            .WithMessage("Country must be a 2-letter ISO code.");
         RuleFor(x => x).Must(x => x.AvailableFrom.HasValue == x.AvailableTo.HasValue &&
             (!x.AvailableFrom.HasValue || x.AvailableFrom <= x.AvailableTo && x.AvailableTo < DateOnly.MaxValue))
             .WithMessage("availableTo must not be earlier than availableFrom, and both are required together.")
@@ -43,6 +46,8 @@ public sealed class VehicleFieldsValidator : AbstractValidator<Request.VehicleFi
         RuleFor(x => x.VehicleType).MaximumLength(100);
         RuleFor(x => x.Manufacturer).MaximumLength(100);
         RuleFor(x => x.Model).MaximumLength(100);
+        RuleFor(x => x.Country).Must(x => string.IsNullOrWhiteSpace(x) || CountryCodes.IsValid(x))
+            .WithMessage("Country must be a 2-letter ISO code.");
         RuleFor(x => x.RegistrationNumber).MaximumLength(100);
         RuleFor(x => x.InsuranceNumber).MaximumLength(100);
         RuleFor(x => x.CapacityHorses).NotNull().InclusiveBetween(2, 9)
@@ -51,6 +56,11 @@ public sealed class VehicleFieldsValidator : AbstractValidator<Request.VehicleFi
             .WithMessage("Expiry date must be in the future.");
         RuleFor(x => x.InsuranceExpiryDate).Must(x => !x.HasValue || x.Value > DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime))
             .WithMessage("Expiry date must be in the future.");
+        RuleFor(x => x.RegistrationExpiryDate).Must(x => !x.HasValue || x.Value <= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime).AddYears(Limits.DateWindowYears))
+            .WithMessage($"Expiry date must be within {Limits.DateWindowYears} years from today.");
+        RuleFor(x => x.InsuranceExpiryDate).Must(x => !x.HasValue || x.Value <= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime).AddYears(Limits.DateWindowYears))
+            .WithMessage($"Expiry date must be within {Limits.DateWindowYears} years from today.");
+        RuleFor(x => x.SpecialEquipment).MaximumLength(Limits.NoteMaxLength);
     }
 }
 
@@ -59,8 +69,6 @@ public sealed class CreateRequestValidator : AbstractValidator<Request.CreateReq
     public CreateRequestValidator(TimeProvider clock)
     {
         Include(new VehicleFieldsValidator(clock));
-        RuleFor(x => x.VehicleCode).NotEmpty().MaximumLength(50).Matches(@"^[A-Za-z0-9][A-Za-z0-9_-]*$")
-            .WithMessage("Invalid vehicle code format.");
     }
 }
 

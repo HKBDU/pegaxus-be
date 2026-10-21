@@ -35,8 +35,9 @@ public class RouteChangePostgresTests
         Assert.Equal(4, await check.RoutePlanRoutes.CountAsync());
         Assert.Null((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Completed.RoutePlanRouteId)).SupersededAt);
         Assert.NotNull((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Current.RoutePlanRouteId)).SupersededAt);
-        Assert.Equal(4, await check.Notifications.CountAsync());
-        Assert.Equal(4, await check.OutboxMessages.CountAsync(item => item.MessageType == "SIGNALR_ACCOUNT"));
+        // The escort of the current segment is notified as well (notification only, no email).
+        Assert.Equal(5, await check.Notifications.CountAsync());
+        Assert.Equal(5, await check.OutboxMessages.CountAsync(item => item.MessageType == "SIGNALR_ACCOUNT"));
         Assert.Equal(4, await check.OutboxMessages.CountAsync(item => item.MessageType == "EMAIL"));
         Assert.Empty(await check.IncidentReports.ToListAsync());
         var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(scope.Source).Options;

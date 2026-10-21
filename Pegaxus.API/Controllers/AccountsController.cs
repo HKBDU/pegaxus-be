@@ -38,14 +38,15 @@ public sealed class AccountsController : ApiControllerBase
     /// <summary>
     /// Update the current account profile.
     /// </summary>
-    /// <remarks>Accepts multipart/form-data. Only supplied fields are changed; profile images must be JPG or PNG and no larger than 2 MB.</remarks>
-    /// <param name="request">The profile fields and optional image to update.</param>
+    /// <remarks>Accepts JSON. Only supplied fields are changed. To change the profile image, request a signature from /api/v1/uploads/signature with entity "avatar", upload the JPG or PNG (up to 2 MB) directly to Cloudinary, then submit its publicId in avatar. Employees must send country as a 2-letter ISO code.</remarks>
+    /// <param name="request">The profile fields and optional avatar publicId to update.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the updated account profile.</returns>
     /// <exception cref="BadRequestException">The request fields or query parameters are invalid.</exception>
     /// <exception cref="KeyNotFoundException">The authenticated account no longer exists.</exception>
     [HttpPatch("me")]
-    public async Task<IActionResult> UpdateCurrentProfile([FromForm] AccountService.Request.UpdateProfileRequest request, CancellationToken cancellationToken)
+    [Consumes("application/json")]
+    public async Task<IActionResult> UpdateCurrentProfile([FromBody] AccountService.Request.UpdateProfileRequest request, CancellationToken cancellationToken)
     {
         var accountId = AccountId;
 

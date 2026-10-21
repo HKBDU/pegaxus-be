@@ -23,6 +23,9 @@ while (envDirectory is not null)
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Every endpoint takes small JSON bodies (files go straight to Cloudinary), so a low cap only stops oversized payloads.
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 1024 * 1024);
+
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".keys")))
     .SetApplicationName("Pegaxus");

@@ -23,9 +23,16 @@ public static class HandoverRules
     {
         if (record.Status is not (HandoverStatus.PLANNED or HandoverStatus.IN_PROGRESS)) return [];
         var actions = new List<string>(3);
-        if (canOperate && record.Status == HandoverStatus.PLANNED) actions.Add(Start);
-        if (canOperate) actions.Add(Complete);
+        // A scheduled record must be started before it can be completed.
+        if (canOperate) actions.Add(record.Status == HandoverStatus.PLANNED ? Start : Complete);
         if (isManagerOrCoordinator) actions.Add(Cancel);
         return actions;
     }
+
+    /// <summary>
+    /// Whether the boundary between two consecutive segments needs a signed handover. The first and last boundary always do (a customer is a party).
+    /// A middle boundary is waived only when one internal driver runs both segments; an outsourced segment has no driver, so it never is.
+    /// </summary>
+    public static bool RequiredBetween(Guid? fromDriverEmployeeId, Guid? toDriverEmployeeId) =>
+        !fromDriverEmployeeId.HasValue || fromDriverEmployeeId != toDriverEmployeeId;
 }

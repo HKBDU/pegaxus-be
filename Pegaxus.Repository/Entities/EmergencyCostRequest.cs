@@ -19,6 +19,12 @@ public partial class EmergencyCostRequest
 
     public EmergencyCostStatus Status { get; set; } = EmergencyCostStatus.PENDING;
 
+    public Guid RequestedByEmployeeId { get; set; }
+
+    public bool InvoiceRequired { get; set; }
+
+    public EmergencyReceiptStatus ReceiptStatus { get; set; } = EmergencyReceiptStatus.NOT_REQUIRED;
+
     public string Description { get; set; } = null!;
 
     public decimal RequestedAmount { get; set; }
@@ -42,6 +48,10 @@ public partial class EmergencyCostRequest
     public virtual CostApprovalDecision? CostApprovalDecision { get; set; }
 
     public virtual IncidentReport IncidentReport { get; set; } = null!;
+
+    public virtual Employee RequestedByEmployee { get; set; } = null!;
+
+    public virtual ICollection<IncidentPhoto> IncidentPhotos { get; set; } = new List<IncidentPhoto>();
 
     public virtual InvoiceItem? InvoiceItem { get; set; }
 }

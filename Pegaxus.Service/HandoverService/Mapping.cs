@@ -22,16 +22,19 @@ public sealed partial class Service
             var index = Array.FindIndex(ordered, entry => entry.Id == segment.Id);
             return new(segment.Id, index >= 0 ? index + 1 : segment.SequenceNo, segment.From, segment.To);
         }
+        var senderSignatureUrl = await ReadUrlAsync(item.SenderSignatureUrl, cancellationToken);
+        var receiverSignatureUrl = await ReadUrlAsync(item.ReceiverSignatureUrl, cancellationToken);
         var actions = new List<string>();
         if (item.Status is HandoverStatus.PLANNED or HandoverStatus.IN_PROGRESS)
         {
             if (await CanOperateAsync(item, actor, cancellationToken))
             {
                 if (item.Status == HandoverStatus.PLANNED) actions.Add("START");
-                actions.Add("COMPLETE");
+                else actions.Add("COMPLETE");
             }
             if (actor.IsManager) actions.Add("CANCEL");
         }
+        var geofence = await GeofenceAsync(item, cancellationToken);
         return new(item.HandoverRecordId, item.HandoverCode, new(transport.Id, transport.Code, transport.Status.ToString()), transport.BookingId,
             item.SequenceNo, item.HandoverType.ToString(), item.Status.ToString(), AsUtc(item.PlannedHandoverAt), AsUtc(item.ActualHandoverAt), AsUtc(item.CompletedAt),
             new(item.FromType.ToString(), item.FromCustomerId, item.FromEmployeeId, null, item.FromPartyName, item.FromContactName,
@@ -39,9 +42,23 @@ public sealed partial class Service
             new(item.ToType.ToString(), item.ToCustomerId, item.ToEmployeeId, null, item.ToPartyName, item.ToContactName,
                 actor.IsCustomer && item.ToType == HandoverPartyType.EMPLOYEE ? null : item.ToContactPhone),
             Brief(item.FromRoutePlanRouteId), Brief(item.ToRoutePlanRouteId), new(item.LocationName, item.Address, item.Country),
-            item.HorseConditionNote, item.DocumentHandoverNote, item.EquipmentHandoverNote, item.DiscrepancyNote, item.SenderSignatureUrl, item.ReceiverSignatureUrl,
-            AsUtc(item.CancelledAt), item.CancellationReason, actions, AsUtc(item.CreatedAt), AsUtc(item.UpdatedAt));
+            item.HorseConditionNote, item.DocumentHandoverNote, item.EquipmentHandoverNote, item.DiscrepancyNote, senderSignatureUrl, receiverSignatureUrl,
+            AsUtc(item.CancelledAt), item.CancellationReason, actions, AsUtc(item.CreatedAt), AsUtc(item.UpdatedAt)) { Geofence = geofence };
     }
+
+    /// <summary>The meeting point of the boundary: where the segment before it ends, or where the first segment starts. Null when the point has no coordinates.</summary>
+    private async Task<Response.Geofence?> GeofenceAsync(HandoverRecord item, CancellationToken cancellationToken)
+    {
+        if (item.HandoverType == HandoverType.OTHER) return null;
+        var location = item.FromRoutePlanRouteId is { } fromId
+            ? db.RoutePlanRoutes.AsNoTracking().Where(segment => segment.RoutePlanRouteId == fromId).Select(segment => segment.Route.ToLocation)
+            : db.RoutePlanRoutes.AsNoTracking().Where(segment => segment.RoutePlanRouteId == item.ToRoutePlanRouteId).Select(segment => segment.Route.FromLocation);
+        var point = await location.Select(place => new { place.Latitude, place.Longitude }).SingleOrDefaultAsync(cancellationToken);
+        return point is { Latitude: { } latitude, Longitude: { } longitude } ? new(latitude, longitude, tracking.Value.GeofenceRadiusMeters) : null;
+    }
+
+    private async Task<string?> ReadUrlAsync(string? fileUrl, CancellationToken cancellationToken) =>
+        string.IsNullOrWhiteSpace(fileUrl) ? null : (await media.CreateReadUrlAsync(fileUrl, cancellationToken)).Url;
 
     private static SegmentData[] EffectiveSegments(SegmentData[] segments, TransportStatus status)
     {

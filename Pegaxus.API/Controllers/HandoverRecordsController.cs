@@ -11,7 +11,7 @@ namespace Pegaxus.API.Controllers;
 public sealed class HandoverRecordsController(Handovers.IHandoverService service) : ApiControllerBase
 {
     /// <summary>Create a handover record.</summary>
-    /// <remarks>LM/RC or Driver/Escort assigned to a linked segment. Only LM/RC may schedule with startNow=false. Parties and boundary snapshots are inferred; OTHER requires explicit parties. Creation does not change journey state. Duplicate active boundaries return 409 HANDOVER_ALREADY_EXISTS.</remarks>
+    /// <remarks>LM/RC or Driver/Escort assigned to a linked segment. Only LM/RC and Transport Specialists may schedule with startNow=false; a specialist sending startNow=true gets 403. A middle boundary run by the same driver needs no record (422 HANDOVER_NOT_REQUIRED). Parties and boundary snapshots are inferred; OTHER requires explicit parties. Creation does not change journey state. Duplicate active boundaries return 409 HANDOVER_ALREADY_EXISTS.</remarks>
     /// <param name="transportId">The transport identifier (UUID).</param>
     /// <param name="request">Handover type, boundary segments, scheduling and optional snapshot overrides.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
@@ -44,7 +44,7 @@ public sealed class HandoverRecordsController(Handovers.IHandoverService service
         Success(await service.GetAsync(handoverRecordId, AccountId, cancellationToken), "Handover record retrieved successfully");
 
     /// <summary>Start a planned handover record.</summary>
-    /// <remarks>No request body. Only LM, RC, or Driver/Escort assigned to either linked segment may start the record. Only PLANNED may become IN_PROGRESS; other statuses return 409 INVALID_HANDOVER_STATUS. Does not start the transport or any segment.</remarks>
+    /// <remarks>No request body. Only LM, RC, or Driver/Escort assigned to either linked segment may start the record (not Transport Specialists). A scheduled record must be started before it can be completed. Only PLANNED may become IN_PROGRESS; other statuses return 409 INVALID_HANDOVER_STATUS. Does not start the transport or any segment.</remarks>
     /// <param name="handoverRecordId">The handover record identifier (UUID).</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the IN_PROGRESS handover record and its new updatedAt.</returns>
@@ -54,15 +54,15 @@ public sealed class HandoverRecordsController(Handovers.IHandoverService service
         Success(await service.StartAsync(handoverRecordId, AccountId, cancellationToken), "Handover record started successfully");
 
     /// <summary>Complete a handover and apply its transport lifecycle effects.</summary>
-    /// <remarks>LM/RC or Driver/Escort assigned to either linked segment. Submit flat multipart fields with lastUpdatedAt, three required notes and both PNG signatures (up to 200 KB each). PLANNED and IN_PROGRESS may complete. Stale versions return 409 HANDOVER_MODIFIED; terminal records return 409 INVALID_HANDOVER_STATUS; changed segment boundaries or parties return 422 INVALID_SEGMENT_PAIR. Signatures, lifecycle changes, notifications and delivery email commit together. GPS arrival timestamps are preserved.</remarks>
+    /// <remarks>LM/RC or Driver/Escort assigned to either linked segment. Submit JSON with lastUpdatedAt, latitude and longitude (the device must be within the geofence radius of the handover point, else 422 NOT_IN_HANDOVER_RADIUS; OTHER is not checked; coordinates are not stored), three required notes and the publicIds of both PNG signatures (up to 200 KB each) uploaded through /api/v1/uploads/signature. Only IN_PROGRESS may complete. Stale versions return 409 HANDOVER_MODIFIED; terminal records return 409 INVALID_HANDOVER_STATUS; changed segment boundaries or parties return 422 INVALID_SEGMENT_PAIR. Signatures, lifecycle changes, notifications and delivery email commit together. The signing time becomes the arrival time of the segment before the boundary and the departure time of the segment after it, replacing any earlier value; PICKUP and DELIVERY set the transport departure and arrival the same way.</remarks>
     /// <param name="handoverRecordId">The handover record identifier (UUID).</param>
-    /// <param name="request">Notes, optional snapshot overrides and both signature files.</param>
+    /// <param name="request">Notes, optional snapshot overrides and both signature publicIds.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the COMPLETED record, lifecycle effects and the delivery claim deadline.</returns>
     [Authorize(Policy = JwtExtensions.HandoverOperatorPolicy)]
     [HttpPost("{handoverRecordId:guid}/complete")]
-    [Consumes("multipart/form-data")]
-    public async Task<IActionResult> CompleteAsync(Guid handoverRecordId, [FromForm] Handovers.Request.CompleteRequest request, CancellationToken cancellationToken) =>
+    [Consumes("application/json")]
+    public async Task<IActionResult> CompleteAsync(Guid handoverRecordId, [FromBody] Handovers.Request.CompleteRequest request, CancellationToken cancellationToken) =>
         Success(await service.CompleteAsync(handoverRecordId, request, AccountId, cancellationToken), "Handover completed successfully");
 
     /// <summary>Cancel a planned or in-progress handover record.</summary>

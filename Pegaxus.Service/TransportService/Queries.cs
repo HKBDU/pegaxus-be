@@ -13,17 +13,19 @@ public sealed partial class Service
         var transport = await GetVisibleTransportAsync(actor, transportId, cancellationToken);
         var segments = EffectiveSegments(await ReadSegmentsAsync([transportId], actor, cancellationToken));
         var current = CurrentSegment(segments, transport.Status);
-        var tracking = ToTrackingSegments(segments, transport.Status);
+        var tracking = ToTrackingSegments(segments, transport.Status, actor);
         var health = await db.BookingHorses.AsNoTracking().Where(item => item.BookingId == transport.BookingId)
             .Select(item => db.HorseHealthLogs.Where(log => log.TransportId == transportId && log.HorseId == item.HorseId)
                 .OrderByDescending(log => log.CheckedAt).ThenByDescending(log => log.CreatedAt).ThenByDescending(log => log.HorseHealthLogId)
                 .Select(log => (HorseHealthStatus?)log.HealthStatus).FirstOrDefault()).ToListAsync(cancellationToken);
-        var incidents = await db.IncidentReports.AsNoTracking().Where(item => item.TransportId == transportId &&
-                (item.Status == IncidentStatus.REPORTED || item.Status == IncidentStatus.PENDING))
-            .OrderByDescending(item => item.OccurredAt).ThenBy(item => item.IncidentReportId)
-            .Select(item => new Response.ActiveIncident(item.IncidentReportId, item.IncidentCode, item.Category.ToString(),
-                item.Status.ToString(), item.Title, AsUtc(item.OccurredAt), actor.IsCustomer ? null : item.Severity.ToString(),
-                actor.IsCustomer ? null : item.Description)).ToListAsync(cancellationToken);
+        var incidents = actor.IsCustomer
+            ? []
+            : await db.IncidentReports.AsNoTracking().Where(item => item.TransportId == transportId &&
+                    (item.Status == IncidentStatus.REPORTED || item.Status == IncidentStatus.PENDING))
+                .OrderByDescending(item => item.OccurredAt).ThenBy(item => item.IncidentReportId)
+                .Select(item => new Response.ActiveIncident(item.IncidentReportId, item.IncidentCode, item.Category.ToString(),
+                    item.Status.ToString(), item.Title, AsUtc(item.OccurredAt), item.Severity.ToString(), item.Description))
+                .ToListAsync(cancellationToken);
         // shortcut: dossierType stays null until B-07 adds MAIN/EXTRA and removes transport uniqueness.
         var dossiers = await db.ComplianceDossiers.AsNoTracking().Where(item => item.TransportId == transportId)
             .OrderBy(item => item.OpenedAt).ThenBy(item => item.ComplianceDossierId)
@@ -49,6 +51,6 @@ public sealed partial class Service
         var transport = await GetVisibleTransportAsync(actor, transportId, cancellationToken);
         var segments = EffectiveSegments(await ReadSegmentsAsync([transportId], actor, cancellationToken));
         var boundaries = await ReadBoundariesAsync(transport, segments, actor, cancellationToken);
-        return new(clock.GetUtcNow(), transportId, transport.Status.ToString(), ToTrackingSegments(segments, transport.Status), boundaries);
+        return new(clock.GetUtcNow(), transportId, transport.Status.ToString(), ToTrackingSegments(segments, transport.Status, actor), boundaries);
     }
 }

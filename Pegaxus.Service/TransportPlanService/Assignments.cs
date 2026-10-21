@@ -333,7 +333,7 @@ public sealed partial class Service
         var coordinator = plan.EmployeeTransportPlans.SingleOrDefault(item =>
             item.IsPrimary && item.Responsibility == EmployeeRole.FLEET_ROUTE_COORDINATOR.ToString());
         var primary = plan.RoutePlans
-            .Where(item => item.Status != RoutePlanStatus.CANCELLED && item.RoutePlanRoutes.Count > 0 &&
+            .Where(item => item.Status is not (RoutePlanStatus.CANCELLED or RoutePlanStatus.REJECTED_BY_MANAGER) && item.RoutePlanRoutes.Count > 0 &&
                 item.RoutePlanRoutes.All(route => route.RouteType == RouteType.PRIMARY))
             .OrderByDescending(item => item.UpdatedAt)
             .FirstOrDefault();

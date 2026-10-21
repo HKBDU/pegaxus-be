@@ -16,6 +16,8 @@ public sealed class EmergencyCostRequestConfiguration : IEntityTypeConfiguration
 
         entity.HasIndex(e => e.IncidentReportId, "EmergencyCostRequest_incident_report_id_idx");
 
+        entity.HasIndex(e => e.RequestedByEmployeeId, "EmergencyCostRequest_requested_by_employee_id_idx");
+
         entity.HasIndex(e => e.RequestCode, "EmergencyCostRequest_request_code_key").IsUnique();
 
         entity.Property(e => e.EmergencyCostRequestId).HasColumnName("emergency_cost_request_id");
@@ -34,6 +36,9 @@ public sealed class EmergencyCostRequestConfiguration : IEntityTypeConfiguration
             .HasColumnName("currency");
         entity.Property(e => e.Description).HasColumnName("description");
         entity.Property(e => e.IncidentReportId).HasColumnName("incident_report_id");
+        entity.Property(e => e.InvoiceRequired)
+            .HasDefaultValue(false)
+            .HasColumnName("invoice_required");
         entity.Property(e => e.Justification).HasColumnName("justification");
         entity.Property(e => e.RequestCode)
             .HasMaxLength(50)
@@ -44,6 +49,7 @@ public sealed class EmergencyCostRequestConfiguration : IEntityTypeConfiguration
         entity.Property(e => e.RequestedAt)
             .HasColumnType("timestamp without time zone")
             .HasColumnName("requested_at");
+        entity.Property(e => e.RequestedByEmployeeId).HasColumnName("requested_by_employee_id");
         entity.Property(e => e.UpdatedAt)
             .HasColumnType("timestamp without time zone")
             .HasColumnName("updated_at");
@@ -52,5 +58,10 @@ public sealed class EmergencyCostRequestConfiguration : IEntityTypeConfiguration
             .HasForeignKey(d => d.IncidentReportId)
             .OnDelete(DeleteBehavior.ClientSetNull)
             .HasConstraintName("EmergencyCostRequest_incident_report_id_fkey");
+
+        entity.HasOne(d => d.RequestedByEmployee).WithMany(p => p.RequestedEmergencyCostRequests)
+            .HasForeignKey(d => d.RequestedByEmployeeId)
+            .OnDelete(DeleteBehavior.ClientSetNull)
+            .HasConstraintName("EmergencyCostRequest_requested_by_employee_id_fkey");
     }
 }

@@ -49,6 +49,41 @@ public class HandoverCreationTests
     }
 
     [Fact]
+    public async Task SameDriverBoundary_NeedsNoHandoverAtCreationOrCompletion()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        f.Second.DriverEmployeeId = f.Driver.EmployeeId; f.Route.TransportPlan.Transport.Status = TransportStatus.IN_TRANSIT;
+        f.Transfer.Status = HandoverStatus.CANCELLED; await db.SaveChangesAsync();
+
+        var created = await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CreateAsync(f.TransportId, new() { HandoverType = "TRANSFER",
+            FromRoutePlanRouteId = f.First.RoutePlanRouteId, ToRoutePlanRouteId = f.Second.RoutePlanRouteId }, f.Manager.AccountId));
+
+        Assert.Equal("HANDOVER_NOT_REQUIRED", created.ErrorCode);
+        f.Transfer.Status = HandoverStatus.IN_PROGRESS; f.Transfer.ToEmployeeId = f.Driver.EmployeeId; await db.SaveChangesAsync();
+        var completed = await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CompleteAsync(f.Transfer.HandoverRecordId, HandoverCompletionTests.Request(f.Transfer), f.Manager.AccountId));
+        Assert.Equal("HANDOVER_NOT_REQUIRED", completed.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Specialist_OnlySchedulesAndCannotStartOrComplete()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var specialist = await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.TRANSPORT_SPECIALIST);
+        f.Route.TransportPlan.Transport.Status = TransportStatus.IN_TRANSIT; f.Transfer.Status = HandoverStatus.CANCELLED; await db.SaveChangesAsync();
+        var request = new Handovers.Request.CreateRequest { HandoverType = "TRANSFER", FromRoutePlanRouteId = f.First.RoutePlanRouteId,
+            ToRoutePlanRouteId = f.Second.RoutePlanRouteId, StartNow = true };
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.CreateAsync(f.TransportId, request, specialist.AccountId));
+        request.StartNow = false; request.PlannedHandoverAt = f.Clock.GetUtcNow().AddHours(1);
+        var scheduled = await f.Service.CreateAsync(f.TransportId, request, specialist.AccountId);
+
+        Assert.Equal("PLANNED", scheduled.Status); Assert.Equal(2, await db.Notifications.CountAsync());
+        Assert.Empty((await f.Service.GetAsync(scheduled.HandoverRecordId, specialist.AccountId)).AvailableActions);
+        await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.StartAsync(scheduled.HandoverRecordId, specialist.AccountId));
+        await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.CompleteAsync(scheduled.HandoverRecordId, HandoverCompletionTests.Request(f.Transfer), specialist.AccountId));
+    }
+
+    [Fact]
     public async Task Creation_ValidatesOtherPartyXorStatusAndSchedulingInput()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
