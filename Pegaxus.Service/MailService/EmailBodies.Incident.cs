@@ -8,4 +8,4 @@ public static partial class EmailBodies
             Encode("An incident has been reported. Review it and coordinate the response."), Tone.Error, "Urgent",
             [Row("Incident", Accent(incidentCode)), Row("Severity", Encode(severity)), Row("Title", Encode(title))],
             description, "Details", actionUrl, "Review incident");
-} 
+}
