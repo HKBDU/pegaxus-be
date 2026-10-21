@@ -36,6 +36,7 @@ public partial class AppDbContext
         Configure<DossierTemplate>(modelBuilder, "status", "dossier_template_status", nameof(DossierTemplate.Status), "DossierTemplate_status_idx", "DRAFT");
         Configure<EmergencyCostRequest>(modelBuilder, "category", "emergency_cost_category", nameof(EmergencyCostRequest.Category), "EmergencyCostRequest_category_idx");
         Configure<EmergencyCostRequest>(modelBuilder, "status", "emergency_cost_status", nameof(EmergencyCostRequest.Status), "EmergencyCostRequest_status_idx", "PENDING");
+        Configure<EmergencyCostRequest>(modelBuilder, "receipt_status", "emergency_receipt_status", nameof(EmergencyCostRequest.ReceiptStatus), "EmergencyCostRequest_receipt_status_idx", "NOT_REQUIRED");
         Configure<Employee>(modelBuilder, "role", "employee_role", nameof(Employee.Role), "Employee_role_idx");
         Configure<HandoverRecord>(modelBuilder, "handover_type", "handover_type", nameof(HandoverRecord.HandoverType));
         Configure<HandoverRecord>(modelBuilder, "status", "handover_status", nameof(HandoverRecord.Status), "HandoverRecord_status_idx", "PLANNED");
