@@ -270,6 +270,10 @@ public static class ServiceCollectionExtensions
     /// <summary>Transport plans, route plans, locations, routes, emergency route changes, outsourcing and personnel assignment.</summary>
     public static IServiceCollection AddTransportPlanningModule(this IServiceCollection services)
     {
+        services.AddScoped<Pegaxus.Service.IncidentService.IIncidentService, Pegaxus.Service.IncidentService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.VehicleFields>, Pegaxus.Service.IncidentService.Validator.VehicleFieldsValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ReportVehicleRequest>, Pegaxus.Service.IncidentService.Validator.ReportVehicleRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.UpdateVehicleRequest>, Pegaxus.Service.IncidentService.Validator.UpdateVehicleRequestValidator>();
         services.AddScoped<Pegaxus.Service.HandoverService.IHandoverService, Pegaxus.Service.HandoverService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CreateRequest>, Pegaxus.Service.HandoverService.Validator.CreateRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.ListRequest>, Pegaxus.Service.HandoverService.Validator.ListRequestValidator>();

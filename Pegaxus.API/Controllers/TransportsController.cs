@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
 
 using Transports = Pegaxus.Service.TransportService;
+using Incidents = Pegaxus.Service.IncidentService;
 
 namespace Pegaxus.API.Controllers;
 
@@ -11,6 +12,17 @@ namespace Pegaxus.API.Controllers;
 [Route("api/v1/transports")]
 public sealed class TransportsController(Transports.ITransportService service) : ApiControllerBase
 {
+    /// <summary>Get emergency contacts for a transport.</summary>
+    /// <remarks>IN6: Logistics Managers, Coordinators and assigned Drivers/Escorts may cache these contacts before reporting. Available for READY, IN_TRANSIT and COMPLETED. Includes active managers, the assigned Coordinator, and only the current segment's Driver/Escort; the next crew is excluded during handover. Phone may be null.</remarks>
+    /// <param name="transportId">The transport identifier (UUID).</param>
+    /// <param name="incidents">The incident service.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with serverTime and emergency contacts; 409 for an unavailable transport status.</returns>
+    [HttpGet("{transportId}/emergency-contacts")]
+    [Authorize(Policy = JwtExtensions.VehicleIncidentOperatorPolicy)]
+    public async Task<IActionResult> GetEmergencyContactsAsync(Guid transportId, [FromServices] Incidents.IIncidentService incidents, CancellationToken cancellationToken) =>
+        Success(await incidents.GetEmergencyContactsAsync(transportId, AccountId, cancellationToken), "Emergency contacts retrieved successfully");
+
     /// <summary>List ongoing transports.</summary>
     /// <remarks>OT1: Logistics Managers, Fleet Route Coordinators and Transport Specialists can view all transports. Defaults: READY and IN_TRANSIT, pageIndex 0, pageSize 20, departureAt:asc. Supports search, status and active-incident filters. Returns the effective current segment and serverTime.</remarks>
     /// <param name="request">The status, search, incident, sorting and pagination filters.</param>
