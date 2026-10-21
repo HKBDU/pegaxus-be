@@ -2,6 +2,11 @@ namespace Pegaxus.Service.IncidentService;
 
 public interface IIncidentService
 {
+    Task<Response.CostRequest> CreateCostAsync(Guid incidentReportId, Request.CreateCostRequest request, Guid accountId, CancellationToken cancellationToken = default);
+    Task<Response.CostListResult> ListCostsAsync(Request.CostListRequest request, Guid accountId, CancellationToken cancellationToken = default);
+    Task<Response.CostRequest> GetCostAsync(Guid emergencyCostRequestId, Guid accountId, CancellationToken cancellationToken = default);
+    Task<Response.CostRequest> CancelCostAsync(Guid emergencyCostRequestId, Request.CancelRequest request, Guid accountId, CancellationToken cancellationToken = default);
+    Task<Response.CostRequest> DecideCostAsync(Guid emergencyCostRequestId, Request.CostDecisionRequest request, Guid accountId, CancellationToken cancellationToken = default);
     Task<Response.RerouteContext> GetRerouteContextAsync(Guid incidentReportId, Guid accountId, CancellationToken cancellationToken = default);
     Task<Response.EscalationResult> EscalateRerouteAsync(Guid incidentReportId, Request.RerouteEscalationRequest request, Guid accountId, CancellationToken cancellationToken = default);
     Task<Response.HoldResult> HoldRouteAsync(Guid incidentReportId, Request.RouteHoldRequest request, Guid accountId, CancellationToken cancellationToken = default);

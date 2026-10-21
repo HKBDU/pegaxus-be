@@ -19,6 +19,8 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock,
     IValidator<Request.ResolveRequest> resolveValidator, IValidator<Request.CancelRequest> cancelValidator,
     IValidator<Request.SelfResolveRequest> selfResolveValidator, IValidator<Request.RaiseSeverityRequest> severityValidator,
     IValidator<Request.RerouteEscalationRequest> escalationValidator, IValidator<Request.RouteHoldRequest> holdValidator,
+    IValidator<Request.CreateCostRequest> createCostValidator, IValidator<Request.CostListRequest> costListValidator,
+    IValidator<Request.CostDecisionRequest> costDecisionValidator,
     IMediaService media, IDocumentStorageService documentStorage, INotificationService notifications) : IIncidentService
 {
     private static readonly RoutePlanStatus[] AssignmentStatuses = [RoutePlanStatus.CONFIRMED, RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED];

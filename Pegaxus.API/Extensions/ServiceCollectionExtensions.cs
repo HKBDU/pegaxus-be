@@ -271,6 +271,9 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddTransportPlanningModule(this IServiceCollection services)
     {
         services.AddScoped<Pegaxus.Service.IncidentService.IIncidentService, Pegaxus.Service.IncidentService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CreateCostRequest>, Pegaxus.Service.IncidentService.Validator.CreateCostRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CostListRequest>, Pegaxus.Service.IncidentService.Validator.CostListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CostDecisionRequest>, Pegaxus.Service.IncidentService.Validator.CostDecisionRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.RerouteEscalationRequest>, Pegaxus.Service.IncidentService.Validator.RerouteEscalationRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.RouteHoldRequest>, Pegaxus.Service.IncidentService.Validator.RouteHoldRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ListRequest>, Pegaxus.Service.IncidentService.Validator.ListRequestValidator>();

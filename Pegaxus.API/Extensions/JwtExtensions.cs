@@ -37,6 +37,7 @@ public static class JwtExtensions
     public const string TransportTrackingViewerPolicy = nameof(TransportTrackingViewerPolicy);
     public const string TransportProgressViewerPolicy = nameof(TransportProgressViewerPolicy);
     public const string IncidentOperatorPolicy = nameof(IncidentOperatorPolicy);
+    public const string EmergencyCostProposerPolicy = nameof(EmergencyCostProposerPolicy);
     public const string IncidentListViewerPolicy = nameof(IncidentListViewerPolicy);
     public const string IncidentViewerPolicy = nameof(IncidentViewerPolicy);
     public const string VehicleIncidentOperatorPolicy = nameof(VehicleIncidentOperatorPolicy);
@@ -154,6 +155,8 @@ public static class JwtExtensions
 
         services.AddAuthorization(options =>
         {
+            options.AddPolicy(EmergencyCostProposerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR), JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
             options.AddPolicy(IncidentListViewerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
                 JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
                 JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));

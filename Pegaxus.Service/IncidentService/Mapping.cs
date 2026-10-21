@@ -19,7 +19,7 @@ public sealed partial class Service
             .Include(incident => incident.EmergencyCostRequests).ThenInclude(cost => cost.CostApprovalDecision).ThenInclude(decision => decision!.Employee)
             .SingleAsync(incident => incident.IncidentReportId == incidentReportId, ct);
         var photos = new List<Response.Photo>();
-        foreach (var photo in item.IncidentPhotos.OrderBy(photo => photo.SortOrder).ThenBy(photo => photo.IncidentPhotoId))
+        foreach (var photo in item.IncidentPhotos.Where(photo => photo.EmergencyCostRequestId == null).OrderBy(photo => photo.SortOrder).ThenBy(photo => photo.IncidentPhotoId))
         {
             var signed = photo.PhotoUrl.StartsWith("s3://", StringComparison.Ordinal)
                 ? await documentStorage.CreateReadUrlAsync(photo.PhotoUrl, ct) : await media.CreateReadUrlAsync(photo.PhotoUrl, ct);
@@ -35,11 +35,7 @@ public sealed partial class Service
                 detail.MedicationGiven, detail.OutcomeNote, detail.HorseTransportable, AsUtc(detail.UpdatedAt),
                 includeVitalWarnings ? VitalWarnings(detail) : null)).ToArray();
         var costs = item.EmergencyCostRequests.OrderBy(cost => cost.RequestedAt).ThenBy(cost => cost.EmergencyCostRequestId)
-            .Select(cost => new Response.CostRequest(cost.EmergencyCostRequestId, cost.RequestCode, cost.Category.ToString(), cost.Description,
-                cost.Justification, Vnd.ToLong(cost.RequestedAmount), Whole(cost.ApprovedAmount), Vnd.Currency, cost.Status.ToString(), AsUtc(cost.RequestedAt),
-                EmployeeBrief(cost.RequestedByEmployee), cost.CostApprovalDecision is { } decision ? new(decision.Decision.ToString(),
-                    Whole(decision.ApprovedAmount), decision.DecisionReason, EmployeeBrief(decision.Employee), AsUtc(decision.DecidedAt)) : null,
-                AsUtc(cost.CancelledAt), cost.CancellationReason, cost.InvoiceRequired, AsUtc(cost.CreatedAt), AsUtc(cost.UpdatedAt))).ToArray();
+            .Select(MapCost).ToArray();
         var currentPlanId = await CurrentPlanIdAsync(transport.TransportId, ct);
         var plans = await db.RoutePlans.AsNoTracking().Include(plan => plan.RoutePlanRoutes)
             .Where(plan => plan.TransportPlanId == currentPlanId && plan.UpdatedAt >= item.ReportedAt &&

@@ -353,6 +353,7 @@ public class VehicleIncidentTests
             new ListRequestValidator(), new ResolveRequestValidator(new SelfResolveRequestValidator()), new CancelRequestValidator(),
             new SelfResolveRequestValidator(), new RaiseSeverityRequestValidator(),
             new RerouteEscalationRequestValidator(), new RouteHoldRequestValidator(),
+            new CreateCostRequestValidator(), new CostListRequestValidator(), new CostDecisionRequestValidator(),
             storage, storage, TestSupport.CreateNotifications(db));
     }
 }

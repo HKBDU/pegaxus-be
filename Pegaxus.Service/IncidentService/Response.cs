@@ -112,5 +112,34 @@ public static class Response
     public sealed record CostRequest(Guid EmergencyCostRequestId, string RequestCode, string Category, string Description,
         string Justification, long RequestedAmount, long? ApprovedAmount, string Currency, string Status, DateTimeOffset RequestedAt,
         EmployeeBrief RequestedBy, CostDecision? Decision, DateTimeOffset? CancelledAt, string? CancellationReason,
-        bool InvoiceRequired, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
+        bool InvoiceRequired, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt)
+    {
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CostIncident? Incident { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public string? TransportCode { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<string>? AvailableActions { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<Photo>? Photos { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CostIncidentSummary? IncidentSummary { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public IReadOnlyList<OtherCostRequest>? OtherRequests { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public TransportService.Response.HorseHealthSummary? HorseHealthSummary { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public CostRoute? CurrentRoute { get; init; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+        public DateTimeOffset? ServerTime { get; init; }
+    }
+
+    public sealed record CostIncident(Guid IncidentReportId, string IncidentCode, string Category, string Severity, string Status, Guid? TransportId);
+    public sealed record CostIncidentSummary(Guid IncidentReportId, string IncidentCode, string Category, string Severity,
+        string Status, string Title, DateTimeOffset OccurredAt, LocationBrief? Location, VehicleBrief? Vehicle);
+    public sealed record OtherCostRequest(Guid EmergencyCostRequestId, string RequestCode, string Category, long RequestedAmount, long? ApprovedAmount, string Status);
+    public sealed record CostRoute(Guid RoutePlanId, string RoutePlanCode, string RouteType, string Status);
+    public sealed record CostCounts(int Pending, int Approved, int Rejected, int Cancelled);
+    public sealed record CostListResult(DateTimeOffset ServerTime, CostCounts Counts, IReadOnlyList<CostRequest> Items,
+        int PageIndex, int PageSize, int TotalItems, int TotalPages);
 }

@@ -39,10 +39,11 @@ public sealed partial class Service
         "Only JPG, JPEG, PNG images up to 5MB are accepted. Please try again.", "INVALID_IMAGE");
 
     private async Task<string[]> AddPhotosAsync(IncidentReport incident, IReadOnlyList<UploadService.Request.UploadedAssetReference> files,
-        Guid accountId, DateTime now, CancellationToken ct)
+        Guid accountId, DateTime now, CancellationToken ct, EmergencyCostRequest? cost = null)
     {
         if (files.Count == 0) return [];
-        var existing = await db.IncidentPhotos.AsNoTracking().Where(photo => photo.IncidentReportId == incident.IncidentReportId)
+        var costId = cost?.EmergencyCostRequestId;
+        var existing = await db.IncidentPhotos.AsNoTracking().Where(photo => photo.IncidentReportId == incident.IncidentReportId && photo.EmergencyCostRequestId == costId)
             .Select(photo => new { photo.PhotoUrl, photo.SortOrder }).ToArrayAsync(ct);
         var urls = existing.Select(photo => photo.PhotoUrl).ToHashSet(StringComparer.Ordinal);
         var order = existing.Select(photo => photo.SortOrder).DefaultIfEmpty(0).Max();
@@ -61,7 +62,8 @@ public sealed partial class Service
             // Presigned evidence already exists; rollback must not delete an upload used by another report.
             db.IncidentPhotos.Add(new IncidentPhoto
             {
-                IncidentPhotoId = Guid.NewGuid(), IncidentReport = incident, PhotoUrl = asset.FileUrl, SortOrder = ++order, CreatedAt = now
+                IncidentPhotoId = Guid.NewGuid(), IncidentReport = incident, EmergencyCostRequest = cost,
+                PhotoUrl = asset.FileUrl, SortOrder = ++order, CreatedAt = now
             });
             added.Add(asset.FileUrl);
         }
