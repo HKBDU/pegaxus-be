@@ -32,6 +32,68 @@ namespace Pegaxus.Service.Test;
 
 public class VehicleIncidentHttpTests
 {
+    [Fact]
+    public async Task CombinedIncident_HorseAndVehicleUpdatesShareVersionAndPreserveMedicalEvidence()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Scenario.CreateAsync(db);
+        await using var host = await StartAsync(db, f.Storage);
+        using var driver = Client(host, f.Driver.AccountId, EmployeeRole.DRIVER);
+        using var escort = Client(host, f.Escort.AccountId, EmployeeRole.ESCORT);
+        using var coordinator = Client(host, f.Coordinator.AccountId, EmployeeRole.FLEET_ROUTE_COORDINATOR);
+        var request = f.Report(); request.Category = "BOTH"; request.VehicleOperable = false;
+        request.ReplacementVehicleRequired = true; request.PhotoFiles = [Photo()];
+        using var report = await driver.PostAsJsonAsync("/api/v1/incidents/vehicle", request);
+        Assert.Equal(HttpStatusCode.Created, report.StatusCode);
+        var created = (await report.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.True(created.GetProperty("effects").GetProperty("canAddHorseDetails").GetBoolean());
+        Assert.False(created.GetProperty("effects").TryGetProperty("healthLogsCreated", out _));
+        var id = created.GetProperty("incidentReportId").GetGuid();
+        var horseId = await db.BookingHorses.Where(item => item.BookingId == f.Transport.BookingId).Select(item => item.HorseId).FirstAsync();
+        using var addition = await escort.PostAsJsonAsync($"/api/v1/incidents/{id}/horse-details", new
+        {
+            horses = new[] { new { horseId, incidentType = "COLIC", conditionDescription = "Sweating and looking at the belly",
+                bodyTemperatureCelsius = 39.2m, firstAidProvided = "Walk the horse", veterinarianRequired = true } },
+            photoFiles = new[] { Photo() }
+        });
+        Assert.Equal(HttpStatusCode.Created, addition.StatusCode);
+        var added = (await addition.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.Equal("CRITICAL", added.GetProperty("severity").GetString());
+        Assert.Equal(created.GetProperty("vehicleDetail").GetRawText(), added.GetProperty("vehicleDetail").GetRawText());
+        Assert.Equal(1, added.GetProperty("effects").GetProperty("healthLogsCreated").GetInt32());
+        Assert.False(added.GetProperty("effects").TryGetProperty("vehicleStatusChanged", out _));
+        var detail = Assert.Single(added.GetProperty("horseDetails").EnumerateArray());
+        var followUpPath = $"/api/v1/incidents/{id}/horse-details/{detail.GetProperty("horseHealthIncidentDetailId").GetGuid()}";
+        using var followUp = await escort.PatchAsJsonAsync(followUpPath, new
+        {
+            lastUpdatedAt = added.GetProperty("updatedAt").GetString(), outcomeNote = "Veterinarian assessed the horse",
+            medicationGiven = "Vet prescribed treatment", horseTransportable = false
+        });
+        Assert.Equal(HttpStatusCode.OK, followUp.StatusCode);
+        var followed = (await followUp.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        using var update = await coordinator.PatchAsJsonAsync($"/api/v1/incidents/{id}/vehicle-detail", new
+        {
+            lastUpdatedAt = followed.GetProperty("updatedAt").GetString(), vehicleOperable = true,
+            repairNote = "Mechanic finished repairs", photoFiles = new[] { Photo() }
+        });
+        Assert.Equal(HttpStatusCode.OK, update.StatusCode);
+        var updated = (await update.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
+        Assert.Equal(followed.GetProperty("horseDetails").GetRawText(), updated.GetProperty("horseDetails").GetRawText());
+        Assert.Equal("OUT_OF_SERVICE", updated.GetProperty("vehicleDetail").GetProperty("vehicle").GetProperty("status").GetString());
+        Assert.Equal(3, updated.GetProperty("photos").GetArrayLength());
+        var medicalLog = await db.HorseHealthLogs.SingleAsync();
+        Assert.Equal(HorseHealthStatus.CRITICAL, medicalLog.HealthStatus); Assert.Equal(39.2m, medicalLog.TemperatureCelsius);
+        Assert.Equal("Walk the horse", medicalLog.TreatmentProvided); Assert.Null(medicalLog.MedicationGiven); Assert.Single(medicalLog.PhotoUrls);
+        Assert.Equal(2, await db.IncidentPhotos.CountAsync(item => item.VehicleIncidentDetailId != null));
+        Assert.Equal(1, await db.AccountNotifications.CountAsync(item => item.AccountId == f.CustomerAccountId));
+        using var stale = await escort.PatchAsJsonAsync(followUpPath, new { lastUpdatedAt = followed.GetProperty("updatedAt").GetString(), outcomeNote = "Stale follow-up" });
+        Assert.Equal(HttpStatusCode.Conflict, stale.StatusCode);
+        Assert.Equal("INCIDENT_MODIFIED", (await stale.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        using var replay = await driver.PostAsJsonAsync("/api/v1/incidents/vehicle", request);
+        Assert.Equal(HttpStatusCode.OK, replay.StatusCode); Assert.Equal(3, f.Storage.Confirmations.Count);
+        var effects = (await replay.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value").GetProperty("effects");
+        Assert.All(effects.EnumerateObject(), effect => Assert.False(effect.Value.GetBoolean()));
+    }
+
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
 
     [Fact]

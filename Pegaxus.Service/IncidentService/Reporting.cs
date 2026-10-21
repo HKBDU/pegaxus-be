@@ -40,7 +40,7 @@ public sealed partial class Service
                     var replay = await ReadIncidentAsync(existingId.Value, transport, actor, cancellationToken);
                     var safety = await SafetyAsync(transport, cancellationToken);
                     await transaction.CommitAsync(cancellationToken);
-                    return new(replay with { Effects = new(false, false, false, false), Safety = safety }, false);
+                    return new(replay with { Effects = new(false, false, VehicleStatusChanged: false, CanAddHorseDetails: false), Safety = safety }, false);
                 }
                 if (transport.Status != TransportStatus.IN_TRANSIT)
                     throw new ConflictException("Incidents can only be reported while the transport is IN_TRANSIT", "INVALID_TRANSPORT_STATUS");

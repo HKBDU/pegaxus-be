@@ -14,7 +14,8 @@ namespace Pegaxus.Service.IncidentService;
 
 public sealed partial class Service(AppDbContext db, TimeProvider clock,
     IValidator<Request.ReportVehicleRequest> reportValidator, IValidator<Request.UpdateVehicleRequest> updateValidator,
-    IMediaService media, IDocumentStorageService documentStorage, INotificationService notifications) : IIncidentService
+    IValidator<Request.ReportHorseHealthRequest> horseReportValidator, IValidator<Request.AddHorseDetailsRequest> detailsValidator,
+    IValidator<Request.FollowUpHorseRequest> followUpValidator, IMediaService media, IDocumentStorageService documentStorage, INotificationService notifications) : IIncidentService
 {
     private static readonly RoutePlanStatus[] AssignmentStatuses = [RoutePlanStatus.CONFIRMED, RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED];
     private const string ForbiddenMessage = "Only the assigned driver / escort can report incidents for this transport";
@@ -66,5 +67,35 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock,
         var planId = await CurrentPlanIdAsync(transportId, ct);
         return actor.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && await db.EmployeeTransportPlans.AsNoTracking()
             .AnyAsync(item => item.TransportPlanId == planId && item.EmployeeId == actor.EmployeeId, ct);
+    }
+
+    private async Task<(IncidentReport Incident, Transport Transport)> LockIncidentAsync(Guid incidentReportId, CancellationToken ct)
+    {
+        if (incidentReportId == Guid.Empty) throw new BadRequestException("Incident ID must be a non-empty UUID.", "VALIDATION_ERROR");
+        var transportId = await db.IncidentReports.AsNoTracking().Where(item => item.IncidentReportId == incidentReportId)
+            .Select(item => item.TransportId).SingleOrDefaultAsync(ct)
+            ?? throw new NotFoundException("Incident not found", "INCIDENT_NOT_FOUND");
+        // All incident writers lock Transport before Incident, then details in ID order.
+        await db.LockRowsAsync(db.Transports.Where(item => item.TransportId == transportId), item => item.TransportId, ct);
+        await db.LockRowsAsync(db.IncidentReports.Where(item => item.IncidentReportId == incidentReportId), item => item.IncidentReportId, ct);
+        var incident = await db.IncidentReports.SingleAsync(item => item.IncidentReportId == incidentReportId, ct);
+        await db.Entry(incident).ReloadAsync(ct);
+        if (incident.TransportId != transportId)
+            throw new ConflictException("The incident was just modified. Please reload the page", "INCIDENT_MODIFIED");
+        return (incident, await TransportAsync(transportId, ct));
+    }
+
+    private static void EnsureOpenHorseIncident(IncidentReport incident)
+    {
+        if (incident.Status is not (IncidentStatus.REPORTED or IncidentStatus.PENDING))
+            throw new UnprocessableEntityException("The incident is already resolved or cancelled", "INVALID_INCIDENT_STATUS");
+        if (incident.Category is not (IncidentCategory.HORSE_HEALTH or IncidentCategory.BOTH))
+            throw new UnprocessableEntityException("This incident does not accept this kind of detail", "INCIDENT_CATEGORY_MISMATCH");
+    }
+
+    private DateTime NextUpdate(IncidentReport incident)
+    {
+        var now = DbTime.Truncate(clock.GetUtcNow());
+        return now > incident.UpdatedAt ? now : incident.UpdatedAt.AddTicks(10);
     }
 }

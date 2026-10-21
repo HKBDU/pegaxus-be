@@ -100,7 +100,7 @@ public class VehicleIncidentPostgresTests
                 await barrier.Started.Task.WaitAsync(TimeSpan.FromSeconds(20)); release.TrySetResult();
                 var created = await winner; Assert.True(created.Created); incident = created.Value;
                 var replay = await competing; Assert.False(replay.Created); Assert.Equal(incident.IncidentReportId, replay.Value.IncidentReportId);
-                Assert.Equal(new Incidents.Response.Effects(false, false, false, false), replay.Value.Effects);
+                Assert.Equal(new Incidents.Response.Effects(false, false, VehicleStatusChanged: false, CanAddHorseDetails: false), replay.Value.Effects);
                 Assert.True(barrier.Attempts >= 2); Assert.Empty(competitorStorage.Confirmations); Assert.Single(storage.Confirmations);
             }
             finally { release.TrySetResult(); }

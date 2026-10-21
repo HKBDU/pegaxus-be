@@ -12,7 +12,11 @@ public static class Response
     public sealed record VehicleBrief(Guid VehicleId, string VehicleCode, string? LicensePlate, string? VehicleName, string Status);
     public sealed record HorseBrief(Guid HorseId, string HorseName, string? MicrochipNumber, string? Breed, int? StallNo);
     public sealed record Photo(Guid PhotoId, string PhotoUrl, string? Caption, Guid? HorseHealthIncidentDetailId, int SortOrder);
-    public sealed record Effects(bool VehicleStatusChanged, object NotifiedPriority, bool EmailQueued, bool CanAddHorseDetails);
+    public sealed record Effects(object NotifiedPriority, bool EmailQueued,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? VehicleStatusChanged = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? CanAddHorseDetails = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? HealthLogsCreated = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? FirstAidGuide = null);
     public sealed record Safety(string Message, IReadOnlyList<EmployeeBrief> EmergencyContacts);
     public sealed record CostSummary(long RequestedTotal, long ApprovedTotal, int PendingCount, string Currency = Vnd.Currency);
     public sealed record RouteChange(Guid RoutePlanId, string RoutePlanCode, string RouteType, string Status, DateTimeOffset UpdatedAt);
@@ -70,7 +74,8 @@ public static class Response
     public sealed record HorseDetail(Guid HorseHealthIncidentDetailId, HorseBrief Horse, string IncidentType, string ConditionDescription,
         string? Symptoms, decimal? BodyTemperatureCelsius, int? HeartRateBpm, int? RespiratoryRateBpm, string? FirstAidProvided,
         bool VeterinarianRequired, DateTimeOffset? VeterinarianContactedAt, bool IsolationRequired, string? VeterinarianInstruction,
-        string? MedicationGiven, string? OutcomeNote, bool? HorseTransportable, DateTimeOffset UpdatedAt);
+        string? MedicationGiven, string? OutcomeNote, bool? HorseTransportable, DateTimeOffset UpdatedAt,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? VitalWarnings = null);
 
     public sealed record CostDecision(string Decision, long? ApprovedAmount, string? DecisionReason, EmployeeBrief DecidedBy, DateTimeOffset DecidedAt);
     public sealed record CostRequest(Guid EmergencyCostRequestId, string RequestCode, string Category, string Description,

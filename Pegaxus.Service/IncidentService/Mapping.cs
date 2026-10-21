@@ -9,7 +9,7 @@ namespace Pegaxus.Service.IncidentService;
 
 public sealed partial class Service
 {
-    private async Task<Response.Incident> ReadIncidentAsync(Guid incidentReportId, Transport transport, Employee actor, CancellationToken ct)
+    private async Task<Response.Incident> ReadIncidentAsync(Guid incidentReportId, Transport transport, Employee actor, CancellationToken ct, bool includeVitalWarnings = false)
     {
         var item = await db.IncidentReports.AsNoTracking().AsSplitQuery().Include(incident => incident.Employee).Include(incident => incident.Location)
             .Include(incident => incident.VehicleIncidentDetail).ThenInclude(detail => detail!.Vehicle)
@@ -32,7 +32,8 @@ public sealed partial class Service
                 detail.IncidentType.ToString(), detail.ConditionDescription, detail.Symptoms, detail.BodyTemperatureCelsius,
                 detail.HeartRateBpm, detail.RespiratoryRateBpm, detail.FirstAidProvided, detail.VeterinarianRequired,
                 AsUtc(detail.VeterinarianContactedAt), detail.IsolationRequired, detail.VeterinarianInstruction,
-                detail.MedicationGiven, detail.OutcomeNote, detail.HorseTransportable, AsUtc(detail.UpdatedAt))).ToArray();
+                detail.MedicationGiven, detail.OutcomeNote, detail.HorseTransportable, AsUtc(detail.UpdatedAt),
+                includeVitalWarnings ? VitalWarnings(detail) : null)).ToArray();
         var costs = item.EmergencyCostRequests.OrderBy(cost => cost.RequestedAt).ThenBy(cost => cost.EmergencyCostRequestId)
             .Select(cost => new Response.CostRequest(cost.EmergencyCostRequestId, cost.RequestCode, cost.Category.ToString(), cost.Description,
                 cost.Justification, Vnd.ToLong(cost.RequestedAmount), Whole(cost.ApprovedAmount), Vnd.Currency, cost.Status.ToString(), AsUtc(cost.RequestedAt),

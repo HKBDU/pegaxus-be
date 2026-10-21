@@ -40,7 +40,7 @@ public class VehicleIncidentTests
         Assert.Equal(value.IncidentReportId, photo.IncidentReportId); Assert.Equal(1, photo.SortOrder);
         Assert.NotEqual(photo.PhotoUrl, value.Photos[0].PhotoUrl); Assert.Equal(request.OccurredAt, value.OccurredAt);
         Assert.Equal(DateTimeKind.Unspecified, (await db.IncidentReports.SingleAsync()).OccurredAt.Kind);
-        Assert.True(value.Effects!.VehicleStatusChanged && value.Effects.EmailQueued); Assert.Equal("URGENT", value.Effects.NotifiedPriority);
+        Assert.True(value.Effects!.VehicleStatusChanged == true && value.Effects.EmailQueued); Assert.Equal("URGENT", value.Effects.NotifiedPriority);
         Assert.False(value.Effects.CanAddHorseDetails); Assert.NotEmpty(value.Safety!.Message);
         var contacts = await f.Service.GetEmergencyContactsAsync(f.Transport.TransportId, f.Driver.AccountId);
         Assert.Equal(contacts.Contacts, value.Safety.EmergencyContacts); Assert.Equal(4, contacts.Contacts.Count);
@@ -91,7 +91,7 @@ public class VehicleIncidentTests
         f.Transport.Status = TransportStatus.COMPLETED; await db.SaveChangesAsync();
         var replay = await service.ReportVehicleAsync(request, f.Driver.AccountId);
         Assert.False(replay.Created); Assert.Equal(first.Value.IncidentReportId, replay.Value.IncidentReportId);
-        Assert.Equal(first.Value.Title, replay.Value.Title); Assert.Equal(new Incidents.Response.Effects(false, false, false, false), replay.Value.Effects);
+        Assert.Equal(first.Value.Title, replay.Value.Title); Assert.Equal(new Incidents.Response.Effects(false, false, VehicleStatusChanged: false, CanAddHorseDetails: false), replay.Value.Effects);
         Assert.Single(db.IncidentReports); Assert.Single(db.VehicleIncidentDetails); Assert.Single(db.IncidentPhotos);
         Assert.Single(f.Storage.Confirmations); Assert.Equal(5, await db.Notifications.CountAsync()); Assert.Single(db.OutboxMessages);
     }
@@ -347,6 +347,9 @@ public class VehicleIncidentTests
     internal static Incidents.Service CreateService(AppDbContext db, Storage storage)
     {
         var fields = new VehicleFieldsValidator(); var clock = new FixedClock();
-        return new(db, clock, new ReportVehicleRequestValidator(clock, fields), new UpdateVehicleRequestValidator(fields), storage, storage, TestSupport.CreateNotifications(db));
+        var details = new AddHorseDetailsRequestValidator(new HorseDetailValidator(clock));
+        return new(db, clock, new ReportVehicleRequestValidator(clock, fields), new UpdateVehicleRequestValidator(fields),
+            new ReportHorseHealthRequestValidator(clock, details), details, new FollowUpHorseRequestValidator(clock),
+            storage, storage, TestSupport.CreateNotifications(db));
     }
 }
