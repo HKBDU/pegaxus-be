@@ -139,7 +139,7 @@ public class IncidentLifecyclePostgresTests
         });
     }
 
-    private sealed class PauseBeforeSave : SaveChangesInterceptor
+    internal sealed class PauseBeforeSave : SaveChangesInterceptor
     {
         internal TaskCompletionSource Entered { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
         internal TaskCompletionSource Release { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);

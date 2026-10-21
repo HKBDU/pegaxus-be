@@ -5,6 +5,26 @@ namespace Pegaxus.Service.IncidentService;
 
 public static class Response
 {
+    public sealed record Hold(string Status, DateTimeOffset StartedAt, DateTimeOffset HoldUntil, int HoldMinutes,
+        int MonitorIntervalMinutes, string Reason, LocationBrief? SafeStopLocation, Reporter DecidedBy);
+    public sealed record HoldResult(Guid IncidentReportId, string IncidentStatus, Hold Hold, IReadOnlyList<Reporter> Notified);
+    public sealed record EscalationResult(Guid IncidentReportId, string IncidentStatus,
+        IReadOnlyList<Reporter> NotifiedLogisticsManagers, DateTimeOffset SentAt);
+    public sealed record RerouteIncident(Guid IncidentReportId, string IncidentCode, string Category, string Severity,
+        string Status, string Title, bool? VehicleOperable, DateTimeOffset OccurredAt);
+    public sealed record RerouteTransport(Guid TransportId, string TransportCode, string Status, Guid? TransportPlanId);
+    public sealed record RerouteSegment(Guid RoutePlanRouteId, Guid RoutePlanId, int SequenceNo, string RouteType,
+        LocationBrief? FromLocation, LocationBrief? ToLocation, string Status, DateTimeOffset? PlannedArrivalAt,
+        DateTimeOffset? ActualDepartureAt, DateTimeOffset? ActualArrivalAt);
+    public sealed record ReroutePlan(Guid RoutePlanId, string RoutePlanCode, string Status, decimal? TotalDistanceKm,
+        int? EstimatedDurationMinutes, DateTimeOffset? PlannedArrivalAt, decimal? EtaDelayMinutes, bool IsAvailable,
+        string? UnavailableReason, IReadOnlyList<RouteRestRules.Check> Checks,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? BranchSequenceNo = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] LocationBrief? BranchLocation = null);
+    public sealed record RerouteDossier(Guid ComplianceDossierId, string DossierCode, string DossierType, string Status);
+    public sealed record RerouteContext(DateTimeOffset ServerTime, RerouteIncident Incident, RerouteTransport Transport,
+        RerouteSegment? CurrentSegment, IReadOnlyList<RerouteSegment> RemainingSegments, IReadOnlyList<ReroutePlan> BackupPlans,
+        ReroutePlan? ReturnPlan, IReadOnlyList<RerouteDossier> ComplianceDossiers, Hold? Hold, IReadOnlyList<string> AvailableActions);
     public sealed record SeverityResult(Incident Value, string PreviousSeverity);
     public sealed record Counts(int Reported, int Pending, int Resolved, int UrgentOpen);
     public sealed record ListResult(DateTimeOffset ServerTime, Counts Counts, IReadOnlyList<ListItem> Items,
@@ -65,8 +85,7 @@ public static class Response
         public long ApprovedTotal => CostSummary.ApprovedTotal;
         public CostSummary CostSummary { get; init; } = new(0, 0, 0);
         public IReadOnlyList<RouteChange> RouteChanges { get; init; } = [];
-        // shortcut: no route-hold writer exists yet; map IncidentHold when route holds are implemented.
-        public object? Hold { get; init; }
+        public Hold? Hold { get; init; }
         public bool CanResolve { get; init; }
         public IReadOnlyList<string> AvailableActions { get; init; } = [];
         public DateTimeOffset ServerTime { get; init; }

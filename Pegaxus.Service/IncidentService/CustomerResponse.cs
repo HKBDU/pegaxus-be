@@ -37,8 +37,7 @@ public static class CustomerResponse
         public IReadOnlyList<Response.Photo> Photos { get; init; } = [];
         public int PhotoCount => Photos.Count;
         public IReadOnlyList<Response.RouteChange> RouteChanges { get; init; } = [];
-        // shortcut: route holds have no writer yet; add a phone-free hold DTO with the route-hold feature.
-        public object? Hold => null;
+        public Response.Hold? Hold { get; init; }
         public DateTimeOffset ServerTime { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
@@ -63,7 +62,7 @@ public static class CustomerResponse
                 detail.RepairNote, detail.UpdatedAt),
             HorseDetails = horses, Horses = horses.Select(horse => horse.Horse).ToArray(),
             Photos = item.Photos.Where(photo => photo.HorseHealthIncidentDetailId is not { } id || detailIds.Contains(id)).ToArray(),
-            RouteChanges = item.RouteChanges, ServerTime = item.ServerTime, CreatedAt = item.CreatedAt, UpdatedAt = item.UpdatedAt
+            RouteChanges = item.RouteChanges, Hold = item.Hold, ServerTime = item.ServerTime, CreatedAt = item.CreatedAt, UpdatedAt = item.UpdatedAt
         };
     }
 }

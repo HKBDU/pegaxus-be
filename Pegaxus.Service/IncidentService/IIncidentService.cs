@@ -2,6 +2,10 @@ namespace Pegaxus.Service.IncidentService;
 
 public interface IIncidentService
 {
+    Task<Response.RerouteContext> GetRerouteContextAsync(Guid incidentReportId, Guid accountId, CancellationToken cancellationToken = default);
+    Task<Response.EscalationResult> EscalateRerouteAsync(Guid incidentReportId, Request.RerouteEscalationRequest request, Guid accountId, CancellationToken cancellationToken = default);
+    Task<Response.HoldResult> HoldRouteAsync(Guid incidentReportId, Request.RouteHoldRequest request, Guid accountId, CancellationToken cancellationToken = default);
+    Task<int> QueueExpiredHoldsAsync(CancellationToken cancellationToken = default);
     Task<Response.ListResult> ListAsync(Request.ListRequest request, Guid accountId, CancellationToken cancellationToken = default);
     Task<object> GetAsync(Guid incidentReportId, Guid accountId, CancellationToken cancellationToken = default);
     Task<Response.Incident> ResolveAsync(Guid incidentReportId, Request.ResolveRequest request, Guid accountId, CancellationToken cancellationToken = default);

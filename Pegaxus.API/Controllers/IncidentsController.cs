@@ -31,6 +31,38 @@ public sealed class IncidentsController(Incidents.IIncidentService service) : Ap
     public async Task<IActionResult> GetAsync(Guid incidentReportId, CancellationToken cancellationToken) =>
         Success(await service.GetAsync(incidentReportId, AccountId, cancellationToken), "Incident retrieved successfully");
 
+    /// <summary>Read the incident's emergency rerouting options.</summary>
+    /// <remarks>RT1: LM or assigned RC. Returns the effective itinerary, BACKUP/RETURN plans, static driving/rest checks, dossiers and hold. Closed incidents remain readable with no actions. GPS positions come from Flow 4.</remarks>
+    /// <param name="incidentReportId">The incident identifier.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the rerouting context. This read never changes incident or route state.</returns>
+    [HttpGet("{incidentReportId}/reroute-context")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerOrFleetRouteCoordinatorPolicy)]
+    public async Task<IActionResult> GetRerouteContextAsync(Guid incidentReportId, CancellationToken cancellationToken) =>
+        Success(await service.GetRerouteContextAsync(incidentReportId, AccountId, cancellationToken), "Reroute context retrieved successfully");
+
+    /// <summary>Escalate blocked routes to the logistics manager.</summary>
+    /// <remarks>RT2: assigned RC, open incident, IN_TRANSIT only. Accepts REPORTED as PENDING and queues urgent ROUTE alerts to active managers and assigned TS, plus manager email. Suggestions never create or activate a route.</remarks>
+    /// <param name="incidentReportId">The incident identifier.</param>
+    /// <param name="request">Reason, optional HOLD/RETURN suggestion and blocked route plan identifiers.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with notified managers and send time; 422 for a closed incident.</returns>
+    [HttpPost("{incidentReportId}/reroute-escalation")]
+    [Authorize(Policy = JwtExtensions.FleetRouteCoordinatorPolicy)]
+    public async Task<IActionResult> EscalateRerouteAsync(Guid incidentReportId, [FromBody] Incidents.Request.RerouteEscalationRequest request, CancellationToken cancellationToken) =>
+        Success(await service.EscalateRerouteAsync(incidentReportId, request, AccountId, cancellationToken), "Escalation sent to the logistics manager");
+
+    /// <summary>Order the crew to wait at a safe stop.</summary>
+    /// <remarks>RT3: LM, open incident, IN_TRANSIT only. Records a 15-240 minute hold and a 10-120 minute monitoring interval (default 30). Notifies current crew, assigned RC and TS. A transport cannot have two active holds. Expiry alerts staff without changing the transport, route, vehicle or medical history.</remarks>
+    /// <param name="incidentReportId">The incident identifier.</param>
+    /// <param name="request">Hold duration, reason, monitoring interval and optional safe-stop location.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the hold and notified employees; 409 HOLD_ALREADY_ACTIVE for an existing hold.</returns>
+    [HttpPost("{incidentReportId}/route-hold")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> HoldRouteAsync(Guid incidentReportId, [FromBody] Incidents.Request.RouteHoldRequest request, CancellationToken cancellationToken) =>
+        Success(await service.HoldRouteAsync(incidentReportId, request, AccountId, cancellationToken), "Transport put on hold successfully");
+
     /// <summary>Confirm emergency settlement and resolve an incident.</summary>
     /// <remarks>IN9: LM only, REPORTED/PENDING, transport IN_TRANSIT or COMPLETED. Pending cost requests block resolution with value.pendingRequests. Confirmation and a summary of at least 20 trimmed characters are required. Vehicle availability and medical history are preserved.</remarks>
     /// <param name="incidentReportId">The incident identifier.</param>

@@ -164,7 +164,7 @@ public class IncidentLifecycleHttpTests
         { using var response = await client.GetAsync("/api/v1/incidents?" + query); Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode); }
     }
 
-    private static HttpClient CustomerClient(WebApplication host, Guid accountId)
+    internal static HttpClient CustomerClient(WebApplication host, Guid accountId)
     {
         var client = Client(host, accountId, EmployeeRole.DRIVER);
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", new JwtServices(host.Configuration).GenerateAccessToken(
@@ -172,7 +172,7 @@ public class IncidentLifecycleHttpTests
         return client;
     }
 
-    private static void AssertNoProperties(JsonElement value, IReadOnlyCollection<string> forbidden)
+    internal static void AssertNoProperties(JsonElement value, IReadOnlyCollection<string> forbidden)
     {
         if (value.ValueKind == JsonValueKind.Object)
             foreach (var property in value.EnumerateObject())
