@@ -3,7 +3,12 @@ namespace Pegaxus.Service.InvoiceService;
 public static class Response
 {
     public sealed record OnlinePaymentResponse(ReceiptResponse Receipt, string PaymentUrl,
-        IReadOnlyDictionary<string, string> CheckoutFields);
+        IReadOnlyDictionary<string, string> CheckoutFields)
+    {
+        /// <summary>True when an existing pending receipt was reused; the controller answers 200 instead of 201. Not part of the JSON.</summary>
+        [System.Text.Json.Serialization.JsonIgnore]
+        public bool Reused { get; init; }
+    }
 
     public sealed record StatusHistoryResponse(Guid HistoryId, string Type, string? PreviousStatus, string NewStatus,
         string? Reason, ChangedByResponse ChangedBy, DateTimeOffset ChangedAt);
