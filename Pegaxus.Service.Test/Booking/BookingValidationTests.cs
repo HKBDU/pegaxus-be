@@ -141,4 +141,42 @@ public class BookingValidationTests
         Assert.False(invalidNonEuResult.IsValid);
         Assert.Contains(invalidNonEuResult.Errors, error => error.PropertyName == "OriginCountry");
     }
+
+    [Theory]
+    [InlineData("France", "United Kingdom", true)]
+    [InlineData("United Kingdom", "France", true)]
+    [InlineData("Ireland", "United Kingdom", true)]
+    [InlineData("Germany", "United Kingdom", true)]
+    [InlineData("  united kingdom ", "Italy", true)]
+    [InlineData("United Kingdom", "United Kingdom", true)]
+    [InlineData("France", "Germany", true)]
+    [InlineData("France", "France", false)]
+    [InlineData("Switzerland", "United Kingdom", false)]
+    [InlineData("United Kingdom", "Norway", false)]
+    [InlineData("Vietnam", "France", false)]
+    public void CreateBooking_AcceptsEuAndUnitedKingdomOnEitherEndOfTheRoute(string origin, string destination, bool valid)
+    {
+        var result = new CreateBookingRequestValidator().Validate(new BookingRequest.CreateBookingRequest
+        {
+            OriginAddress = "A", OriginLatitude = 1m, OriginLongitude = 2m, OriginCountry = origin,
+            DestinationAddress = "B", DestinationLatitude = 3m, DestinationLongitude = 4m, DestinationCountry = destination,
+            Horses = [new BookingRequest.BookingHorseRequest { HorseId = Guid.NewGuid() }]
+        });
+
+        Assert.Equal(valid, result.IsValid);
+    }
+
+    [Theory]
+    [InlineData("France", "United Kingdom", "")]
+    [InlineData("United Kingdom", "France", "")]
+    [InlineData("France", "France", "When origin and destination countries are the same, the country must be United Kingdom.")]
+    [InlineData("Switzerland", "United Kingdom", "Origin country 'Switzerland' is not an accepted EU member country or United Kingdom.")]
+    [InlineData("France", "Norway", "Destination country 'Norway' is not an accepted EU member country or United Kingdom.")]
+    public void ValidateRoute_AllowsEuToUkAndUkToEu_AndExplainsEveryRefusal(string origin, string destination, string message)
+    {
+        var (isValid, error) = Pegaxus.Service.Common.CountryUtils.ValidateRoute(origin, destination);
+
+        Assert.Equal(message.Length == 0, isValid);
+        Assert.Equal(message, error);
+    }
 }

@@ -87,7 +87,7 @@ public class InvoiceCancellationTests
         Assert.Equal(new[] { "CREATE_ANOTHER" }, result.AvailableActions);
         Assert.Equal(issuer, invoice.EmployeeId); Assert.Equal(issuedAt, invoice.IssuedAt); Assert.Null(invoice.PaidAt);
         Assert.Equal((100m, 0m, 20m, 120m, "Keep billing note"), (invoice.Subtotal, invoice.DiscountAmount, invoice.TaxAmount, invoice.TotalAmount, invoice.BillingNote));
-        Assert.Equal(new DateOnly(2026, 11, 15), invoice.DueDate);
+        Assert.Equal(new DateTime(2026, 11, 15), invoice.DueDate);
         var item = Assert.Single(db.InvoiceItems); Assert.Equal(100, item.LineAmount); Assert.Equal(invoice.CreatedAt, item.UpdatedAt);
         Assert.Equal(TransportPlanStatus.PENDING, plan.Status); Assert.Equal(invoice.CreatedAt, plan.UpdatedAt);
         Assert.Equal(TransportStatus.CREATED, plan.Transport.Status); Assert.Equal(invoice.CreatedAt, plan.Transport.UpdatedAt);

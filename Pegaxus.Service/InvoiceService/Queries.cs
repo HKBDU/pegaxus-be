@@ -119,9 +119,10 @@ public sealed partial class Service
         var booking = invoice.Booking;
         var transport = booking.Transport;
         return new(invoice.InvoiceId, invoice.InvoiceCode, invoice.Type.ToString(), invoice.Status.ToString(), invoice.Type != InvoiceType.QUOTATION,
-            DateOnly.FromDateTime(invoice.IssuedAt ?? invoice.CreatedAt), invoice.DueDate, invoice.Currency, invoice.BillingNote,
+            DateOnly.FromDateTime(invoice.IssuedAt ?? invoice.CreatedAt), AsUtc(invoice.DueDate), invoice.Currency, invoice.BillingNote,
             new(client.CustomerId, client.CustomerCode, client.FullName, client.Phone, client.Address, client.Account.Email), items,
-            new(Vnd.ToLong(invoice.Subtotal), Vnd.ToLong(invoice.TaxAmount), items.Where(item => item.IsDepositDeduction).Sum(item => item.Total), Vnd.ToLong(invoice.TotalAmount)),
+            new(Vnd.ToLong(invoice.Subtotal), Vnd.ToLong(invoice.TaxAmount), items.Where(item => item.IsDepositDeduction).Sum(item => item.Total), Vnd.ToLong(invoice.TotalAmount))
+            { TaxRatePercent = Vnd.TaxRatePercent(invoice.Type) },
             new(contact.FullName, contact.Account.Email, contact.Phone), AsUtc(invoice.IssuedAt), AsUtc(invoice.PaidAt), AsUtc(invoice.CancelledAt),
             invoice.CancellationReason, new(booking.BookingId, booking.BookingCode, booking.Status.ToString(), booking.OriginAddress, booking.OriginCountry,
                 booking.DestinationAddress, booking.DestinationCountry, booking.RequestedDepartureDate),
@@ -188,7 +189,7 @@ public sealed partial class Service
             }).ToListAsync(cancellationToken);
         return new(rows.Select(item => new Response.InvoiceListItem(item.InvoiceId, item.InvoiceCode, item.Type.ToString(), item.Status.ToString(),
                 item.BookingId, item.BookingCode, item.TransportPlanId, item.CustomerName, Vnd.ToLong(item.TotalAmount), item.Currency,
-                item.DueDate, AsUtc(item.IssuedAt), AsUtc(item.PaidAt), AsUtc(item.CreatedAt), AsUtc(item.UpdatedAt))).ToArray(),
+                AsUtc(item.DueDate), AsUtc(item.IssuedAt), AsUtc(item.PaidAt), AsUtc(item.CreatedAt), AsUtc(item.UpdatedAt))).ToArray(),
             request.PageIndex, request.PageSize, total, Paging.TotalPages(total, request.PageSize));
     }
 
@@ -232,8 +233,9 @@ public sealed partial class Service
             var to = request.IssuedTo.Value.ToDateTime(TimeOnly.MaxValue);
             query = query.Where(item => item.IssuedAt <= to);
         }
-        if (request.DueFrom.HasValue) query = query.Where(item => item.DueDate >= request.DueFrom);
-        if (request.DueTo.HasValue) query = query.Where(item => item.DueDate <= request.DueTo);
+        // The filter is a UTC day range while the due date carries a time, so DueTo covers the whole last day.
+        if (request.DueFrom.HasValue) { var from = request.DueFrom.Value.ToDateTime(TimeOnly.MinValue); query = query.Where(item => item.DueDate >= from); }
+        if (request.DueTo.HasValue) { var until = request.DueTo.Value.AddDays(1).ToDateTime(TimeOnly.MinValue); query = query.Where(item => item.DueDate < until); }
         if (!string.IsNullOrWhiteSpace(request.Search))
         {
             var search = request.Search.Trim().ToUpperInvariant();
@@ -264,7 +266,7 @@ public sealed partial class Service
             }).ToListAsync(cancellationToken);
         return new(rows.Select(item => new Response.InvoiceListItem(item.InvoiceId, item.InvoiceCode, item.Type.ToString(), item.Status.ToString(),
                 item.BookingId, item.BookingCode, item.TransportPlanId, item.CustomerName, Vnd.ToLong(item.TotalAmount), item.Currency,
-                item.DueDate, AsUtc(item.IssuedAt), AsUtc(item.PaidAt), AsUtc(item.CreatedAt), AsUtc(item.UpdatedAt))).ToArray(),
+                AsUtc(item.DueDate), AsUtc(item.IssuedAt), AsUtc(item.PaidAt), AsUtc(item.CreatedAt), AsUtc(item.UpdatedAt))).ToArray(),
             request.PageIndex, request.PageSize, total, Paging.TotalPages(total, request.PageSize));
     }
 

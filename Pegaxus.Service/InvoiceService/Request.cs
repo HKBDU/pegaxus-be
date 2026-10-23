@@ -58,7 +58,7 @@ public static class Request
     public sealed class CreateRequest
     {
         public string Type { get; set; } = string.Empty;
-        public DateOnly? DueDate { get; set; }
+        public DateTimeOffset? DueDate { get; set; }
         public string? Note { get; set; }
         public int? TransitDays { get; set; }
         public JsonElement? Payment { get; set; }
@@ -69,7 +69,7 @@ public static class Request
     {
         public DateTimeOffset? LastUpdatedAt { get; set; }
         public string? Type { get; set; }
-        public DateOnly? DueDate { get; set; }
+        public DateTimeOffset? DueDate { get; set; }
         public string? Note { get; set; }
         public int? TransitDays { get; set; }
         public JsonElement? Payment { get; set; }

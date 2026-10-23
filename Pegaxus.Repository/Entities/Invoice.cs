@@ -34,7 +34,7 @@ public partial class Invoice
 
     public DateTime? IssuedAt { get; set; }
 
-    public DateOnly? DueDate { get; set; }
+    public DateTime? DueDate { get; set; }
 
     public DateTime? PaidAt { get; set; }
 

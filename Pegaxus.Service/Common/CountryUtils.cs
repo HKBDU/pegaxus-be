@@ -67,14 +67,15 @@ public static class CountryUtils
             return (true, string.Empty);
         }
 
-        if (!IsEuCountry(origin))
+        // The United Kingdom is served as a route end like an EU country (EU to UK and UK to EU are the EXTRA_EU import and export routes).
+        if (!IsEuCountry(origin) && !IsUnitedKingdom(origin))
         {
-            return (false, $"Origin country '{origin}' is not an accepted EU member country.");
+            return (false, $"Origin country '{origin}' is not an accepted EU member country or United Kingdom.");
         }
 
-        if (!IsEuCountry(destination))
+        if (!IsEuCountry(destination) && !IsUnitedKingdom(destination))
         {
-            return (false, $"Destination country '{destination}' is not an accepted EU member country.");
+            return (false, $"Destination country '{destination}' is not an accepted EU member country or United Kingdom.");
         }
 
         return (true, string.Empty);

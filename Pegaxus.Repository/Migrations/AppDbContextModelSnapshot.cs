@@ -3079,8 +3079,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("discount_amount");
 
-                    b.Property<DateOnly?>("DueDate")
-                        .HasColumnType("date")
+                    b.Property<DateTime?>("DueDate")
+                        .HasColumnType("timestamp without time zone")
                         .HasColumnName("due_date");
 
                     b.Property<Guid>("EmployeeId")

@@ -71,7 +71,7 @@ public class ValidationRulesTests
     public void InvoiceDueDate_MustBeWithinTenYears()
     {
         var request = InvoiceTests.Fixture.Request();
-        request.DueDate = DateOnly.FromDateTime(DateTime.UtcNow).AddYears(11);
+        request.DueDate = DateTimeOffset.UtcNow.AddYears(11);
 
         Assert.False(new Pegaxus.Service.InvoiceService.Validator.CreateRequestValidator(TimeProvider.System).Validate(request).IsValid);
     }

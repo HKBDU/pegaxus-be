@@ -59,7 +59,7 @@ public class InvoiceIssueHttpTests
         Assert.Equal(InvoiceIssueTests.TestClock.GetUtcNow(), value.GetProperty("updatedAt").GetDateTimeOffset());
         Assert.Equal(120, value.GetProperty("grandTotal").GetInt64()); Assert.Equal("VND", value.GetProperty("currency").GetString());
         Assert.Equal("120", value.GetProperty("grandTotal").GetRawText());
-        Assert.Equal("2026-11-15", value.GetProperty("dueDate").GetString());
+        Assert.Equal(new DateTimeOffset(2026, 11, 15, 0, 0, 0, TimeSpan.Zero), value.GetProperty("dueDate").GetDateTimeOffset());
         Assert.Equal(new[] { "RECORD_PAYMENT", "CANCEL", "CREATE_ANOTHER" }, value.GetProperty("availableActions").EnumerateArray().Select(x => x.GetString()));
         await Error(await client.PostAsJsonAsync(url, InvoiceIssueTests.Version(invoice)), 409, "INVALID_INVOICE_STATUS");
         await Error(await client.PostAsJsonAsync($"/api/v1/invoices/{Guid.NewGuid()}/issue", InvoiceIssueTests.Version(invoice)), 404, "INVOICE_NOT_FOUND");

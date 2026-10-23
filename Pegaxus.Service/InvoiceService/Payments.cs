@@ -51,19 +51,24 @@ public sealed partial class Service
                 throw new UnprocessableEntityException("Invoice total must be greater than 0", "INVOICE_TOTAL_NOT_POSITIVE");
 
             var now = Truncate(clock.GetUtcNow().UtcDateTime);
-            var pending = db.Receipts.Where(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.PENDING);
-            if (db.Database.IsRelational())
-                await pending.ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, ReceiptStatus.FAILED).SetProperty(x => x.UpdatedAt, now), cancellationToken);
-            else
-                foreach (var previous in await pending.ToListAsync(cancellationToken)) { previous.Status = ReceiptStatus.FAILED; previous.UpdatedAt = now; }
-            var receipt = new Receipt
+            // A pending receipt means a checkout was already started and the bank transfer may be on its way, so it is reused and never
+            // failed here: only the gateway webhook may decide a payment failed (flow6 IV11, O-F6-01). Only a receipt that still matches the
+            // invoice total is reused, because the webhook rejects any other amount.
+            var receipt = await db.Receipts.Where(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.PENDING &&
+                    x.Amount == invoice.TotalAmount && x.Currency == invoice.Currency)
+                .OrderByDescending(x => x.CreatedAt).ThenByDescending(x => x.ReceiptId).FirstOrDefaultAsync(cancellationToken);
+            var reused = receipt is not null;
+            if (receipt is null)
             {
-                ReceiptId = Guid.NewGuid(), ReceiptCode = await GenerateReceiptCodeAsync(now, cancellationToken),
-                InvoiceId = invoiceId, Amount = invoice.TotalAmount, Currency = invoice.Currency,
-                PaymentMethod = PaymentMethod.BANK_TRANSFER, Status = ReceiptStatus.PENDING, CreatedAt = now, UpdatedAt = now
-            };
-            db.Receipts.Add(receipt);
-            await db.SaveChangesAsync(cancellationToken);
+                receipt = new Receipt
+                {
+                    ReceiptId = Guid.NewGuid(), ReceiptCode = await GenerateReceiptCodeAsync(now, cancellationToken),
+                    InvoiceId = invoiceId, Amount = invoice.TotalAmount, Currency = invoice.Currency,
+                    PaymentMethod = PaymentMethod.BANK_TRANSFER, Status = ReceiptStatus.PENDING, CreatedAt = now, UpdatedAt = now
+                };
+                db.Receipts.Add(receipt);
+                await db.SaveChangesAsync(cancellationToken);
+            }
 
             PaymentGatewayService.Checkout checkout;
             try
@@ -81,7 +86,8 @@ public sealed partial class Service
             }
             await transaction.CommitAsync(cancellationToken);
             return new(new(receipt.ReceiptId, receipt.ReceiptCode, Vnd.ToLong(receipt.Amount), receipt.Currency,
-                receipt.PaymentMethod.ToString(), receipt.Status.ToString(), null, null, null, null, null), checkout.PaymentUrl, checkout.Fields);
+                receipt.PaymentMethod.ToString(), receipt.Status.ToString(), null, null, null, null, null), checkout.PaymentUrl, checkout.Fields)
+                { Reused = reused };
         }
         catch (Exception ex) when (ex is DbUpdateConcurrencyException || ex.GetBaseException() is PostgresException
             { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } or PostgresException
@@ -132,11 +138,7 @@ public sealed partial class Service
                 ConfirmedAt = now, Note = EmptyToNull(request.Note), CreatedAt = now, UpdatedAt = now
             };
             db.Receipts.Add(receipt);
-            var pending = db.Receipts.Where(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.PENDING);
-            if (db.Database.IsRelational())
-                await pending.ExecuteUpdateAsync(s => s.SetProperty(x => x.Status, ReceiptStatus.FAILED).SetProperty(x => x.UpdatedAt, now), cancellationToken);
-            else
-                foreach (var old in await pending.ToListAsync(cancellationToken)) { old.Status = ReceiptStatus.FAILED; old.UpdatedAt = now; }
+            // Pending checkout receipts stay PENDING: their webhook may still arrive, and it is then flagged for reconciliation (flow6 IV8, O-F6-01).
             var previousStatus = invoice.Status;
             invoice.Status = InvoiceStatus.PAID;
             invoice.PaidAt = now;

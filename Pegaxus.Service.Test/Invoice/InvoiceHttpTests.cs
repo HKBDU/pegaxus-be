@@ -105,7 +105,7 @@ public class InvoiceHttpTests
         var value = body.GetProperty("value");
         Assert.Equal("DRAFT", value.GetProperty("status").GetString());
         Assert.True(value.GetProperty("isPaymentRequired").GetBoolean());
-        Assert.Equal("2026-10-12", value.GetProperty("dueDate").GetString());
+        Assert.Equal(request.DueDate, value.GetProperty("dueDate").GetDateTimeOffset());
         Assert.Equal(f.Horse.HorseId, value.GetProperty("items")[0].GetProperty("horse").GetProperty("horseId").GetGuid());
         Assert.Equal("6", value.GetProperty("summary").GetProperty("grandTotal").GetRawText());
         foreach (var field in new[] { "payment", "issuedAt", "paidAt", "cancelledAt", "cancellationReason" })

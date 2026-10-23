@@ -38,7 +38,9 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         entity.Property(e => e.DiscountAmount)
             .HasPrecision(18, 2)
             .HasColumnName("discount_amount");
-        entity.Property(e => e.DueDate).HasColumnName("due_date");
+        entity.Property(e => e.DueDate)
+            .HasColumnType("timestamp without time zone")
+            .HasColumnName("due_date");
         entity.Property(e => e.EmployeeId).HasColumnName("employee_id");
         entity.Property(e => e.InvoiceCode)
             .HasMaxLength(50)

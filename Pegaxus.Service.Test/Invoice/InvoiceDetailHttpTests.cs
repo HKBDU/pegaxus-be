@@ -44,7 +44,7 @@ public class InvoiceDetailHttpTests
             "items", "note", "paidAt", "payment", "receipts", "status", "summary", "transport", "transportPlan", "type", "updatedAt" },
             value.EnumerateObject().Select(property => property.Name).Order());
         Assert.Equal("2026-10-05", value.GetProperty("invoiceDate").GetString());
-        Assert.Equal("2026-10-15", value.GetProperty("dueDate").GetString());
+        Assert.Equal(new DateTimeOffset(2026, 10, 15, 0, 0, 0, TimeSpan.Zero), value.GetProperty("dueDate").GetDateTimeOffset());
         Assert.Equal(JsonValueKind.Null, value.GetProperty("payment").ValueKind);
         Assert.Equal(TimeSpan.Zero, value.GetProperty("updatedAt").GetDateTimeOffset().Offset);
         Assert.Equal("Club Alpha", value.GetProperty("customer").GetProperty("name").GetString());
