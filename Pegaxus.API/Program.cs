@@ -53,6 +53,7 @@ builder.Services.AddAuthModule();
 builder.Services.AddAccountsModule();
 builder.Services.AddBookingModule();
 builder.Services.AddInvoicingModule(builder.Configuration);
+builder.Services.AddClaimsModule();
 builder.Services.AddTransportPlanningModule();
 builder.Services.AddFleetModule();
 builder.Services.AddComplianceModule();

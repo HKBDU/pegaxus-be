@@ -248,6 +248,18 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>Customer claims about a delivery and how the logistics manager handles them.</summary>
+    public static IServiceCollection AddClaimsModule(this IServiceCollection services)
+    {
+        services.AddScoped<Pegaxus.Service.ClaimService.IClaimService, Pegaxus.Service.ClaimService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.SubmitRequest>, Pegaxus.Service.ClaimService.Validator.SubmitRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.ListRequest>, Pegaxus.Service.ClaimService.Validator.ListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.ResolveRequest>, Pegaxus.Service.ClaimService.Validator.ResolveRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.CancelRequest>, Pegaxus.Service.ClaimService.Validator.CancelRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.CompleteRequest>, Pegaxus.Service.ClaimService.Validator.CompleteRequestValidator>();
+        return services;
+    }
+
     /// <summary>Invoices, online payment checkout and the payment webhook.</summary>
     public static IServiceCollection AddInvoicingModule(this IServiceCollection services, IConfiguration configuration)
     {

@@ -31,6 +31,13 @@ public static class NotificationLinks
         _ => null
     };
 
+    public static string? Claim(EmployeeRole? role, Guid bookingId, Guid claimId) => role switch
+    {
+        null => $"/bookings/{bookingId}?claimId={claimId}",
+        EmployeeRole.LOGISTICS_MANAGER => $"/admin/claims/{claimId}",
+        _ => null
+    };
+
     /// <param name="view">Optional manager screen of the route plan: <c>change-decision</c> or <c>return-activation</c>.</param>
     public static string? RoutePlan(EmployeeRole? role, Guid routePlanId, string? view = null) => role switch
     {
