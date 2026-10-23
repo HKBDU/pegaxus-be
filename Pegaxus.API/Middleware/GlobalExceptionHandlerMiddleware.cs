@@ -46,7 +46,7 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
                 errorCode: GetErrorCode(ex, statusCode),
                 code: statusCode,
                 traceId: context.TraceIdentifier,
-                value: (ex as ConflictException)?.Value));
+                value: ex switch { ConflictException conflict => conflict.Value, UnprocessableEntityException rule => rule.Value, _ => null }));
         }
     }
 
@@ -99,9 +99,28 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
             return "The record changed. Reload it and try again.";
         if (statusCode == StatusCodes.Status413PayloadTooLarge && ex is BadHttpRequestException)
             return "The request body must not exceed 1 MB.";
+        if (statusCode >= StatusCodes.Status500InternalServerError && ex is not Exceptions && ExposeErrors())
+            return Describe(ex);
         return statusCode >= StatusCodes.Status500InternalServerError
             ? "A system error occurred. Please try again later"
             : ex.Message;
+    }
+
+    // TEMPORARY DEBUG SWITCH - for environments where the server log cannot be opened (e.g. Render dev) but a caller such as the
+    // SePay IPN log shows the response body. Set the env var Diagnostics__ExposeErrors=true to put the exception type and message
+    // into the message of an unhandled 500. It leaks internal details (SQL, column names), so NEVER set it on production.
+    // To restore: unset/remove the env var and redeploy (default is off). To delete the feature: remove ExposeErrors, Describe and
+    // the branch in GetErrorMessage, and the matching test in ValidationLimitsTests.
+    private static bool ExposeErrors() =>
+        string.Equals(Environment.GetEnvironmentVariable("Diagnostics__ExposeErrors"), "true", StringComparison.OrdinalIgnoreCase);
+
+    private static string Describe(Exception ex)
+    {
+        var parts = new List<string>();
+        for (var inner = ex; inner is not null && parts.Count < 4; inner = inner.InnerException)
+            parts.Add($"{inner.GetType().Name}: {inner.Message}");
+        var text = string.Join(" <- ", parts);
+        return text.Length <= 1500 ? text : text[..1500];
     }
 
     private static string GetErrorCode(Exception ex, int statusCode)

@@ -132,10 +132,9 @@ public class InvoiceUpdatePostgresTests : IAsyncLifetime
         await using var db = CreateDb();
         var f = await InvoiceUpdateTests.Fixture.CreateAsync(db, InvoiceType.FINAL);
         var deposit = f.Deposit(30);
-        db.Invoices.Add(deposit); await db.SaveChangesAsync();
+        db.Invoices.AddRange(deposit, f.Quotation(100)); await db.SaveChangesAsync();
         var request = f.Request();
-        request.Items = [InvoiceUpdateTests.Fixture.Item(1, 100, f.Invoice.InvoiceItems.First().InvoiceItemId)];
-        request.Items[0].HorseId = f.Horse.HorseId;
+        request.Items = null;
         var result = await f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, request);
         await using var verification = CreateDb();
         var saved = await verification.Invoices.Include(item => item.InvoiceItems).SingleAsync(item => item.InvoiceId == f.Invoice.InvoiceId);

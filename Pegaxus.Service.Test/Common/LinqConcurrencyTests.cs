@@ -111,6 +111,22 @@ public class LinqConcurrencyTests : IAsyncLifetime
     }
 
     [PostgresFact]
+    public async Task LocationLookup_FiltersGpsCandidatesAndPagesNearbyResultsInPostgres()
+    {
+        await using var db = CreateDb();
+        var close = LocationLookupTests.Point("Z close", 50.6293m, 3.0573m);
+        var north = LocationLookupTests.Point("A north", 50.6328m, 3.0573m);
+        db.Locations.AddRange(close, north, LocationLookupTests.Point("Far", 50.6340m, 3.0573m),
+            LocationLookupTests.Point("No coordinates", null, null));
+        await db.SaveChangesAsync();
+
+        var result = await new Pegaxus.Service.LocationService.Service(db).GetListAsync(new()
+            { Latitude = 50.6292314m, Longitude = 3.0573129m, PageSize = 1 });
+        Assert.Equal(close.LocationId, Assert.Single(result.Items).LocationId);
+        Assert.Equal(2, result.TotalItems); Assert.Equal(2, result.TotalPages);
+    }
+
+    [PostgresFact]
     public async Task CompetingOutboxWorkers_SendEligibleMessagesOnce()
     {
         await using var db = CreateDb();

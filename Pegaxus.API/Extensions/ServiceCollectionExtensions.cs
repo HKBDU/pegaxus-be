@@ -270,6 +270,24 @@ public static class ServiceCollectionExtensions
     /// <summary>Transport plans, route plans, locations, routes, emergency route changes, outsourcing and personnel assignment.</summary>
     public static IServiceCollection AddTransportPlanningModule(this IServiceCollection services)
     {
+        services.AddScoped<Pegaxus.Service.IncidentService.IIncidentService, Pegaxus.Service.IncidentService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CreateCostRequest>, Pegaxus.Service.IncidentService.Validator.CreateCostRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CostListRequest>, Pegaxus.Service.IncidentService.Validator.CostListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CostDecisionRequest>, Pegaxus.Service.IncidentService.Validator.CostDecisionRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.RerouteEscalationRequest>, Pegaxus.Service.IncidentService.Validator.RerouteEscalationRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.RouteHoldRequest>, Pegaxus.Service.IncidentService.Validator.RouteHoldRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ListRequest>, Pegaxus.Service.IncidentService.Validator.ListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ResolveRequest>, Pegaxus.Service.IncidentService.Validator.ResolveRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CancelRequest>, Pegaxus.Service.IncidentService.Validator.CancelRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.SelfResolveRequest>, Pegaxus.Service.IncidentService.Validator.SelfResolveRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.RaiseSeverityRequest>, Pegaxus.Service.IncidentService.Validator.RaiseSeverityRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.HorseDetail>, Pegaxus.Service.IncidentService.Validator.HorseDetailValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.AddHorseDetailsRequest>, Pegaxus.Service.IncidentService.Validator.AddHorseDetailsRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ReportHorseHealthRequest>, Pegaxus.Service.IncidentService.Validator.ReportHorseHealthRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.FollowUpHorseRequest>, Pegaxus.Service.IncidentService.Validator.FollowUpHorseRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.VehicleFields>, Pegaxus.Service.IncidentService.Validator.VehicleFieldsValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ReportVehicleRequest>, Pegaxus.Service.IncidentService.Validator.ReportVehicleRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.UpdateVehicleRequest>, Pegaxus.Service.IncidentService.Validator.UpdateVehicleRequestValidator>();
         services.AddScoped<Pegaxus.Service.HandoverService.IHandoverService, Pegaxus.Service.HandoverService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CreateRequest>, Pegaxus.Service.HandoverService.Validator.CreateRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.ListRequest>, Pegaxus.Service.HandoverService.Validator.ListRequestValidator>();
@@ -280,6 +298,9 @@ public static class ServiceCollectionExtensions
         services.AddOptions<LocationTrackingService.TrackingOptions>().BindConfiguration("Tracking")
             .Validate(options => double.IsFinite(options.GeofenceRadiusMeters) && options.GeofenceRadiusMeters > 0,
                 "Tracking:GeofenceRadiusMeters must be a positive finite number.").ValidateOnStart();
+        services.AddOptions<Pegaxus.Service.InvoiceService.QuotationOptions>().BindConfiguration("Quotation")
+            .Validate(options => options.IsValid(),
+                "Quotation: unit prices must be positive, DepositRatePercent 30-50 and DefaultTransitDays 1-60.").ValidateOnStart();
         services.AddScoped<HorseHealthLogService.IHorseHealthLogService, HorseHealthLogService.Service>();
         services.AddScoped<IValidator<HorseHealthLogService.Request.RecordRequest>, HorseHealthLogService.Validator.RecordRequestValidator>();
         services.AddScoped<IValidator<HorseHealthLogService.Request.CreateRequest>, HorseHealthLogService.Validator.CreateRequestValidator>();

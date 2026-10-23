@@ -119,6 +119,20 @@ public class HandoverCompletionTests
     }
 
     [Fact]
+    public async Task Complete_RadiusCheckCanBeSwitchedOff_ButCoordinatesAreStillRequired()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
+        f.First.Route.ToLocation.Latitude = 10; f.First.Route.ToLocation.Longitude = 1; await db.SaveChangesAsync();
+        f.Tracking.EnforceHandoverRadius = false;
+        var invalid = Request(f.Transfer); invalid.Longitude = null;
+        Assert.Equal("VALIDATION_ERROR", (await Assert.ThrowsAsync<BadRequestException>(() => f.Service.CompleteAsync(f.Transfer.HandoverRecordId, invalid, f.Driver.AccountId))).ErrorCode);
+
+        var result = await f.Service.CompleteAsync(f.Transfer.HandoverRecordId, Request(f.Transfer), f.Driver.AccountId); // Request() is in Europe, the point is at 10N 1E
+
+        Assert.Equal("COMPLETED", result.Status);
+    }
+
+    [Fact]
     public async Task Complete_OtherIsNotCheckedAgainstTheRadiusButStillNeedsValidCoordinates()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);

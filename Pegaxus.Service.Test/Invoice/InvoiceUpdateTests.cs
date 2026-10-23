@@ -22,7 +22,7 @@ public class InvoiceUpdateTests
         var remove = f.Invoice.InvoiceItems.Last();
         var (editor, _) = await TestSupport.AddLogisticsManagerAsync(db);
         var request = f.Request();
-        request.Type = " quotation ";
+        request.Type = " supplementary ";
         request.Note = "Updated billing note";
         request.Items = [Fixture.Item(2, 5, keep.InvoiceItemId), Fixture.Item(3, 5)];
         request.Items[0].HorseId = f.Horse.HorseId;
@@ -35,8 +35,8 @@ public class InvoiceUpdateTests
 
         Assert.Equal(f.Invoice.InvoiceCode, result.InvoiceNumber);
         Assert.Equal(f.Invoice.InvoiceId, result.InvoiceId);
-        Assert.Equal("QUOTATION", result.Type);
-        Assert.False(result.IsPaymentRequired);
+        Assert.Equal("SUPPLEMENTARY", result.Type);
+        Assert.True(result.IsPaymentRequired);
         Assert.Equal("DRAFT", result.Status);
         Assert.Equal("VND", result.Currency);
         Assert.Equal(request.Note, result.Note);
@@ -58,7 +58,7 @@ public class InvoiceUpdateTests
         var saved = await db.Invoices.Include(item => item.InvoiceItems).SingleAsync();
         Assert.Equal(f.Employee.EmployeeId, saved.EmployeeId);
         Assert.Equal(f.Invoice.CreatedAt, saved.CreatedAt);
-        Assert.Equal(InvoiceType.QUOTATION, saved.Type);
+        Assert.Equal(InvoiceType.SUPPLEMENTARY, saved.Type);
         Assert.Equal(InvoiceStatus.DRAFT, saved.Status);
         Assert.Null(saved.IssuedAt);
         Assert.Equal(keep.CreatedAt, saved.InvoiceItems.Single(item => item.InvoiceItemId == keep.InvoiceItemId).CreatedAt);
@@ -76,10 +76,8 @@ public class InvoiceUpdateTests
         Assert.Equal(TransportPlanStatus.DRAFT, (await db.TransportPlans.SingleAsync()).Status);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task Final_RegeneratesDeductionsFromCurrentPaidDepositsIgnoringClientRows(bool sendOldIdWithoutFlag)
+    [Fact]
+    public async Task Final_RegeneratesQuotationCostsAndDeductionsIgnoringClientRows()
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db, InvoiceType.FINAL);
@@ -88,22 +86,67 @@ public class InvoiceUpdateTests
         var deposit1 = f.Deposit(30_000_000);
         var deposit2 = f.Deposit(5_000_000);
         var cancelled = f.Deposit(99_000_000); cancelled.Status = InvoiceStatus.CANCELLED;
-        db.Invoices.AddRange(deposit1, deposit2, cancelled);
+        var cost = f.Cost(EmergencyCostStatus.APPROVED, 3_500_000);
+        db.Invoices.AddRange(deposit1, deposit2, cancelled, f.Quotation(120_000_000));
+        db.EmergencyCostRequests.Add(cost);
         await db.SaveChangesAsync();
         var request = f.Request();
-        request.Items = [Fixture.Item(1, 120_000_000), Fixture.Item(4, 5_000_000), Fixture.Item(1, 8_000_000), Fixture.Item(1, 3_500_000)];
-        request.Items.Add(sendOldIdWithoutFlag ? Fixture.Item(1, 777, old.InvoiceItemId)
-            : new() { InvoiceItemId = old.InvoiceItemId, IsDepositDeduction = true, Price = -999, HorseId = Guid.NewGuid() });
+        request.Items = [new() { InvoiceItemId = old.InvoiceItemId, IsDepositDeduction = true, Price = -999, HorseId = Guid.NewGuid() }];
         var result = await f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, request);
-        Assert.Equal(new Response.SummaryResponse(151_500_000, 30_300_000, -35_000_000, 146_800_000), result.Summary);
+        Assert.Equal(new Response.SummaryResponse(123_500_000, 24_700_000, -35_000_000, 113_200_000), result.Summary);
         Assert.Equal(2, result.Items.Count(item => item.IsDepositDeduction));
         Assert.DoesNotContain(result.Items, item => item.InvoiceItemId == old.InvoiceItemId);
         Assert.Contains(result.Items, item => item.Description == $"Deposit deduction ({deposit1.InvoiceCode})" && item.Total == -30_000_000);
         Assert.Contains(result.Items, item => item.Description == $"Deposit deduction ({deposit2.InvoiceCode})" && item.Total == -5_000_000);
         Assert.All(result.Items.Where(item => item.IsDepositDeduction), item => { Assert.Equal(1, item.Quantity); Assert.Null(item.Horse); });
+        var costLine = Assert.Single(result.Items, item => item.EmergencyCostRequestId == cost.EmergencyCostRequestId);
+        Assert.Equal(3_500_000, costLine.Total);
         Assert.False(await db.InvoiceItems.AnyAsync(item => item.InvoiceItemId == old.InvoiceItemId));
-        Assert.Equal(6, await db.InvoiceItems.CountAsync(item => item.InvoiceId == f.Invoice.InvoiceId));
+        Assert.Equal(4, await db.InvoiceItems.CountAsync(item => item.InvoiceId == f.Invoice.InvoiceId));
         Assert.Single(await db.InvoiceStatusHistories.ToListAsync());
+
+        // A second save keeps the cost row, so the unique emergency-cost link is never inserted twice.
+        var again = f.Request();
+        again.LastUpdatedAt = result.UpdatedAt;
+        var second = await f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, again);
+        Assert.Equal(costLine.InvoiceItemId, Assert.Single(second.Items, item => item.EmergencyCostRequestId == cost.EmergencyCostRequestId).InvoiceItemId);
+        Assert.Equal(4, await db.InvoiceItems.CountAsync(item => item.InvoiceId == f.Invoice.InvoiceId));
+    }
+
+    [Theory]
+    [InlineData(InvoiceType.QUOTATION)]
+    [InlineData(InvoiceType.DEPOSIT)]
+    [InlineData(InvoiceType.FINAL)]
+    public async Task GeneratedTypes_RejectClientItemsAndKeepStoredRows(InvoiceType type)
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db, type);
+        var request = f.Request();
+        request.Items = [Fixture.Item(1, 100)];
+        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
+            f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, request));
+        Assert.Equal("INVOICE_ITEMS_GENERATED", error.ErrorCode);
+        Assert.Equal(2, await db.InvoiceItems.CountAsync());
+    }
+
+    [Fact]
+    public async Task Quotation_RegeneratesLinesFromTransitDaysAndComposesTheNote()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db, InvoiceType.QUOTATION);
+        var request = f.Request();
+        request.TransitDays = 5;
+        request.Note = "VIP customer";
+        var result = await f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, request);
+        // One horse, Tier S, five days: 1,600 + 120 + 35*5 + 110 + 50 + 150 + 250 + 90 + 80 = 2,625.
+        Assert.Equal(new Response.SummaryResponse(2_625, 525, 0, 3_150), result.Summary);
+        Assert.Equal(9, result.Items.Count);
+        Assert.Equal("Additional costs may arise during the trip and will be added to the final invoice. VIP customer", result.Note);
+        request = f.Request();
+        request.LastUpdatedAt = result.UpdatedAt;
+        request.Note = result.Note;
+        var echoed = await f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, request);
+        Assert.Equal(result.Note, echoed.Note);
     }
 
     [Theory]
@@ -112,11 +155,13 @@ public class InvoiceUpdateTests
     public async Task EmptyDraft_AllowsZeroOrNegativeTotal(bool withPaidDeposit)
     {
         await using var db = TestSupport.CreateDb();
-        var f = await Fixture.CreateAsync(db, withPaidDeposit ? InvoiceType.FINAL : InvoiceType.QUOTATION);
-        if (withPaidDeposit) { db.Invoices.Add(f.Deposit(25)); await db.SaveChangesAsync(); }
-        var result = await f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, f.Request());
-        Assert.Equal(withPaidDeposit ? -25 : 0, result.Summary.GrandTotal);
-        Assert.Equal(withPaidDeposit ? 1 : 0, result.Items.Count);
+        var f = await Fixture.CreateAsync(db, withPaidDeposit ? InvoiceType.FINAL : InvoiceType.SUPPLEMENTARY);
+        if (withPaidDeposit) { db.Invoices.AddRange(f.Quotation(10), f.Deposit(25)); await db.SaveChangesAsync(); }
+        var request = f.Request();
+        if (withPaidDeposit) request.Items = null;
+        var result = await f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, request);
+        Assert.Equal(withPaidDeposit ? -13 : 0, result.Summary.GrandTotal);
+        Assert.Equal(withPaidDeposit ? 2 : 0, result.Items.Count);
     }
 
     [Fact]
@@ -290,7 +335,7 @@ public class InvoiceUpdateTests
         Transport Transport, TransportPlan Plan, Invoice Invoice, InvoiceStatusHistory History, DraftInvoiceService Service)
     {
         internal static TimeProvider Clock { get; } = new FixedClock();
-        internal static async Task<Fixture> CreateAsync(AppDbContext db, InvoiceType type = InvoiceType.QUOTATION)
+        internal static async Task<Fixture> CreateAsync(AppDbContext db, InvoiceType type = InvoiceType.SUPPLEMENTARY)
         {
             var (account, employee) = await TestSupport.AddLogisticsManagerAsync(db);
             var (_, customer) = await TestSupport.AddCustomerAsync(db);
@@ -335,6 +380,30 @@ public class InvoiceUpdateTests
             EmployeeId = Employee.EmployeeId, Type = InvoiceType.DEPOSIT, Status = InvoiceStatus.PAID,
             Currency = "VND", TotalAmount = total, CreatedAt = Invoice.CreatedAt, UpdatedAt = Invoice.CreatedAt
         };
+        internal Invoice Quotation(decimal subtotal)
+        {
+            var quotation = Deposit(subtotal * 1.2m);
+            quotation.Type = InvoiceType.QUOTATION;
+            quotation.Status = InvoiceStatus.ISSUED;
+            quotation.IssuedAt = Invoice.CreatedAt;
+            quotation.Subtotal = subtotal;
+            quotation.InvoiceItems.Add(new InvoiceItem { InvoiceItemId = Guid.NewGuid(), ItemType = InvoiceItemType.TRANSPORT_FEE,
+                Description = "Quoted transport", Quantity = 1, UnitPrice = subtotal, LineAmount = subtotal,
+                CreatedAt = Invoice.CreatedAt, UpdatedAt = Invoice.CreatedAt });
+            return quotation;
+        }
+        internal EmergencyCostRequest Cost(EmergencyCostStatus status, decimal? approved = null)
+        {
+            var incident = new IncidentReport { IncidentReportId = Guid.NewGuid(), IncidentCode = $"INC-{Guid.NewGuid():N}",
+                TransportId = Transport.TransportId, EmployeeId = Employee.EmployeeId, LocationId = Guid.NewGuid(),
+                Category = IncidentCategory.VEHICLE, Severity = IncidentSeverity.HIGH, Status = IncidentStatus.REPORTED,
+                Title = "Breakdown", Description = "Breakdown", OccurredAt = Invoice.CreatedAt, ReportedAt = Invoice.CreatedAt,
+                CreatedAt = Invoice.CreatedAt, UpdatedAt = Invoice.CreatedAt };
+            return new EmergencyCostRequest { EmergencyCostRequestId = Guid.NewGuid(), IncidentReport = incident, RequestCode = $"ECR-{Guid.NewGuid():N}",
+                Category = EmergencyCostCategory.TOWING, Status = status, RequestedByEmployeeId = Employee.EmployeeId, Description = "Towing",
+                Justification = "Towing", Currency = "VND", RequestedAmount = approved ?? 100, ApprovedAmount = approved,
+                RequestedAt = Invoice.CreatedAt, CreatedAt = Invoice.CreatedAt, UpdatedAt = Invoice.CreatedAt };
+        }
         internal static DateTimeOffset Version(DateTime time) => new(DateTime.SpecifyKind(time, DateTimeKind.Utc));
         private sealed class FixedClock : TimeProvider
         {

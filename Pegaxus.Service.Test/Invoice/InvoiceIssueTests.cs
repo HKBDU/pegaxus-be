@@ -44,6 +44,18 @@ public class InvoiceIssueTests
             Subtotal = 100, TaxAmount = 20, TotalAmount = 120, DueDate = type == InvoiceType.CREDIT_NOTE ? null : new DateOnly(2026, 11, 15),
             BillingNote = "Keep this note", CreatedAt = time, UpdatedAt = time };
         db.AddRange(transport, plan, invoice);
+        if (type is InvoiceType.DEPOSIT or InvoiceType.FINAL)
+        {
+            // Issuing re-derives the lines from the booking's issued quotation: 40% of 250 is the 100 deposit, a FINAL repeats the 100 line.
+            var subtotal = type == InvoiceType.DEPOSIT ? 250m : 100m;
+            var quotation = new Invoice { InvoiceId = Guid.NewGuid(), InvoiceCode = "INV-" + Guid.NewGuid().ToString("N"),
+                BookingId = booking.BookingId, EmployeeId = creator.EmployeeId, Type = InvoiceType.QUOTATION, Status = InvoiceStatus.ISSUED,
+                Currency = "VND", Subtotal = subtotal, TaxAmount = subtotal * 0.2m, TotalAmount = subtotal * 1.2m,
+                IssuedAt = time, CreatedAt = time, UpdatedAt = time };
+            quotation.InvoiceItems.Add(new InvoiceItem { InvoiceItemId = Guid.NewGuid(), ItemType = InvoiceItemType.TRANSPORT_FEE,
+                Description = "Quoted transport", Quantity = 1, UnitPrice = subtotal, LineAmount = subtotal, CreatedAt = time, UpdatedAt = time });
+            db.Invoices.Add(quotation);
+        }
         db.InvoiceItems.Add(new InvoiceItem { InvoiceItemId = Guid.NewGuid(), InvoiceId = invoice.InvoiceId,
             ItemType = InvoiceItemType.TRANSPORT_FEE, Description = "Transport fee", Quantity = 1, UnitPrice = 100,
             LineAmount = 100, CreatedAt = time, UpdatedAt = time });

@@ -14,6 +14,7 @@ public class EmailBodiesTests
     [
         ("otp-verify", Mail.OtpBody(true, "Ada", "123456", 5)),
         ("otp-reset", Mail.OtpBody(false, "Ada", "123456", 5)),
+        ("incident", Mail.IncidentReportedBody("Ada", "INC-1", "CRITICAL", "Horse incident", "Vet required", Link)),
         ("booking-approved", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", new DateOnly(2026, 12, 1), Link)),
         ("booking-rejected", Mail.BookingRejectedBody("Ada", "REQ-1", "No capacity", Link)),
         ("delivered", Mail.TransportDeliveredBody("Ada", "TR-1", new DateTime(2026, 10, 16, 12, 0, 0), Link)),
@@ -22,6 +23,7 @@ public class EmailBodiesTests
             [new Mail.MissingItem("Passport", "Storm", null)])),
         ("route", Mail.RouteAssignmentBody("Ada", "RP-1", true, "Driver sick", Link,
             [new Mail.RouteSegment(1, new DateTime(2026, 11, 28, 6, 0, 0), new DateTime(2026, 11, 28, 10, 0, 0), "EMP-4", "EMP-5", null)])),
+        ("incident", Mail.IncidentReportedBody("Ada", "INC-1", "HIGH", "Engine failure", "The engine stopped", Link)),
         ("invoice-issued", Mail.InvoiceIssuedBody("Ada", "INV-1", "DEPOSIT", "REQ-1", Mail.InvoiceMailKind.Invoice, 120m, "EUR", new DateOnly(2026, 11, 15), Link)),
         ("invoice-cancelled", Mail.InvoiceCancelledBody("Ada", "INV-1", "DEPOSIT", "Wrong amount", Link)),
         ("payment-confirmed", Mail.PaymentConfirmedBody("Ada", "INV-1", "RCP-1", 120m, "EUR", false, Link)),
@@ -51,6 +53,7 @@ public class EmailBodiesTests
         var html = new[]
         {
             Mail.OtpBody(true, Evil, "123456", 5),
+            Mail.IncidentReportedBody(Evil, Evil, Evil, Evil, Evil, null),
             Mail.BookingApprovedBody(Evil, Evil, Evil, null, null),
             Mail.BookingRejectedBody(Evil, Evil, Evil, null),
             Mail.TransportDeliveredBody(Evil, Evil, new DateTime(2026, 10, 16, 12, 0, 0), null),
@@ -160,6 +163,14 @@ public class EmailBodiesTests
         Assert.Contains("Payout confirmed", payout); Assert.DoesNotContain("Payment confirmed", payout);
         var payment = Mail.PaymentConfirmedBody("Ada", "INV-1", "RCP-1", 120m, "EUR", false, null);
         Assert.Contains("Payment confirmed", payment); Assert.Contains("RCP-1", payment);
+    }
+
+    [Fact]
+    public void UrgentIncident_EncodesUntrustedFieldsAndKeepsIncidentLink()
+    {
+        var body = Mail.IncidentReportedBody("<staff>", "<code>", "<severity>", "<title>", Evil, "/admin/incidents/test");
+        Assert.DoesNotContain(Evil, body); Assert.Contains("&lt;title&gt;", body); Assert.Contains(EncodedEvil, body);
+        Assert.Contains("/admin/incidents/test", body); Assert.Contains("&lt;staff&gt;", body);
     }
 
     [Fact]
