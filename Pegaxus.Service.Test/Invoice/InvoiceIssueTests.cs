@@ -41,7 +41,7 @@ public class InvoiceIssueTests
             PlanCode = "TP-" + Guid.NewGuid().ToString("N"), Status = TransportPlanStatus.PENDING, CreatedAt = time, UpdatedAt = time };
         var invoice = new Invoice { InvoiceId = Guid.NewGuid(), InvoiceCode = "INV-" + Guid.NewGuid().ToString("N"),
             BookingId = booking.BookingId, EmployeeId = creator.EmployeeId, Type = type, Currency = "VND",
-            Subtotal = 100, TaxAmount = 20, TotalAmount = 120, DueDate = type == InvoiceType.CREDIT_NOTE ? null : new DateOnly(2026, 11, 15),
+            Subtotal = 100, TaxAmount = 20, TotalAmount = 120, DueDate = type == InvoiceType.CREDIT_NOTE ? null : new DateTime(2026, 11, 15),
             BillingNote = "Keep this note", CreatedAt = time, UpdatedAt = time };
         db.AddRange(transport, plan, invoice);
         if (type is InvoiceType.DEPOSIT or InvoiceType.FINAL)
@@ -99,7 +99,7 @@ public class InvoiceIssueTests
         Assert.Equal(result.IssuedAt, result.UpdatedAt);
         Assert.Equal(120, result.GrandTotal);
         Assert.Equal("VND", result.Currency);
-        Assert.Equal(invoice.DueDate, result.DueDate);
+        Assert.Equal(Pegaxus.Service.Common.DbTime.AsUtc(invoice.DueDate), result.DueDate);
         Assert.Equal(type == InvoiceType.QUOTATION ? ["CANCEL", "CREATE_ANOTHER"] : new[] { "RECORD_PAYMENT", "CANCEL", "CREATE_ANOTHER" }, result.AvailableActions);
         Assert.Equal((await db.Employees.SingleAsync(x => x.AccountId == actor.AccountId)).EmployeeId, invoice.EmployeeId);
         Assert.Equal((100m, 0m, 20m, 120m, "Keep this note"), (invoice.Subtotal, invoice.DiscountAmount, invoice.TaxAmount, invoice.TotalAmount, invoice.BillingNote));

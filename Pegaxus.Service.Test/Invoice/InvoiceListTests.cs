@@ -34,7 +34,7 @@ public class InvoiceListTests
         Assert.Equal(f.Booking.Customer.FullName, item.CustomerName);
         Assert.Equal(10, item.TotalAmount);
         Assert.Equal("VND", item.Currency);
-        Assert.Equal(f.Invoices[2].DueDate, item.DueDate);
+        Assert.Equal(Pegaxus.Service.Common.DbTime.AsUtc(f.Invoices[2].DueDate), item.DueDate);
         Assert.Equal(Fixture.Offset(f.Invoices[2].IssuedAt!.Value), item.IssuedAt);
         Assert.Equal(Fixture.Offset(f.Invoices[2].PaidAt!.Value), item.PaidAt);
         Assert.Equal(Fixture.Offset(f.Invoices[2].CreatedAt), item.CreatedAt);

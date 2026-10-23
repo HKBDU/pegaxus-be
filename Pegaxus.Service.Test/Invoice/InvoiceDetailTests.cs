@@ -24,7 +24,7 @@ public class InvoiceDetailTests
         Assert.Equal("PAID", result.Status);
         Assert.True(result.IsPaymentRequired);
         Assert.Equal(new DateOnly(2026, 10, 5), result.InvoiceDate);
-        Assert.Equal(f.Invoice.DueDate, result.DueDate);
+        Assert.Equal(Pegaxus.Service.Common.DbTime.AsUtc(f.Invoice.DueDate), result.DueDate);
         Assert.Equal("EUR", result.Currency);
         Assert.Equal("Final settlement", result.Note);
         Assert.Null(result.Payment);

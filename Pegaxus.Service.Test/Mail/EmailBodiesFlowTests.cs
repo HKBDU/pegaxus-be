@@ -53,7 +53,7 @@ public class EmailBodiesFlowTests
         ("plan-updated", Mail.TransportPlanBody(text, "TP-1", Mail.TransportPlanMailKind.Updated, text, link)),
         ("employee-welcome", Mail.EmployeeWelcomeBody(text, text, text, link)),
         ("catalog-change", Mail.CatalogChangeBody(text, "Vehicle", "VEH-1", text, "is no longer available", text, link)),
-        ("invoice-overdue", Mail.InvoiceOverdueBody(text, "INV-1", "REQ-1", 1500000m, "VND", new DateOnly(2026, 11, 15), link)),
+        ("invoice-overdue", Mail.InvoiceOverdueBody(text, "INV-1", "REQ-1", 1500000m, "VND", new DateTime(2026, 11, 15, 9, 30, 0), link)),
         ("transport-picked-up", Mail.TransportMilestoneBody(text, "REQ-1", "TR-1", false, new DateTime(2026, 12, 1, 6, 0, 0), link)),
         ("transport-delivered", Mail.TransportMilestoneBody(text, "REQ-1", "TR-1", true, null, link)),
         ("health-alert", Mail.HorseHealthAlertBody(text, "TR-1", text, link)),

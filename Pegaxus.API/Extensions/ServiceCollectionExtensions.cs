@@ -252,6 +252,7 @@ public static class ServiceCollectionExtensions
     public static IServiceCollection AddInvoicingModule(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<Pegaxus.Service.InvoiceService.IInvoiceService, Pegaxus.Service.InvoiceService.Service>();
+        services.AddHostedService<Pegaxus.API.Services.InvoiceOverdueWorker>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.BookingListRequest>, Pegaxus.Service.InvoiceService.Validator.BookingListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.ListRequest>, Pegaxus.Service.InvoiceService.Validator.ListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.UpdateRequest>, Pegaxus.Service.InvoiceService.Validator.UpdateRequestValidator>();

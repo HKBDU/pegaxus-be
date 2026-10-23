@@ -10,10 +10,10 @@ public sealed class UpdateRequestValidator : AbstractValidator<Request.UpdateReq
     {
         RuleFor(request => request.LastUpdatedAt).NotNull();
         RuleFor(request => request.DueDate).NotNull()
-            .Must(date => !date.HasValue || date.Value >= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime))
-            .WithMessage("Due date must not be before today.");
+            .Must(date => !date.HasValue || date.Value >= clock.GetUtcNow())
+            .WithMessage("Due date must not be in the past.");
         RuleFor(request => request.DueDate)
-            .Must(date => !date.HasValue || date.Value <= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime).AddYears(Limits.DateWindowYears))
+            .Must(date => !date.HasValue || date.Value <= clock.GetUtcNow().AddYears(Limits.DateWindowYears))
             .WithMessage($"Due date must be within {Limits.DateWindowYears} years from today.");
         RuleFor(request => request.TransitDays).InclusiveBetween(QuotationCatalog.MinTransitDays, QuotationCatalog.MaxTransitDays)
             .When(request => request.TransitDays.HasValue).WithMessage($"Transit days must be between {QuotationCatalog.MinTransitDays} and {QuotationCatalog.MaxTransitDays}.");

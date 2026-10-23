@@ -7,7 +7,7 @@ public static partial class EmailBodies
 
     public static string InvoiceIssuedBody(
         string customerName, string invoiceCode, string invoiceType, string bookingCode,
-        InvoiceMailKind kind, decimal totalAmount, string currency, DateOnly? dueDate, string? actionUrl)
+        InvoiceMailKind kind, decimal totalAmount, string currency, DateTime? dueDate, string? actionUrl)
     {
         var title = kind switch
         {
@@ -39,7 +39,7 @@ public static partial class EmailBodies
                       Row("Type", Encode(invoiceType)),
                       Row("Booking", Encode(bookingCode)),
                       Row(amountLabel, Accent(FmtMoney(totalAmount, currency))),
-                      kind == InvoiceMailKind.Invoice ? Row("Due date", Accent(FmtDate(dueDate))) : null)}
+                      kind == InvoiceMailKind.Invoice ? Row("Due date", Accent(FmtDateTime(dueDate))) : null)}
                   {Button(actionUrl, kind == InvoiceMailKind.Invoice ? "View and pay" : "View details")}
             """ +
             Footer();
@@ -104,10 +104,10 @@ public static partial class EmailBodies
 
     /// <summary>The invoice passed its due date without payment.</summary>
     public static string InvoiceOverdueBody(
-        string customerName, string invoiceCode, string bookingCode, decimal amount, string currency, DateOnly? dueDate, string? actionUrl) =>
+        string customerName, string invoiceCode, string bookingCode, decimal amount, string currency, DateTime? dueDate, string? actionUrl) =>
         Notice("Invoice overdue", $"Invoice {invoiceCode} is past its due date", invoiceCode, customerName,
             "This invoice is past its due date. Please pay it as soon as possible.", Tone.Error, "Overdue",
             [Row("Invoice code", Accent(invoiceCode)), Row("Booking code", Encode(bookingCode)),
-             Row("Amount due", Accent(FmtMoney(amount, currency))), Row("Due date", Accent(FmtDate(dueDate)))],
+             Row("Amount due", Accent(FmtMoney(amount, currency))), Row("Due date", Accent(FmtDateTime(dueDate)))],
             null, "Note", actionUrl, "Pay invoice");
 }

@@ -23,11 +23,11 @@ public static class Response
     public sealed record PaymentEffects(string? TransportPlanStatus, bool CreditNoteUnlocked);
 
     public sealed record IssueResponse(Guid InvoiceId, string InvoiceNumber, string Type, string Status,
-        DateOnly InvoiceDate, DateTimeOffset IssuedAt, long GrandTotal, string Currency, DateOnly? DueDate,
+        DateOnly InvoiceDate, DateTimeOffset IssuedAt, long GrandTotal, string Currency, DateTimeOffset? DueDate,
         IReadOnlyList<string> AvailableActions, DateTimeOffset UpdatedAt);
 
     public sealed record InvoiceResponse(Guid InvoiceId, string InvoiceNumber, string Type, string Status, bool IsPaymentRequired,
-        DateOnly InvoiceDate, DateOnly? DueDate, string Currency, string? Note, CustomerResponse Customer,
+        DateOnly InvoiceDate, DateTimeOffset? DueDate, string Currency, string? Note, CustomerResponse Customer,
         IReadOnlyList<InvoiceItemResponse> Items, SummaryResponse Summary, ContactResponse ContactPerson,
         DateTimeOffset? IssuedAt, DateTimeOffset? PaidAt, DateTimeOffset? CancelledAt, string? CancellationReason,
         BookingResponse Booking, TransportResponse? Transport, PlanResponse? TransportPlan,
@@ -51,7 +51,7 @@ public static class Response
     public sealed record ListResponse(IReadOnlyList<InvoiceListItem> Items, int PageIndex, int PageSize, int TotalItems, int TotalPages);
     public sealed record InvoiceListItem(Guid InvoiceId, string InvoiceNumber, string Type, string Status,
         Guid BookingId, string BookingCode, Guid? TransportPlanId, string CustomerName, long TotalAmount,
-        string Currency, DateOnly? DueDate, DateTimeOffset? IssuedAt, DateTimeOffset? PaidAt,
+        string Currency, DateTimeOffset? DueDate, DateTimeOffset? IssuedAt, DateTimeOffset? PaidAt,
         DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt);
 
     public sealed record SuggestionResponse(Guid BookingId, string BookingCode, string BookingStatus,
@@ -69,7 +69,7 @@ public static class Response
         public string Status => "DRAFT";
         public bool IsPaymentRequired => Type != "QUOTATION";
         public DateOnly InvoiceDate { get; init; }
-        public DateOnly DueDate { get; init; }
+        public DateTimeOffset DueDate { get; init; }
         public required string Currency { get; init; }
         public string? Note { get; init; }
         public object? Payment => null;
