@@ -21,4 +21,7 @@ public sealed class TrackingState
 public sealed class TrackingOptions
 {
     public double GeofenceRadiusMeters { get; set; } = 500;
+
+    /// <summary>Test switch (<c>Tracking:EnforceHandoverRadius=false</c>): lets a handover be signed from anywhere. Leave true in production.</summary>
+    public bool EnforceHandoverRadius { get; set; } = true;
 }

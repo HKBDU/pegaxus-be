@@ -37,7 +37,7 @@ public sealed partial class Service
         var customerId = await db.Bookings.Where(booking => booking.BookingId == transport.BookingId).Select(booking => booking.CustomerId).SingleAsync(cancellationToken);
         ValidateBoundary(item, segments, effective, customerId);
         // Coordinates only prove the device is at the meeting point; they are discarded. A location without coordinates cannot be checked.
-        if (await GeofenceAsync(item, cancellationToken) is { } geofence &&
+        if (tracking.Value.EnforceHandoverRadius && await GeofenceAsync(item, cancellationToken) is { } geofence &&
             Geo.DistanceMeters(request.Latitude!.Value, request.Longitude!.Value, geofence.Latitude, geofence.Longitude) > geofence.RadiusMeters)
             throw new UnprocessableEntityException("You are not within the handover radius of the handover point", "NOT_IN_HANDOVER_RADIUS");
         var now = Truncate(clock.GetUtcNow());
