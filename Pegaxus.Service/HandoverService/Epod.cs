@@ -1,0 +1,107 @@
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
+using Pegaxus.Repository.Entities;
+using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Exceptions;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
+
+using static Pegaxus.Service.Common.DbTime;
+
+namespace Pegaxus.Service.HandoverService;
+
+public sealed partial class Service
+{
+    public async Task<Response.EpodFile> GetEpodAsync(Guid handoverRecordId, string? format, Guid accountId, CancellationToken cancellationToken = default)
+    {
+        if (!string.IsNullOrWhiteSpace(format) && !format.Trim().Equals("pdf", StringComparison.OrdinalIgnoreCase))
+            throw new BadRequestException("Only pdf format is supported", "VALIDATION_ERROR");
+        // Same visibility as the record itself (HO2): a customer only reaches the pickup and delivery records of their own booking.
+        var actor = await ActorAsync(accountId, cancellationToken);
+        var item = await db.HandoverRecords.AsNoTracking().SingleOrDefaultAsync(record => record.HandoverRecordId == handoverRecordId, cancellationToken) ?? throw Missing();
+        if (actor.IsCustomer && item.HandoverType is not (HandoverType.PICKUP or HandoverType.DELIVERY)) throw Missing();
+        var transport = await HeaderAsync(item.TransportId, cancellationToken);
+        await EnsureVisibleAsync(transport, actor, true, cancellationToken);
+        if (item.Status != HandoverStatus.COMPLETED) throw InvalidStatus(item);
+
+        var bookingCode = await db.Bookings.AsNoTracking().Where(booking => booking.BookingId == transport.BookingId).Select(booking => booking.BookingCode).SingleAsync(cancellationToken);
+        var horses = await db.BookingHorses.AsNoTracking().Where(link => link.BookingId == transport.BookingId).OrderBy(link => link.Horse.HorseName)
+            .Select(link => new { link.Horse.HorseName, link.Horse.PassportNumber, link.Horse.MicrochipNumber }).ToListAsync(cancellationToken);
+        var sender = await SignatureAsync(item.SenderSignatureUrl, cancellationToken);
+        var receiver = await SignatureAsync(item.ReceiverSignatureUrl, cancellationToken);
+
+        // A customer never sees the phone of the employee on the other side (flow4 O-F4-04); a manager sees every phone.
+        string? FromPhone() => actor.IsCustomer && item.FromType == HandoverPartyType.EMPLOYEE ? null : item.FromContactPhone;
+        string? ToPhone() => actor.IsCustomer && item.ToType == HandoverPartyType.EMPLOYEE ? null : item.ToContactPhone;
+
+        QuestPDF.Settings.License = LicenseType.Community;
+        // A free-text note may hold a character the bundled font lacks; the document must still be produced.
+        QuestPDF.Settings.CheckIfAllTextGlyphsAreAvailable = false;
+        var content = Document.Create(container => container.Page(page =>
+        {
+            page.Margin(30);
+            page.DefaultTextStyle(style => style.FontSize(10));
+            page.Header().Column(header =>
+            {
+                header.Item().Text("Electronic Proof of Delivery (e-POD)").FontSize(18).Bold();
+                header.Item().Text($"{item.HandoverCode}  |  Transport {transport.Code}  |  Booking {bookingCode}").FontColor(Colors.Grey.Darken2);
+            });
+            page.Content().PaddingVertical(10).Column(column =>
+            {
+                column.Spacing(8);
+                Field(column, "Handover type", item.HandoverType.ToString());
+                Field(column, "Signed at (UTC)", $"{AsUtc(item.CompletedAt):yyyy-MM-dd HH:mm:ss}");
+                Field(column, "Location", string.Join(", ", new[] { item.LocationName, item.Address, item.Country }.Where(value => !string.IsNullOrWhiteSpace(value))));
+                Field(column, "From", Party(item.FromPartyName, item.FromContactName, FromPhone()));
+                Field(column, "To", Party(item.ToPartyName, item.ToContactName, ToPhone()));
+                column.Item().Text("Horses").Bold();
+                if (horses.Count == 0) column.Item().Text("-");
+                foreach (var horse in horses)
+                    column.Item().Text($"{horse.HorseName}" + (horse.PassportNumber is null ? "" : $"  |  Passport {horse.PassportNumber}") +
+                        (horse.MicrochipNumber is null ? "" : $"  |  Microchip {horse.MicrochipNumber}"));
+                Field(column, "Horse condition", item.HorseConditionNote);
+                Field(column, "Documents handed over", item.DocumentHandoverNote);
+                Field(column, "Equipment handed over", item.EquipmentHandoverNote);
+                Field(column, "Discrepancy", item.DiscrepancyNote);
+                column.Item().PaddingTop(10).Row(row =>
+                {
+                    Signature(row, "Sender signature", sender);
+                    Signature(row, "Receiver signature", receiver);
+                });
+            });
+            page.Footer().AlignCenter().Text($"Generated by Pegaxus. Signed at {AsUtc(item.CompletedAt):yyyy-MM-dd HH:mm:ss} UTC.").FontSize(8).FontColor(Colors.Grey.Darken1);
+        })).GeneratePdf();
+        return new(content, $"{item.HandoverCode}-epod.pdf");
+    }
+
+    private static string Party(string? name, string? contact, string? phone) =>
+        string.Join(" | ", new[] { name, contact, phone }.Where(value => !string.IsNullOrWhiteSpace(value))) is { Length: > 0 } text ? text : "-";
+
+    private static void Field(ColumnDescriptor column, string label, string? value) =>
+        column.Item().Text(text =>
+        {
+            text.Span(label + ": ").Bold();
+            text.Span(string.IsNullOrWhiteSpace(value) ? "-" : value.Trim());
+        });
+
+    private static void Signature(RowDescriptor row, string label, byte[]? image) =>
+        row.RelativeItem().Column(column =>
+        {
+            column.Item().Text(label).Bold();
+            if (image is null) column.Item().Text("(signature image unavailable)").FontColor(Colors.Grey.Darken1);
+            else column.Item().Height(80).Image(image).FitArea();
+        });
+
+    /// <summary>The stored signature as bytes; a storage hiccup must not stop the whole document, so a miss is only logged.</summary>
+    private async Task<byte[]?> SignatureAsync(string? fileUrl, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(fileUrl)) return null;
+        try { return (await media.DownloadPreviewAsync(fileUrl, cancellationToken)).Content; }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            logger.LogWarning(error, "A handover signature image could not be loaded for the e-POD");
+            return null;
+        }
+    }
+}

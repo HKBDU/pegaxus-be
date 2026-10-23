@@ -93,6 +93,7 @@ public sealed partial class Service
                 if (plan.TransportPlan.Status == TransportPlanStatus.IN_PROGRESS) { plan.TransportPlan.Status = TransportPlanStatus.COMPLETED; plan.TransportPlan.UpdatedAt = now; }
             }
         }
+        var released = new List<Response.ReleasedVehicle>();
         if (item.HandoverType is HandoverType.PICKUP or HandoverType.DELIVERY)
         {
             var segmentIds = (item.HandoverType == HandoverType.PICKUP ? effective : segments).Select(segment => segment.RoutePlanRouteId).ToArray();
@@ -105,16 +106,27 @@ public sealed partial class Service
                     link.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED &&
                     link.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.CANCELLED)
                 .Select(link => link.VehicleId).Distinct().ToArrayAsync(cancellationToken);
-            foreach (var vehicle in await db.Vehicles.Where(vehicle => vehicleIds.Contains(vehicle.VehicleId)).ToArrayAsync(cancellationToken))
+            // O-F6-19: a vehicle that this trip left needing repair goes to maintenance instead of back to the pool.
+            var needsRepair = item.HandoverType == HandoverType.DELIVERY
+                ? await db.VehicleIncidentDetails.AsNoTracking().Where(detail => detail.RepairRequired && vehicleIds.Contains(detail.VehicleId) &&
+                        detail.IncidentReport.TransportId == transport.TransportId && detail.IncidentReport.Status != IncidentStatus.CANCELLED)
+                    .Select(detail => detail.VehicleId).Distinct().ToArrayAsync(cancellationToken)
+                : [];
+            foreach (var vehicle in await db.Vehicles.Where(vehicle => vehicleIds.Contains(vehicle.VehicleId)).OrderBy(vehicle => vehicle.VehicleCode).ToArrayAsync(cancellationToken))
             {
                 await db.Entry(vehicle).ReloadAsync(cancellationToken);
                 if (!vehicle.IsDeleted && item.HandoverType == HandoverType.PICKUP && vehicle.Status == VehicleStatus.ASSIGNED) { vehicle.Status = VehicleStatus.IN_USE; vehicle.UpdatedAt = now; }
-                if (!vehicle.IsDeleted && item.HandoverType == HandoverType.DELIVERY && vehicle.Status == VehicleStatus.IN_USE && !busy.Contains(vehicle.VehicleId)) { vehicle.Status = VehicleStatus.AVAILABLE; vehicle.UpdatedAt = now; }
+                if (!vehicle.IsDeleted && item.HandoverType == HandoverType.DELIVERY && vehicle.Status == VehicleStatus.IN_USE && !busy.Contains(vehicle.VehicleId)) {
+                    vehicle.Status = needsRepair.Contains(vehicle.VehicleId) ? VehicleStatus.MAINTENANCE : VehicleStatus.AVAILABLE; vehicle.UpdatedAt = now;
+                    released.Add(new(vehicle.VehicleId, vehicle.VehicleCode, vehicle.LicensePlate, vehicle.Status.ToString()));
+                }
             }
         }
         var route = (to ?? from)?.RoutePlan;
         return new(transport.Status.ToString(), route?.Status.ToString(), route?.TransportPlan.Status.ToString(),
             item.HandoverType == HandoverType.OTHER ? null : from?.RoutePlanRouteId, item.HandoverType == HandoverType.OTHER ? null : to?.RoutePlanRouteId,
-            item.HandoverType == HandoverType.DELIVERY ? AsUtc(now.AddHours(24)) : null);
+            item.HandoverType == HandoverType.DELIVERY ? AsUtc(now.AddHours(24)) : null,
+            item.HandoverType == HandoverType.DELIVERY ? !string.IsNullOrWhiteSpace(item.DiscrepancyNote) : null,
+            item.HandoverType == HandoverType.DELIVERY ? released : null);
     }
 }

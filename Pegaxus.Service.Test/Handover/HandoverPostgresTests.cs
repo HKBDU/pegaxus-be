@@ -140,8 +140,10 @@ public partial class HandoverPostgresTests
         public override ValueTask<InterceptionResult<int>> SavingChangesAsync(DbContextEventData eventData, InterceptionResult<int> result, CancellationToken cancellationToken = default)
         {
             var tracker = eventData.Context!.ChangeTracker; Calls++;
-            Writes = (tracker.Entries<HandoverRecord>().Count(entry => entry.State == EntityState.Modified),
+            // Only the saves of the handover itself count; the financial report that follows the delivery commit is a save of its own.
+            var writes = (tracker.Entries<HandoverRecord>().Count(entry => entry.State == EntityState.Modified),
                 tracker.Entries<Notification>().Count(entry => entry.State == EntityState.Added), tracker.Entries<OutboxMessage>().Count(entry => entry.State == EntityState.Added));
+            if (writes != (0, 0, 0)) Writes = writes;
             return ValueTask.FromResult(result);
         }
         public override async ValueTask<int> SavedChangesAsync(SaveChangesCompletedEventData eventData, int result, CancellationToken cancellationToken = default)

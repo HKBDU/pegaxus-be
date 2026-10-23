@@ -18,7 +18,8 @@ namespace Pegaxus.Service.HandoverService;
 
 public sealed partial class Service(AppDbContext db, TimeProvider clock, IValidator<Request.ListRequest> listValidator,
     IValidator<Request.CancelRequest> cancelValidator, IValidator<Request.CreateRequest> createValidator, INotificationService notifications,
-    IValidator<Request.CompleteRequest> completeValidator, IMediaService media, IOptions<TrackingOptions> tracking, ILogger<Service> logger) : IHandoverService
+    IValidator<Request.CompleteRequest> completeValidator, IMediaService media, IOptions<TrackingOptions> tracking, FinancialReportService.IFinancialReportService financialReports,
+    ILogger<Service> logger) : IHandoverService
 {
     private static readonly RoutePlanStatus[] EligibleStatuses = [RoutePlanStatus.CONFIRMED, RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED];
     private static readonly EmployeeRole[] ViewerRoles = [EmployeeRole.LOGISTICS_MANAGER, EmployeeRole.FLEET_ROUTE_COORDINATOR,

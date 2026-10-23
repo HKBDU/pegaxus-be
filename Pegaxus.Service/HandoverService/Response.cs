@@ -25,7 +25,11 @@ public static class Response
         public Geofence? Geofence { get; init; }
     }
     public sealed record Geofence(decimal Latitude, decimal Longitude, double RadiusMeters);
+    public sealed record EpodFile(byte[] Content, string FileName);
+    public sealed record ReleasedVehicle(Guid VehicleId, string VehicleCode, string? LicensePlate, string NewStatus);
     public sealed record CompletionEffects(string TransportStatus, string? RoutePlanStatus, string? TransportPlanStatus,
         Guid? ClosedRoutePlanRouteId, Guid? ActivatedRoutePlanRouteId,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? ClaimWindowEndsAt);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] DateTimeOffset? ClaimWindowEndsAt,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? HasDiscrepancy = null,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ReleasedVehicle>? ReleasedVehicles = null);
 }
