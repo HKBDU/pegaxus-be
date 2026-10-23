@@ -103,6 +103,25 @@ public class InvoiceTests
         Assert.Equal("VND", result.Currency);
     }
 
+    [Fact]
+    public async Task CreditNote_CarriesNoTax_UnlikeEveryOtherType()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        db.Invoices.Add(f.Invoice(InvoiceType.FINAL, InvoiceStatus.PAID));
+        await db.SaveChangesAsync();
+        var request = Fixture.Request("CREDIT_NOTE");
+        request.Items = [Fixture.Item(1, 1_000)];
+
+        var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, request);
+
+        Assert.Equal(1_000, result.Summary.Subtotal);
+        Assert.Equal(0, result.Summary.Tax);
+        Assert.Equal(1_000, result.Summary.GrandTotal);
+        Assert.Equal(0, result.Summary.TaxRatePercent);
+        Assert.Equal(0, (await db.Invoices.SingleAsync(item => item.InvoiceId == result.InvoiceId)).TaxAmount);
+    }
+
     [Theory]
     [InlineData(2, 0)]
     [InlineData(3, 1)]

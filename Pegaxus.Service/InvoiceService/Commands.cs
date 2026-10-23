@@ -283,7 +283,7 @@ public sealed partial class Service
                     CreatedAt = now, UpdatedAt = now
                 });
             invoice.Subtotal = Money(invoice.InvoiceItems.Sum(item => item.LineAmount));
-            invoice.TaxAmount = Money(Vnd.Tax(invoice.Subtotal));
+            invoice.TaxAmount = Money(Vnd.Tax(invoice.Subtotal, type));
             foreach (var deposit in deposits)
                 invoice.InvoiceItems.Add(new InvoiceItem
                 {
@@ -386,7 +386,7 @@ public sealed partial class Service
                         CreatedAt = line.ItemId.HasValue ? existing[line.ItemId.Value].CreatedAt : now, UpdatedAt = now
                     });
                 subtotal = Money(items.Sum(item => item.LineAmount));
-                tax = Money(Vnd.Tax(subtotal));
+                tax = Money(Vnd.Tax(subtotal, invoice.Type));
                 foreach (var deposit in deposits)
                     items.Add(new InvoiceItem
                     {
@@ -479,7 +479,8 @@ public sealed partial class Service
                 item.HorseId.HasValue ? horses[item.HorseId.Value] : null, item.EmergencyCostRequestId,
                 IsDeduction(invoice, item), item.Note)).ToArray(),
             Summary = new(Vnd.ToLong(invoice.Subtotal), Vnd.ToLong(invoice.TaxAmount),
-                Vnd.ToLong(items.Where(item => IsDeduction(invoice, item)).Sum(item => item.LineAmount)), Vnd.ToLong(invoice.TotalAmount)),
+                Vnd.ToLong(items.Where(item => IsDeduction(invoice, item)).Sum(item => item.LineAmount)), Vnd.ToLong(invoice.TotalAmount))
+            { TaxRatePercent = Vnd.TaxRatePercent(invoice.Type) },
             ContactPerson = new(employee.FullName, employee.Account.Email, employee.Phone),
             Booking = new(booking.BookingId, booking.BookingCode, booking.Status.ToString(), booking.OriginAddress,
                 booking.OriginCountry, booking.DestinationAddress, booking.DestinationCountry, booking.RequestedDepartureDate),

@@ -98,6 +98,6 @@ public static class Response
     public sealed record SummaryResponse(long Subtotal, long Tax, long DepositDeduction, long GrandTotal)
     {
         public decimal Discount => 0;
-        public decimal TaxRatePercent => 20;
+        public decimal TaxRatePercent { get; init; } = 20;
     }
 }

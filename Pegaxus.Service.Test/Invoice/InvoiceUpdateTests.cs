@@ -256,6 +256,24 @@ public class InvoiceUpdateTests
     }
 
     [Fact]
+    public async Task Edit_CreditNoteStaysTaxFree_EvenWhenItWasSavedWithTaxBefore()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db, InvoiceType.CREDIT_NOTE);
+        f.Invoice.TaxAmount = 20; // a draft saved before the credit-note tax rule changed
+        await db.SaveChangesAsync();
+        var request = f.Request();
+        request.Items = [Fixture.Item(1, 1_000)];
+
+        var result = await f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, request);
+
+        Assert.Equal(1_000, result.Summary.Subtotal);
+        Assert.Equal(0, result.Summary.Tax);
+        Assert.Equal(1_000, result.Summary.GrandTotal);
+        Assert.Equal(0, result.Summary.TaxRatePercent);
+    }
+
+    [Fact]
     public async Task Edit_DoesNotReapplyCreationGatesAndReturnsNullTransportWhenAbsent()
     {
         await using var db = TestSupport.CreateDb();
