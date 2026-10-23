@@ -298,6 +298,9 @@ public static class ServiceCollectionExtensions
         services.AddOptions<LocationTrackingService.TrackingOptions>().BindConfiguration("Tracking")
             .Validate(options => double.IsFinite(options.GeofenceRadiusMeters) && options.GeofenceRadiusMeters > 0,
                 "Tracking:GeofenceRadiusMeters must be a positive finite number.").ValidateOnStart();
+        services.AddOptions<Pegaxus.Service.InvoiceService.QuotationOptions>().BindConfiguration("Quotation")
+            .Validate(options => options.IsValid(),
+                "Quotation: unit prices must be positive, DepositRatePercent 30-50 and DefaultTransitDays 1-60.").ValidateOnStart();
         services.AddScoped<HorseHealthLogService.IHorseHealthLogService, HorseHealthLogService.Service>();
         services.AddScoped<IValidator<HorseHealthLogService.Request.RecordRequest>, HorseHealthLogService.Validator.RecordRequestValidator>();
         services.AddScoped<IValidator<HorseHealthLogService.Request.CreateRequest>, HorseHealthLogService.Validator.CreateRequestValidator>();

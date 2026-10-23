@@ -17,9 +17,16 @@ public sealed class CreateRequestValidator : AbstractValidator<Request.CreateReq
         RuleFor(request => request.DueDate)
             .Must(date => !date.HasValue || date.Value <= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime).AddYears(Limits.DateWindowYears))
             .WithMessage($"Due date must be within {Limits.DateWindowYears} years from today.");
-        RuleFor(request => request.Items).NotNull().WithMessage("Items are required; an empty array is allowed.");
+        RuleFor(request => request.TransitDays).InclusiveBetween(QuotationCatalog.MinTransitDays, QuotationCatalog.MaxTransitDays)
+            .When(request => request.TransitDays.HasValue).WithMessage($"Transit days must be between {QuotationCatalog.MinTransitDays} and {QuotationCatalog.MaxTransitDays}.");
+        RuleFor(request => request.Items).NotNull().WithMessage("Items are required; an empty array is allowed.")
+            .When(request => MustSendItems(request.Type));
         RuleForEach(request => request.Items).NotNull().SetValidator(new ItemValidator());
     }
+
+    // The server builds the lines of QUOTATION, DEPOSIT and FINAL, so only the other types must send items.
+    private static bool MustSendItems(string? type) =>
+        !(Enum.TryParse<InvoiceType>(type?.Trim(), true, out var parsed) && parsed is InvoiceType.QUOTATION or InvoiceType.DEPOSIT or InvoiceType.FINAL);
 
     private sealed class ItemValidator : AbstractValidator<Request.ItemRequest>
     {

@@ -33,11 +33,10 @@ public static class Response
     }
 
     public sealed record InvoiceItemResponse(Guid InvoiceItemId, string ItemType, string Description, int Quantity,
-        long Price, long Total, HorseResponse? Horse, bool IsDepositDeduction, string? Note)
+        long Price, long Total, HorseResponse? Horse, bool IsDepositDeduction, string? Note, Guid? EmergencyCostRequestId = null)
     {
-        // shortcut: itemDate remains null until Flow 6 P-03 exists; R16 defers emergency cost links.
+        // shortcut: itemDate remains null until Flow 6 P-03 exists.
         public DateOnly? ItemDate => null;
-        public Guid? EmergencyCostRequestId => null;
     }
     public sealed record ReceiptResponse(Guid ReceiptId, string ReceiptCode, long Amount, string Currency, string PaymentMethod,
         string Status, string? TransactionReference, DateTimeOffset? PaidAt, DateTimeOffset? ConfirmedAt, string? Note, RecordedByResponse? RecordedBy);
@@ -52,7 +51,10 @@ public static class Response
 
     public sealed record SuggestionResponse(Guid BookingId, string BookingCode, string BookingStatus,
         Guid TransportId, string TransportStatus, string Type, string Currency, bool IsPaymentRequired,
-        IReadOnlyList<ItemResponse> Items);
+        IReadOnlyList<ItemResponse> Items, PricingResponse? Pricing, bool IsLocked);
+
+    public sealed record PricingResponse(string Version, int HorseCount, int? TransitDays, string? VehicleTier,
+        int DepositRatePercent, int TaxRatePercent);
 
     public sealed class DraftResponse
     {

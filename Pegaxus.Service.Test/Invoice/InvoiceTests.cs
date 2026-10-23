@@ -19,34 +19,32 @@ public class InvoiceTests
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db);
         var paid = f.Invoice(InvoiceType.DEPOSIT, InvoiceStatus.PAID, 30_000_000);
-        db.Invoices.AddRange(paid, f.Invoice(InvoiceType.DEPOSIT, InvoiceStatus.CANCELLED, 99_000_000));
+        var cost = f.Cost(EmergencyCostStatus.APPROVED, 3_500_000);
+        db.Invoices.AddRange(paid, f.Invoice(InvoiceType.DEPOSIT, InvoiceStatus.CANCELLED, 99_000_000), f.IssuedQuotation(120_000_000));
+        db.EmergencyCostRequests.AddRange(cost, f.Cost(EmergencyCostStatus.REJECTED), f.Cost(EmergencyCostStatus.CANCELLED));
         await db.SaveChangesAsync();
         var request = Fixture.Request("FINAL");
-        request.Items = [Fixture.Item(1, 120_000_000), Fixture.Item(4, 5_000_000),
-            Fixture.Item(1, 8_000_000), Fixture.Item(1, 3_500_000)];
-        request.Items[1].HorseId = f.Horse.HorseId;
-        request.Items[3].ItemType = "EMERGENCY_COST";
+        request.Items = null;
         request.Note = "Final settlement";
         request.Payment = JsonSerializer.SerializeToElement(new { method = "BANKING", qrCodeUrl = "/qr.png" });
-        request.Items[0].ItemDate = JsonSerializer.SerializeToElement("not-a-date");
-        request.Items.Add(new() { IsDepositDeduction = true, Price = -99_000_000, HorseId = Guid.NewGuid() });
 
         var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, request);
 
         Assert.Matches("^INV-20261012-[0-9]{4}$", result.InvoiceNumber);
         Assert.Equal("DRAFT", result.Status);
-        Assert.Equal(new Response.SummaryResponse(151_500_000, 30_300_000, -30_000_000, 151_800_000), result.Summary);
+        Assert.Equal(new Response.SummaryResponse(123_500_000, 24_700_000, -30_000_000, 118_200_000), result.Summary);
         Assert.Equal(0, result.Summary.Discount);
         Assert.Equal(20, result.Summary.TaxRatePercent);
-        Assert.Equal(f.Horse.HorseName, result.Items[1].Horse!.HorseName);
-        Assert.Equal("EMERGENCY_COST", result.Items[3].ItemType);
+        Assert.Equal(["TRANSPORT_FEE", "EMERGENCY_COST", "OTHER"], result.Items.Select(item => item.ItemType).ToArray());
+        Assert.Equal(cost.EmergencyCostRequestId, result.Items[1].EmergencyCostRequestId);
+        Assert.Equal(3_500_000, result.Items[1].Price);
         var deduction = Assert.Single(result.Items.Where(item => item.IsDepositDeduction));
         Assert.Equal($"Deposit deduction ({paid.InvoiceCode})", deduction.Description);
         Assert.Equal(-30_000_000, deduction.Price);
         Assert.Equal(1, deduction.Quantity);
         Assert.Null(deduction.Horse);
         Assert.Null(result.Payment);
-        Assert.All(result.Items, item => { Assert.Null(item.ItemDate); Assert.Null(item.EmergencyCostRequestId); });
+        Assert.All(result.Items, item => Assert.Null(item.ItemDate));
         Assert.Equal(f.Account.Email, result.ContactPerson.Email);
         Assert.Equal(f.Booking.Customer.Account.Email, result.Customer.Email);
         Assert.Equal(f.Plan.TransportPlanId, result.TransportPlan!.TransportPlanId);
@@ -57,7 +55,7 @@ public class InvoiceTests
         var invoice = await db.Invoices.Include(item => item.InvoiceItems).SingleAsync(item => item.InvoiceId == result.InvoiceId);
         Assert.Equal(f.Employee.EmployeeId, invoice.EmployeeId);
         Assert.Equal(InvoiceStatus.DRAFT, invoice.Status);
-        Assert.Equal(5, invoice.InvoiceItems.Count);
+        Assert.Equal(3, invoice.InvoiceItems.Count);
         Assert.Equal(result.Summary.GrandTotal, invoice.TotalAmount);
         Assert.Equal(request.Note, invoice.BillingNote);
         var history = await db.InvoiceStatusHistories.SingleAsync();
@@ -81,15 +79,15 @@ public class InvoiceTests
         var f = await Fixture.CreateAsync(db);
         if (withDeposits)
         {
-            db.Invoices.AddRange(f.Invoice(InvoiceType.DEPOSIT, InvoiceStatus.PAID, 25),
+            db.Invoices.AddRange(f.IssuedQuotation(10), f.Invoice(InvoiceType.DEPOSIT, InvoiceStatus.PAID, 25),
                 f.Invoice(InvoiceType.DEPOSIT, InvoiceStatus.PAID, 50));
             await db.SaveChangesAsync();
         }
         var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId,
-            Fixture.Request(withDeposits ? "FINAL" : "QUOTATION"));
-        Assert.Equal(withDeposits ? -75 : 0, result.Summary.GrandTotal);
-        Assert.Equal(withDeposits ? 2 : 0, result.Items.Count);
-        Assert.Equal(withDeposits, result.IsPaymentRequired);
+            Fixture.Request(withDeposits ? "FINAL" : "SUPPLEMENTARY"));
+        Assert.Equal(withDeposits ? -63 : 0, result.Summary.GrandTotal);
+        Assert.Equal(withDeposits ? 3 : 0, result.Items.Count);
+        Assert.True(result.IsPaymentRequired);
     }
 
     [Fact]
@@ -145,7 +143,7 @@ public class InvoiceTests
             PlanCode = "TP-CANCELLED", Status = TransportPlanStatus.CANCELLED, CreatedAt = f.Plan.CreatedAt.AddDays(2) };
         db.TransportPlans.AddRange(latest, cancelled);
         await db.SaveChangesAsync();
-        var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Fixture.Request());
+        var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Fixture.Request("QUOTATION"));
         Assert.Equal(latest.TransportPlanId, result.TransportPlan!.TransportPlanId);
         latest.Status = f.Plan.Status = TransportPlanStatus.CANCELLED;
         await db.SaveChangesAsync();
@@ -171,6 +169,7 @@ public class InvoiceTests
         var f = await Fixture.CreateAsync(db);
         f.Transport.Status = status;
         if (type == InvoiceType.CREDIT_NOTE) db.Invoices.Add(f.Invoice(InvoiceType.FINAL, InvoiceStatus.PAID));
+        if (type is InvoiceType.DEPOSIT or InvoiceType.FINAL) db.Invoices.Add(f.IssuedQuotation());
         await db.SaveChangesAsync();
         var action = () => f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Fixture.Request(type.ToString()));
         if (allowed) Assert.Equal(type.ToString(), (await action()).Type);
@@ -192,6 +191,7 @@ public class InvoiceTests
         var f = await Fixture.CreateAsync(db);
         if (type == InvoiceType.DEPOSIT) f.Transport.Status = TransportStatus.READY;
         if (type == InvoiceType.CREDIT_NOTE) db.Invoices.Add(f.Invoice(InvoiceType.FINAL, InvoiceStatus.PAID));
+        if (type is InvoiceType.DEPOSIT or InvoiceType.FINAL) db.Invoices.Add(f.IssuedQuotation());
         db.Invoices.Add(f.Invoice(type, status));
         await db.SaveChangesAsync();
         var action = () => f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Fixture.Request(type.ToString()));
@@ -336,7 +336,7 @@ public class InvoiceTests
                     new ListRequestValidator(), new BookingListRequestValidator(), new IssueRequestValidator(), new RecordPaymentRequestValidator(Clock), new CancelRequestValidator(),
                     new NotificationService.Service(db, new NotificationService.NoopNotificationRealtimeService())));
         }
-        internal static Request.CreateRequest Request(string type = "QUOTATION") => new()
+        internal static Request.CreateRequest Request(string type = "SUPPLEMENTARY") => new()
         {
             Type = type, DueDate = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime), Items = []
         };
@@ -350,6 +350,29 @@ public class InvoiceTests
             EmployeeId = Employee.EmployeeId, Type = type, Status = status, Currency = "VND", TotalAmount = total,
             CreatedAt = Plan.CreatedAt, UpdatedAt = Plan.CreatedAt
         };
+        internal Invoice IssuedQuotation(decimal subtotal = 1_000, InvoiceStatus status = InvoiceStatus.ISSUED)
+        {
+            var quotation = Invoice(InvoiceType.QUOTATION, status, subtotal * 1.2m);
+            quotation.Subtotal = subtotal;
+            quotation.TaxAmount = subtotal * 0.2m;
+            quotation.IssuedAt = Plan.CreatedAt;
+            quotation.InvoiceItems.Add(new InvoiceItem { InvoiceItemId = Guid.NewGuid(), ItemType = InvoiceItemType.TRANSPORT_FEE,
+                Description = "Quoted transport", Quantity = 1, UnitPrice = subtotal, LineAmount = subtotal,
+                CreatedAt = Plan.CreatedAt, UpdatedAt = Plan.CreatedAt });
+            return quotation;
+        }
+        internal EmergencyCostRequest Cost(EmergencyCostStatus status, decimal? approved = null)
+        {
+            var incident = new IncidentReport { IncidentReportId = Guid.NewGuid(), IncidentCode = $"INC-{Guid.NewGuid():N}",
+                TransportId = Transport.TransportId, EmployeeId = Employee.EmployeeId, LocationId = Guid.NewGuid(),
+                Category = IncidentCategory.VEHICLE, Severity = IncidentSeverity.HIGH, Status = IncidentStatus.REPORTED,
+                Title = "Breakdown", Description = "Breakdown", OccurredAt = Plan.CreatedAt, ReportedAt = Plan.CreatedAt,
+                CreatedAt = Plan.CreatedAt, UpdatedAt = Plan.CreatedAt };
+            return new EmergencyCostRequest { EmergencyCostRequestId = Guid.NewGuid(), IncidentReport = incident, RequestCode = $"ECR-{Guid.NewGuid():N}",
+                Category = EmergencyCostCategory.TOWING, Status = status, RequestedByEmployeeId = Employee.EmployeeId, Description = "Towing",
+                Justification = "Towing", Currency = "VND", RequestedAmount = approved ?? 100, ApprovedAmount = approved,
+                RequestedAt = Plan.CreatedAt, CreatedAt = Plan.CreatedAt, UpdatedAt = Plan.CreatedAt };
+        }
         private sealed class FixedClock : TimeProvider
         {
             public override DateTimeOffset GetUtcNow() => new(2026, 10, 12, 8, 0, 0, TimeSpan.Zero);
