@@ -60,6 +60,10 @@ public sealed partial class Service
             invoice.CancelledAt = now;
             invoice.CancellationReason = reason;
             invoice.UpdatedAt = NextVersion(invoice.UpdatedAt, now);
+            // The emergency-cost link is unique; release it so the costs can be billed on the replacement FINAL.
+            if (invoice.Type == InvoiceType.FINAL)
+                foreach (var item in await db.InvoiceItems.Where(x => x.InvoiceId == invoiceId && x.EmergencyCostRequestId != null).ToListAsync(cancellationToken))
+                    item.EmergencyCostRequestId = null;
             db.InvoiceStatusHistories.Add(new InvoiceStatusHistory
             {
                 InvoiceStatusHistoryId = Guid.NewGuid(), InvoiceId = invoiceId, Type = InvoiceHistoryType.CANCEL,
@@ -141,6 +145,14 @@ public sealed partial class Service
                     .Select(x => (x.Description, x.Quantity, x.UnitPrice, x.LineAmount)).OrderBy(x => x.Description, StringComparer.Ordinal);
                 if (!saved.SequenceEqual(expected))
                     throw new ConflictException("The paid deposits changed after this draft was saved. Please open the draft and save it again", "DEPOSIT_DEDUCTION_CHANGED");
+            }
+
+            if (invoice.Type is InvoiceType.DEPOSIT or InvoiceType.FINAL)
+            {
+                var current = await GenerateAsync(invoice.BookingId, await TransportIdAsync(invoice.BookingId, cancellationToken), invoice.Type,
+                    false, null, invoiceId, false, cancellationToken);
+                if (current!.Lines.Sum(x => x.Quantity * x.Price) != invoice.Subtotal)
+                    throw new ConflictException("The quotation or emergency costs changed after this draft was saved. Please open the draft and save it again", "INVOICE_SOURCE_CHANGED");
             }
 
             var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
@@ -238,11 +250,16 @@ public sealed partial class Service
             throw new UnprocessableEntityException("Cannot create a claim/compensation invoice. The FINAL invoice of this booking must be PAID first.", "UNPAID_FINAL_INVOICE");
         var deposits = invoices.Where(item => type == InvoiceType.FINAL && item.Type == InvoiceType.DEPOSIT && item.Status == InvoiceStatus.PAID).ToArray();
 
-        var requestedItems = request.Items!.Where(item => !item.IsDepositDeduction).ToArray();
-        var horseIds = requestedItems.Where(item => item.HorseId.HasValue).Select(item => item.HorseId!.Value).Distinct().ToArray();
+        var requestedItems = (request.Items ?? []).Where(item => !item.IsDepositDeduction).ToArray();
+        var generated = IsGenerated(type)
+            ? await GenerateAsync(bookingId, booking.Transport!.TransportId, type, requestedItems.Length > 0, request.TransitDays, null, false, cancellationToken)
+            : null;
+        if (type == InvoiceType.QUOTATION && generated is null && string.IsNullOrWhiteSpace(request.Note)) throw ManualQuotationNoteRequired();
+        var lines = generated?.Lines ?? requestedItems.Select(ManualLine).ToList();
+        var horseIds = lines.Where(item => item.HorseId.HasValue).Select(item => item.HorseId!.Value).Distinct().ToArray();
         var horses = await db.BookingHorses.AsNoTracking().Where(item => item.BookingId == bookingId && horseIds.Contains(item.HorseId))
             .Select(item => new Response.HorseResponse(item.HorseId, item.Horse.HorseName)).ToDictionaryAsync(item => item.HorseId, cancellationToken);
-        var invalidHorses = request.Items!.Select((item, index) => (item, index))
+        var invalidHorses = (request.Items ?? []).Select((item, index) => (item, index))
             .Where(entry => !entry.item.IsDepositDeduction && entry.item.HorseId.HasValue && !horses.ContainsKey(entry.item.HorseId.Value))
             .Select(entry => new FieldError($"items[{entry.index}].horseId", "Horse must belong to this booking.")).ToArray();
         if (invalidHorses.Length > 0) throw new FieldValidationException(invalidHorses);
@@ -252,17 +269,18 @@ public sealed partial class Service
         {
             InvoiceId = Guid.NewGuid(), BookingId = bookingId, EmployeeId = employee.EmployeeId, Type = type,
             Status = InvoiceStatus.DRAFT, Currency = Vnd.Currency, DueDate = request.DueDate,
-            BillingNote = request.Note, CreatedAt = now, UpdatedAt = now
+            BillingNote = type == InvoiceType.QUOTATION && generated is not null ? ComposeQuotationNote(request.Note) : request.Note,
+            CreatedAt = now, UpdatedAt = now
         };
         try
         {
-            foreach (var item in requestedItems)
+            foreach (var line in lines)
                 invoice.InvoiceItems.Add(new InvoiceItem
                 {
-                    InvoiceItemId = Guid.NewGuid(), ItemType = Enum.Parse<InvoiceItemType>(item.ItemType.Trim(), true),
-                    Description = item.Description.Trim(), Quantity = item.Quantity, UnitPrice = item.Price,
-                    LineAmount = Money(item.Quantity * item.Price),
-                    HorseId = item.HorseId, Note = item.Note, CreatedAt = now, UpdatedAt = now
+                    InvoiceItemId = Guid.NewGuid(), ItemType = line.ItemType, Description = line.Description,
+                    Quantity = line.Quantity, UnitPrice = line.Price, LineAmount = Money(line.Quantity * line.Price),
+                    HorseId = line.HorseId, Note = line.Note, EmergencyCostRequestId = line.EmergencyCostRequestId,
+                    CreatedAt = now, UpdatedAt = now
                 });
             invoice.Subtotal = Money(invoice.InvoiceItems.Sum(item => item.LineAmount));
             invoice.TaxAmount = Money(Vnd.Tax(invoice.Subtotal));
@@ -321,14 +339,26 @@ public sealed partial class Service
             if (request.Type is not null && !string.Equals(request.Type.Trim(), invoice.Type.ToString(), StringComparison.OrdinalIgnoreCase))
                 throw new FieldValidationException([new("type", "Invoice type cannot be changed.")]);
 
+            if (!IsGenerated(invoice.Type) && request.Items is null)
+                throw new FieldValidationException([new("items", "Items are required; an empty array is allowed.")]);
             var existing = invoice.InvoiceItems.ToDictionary(item => item.InvoiceItemId);
-            var supplied = request.Items!.Select((item, index) => (item, index)).Where(entry => !entry.item.IsDepositDeduction).ToArray();
+            var supplied = (request.Items ?? []).Select((item, index) => (item, index)).Where(entry => !entry.item.IsDepositDeduction).ToArray();
             var invalidIds = supplied.Where(entry => entry.item.InvoiceItemId.HasValue && !existing.ContainsKey(entry.item.InvoiceItemId.Value))
                 .Select(entry => new FieldError($"items[{entry.index}].invoiceItemId", "Invoice item must belong to this invoice.")).ToArray();
             if (invalidIds.Length > 0) throw new FieldValidationException(invalidIds);
             var requested = supplied.Where(entry => !entry.item.InvoiceItemId.HasValue ||
                 !IsDeduction(invoice, existing[entry.item.InvoiceItemId.Value])).ToArray();
-            var horseIds = requested.Where(entry => entry.item.HorseId.HasValue).Select(entry => entry.item.HorseId!.Value).Distinct().ToArray();
+            var generated = IsGenerated(invoice.Type)
+                ? await GenerateAsync(invoice.BookingId, await TransportIdAsync(invoice.BookingId, cancellationToken), invoice.Type,
+                    requested.Length > 0, request.TransitDays, invoiceId, false, cancellationToken)
+                : null;
+            if (invoice.Type == InvoiceType.QUOTATION && generated is null && string.IsNullOrWhiteSpace(request.Note)) throw ManualQuotationNoteRequired();
+            // Regenerated cost lines keep their row so the unique emergency-cost link is updated in place.
+            var itemByCost = existing.Values.Where(item => item.EmergencyCostRequestId.HasValue).ToDictionary(item => item.EmergencyCostRequestId!.Value);
+            var lines = generated?.Lines.Select(line => line.EmergencyCostRequestId is { } cost && itemByCost.TryGetValue(cost, out var kept)
+                    ? line with { ItemId = kept.InvoiceItemId } : line).ToList()
+                ?? requested.Select(entry => ManualLine(entry.item)).ToList();
+            var horseIds = lines.Where(item => item.HorseId.HasValue).Select(item => item.HorseId!.Value).Distinct().ToArray();
             var horses = await db.BookingHorses.AsNoTracking().Where(item => item.BookingId == invoice.BookingId && horseIds.Contains(item.HorseId))
                 .Select(item => new Response.HorseResponse(item.HorseId, item.Horse.HorseName)).ToDictionaryAsync(item => item.HorseId, cancellationToken);
             var invalidHorses = requested.Where(entry => entry.item.HorseId.HasValue && !horses.ContainsKey(entry.item.HorseId.Value))
@@ -345,15 +375,15 @@ public sealed partial class Service
             decimal subtotal, tax, total;
             try
             {
-                foreach (var (item, _) in requested)
+                foreach (var line in lines)
                     items.Add(new InvoiceItem
                     {
-                        InvoiceItemId = item.InvoiceItemId ?? Guid.NewGuid(), InvoiceId = invoiceId,
-                        ItemType = Enum.Parse<InvoiceItemType>(item.ItemType.Trim(), true), Description = item.Description.Trim(),
-                        Quantity = item.Quantity, UnitPrice = item.Price,
-                        LineAmount = Money(item.Quantity * item.Price),
-                        HorseId = item.HorseId, Note = item.Note,
-                        CreatedAt = item.InvoiceItemId.HasValue ? existing[item.InvoiceItemId.Value].CreatedAt : now, UpdatedAt = now
+                        InvoiceItemId = line.ItemId ?? Guid.NewGuid(), InvoiceId = invoiceId,
+                        ItemType = line.ItemType, Description = line.Description,
+                        Quantity = line.Quantity, UnitPrice = line.Price,
+                        LineAmount = Money(line.Quantity * line.Price),
+                        HorseId = line.HorseId, Note = line.Note, EmergencyCostRequestId = line.EmergencyCostRequestId,
+                        CreatedAt = line.ItemId.HasValue ? existing[line.ItemId.Value].CreatedAt : now, UpdatedAt = now
                     });
                 subtotal = Money(items.Sum(item => item.LineAmount));
                 tax = Money(Vnd.Tax(subtotal));
@@ -387,7 +417,7 @@ public sealed partial class Service
             }
             invoice.Currency = Vnd.Currency;
             invoice.DueDate = request.DueDate;
-            invoice.BillingNote = request.Note;
+            invoice.BillingNote = invoice.Type == InvoiceType.QUOTATION && generated is not null ? ComposeQuotationNote(request.Note) : request.Note;
             invoice.Subtotal = subtotal;
             invoice.TaxAmount = tax;
             invoice.DiscountAmount = 0;
@@ -446,7 +476,7 @@ public sealed partial class Service
             Customer = new(customer.CustomerId, customer.CustomerCode, customer.FullName, customer.Phone, customer.Address, customer.Account.Email),
             Items = items.OrderBy(item => item.CreatedAt).Select(item => new Response.ItemResponse(item.InvoiceItemId, item.ItemType.ToString(),
                 item.Description, null, Vnd.ToInt(item.Quantity), Vnd.ToLong(item.UnitPrice), Vnd.ToLong(item.LineAmount),
-                item.HorseId.HasValue ? horses[item.HorseId.Value] : null, null,
+                item.HorseId.HasValue ? horses[item.HorseId.Value] : null, item.EmergencyCostRequestId,
                 IsDeduction(invoice, item), item.Note)).ToArray(),
             Summary = new(Vnd.ToLong(invoice.Subtotal), Vnd.ToLong(invoice.TaxAmount),
                 Vnd.ToLong(items.Where(item => IsDeduction(invoice, item)).Sum(item => item.LineAmount)), Vnd.ToLong(invoice.TotalAmount)),

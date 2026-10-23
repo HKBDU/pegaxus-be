@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using FluentValidation;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Common;
@@ -17,7 +18,8 @@ public sealed partial class Service(AppDbContext db, PaymentGatewayService.IPaym
     IValidator<Request.SuggestionRequest> suggestionValidator, IValidator<Request.UpdateRequest> updateValidator,
     IValidator<Request.ListRequest> listValidator, IValidator<Request.BookingListRequest> bookingListValidator,
     IValidator<Request.IssueRequest> issueValidator, IValidator<Request.RecordPaymentRequest> paymentValidator,
-    IValidator<Request.CancelRequest> cancelValidator, NotificationService.INotificationService notifications) : IInvoiceService
+    IValidator<Request.CancelRequest> cancelValidator, NotificationService.INotificationService notifications,
+    IOptions<QuotationOptions>? quotation = null) : IInvoiceService
 {
     private const decimal MaxAmount = 9_999_999_999_999_999.99m;
 

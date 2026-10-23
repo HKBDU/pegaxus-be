@@ -15,7 +15,8 @@ public sealed class UpdateRequestValidator : AbstractValidator<Request.UpdateReq
         RuleFor(request => request.DueDate)
             .Must(date => !date.HasValue || date.Value <= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime).AddYears(Limits.DateWindowYears))
             .WithMessage($"Due date must be within {Limits.DateWindowYears} years from today.");
-        RuleFor(request => request.Items).NotNull().WithMessage("Items are required; an empty array is allowed.");
+        RuleFor(request => request.TransitDays).InclusiveBetween(QuotationCatalog.MinTransitDays, QuotationCatalog.MaxTransitDays)
+            .When(request => request.TransitDays.HasValue).WithMessage($"Transit days must be between {QuotationCatalog.MinTransitDays} and {QuotationCatalog.MaxTransitDays}.");
         RuleForEach(request => request.Items).NotNull().SetValidator(new ItemValidator());
         RuleFor(request => request.Items).Must(items => items is null || items.Where(item => item is not null && !item.IsDepositDeduction)
             .Where(item => item.InvoiceItemId.HasValue).GroupBy(item => item.InvoiceItemId).All(group => group.Count() == 1))

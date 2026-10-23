@@ -77,13 +77,13 @@ public sealed partial class Service
             .OrderBy(item => item.CreatedAt).ThenBy(item => item.InvoiceItemId)
             .Select(item => new
             {
-                item.InvoiceItemId, item.ItemType, item.Description, item.Quantity, item.UnitPrice, item.LineAmount,
+                item.InvoiceItemId, item.ItemType, item.Description, item.Quantity, item.UnitPrice, item.LineAmount, item.EmergencyCostRequestId,
                 Horse = item.Horse == null ? null : new Response.HorseResponse(item.Horse.HorseId, item.Horse.HorseName),
                 IsDepositDeduction = invoice.Type == InvoiceType.FINAL && item.ItemType == InvoiceItemType.OTHER && item.LineAmount < 0,
                 item.Note
             }).ToListAsync(cancellationToken);
         var items = itemRows.Select(item => new Response.InvoiceItemResponse(item.InvoiceItemId, item.ItemType.ToString(), item.Description,
-            Vnd.ToInt(item.Quantity), Vnd.ToLong(item.UnitPrice), Vnd.ToLong(item.LineAmount), item.Horse, item.IsDepositDeduction, item.Note)).ToList();
+            Vnd.ToInt(item.Quantity), Vnd.ToLong(item.UnitPrice), Vnd.ToLong(item.LineAmount), item.Horse, item.IsDepositDeduction, item.Note, item.EmergencyCostRequestId)).ToList();
         var receipts = await db.Receipts.AsNoTracking().Where(item => item.InvoiceId == invoiceId)
             .OrderBy(item => item.CreatedAt).ThenBy(item => item.ReceiptId)
             .Select(item => new
@@ -277,7 +277,7 @@ public sealed partial class Service
 
         var validation = suggestionValidator.Validate(request);
         if (!validation.IsValid)
-            throw new FieldValidationException(validation.Errors.Select(error => new FieldError("type", error.ErrorMessage)).ToArray());
+            throw new FieldValidationException(validation.Errors.Select(error => new FieldError(JsonNamingPolicy.CamelCase.ConvertName(error.PropertyName), error.ErrorMessage)).ToArray());
         var type = Enum.Parse<InvoiceType>(request.Type.Trim(), true);
 
         var booking = await db.Bookings.AsNoTracking().Where(item => item.BookingId == bookingId)
@@ -315,13 +315,18 @@ public sealed partial class Service
                 "UNPAID_FINAL_INVOICE");
 
         var deposits = invoices.Where(invoice => invoice.Type == InvoiceType.DEPOSIT && invoice.Status == InvoiceStatus.PAID).ToArray();
-        var items = type == InvoiceType.FINAL
-            ? deposits.Select(deposit => new Response.ItemResponse(null, nameof(InvoiceItemType.OTHER),
-                $"Deposit deduction ({deposit.InvoiceCode})", null, 1, -Vnd.ToLong(deposit.TotalAmount), -Vnd.ToLong(deposit.TotalAmount),
-                null, null, true, "Deposit is not refunded in cash; it is deducted from this final invoice.")).ToArray()
-            : [];
+        var generated = IsGenerated(type)
+            ? await GenerateAsync(bookingId, booking.TransportId!.Value, type, false, request.TransitDays, null, true, cancellationToken)
+            : null;
+        var items = (generated?.Lines ?? []).Select(line => new Response.ItemResponse(null, line.ItemType.ToString(), line.Description, null,
+                Vnd.ToInt(line.Quantity), Vnd.ToLong(line.Price), Vnd.ToLong(line.Quantity * line.Price), null, line.EmergencyCostRequestId, false, line.Note))
+            .Concat(type == InvoiceType.FINAL
+                ? deposits.Select(deposit => new Response.ItemResponse(null, nameof(InvoiceItemType.OTHER),
+                    $"Deposit deduction ({deposit.InvoiceCode})", null, 1, -Vnd.ToLong(deposit.TotalAmount), -Vnd.ToLong(deposit.TotalAmount),
+                    null, null, true, "Deposit is not refunded in cash; it is deducted from this final invoice."))
+                : []).ToArray();
         return new(booking.BookingId, booking.BookingCode, booking.Status.ToString(), booking.TransportId!.Value,
             booking.TransportStatus!.Value.ToString(), type.ToString(), Vnd.Currency,
-            type != InvoiceType.QUOTATION, items);
+            type != InvoiceType.QUOTATION, items, generated?.Pricing, generated?.Locked ?? false);
     }
 }

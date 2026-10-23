@@ -82,10 +82,10 @@ public class InvoiceHttpTests
             Assert.Equal(HttpStatusCode.Forbidden, (await client.PostAsJsonAsync(path, request)).StatusCode);
         }
         SignIn(JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER));
-        var suggestion = await client.GetAsync(path + "/suggestion?type=QUOTATION");
+        var suggestion = await client.GetAsync(path + "/suggestion?type=SUPPLEMENTARY");
         Assert.Equal(HttpStatusCode.OK, suggestion.StatusCode);
         var preview = (await suggestion.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
-        Assert.False(preview.GetProperty("isPaymentRequired").GetBoolean());
+        Assert.True(preview.GetProperty("isPaymentRequired").GetBoolean());
         Assert.Equal(0, preview.GetProperty("items").GetArrayLength());
         request.Items = [InvoiceTests.Fixture.Item(0, 5)];
         var invalid = await client.PostAsJsonAsync(path, request);
@@ -104,7 +104,7 @@ public class InvoiceHttpTests
         Assert.Equal("Invoice created successfully", body.GetProperty("message").GetString());
         var value = body.GetProperty("value");
         Assert.Equal("DRAFT", value.GetProperty("status").GetString());
-        Assert.False(value.GetProperty("isPaymentRequired").GetBoolean());
+        Assert.True(value.GetProperty("isPaymentRequired").GetBoolean());
         Assert.Equal("2026-10-12", value.GetProperty("dueDate").GetString());
         Assert.Equal(f.Horse.HorseId, value.GetProperty("items")[0].GetProperty("horse").GetProperty("horseId").GetGuid());
         Assert.Equal("6", value.GetProperty("summary").GetProperty("grandTotal").GetRawText());
@@ -170,7 +170,7 @@ public class InvoiceHttpTests
         var duplicate = await client.PostAsJsonAsync(path, request);
         Assert.Equal(HttpStatusCode.Conflict, duplicate.StatusCode);
         Assert.Equal("INVOICE_ALREADY_EXISTS", (await duplicate.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
-        var duplicateSuggestion = await client.GetAsync(path + "/suggestion?type=QUOTATION");
+        var duplicateSuggestion = await client.GetAsync(path + "/suggestion?type=SUPPLEMENTARY");
         Assert.Equal(HttpStatusCode.Conflict, duplicateSuggestion.StatusCode);
         Assert.Equal("INVOICE_ALREADY_EXISTS", (await duplicateSuggestion.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
         var issuedResponse = await client.PostAsJsonAsync($"/api/v1/invoices/{invoiceId}/issue",
