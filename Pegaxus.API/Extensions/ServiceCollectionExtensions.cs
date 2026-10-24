@@ -248,10 +248,39 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>Customer claims about a delivery and how the logistics manager handles them.</summary>
+    public static IServiceCollection AddClaimsModule(this IServiceCollection services)
+    {
+        services.AddScoped<Pegaxus.Service.ClaimService.IClaimService, Pegaxus.Service.ClaimService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.SubmitRequest>, Pegaxus.Service.ClaimService.Validator.SubmitRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.ListRequest>, Pegaxus.Service.ClaimService.Validator.ListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.ResolveRequest>, Pegaxus.Service.ClaimService.Validator.ResolveRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.CancelRequest>, Pegaxus.Service.ClaimService.Validator.CancelRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.CompleteRequest>, Pegaxus.Service.ClaimService.Validator.CompleteRequestValidator>();
+        return services;
+    }
+
+    /// <summary>The transport archive, the audit view and the audit package export (with its background worker).</summary>
+    public static IServiceCollection AddAuditModule(this IServiceCollection services)
+    {
+        services.AddSingleton<Pegaxus.Service.AuditService.AuditExportQueue>();
+        services.AddScoped<Pegaxus.Service.AuditService.IAuditService, Pegaxus.Service.AuditService.Service>();
+        services.AddHostedService<Pegaxus.API.Services.AuditExportWorker>();
+        return services;
+    }
+
+    /// <summary>Read-only management reports for the logistics manager.</summary>
+    public static IServiceCollection AddReportsModule(this IServiceCollection services)
+    {
+        services.AddScoped<Pegaxus.Service.ReportService.IReportService, Pegaxus.Service.ReportService.Service>();
+        return services;
+    }
+
     /// <summary>Invoices, online payment checkout and the payment webhook.</summary>
     public static IServiceCollection AddInvoicingModule(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<Pegaxus.Service.InvoiceService.IInvoiceService, Pegaxus.Service.InvoiceService.Service>();
+        services.AddHostedService<Pegaxus.API.Services.InvoiceOverdueWorker>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.BookingListRequest>, Pegaxus.Service.InvoiceService.Validator.BookingListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.ListRequest>, Pegaxus.Service.InvoiceService.Validator.ListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.UpdateRequest>, Pegaxus.Service.InvoiceService.Validator.UpdateRequestValidator>();
@@ -288,6 +317,7 @@ public static class ServiceCollectionExtensions
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.VehicleFields>, Pegaxus.Service.IncidentService.Validator.VehicleFieldsValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ReportVehicleRequest>, Pegaxus.Service.IncidentService.Validator.ReportVehicleRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.UpdateVehicleRequest>, Pegaxus.Service.IncidentService.Validator.UpdateVehicleRequestValidator>();
+        services.AddScoped<Pegaxus.Service.FinancialReportService.IFinancialReportService, Pegaxus.Service.FinancialReportService.Service>();
         services.AddScoped<Pegaxus.Service.HandoverService.IHandoverService, Pegaxus.Service.HandoverService.Service>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CreateRequest>, Pegaxus.Service.HandoverService.Validator.CreateRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.ListRequest>, Pegaxus.Service.HandoverService.Validator.ListRequestValidator>();

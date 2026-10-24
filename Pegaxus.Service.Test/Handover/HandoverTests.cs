@@ -275,10 +275,12 @@ public class HandoverTests
         internal required HandoverRecord Delivery { get; init; }
         internal Guid TransportId => Route.TransportPlan.TransportId;
         internal Pegaxus.Service.LocationTrackingService.TrackingOptions Tracking { get; } = new();
+        internal Pegaxus.Service.FinancialReportService.IFinancialReportService? FinancialReports { get; set; }
         internal Handovers.Service Service => CreateService(db);
         internal Handovers.Service CreateService(AppDbContext context) => new(context, Clock, new ListRequestValidator(), new CancelRequestValidator(), new CreateRequestValidator(),
             new Pegaxus.Service.NotificationService.Service(context, Realtime), new CompleteRequestValidator(), Media,
-            Microsoft.Extensions.Options.Options.Create(Tracking), Microsoft.Extensions.Logging.Abstractions.NullLogger<Handovers.Service>.Instance);
+            Microsoft.Extensions.Options.Options.Create(Tracking), FinancialReports ?? new Pegaxus.Service.FinancialReportService.Service(context, Clock),
+            Microsoft.Extensions.Logging.Abstractions.NullLogger<Handovers.Service>.Instance);
         internal Handovers.Request.CancelRequest Cancel(HandoverRecord item) => new() { LastUpdatedAt = DbTime.AsUtc(item.UpdatedAt), CancellationReason = "  Primary road is closed  " };
 
         /// <summary>Records start IN_PROGRESS: completing a scheduled (PLANNED) record is refused, so completion tests begin from a started one.</summary>

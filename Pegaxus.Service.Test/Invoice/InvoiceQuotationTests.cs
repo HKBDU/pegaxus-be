@@ -91,7 +91,7 @@ public class InvoiceQuotationTests
     }
 
     private static Request.CreateRequest Create(string type, int? transitDays = null, string? note = null) =>
-        new() { Type = type, DueDate = DateOnly.FromDateTime(InvoiceTests.Fixture.Clock.GetUtcNow().UtcDateTime), TransitDays = transitDays, Note = note };
+        new() { Type = type, DueDate = InvoiceTests.Fixture.Clock.GetUtcNow().AddDays(1), TransitDays = transitDays, Note = note };
 
     [Fact]
     public async Task Quotation_IsGeneratedFromTheBookingHorsesAndTransitDays()

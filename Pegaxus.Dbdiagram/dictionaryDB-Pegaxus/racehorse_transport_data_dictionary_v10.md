@@ -512,7 +512,7 @@
 | `veterinarian_required` | `boolean` |  | Yes | Cho biết có cần bác sĩ thú y hay không. |
 | `veterinarian_note` | `text` |  | No | Ghi chú của/liên quan tới bác sĩ thú y. |
 | `location_description` | `varchar(500)` |  | No | Mô tả vị trí nơi thực hiện health check. |
-| `photo_url` | `varchar(500)` |  | No | URL ảnh bằng chứng/minh họa. |
+| `photo_urls` | `varchar(500)[]` |  | Yes | Danh sách tối đa 5 URL ảnh bằng chứng/minh họa của lần kiểm tra; mặc định mảng rỗng, không có phần tử null. |
 | `general_note` | `text` |  | No | Ghi chú chung. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
@@ -670,7 +670,7 @@
 | `tax_amount` | `decimal(18,2)` |  | Yes | Số tiền thuế. |
 | `total_amount` | `decimal(18,2)` |  | Yes | Tổng tiền cuối cùng của hóa đơn. |
 | `issued_at` | `timestamp` |  | No | Thời điểm hóa đơn được phát hành. |
-| `due_date` | `date` |  | No | Ngày đến hạn thanh toán hoặc hoàn thành yêu cầu, tùy bảng. |
+| `due_date` | `timestamp` |  | No | Thời điểm đến hạn thanh toán (UTC, có cả giờ). Job nền chạy mỗi giờ đánh dấu hóa đơn `OVERDUE` khi quá hạn. |
 | `paid_at` | `timestamp` |  | No | Thời điểm ghi nhận thanh toán. |
 | `cancelled_at` | `timestamp` |  | No | Thời điểm nghiệp vụ/bản ghi bị hủy. |
 | `cancellation_reason` | `text` |  | No | Lý do hủy. |
@@ -947,7 +947,7 @@
 | `file_name` | `varchar(255)` |  | Yes | Tên file đã upload. |
 | `file_url` | `varchar(1000)` |  | Yes | URL/vị trí lưu file. |
 | `mime_type` | `varchar(100)` |  | No | MIME type của file, ví dụ application/pdf. |
-| `file_size_bytes` | `uuid` |  | No | Kích thước file tính bằng byte. |
+| `file_size_bytes` | `bigint` |  | No | Kích thước file tính bằng byte. |
 | `upload_note` | `text` |  | No | Ghi chú khi upload phiên bản file. |
 | `uploaded_by_account_id` | `uuid` | FK | Yes | Account thực hiện upload version; có thể là Customer hoặc Transport Specialist. |
 | `uploaded_at` | `timestamp` |  | Yes | Thời điểm upload file. |
@@ -964,7 +964,7 @@
 | `file_name` | `varchar(255)` |  | Yes | Tên file vật lý. |
 | `file_url` | `varchar(1000)` |  | Yes | URL/vị trí lưu file. |
 | `mime_type` | `varchar(100)` |  | No | MIME type của file. |
-| `file_size_bytes` | `uuid` |  | No | Kích thước file tính bằng byte. |
+| `file_size_bytes` | `bigint` |  | No | Kích thước file tính bằng byte. |
 | `sort_order` | `int` |  | Yes | Thứ tự hiển thị/xử lý file trong cùng một `DocumentVersion`; unique theo `document_version_id`. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm attachment được tạo. |
 
@@ -1044,7 +1044,7 @@
 | `file_name` | `varchar(255)` |  | Yes | Tên file vật lý. |
 | `file_url` | `varchar(1000)` |  | Yes | URL/vị trí lưu file. |
 | `mime_type` | `varchar(100)` |  | No | MIME type của file. |
-| `file_size_bytes` | `uuid` |  | No | Kích thước file tính bằng byte. |
+| `file_size_bytes` | `bigint` |  | No | Kích thước file tính bằng byte. |
 | `note` | `text` |  | No | Ghi chú về file hoặc phản hồi của cơ quan. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm file được ghi nhận. |
 
@@ -1121,7 +1121,7 @@
 | `file_name` | `varchar(255)` |  | Yes | Tên file vật lý. |
 | `file_url` | `varchar(1000)` |  | Yes | URL/vị trí lưu file. |
 | `mime_type` | `varchar(100)` |  | No | MIME type của file. |
-| `file_size_bytes` | `uuid` |  | No | Kích thước file tính bằng byte. |
+| `file_size_bytes` | `bigint` |  | No | Kích thước file tính bằng byte. |
 | `sort_order` | `int` |  | Yes | Thứ tự hiển thị/xử lý file trong cùng một proof. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm file được ghi nhận. |
 

@@ -12,10 +12,10 @@ public sealed class CreateRequestValidator : AbstractValidator<Request.CreateReq
             .Must(type => Enum.GetNames<InvoiceType>().Contains(type?.Trim(), StringComparer.OrdinalIgnoreCase))
             .WithMessage("Type must be QUOTATION, DEPOSIT, FINAL, SUPPLEMENTARY or CREDIT_NOTE.");
         RuleFor(request => request.DueDate).NotNull()
-            .Must(date => !date.HasValue || date.Value >= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime))
-            .WithMessage("Due date must not be before today.");
+            .Must(date => !date.HasValue || date.Value >= clock.GetUtcNow())
+            .WithMessage("Due date must not be in the past.");
         RuleFor(request => request.DueDate)
-            .Must(date => !date.HasValue || date.Value <= DateOnly.FromDateTime(clock.GetUtcNow().UtcDateTime).AddYears(Limits.DateWindowYears))
+            .Must(date => !date.HasValue || date.Value <= clock.GetUtcNow().AddYears(Limits.DateWindowYears))
             .WithMessage($"Due date must be within {Limits.DateWindowYears} years from today.");
         RuleFor(request => request.TransitDays).InclusiveBetween(QuotationCatalog.MinTransitDays, QuotationCatalog.MaxTransitDays)
             .When(request => request.TransitDays.HasValue).WithMessage($"Transit days must be between {QuotationCatalog.MinTransitDays} and {QuotationCatalog.MaxTransitDays}.");

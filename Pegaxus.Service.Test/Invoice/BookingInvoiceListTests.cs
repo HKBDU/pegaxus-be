@@ -35,7 +35,7 @@ public class BookingInvoiceListTests
         Assert.Equal("Club Alpha", item.CustomerName);
         Assert.Equal(10, item.TotalAmount);
         Assert.Equal("VND", item.Currency);
-        Assert.Equal(new DateOnly(2026, 10, 25), item.DueDate);
+        Assert.Equal(new DateTimeOffset(2026, 10, 25, 0, 0, 0, TimeSpan.Zero), item.DueDate);
         Assert.Equal(Fixture.Offset(f.Invoices[2].IssuedAt!.Value), item.IssuedAt);
         Assert.Equal(Fixture.Offset(f.Invoices[2].PaidAt!.Value), item.PaidAt);
         Assert.Equal(Fixture.Offset(f.Invoices[2].CreatedAt), item.CreatedAt);

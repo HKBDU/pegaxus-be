@@ -24,7 +24,7 @@ public class EmailBodiesTests
         ("route", Mail.RouteAssignmentBody("Ada", "RP-1", true, "Driver sick", Link,
             [new Mail.RouteSegment(1, new DateTime(2026, 11, 28, 6, 0, 0), new DateTime(2026, 11, 28, 10, 0, 0), "EMP-4", "EMP-5", null)])),
         ("incident", Mail.IncidentReportedBody("Ada", "INC-1", "HIGH", "Engine failure", "The engine stopped", Link)),
-        ("invoice-issued", Mail.InvoiceIssuedBody("Ada", "INV-1", "DEPOSIT", "REQ-1", Mail.InvoiceMailKind.Invoice, 120m, "EUR", new DateOnly(2026, 11, 15), Link)),
+        ("invoice-issued", Mail.InvoiceIssuedBody("Ada", "INV-1", "DEPOSIT", "REQ-1", Mail.InvoiceMailKind.Invoice, 120m, "EUR", new DateTime(2026, 11, 15, 9, 30, 0), Link)),
         ("invoice-cancelled", Mail.InvoiceCancelledBody("Ada", "INV-1", "DEPOSIT", "Wrong amount", Link)),
         ("payment-confirmed", Mail.PaymentConfirmedBody("Ada", "INV-1", "RCP-1", 120m, "EUR", false, Link)),
         ("reconciliation", Mail.PaymentReconciliationBody("Max", "A payment was received", "RCP-1", "PENDING", "TX-1", 120m, "VND", "INV-1", "PAID", Link)),
@@ -142,7 +142,7 @@ public class EmailBodiesTests
     [InlineData(Mail.InvoiceMailKind.CreditNote, "Credit note issued", "Payout or credit amount", "Credit note", false)]
     public void InvoiceIssued_AdaptsToTheInvoiceKind(Mail.InvoiceMailKind kind, string title, string amountLabel, string pill, bool payable)
     {
-        var html = Mail.InvoiceIssuedBody("Ada", "INV-1", "DEPOSIT", "REQ-1", kind, 1234.5m, "EUR", new DateOnly(2026, 11, 15), Link);
+        var html = Mail.InvoiceIssuedBody("Ada", "INV-1", "DEPOSIT", "REQ-1", kind, 1234.5m, "EUR", new DateTime(2026, 11, 15, 9, 30, 0), Link);
         Assert.Contains(title, html); Assert.Contains(amountLabel, html); Assert.Contains(pill, html);
         Assert.Contains("1,234.50 EUR", html);
         Assert.Equal(payable, html.Contains("Due date:") && html.Contains("15/11/2026"));

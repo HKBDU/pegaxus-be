@@ -103,6 +103,41 @@ public class InvoiceTests
         Assert.Equal("VND", result.Currency);
     }
 
+    [Fact]
+    public async Task CreditNote_CarriesNoTax_UnlikeEveryOtherType()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        db.Invoices.Add(f.Invoice(InvoiceType.FINAL, InvoiceStatus.PAID));
+        await db.SaveChangesAsync();
+        var request = Fixture.Request("CREDIT_NOTE");
+        request.Items = [Fixture.Item(1, 1_000)];
+
+        var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, request);
+
+        Assert.Equal(1_000, result.Summary.Subtotal);
+        Assert.Equal(0, result.Summary.Tax);
+        Assert.Equal(1_000, result.Summary.GrandTotal);
+        Assert.Equal(0, result.Summary.TaxRatePercent);
+        Assert.Equal(0, (await db.Invoices.SingleAsync(item => item.InvoiceId == result.InvoiceId)).TaxAmount);
+    }
+
+    [Fact]
+    public async Task Create_KeepsTheDueTimeOfDay_AndStoresItAsUtc()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        var request = Fixture.Request();
+        request.Items = [Fixture.Item(1, 100)];
+        request.DueDate = new DateTimeOffset(2026, 10, 20, 17, 30, 0, TimeSpan.FromHours(7)); // 10:30 UTC
+
+        var result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, request);
+
+        Assert.Equal(new DateTimeOffset(2026, 10, 20, 10, 30, 0, TimeSpan.Zero), result.DueDate);
+        Assert.Equal(TimeSpan.Zero, result.DueDate.Offset);
+        Assert.Equal(new DateTime(2026, 10, 20, 10, 30, 0), (await db.Invoices.SingleAsync(item => item.InvoiceId == result.InvoiceId)).DueDate);
+    }
+
     [Theory]
     [InlineData(2, 0)]
     [InlineData(3, 1)]
@@ -289,7 +324,7 @@ public class InvoiceTests
         switch (problem)
         {
             case "type": request.Type = "1"; break;
-            case "dueDate": request.DueDate = request.DueDate!.Value.AddDays(-1); break;
+            case "dueDate": request.DueDate = request.DueDate!.Value.AddDays(-1).AddMinutes(-1); break; // one minute in the past
             case "missingDueDate": request.DueDate = null; break;
             case "missingItems": request.Items = null; break;
             case "nullItem": request.Items[0] = null!; break;
@@ -338,7 +373,7 @@ public class InvoiceTests
         }
         internal static Request.CreateRequest Request(string type = "SUPPLEMENTARY") => new()
         {
-            Type = type, DueDate = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime), Items = []
+            Type = type, DueDate = Clock.GetUtcNow().AddDays(1), Items = []
         };
         internal static Request.ItemRequest Item(decimal quantity, decimal price) => new()
         {

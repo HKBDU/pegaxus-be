@@ -256,6 +256,24 @@ public class InvoiceUpdateTests
     }
 
     [Fact]
+    public async Task Edit_CreditNoteStaysTaxFree_EvenWhenItWasSavedWithTaxBefore()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db, InvoiceType.CREDIT_NOTE);
+        f.Invoice.TaxAmount = 20; // a draft saved before the credit-note tax rule changed
+        await db.SaveChangesAsync();
+        var request = f.Request();
+        request.Items = [Fixture.Item(1, 1_000)];
+
+        var result = await f.Service.UpdateAsync(f.Account.AccountId, f.Invoice.InvoiceId, request);
+
+        Assert.Equal(1_000, result.Summary.Subtotal);
+        Assert.Equal(0, result.Summary.Tax);
+        Assert.Equal(1_000, result.Summary.GrandTotal);
+        Assert.Equal(0, result.Summary.TaxRatePercent);
+    }
+
+    [Fact]
     public async Task Edit_DoesNotReapplyCreationGatesAndReturnsNullTransportWhenAbsent()
     {
         await using var db = TestSupport.CreateDb();
@@ -303,7 +321,7 @@ public class InvoiceUpdateTests
         {
             case "version": request.LastUpdatedAt = null; break;
             case "type": request.Type = "FINAL"; break;
-            case "dueDate": request.DueDate = request.DueDate!.Value.AddDays(-1); break;
+            case "dueDate": request.DueDate = request.DueDate!.Value.AddDays(-1).AddMinutes(-1); break; // one minute in the past
             case "missingDueDate": request.DueDate = null; break;
             case "missingItems": request.Items = null; break;
             case "nullItem": request.Items[0] = null!; break;
@@ -348,7 +366,7 @@ public class InvoiceUpdateTests
                 TransportId = transport.TransportId, Status = TransportPlanStatus.DRAFT, CreatedAt = now, UpdatedAt = now };
             var invoice = new Invoice { InvoiceId = Guid.NewGuid(), InvoiceCode = $"INV-{Guid.NewGuid():N}", BookingId = booking.BookingId,
                 EmployeeId = employee.EmployeeId, Type = type, Currency = "VND", Subtotal = 100, TaxAmount = 20, TotalAmount = 120,
-                DueDate = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime), CreatedAt = now, UpdatedAt = now };
+                DueDate = DateTime.SpecifyKind(Clock.GetUtcNow().UtcDateTime.AddDays(1), DateTimeKind.Unspecified), CreatedAt = now, UpdatedAt = now };
             invoice.InvoiceItems = [Row(invoice.InvoiceId, 60, now), Row(invoice.InvoiceId, 40, now.AddHours(1))];
             var history = new InvoiceStatusHistory { InvoiceStatusHistoryId = Guid.NewGuid(), InvoiceId = invoice.InvoiceId,
                 Type = InvoiceHistoryType.CREATE, NewStatus = InvoiceStatus.DRAFT, ChangedByAccountId = account.AccountId,
@@ -363,7 +381,7 @@ public class InvoiceUpdateTests
         }
         internal Request.UpdateRequest Request() => new()
         {
-            LastUpdatedAt = Version(Invoice.UpdatedAt), DueDate = DateOnly.FromDateTime(Clock.GetUtcNow().UtcDateTime), Items = []
+            LastUpdatedAt = Version(Invoice.UpdatedAt), DueDate = Clock.GetUtcNow().AddDays(1), Items = []
         };
         internal static Request.ItemRequest Item(decimal quantity, decimal price, Guid? id = null) => new()
         {

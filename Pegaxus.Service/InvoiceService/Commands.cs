@@ -170,11 +170,12 @@ public sealed partial class Service
                 ChangedAt = now, CreatedAt = now
             });
             var amount = Vnd.Format(invoice.TotalAmount, invoice.Currency);
+            var dueText = invoice.DueDate is { } dueAt ? dueAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture) + " UTC" : "the due date on the invoice";
             var (title, message, priority) = invoice.Type switch
             {
                 InvoiceType.QUOTATION => ("Quotation issued", $"Quotation {invoice.InvoiceCode} for booking {customer.BookingCode} has been issued. Estimated total: {amount}. No payment is required.", NotificationPriority.NORMAL),
                 InvoiceType.CREDIT_NOTE => ("Credit note issued", $"Credit note {invoice.InvoiceCode} for booking {customer.BookingCode} has been issued. Payout amount: {amount}.", NotificationPriority.NORMAL),
-                _ => ("Invoice issued", $"{InvoiceTypeLabel(invoice.Type)} {invoice.InvoiceCode} for booking {customer.BookingCode} has been issued. Amount due: {amount}. Please pay by {invoice.DueDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) ?? "the due date on the invoice"}.", NotificationPriority.HIGH)
+                _ => ("Invoice issued", $"{InvoiceTypeLabel(invoice.Type)} {invoice.InvoiceCode} for booking {customer.BookingCode} has been issued. Amount due: {amount}. Please pay by {dueText}.", NotificationPriority.HIGH)
             };
             notifications.Queue(new NotificationCreateRequest
             {
@@ -199,7 +200,7 @@ public sealed partial class Service
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);
             return new(invoiceId, invoice.InvoiceCode, invoice.Type.ToString(), invoice.Status.ToString(),
-                DateOnly.FromDateTime(now), AsUtc(now), Vnd.ToLong(invoice.TotalAmount), invoice.Currency, invoice.DueDate,
+                DateOnly.FromDateTime(now), AsUtc(now), Vnd.ToLong(invoice.TotalAmount), invoice.Currency, AsUtc(invoice.DueDate),
                 invoice.Type == InvoiceType.QUOTATION ? ["CANCEL", "CREATE_ANOTHER"] : ["RECORD_PAYMENT", "CANCEL", "CREATE_ANOTHER"],
                 AsUtc(invoice.UpdatedAt));
         }
@@ -268,7 +269,7 @@ public sealed partial class Service
         var invoice = new Invoice
         {
             InvoiceId = Guid.NewGuid(), BookingId = bookingId, EmployeeId = employee.EmployeeId, Type = type,
-            Status = InvoiceStatus.DRAFT, Currency = Vnd.Currency, DueDate = request.DueDate,
+            Status = InvoiceStatus.DRAFT, Currency = Vnd.Currency, DueDate = request.DueDate.HasValue ? Truncate(request.DueDate.Value) : null,
             BillingNote = type == InvoiceType.QUOTATION && generated is not null ? ComposeQuotationNote(request.Note) : request.Note,
             CreatedAt = now, UpdatedAt = now
         };
@@ -283,7 +284,7 @@ public sealed partial class Service
                     CreatedAt = now, UpdatedAt = now
                 });
             invoice.Subtotal = Money(invoice.InvoiceItems.Sum(item => item.LineAmount));
-            invoice.TaxAmount = Money(Vnd.Tax(invoice.Subtotal));
+            invoice.TaxAmount = Money(Vnd.Tax(invoice.Subtotal, type));
             foreach (var deposit in deposits)
                 invoice.InvoiceItems.Add(new InvoiceItem
                 {
@@ -386,7 +387,7 @@ public sealed partial class Service
                         CreatedAt = line.ItemId.HasValue ? existing[line.ItemId.Value].CreatedAt : now, UpdatedAt = now
                     });
                 subtotal = Money(items.Sum(item => item.LineAmount));
-                tax = Money(Vnd.Tax(subtotal));
+                tax = Money(Vnd.Tax(subtotal, invoice.Type));
                 foreach (var deposit in deposits)
                     items.Add(new InvoiceItem
                     {
@@ -416,7 +417,7 @@ public sealed partial class Service
                 else db.InvoiceItems.Add(item);
             }
             invoice.Currency = Vnd.Currency;
-            invoice.DueDate = request.DueDate;
+            invoice.DueDate = request.DueDate.HasValue ? Truncate(request.DueDate.Value) : null;
             invoice.BillingNote = invoice.Type == InvoiceType.QUOTATION && generated is not null ? ComposeQuotationNote(request.Note) : request.Note;
             invoice.Subtotal = subtotal;
             invoice.TaxAmount = tax;
@@ -471,7 +472,7 @@ public sealed partial class Service
         return new()
         {
             InvoiceId = invoice.InvoiceId, InvoiceNumber = invoice.InvoiceCode, Type = invoice.Type.ToString(),
-            InvoiceDate = DateOnly.FromDateTime(invoice.CreatedAt), DueDate = invoice.DueDate!.Value,
+            InvoiceDate = DateOnly.FromDateTime(invoice.CreatedAt), DueDate = AsUtc(invoice.DueDate!.Value),
             Currency = invoice.Currency, Note = invoice.BillingNote,
             Customer = new(customer.CustomerId, customer.CustomerCode, customer.FullName, customer.Phone, customer.Address, customer.Account.Email),
             Items = items.OrderBy(item => item.CreatedAt).Select(item => new Response.ItemResponse(item.InvoiceItemId, item.ItemType.ToString(),
@@ -479,7 +480,8 @@ public sealed partial class Service
                 item.HorseId.HasValue ? horses[item.HorseId.Value] : null, item.EmergencyCostRequestId,
                 IsDeduction(invoice, item), item.Note)).ToArray(),
             Summary = new(Vnd.ToLong(invoice.Subtotal), Vnd.ToLong(invoice.TaxAmount),
-                Vnd.ToLong(items.Where(item => IsDeduction(invoice, item)).Sum(item => item.LineAmount)), Vnd.ToLong(invoice.TotalAmount)),
+                Vnd.ToLong(items.Where(item => IsDeduction(invoice, item)).Sum(item => item.LineAmount)), Vnd.ToLong(invoice.TotalAmount))
+            { TaxRatePercent = Vnd.TaxRatePercent(invoice.Type) },
             ContactPerson = new(employee.FullName, employee.Account.Email, employee.Phone),
             Booking = new(booking.BookingId, booking.BookingCode, booking.Status.ToString(), booking.OriginAddress,
                 booking.OriginCountry, booking.DestinationAddress, booking.DestinationCountry, booking.RequestedDepartureDate),

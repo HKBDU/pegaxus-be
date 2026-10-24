@@ -43,13 +43,24 @@ public sealed partial class Service
         var now = Truncate(clock.GetUtcNow());
         ApplyCompletion(item, request, senderUrl, receiverUrl, now);
         var effects = await ApplyEffectsAsync(item, transport, segments, effective, now, cancellationToken);
-        await QueueCompletionAsync(item, transport, segments, now, cancellationToken);
+        await QueueCompletionAsync(item, transport, segments, now, effects, cancellationToken);
         var result = (await DetailAsync(item, (await HeaderAsync(item.TransportId, cancellationToken)) with { Status = transport.Status }, actor, cancellationToken))
             with { Effects = effects };
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
+        if (item.HandoverType == HandoverType.DELIVERY) await EnsureFinancialReportAsync(transport.TransportId, cancellationToken);
         return result;
+    }
+
+    /// <summary>R27: the report is created after the commit, so a failure here is only logged and never undoes the signed handover.</summary>
+    private async Task EnsureFinancialReportAsync(Guid transportId, CancellationToken cancellationToken)
+    {
+        try { await financialReports.EnsureAsync(transportId, cancellationToken); }
+        catch (Exception error) when (error is not OperationCanceledException)
+        {
+            logger.LogWarning(error, "Financial report for transport {TransportId} could not be created after delivery; the first view will create it", transportId);
+        }
     }
 
     private async Task<string> ConfirmSignatureAsync(Guid accountId, UploadService.Request.UploadedAssetReference? reference, CancellationToken cancellationToken)

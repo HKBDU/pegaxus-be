@@ -90,7 +90,7 @@ public class InvoicePaymentTests
         Assert.Equal(issuer, invoice.EmployeeId);
         Assert.Equal((100m, 0m, 20m, 120m, "Preserve note"), (invoice.Subtotal, invoice.DiscountAmount, invoice.TaxAmount, invoice.TotalAmount, invoice.BillingNote));
         Assert.Equal(100, Assert.Single(db.InvoiceItems).LineAmount);
-        Assert.All(pending, x => { Assert.Equal(ReceiptStatus.FAILED, x.Status); Assert.Equal(receipt.ConfirmedAt, x.UpdatedAt); Assert.Equal("Keep reference", x.TransactionReference); });
+        Assert.All(pending, x => { Assert.Equal(ReceiptStatus.PENDING, x.Status); Assert.NotEqual(receipt.ConfirmedAt, x.UpdatedAt); Assert.Equal("Keep reference", x.TransactionReference); });
         Assert.Equal(invoice.CreatedAt, failed.UpdatedAt);
         var history = Assert.Single(db.InvoiceStatusHistories);
         Assert.Equal(InvoiceHistoryType.RECORD_PAYMENT, history.Type); Assert.Equal(status, history.PreviousStatus);
