@@ -7,6 +7,8 @@
 // - Confirmed relationship and status decisions from the design discussion
 //
 // V10 (Flow 5): adds incident detail fields, emergency cost requester/receipt state, and shared IncidentPhoto.
+// V10 fix (aligned with BE): file_size_bytes is bigint, Invoice.due_date is timestamp, HorseHealthLog.photo_urls is an array,
+//   Notification.transport_id is nullable.
 // V9 (Flow 4): adds HandoverRecord provider parties (handover_party_type.PROVIDER), RoutePlanRoute.status,
 //   ComplianceDossier.dossier_type (MAIN/EXTRA; one dossier per transport and type), TransportPlan origin/destination
 //   Location and Booking origin/destination coordinates. Coordinates use decimal(10,4), like Location.
@@ -1284,7 +1286,7 @@ Table HorseHealthLog {
 
   location_description varchar(500)
 
-  photo_url varchar(500)
+  photo_urls varchar(500)[] [not null, default: '{}'] // up to 5 photo URLs (BE check: cardinality <= 5, no null item)
 
   general_note text
 
@@ -1553,7 +1555,7 @@ Table Invoice {
   total_amount decimal(18,2) [not null, default: 0]
 
   issued_at timestamp
-  due_date date
+  due_date timestamp
   paid_at timestamp
 
   cancelled_at timestamp
@@ -2043,7 +2045,7 @@ Table DocumentVersion {
 
   mime_type varchar(100)
 
-  file_size_bytes uuid
+  file_size_bytes bigint
 
   upload_note text
 
@@ -2071,7 +2073,7 @@ Table DocumentAttachment {
   file_name varchar(255) [not null]
   file_url varchar(1000) [not null]
   mime_type varchar(100)
-  file_size_bytes uuid
+  file_size_bytes bigint
 
   // Thứ tự hiển thị/xử lý file trong cùng một DocumentVersion.
   sort_order int [not null]
@@ -2265,7 +2267,7 @@ Table AuthoritySubmissionEvidenceFile {
   file_name varchar(255) [not null]
   file_url varchar(1000) [not null]
   mime_type varchar(100)
-  file_size_bytes uuid
+  file_size_bytes bigint
 
   note text
 
@@ -2388,7 +2390,7 @@ Table ProofAttachment {
   file_name varchar(255) [not null]
   file_url varchar(1000) [not null]
   mime_type varchar(100)
-  file_size_bytes uuid
+  file_size_bytes bigint
   sort_order int [not null]
   created_at timestamp [not null]
 
@@ -2470,7 +2472,7 @@ Table CatalogAuditLog {
 Table Notification {
   notification_id uuid [pk]
 
-  transport_id uuid [not null]
+  transport_id uuid // nullable: a system notification may not belong to a transport
 
   notification_type notification_type [not null]
 
