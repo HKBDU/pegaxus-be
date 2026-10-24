@@ -59,6 +59,11 @@ public class EmailBodiesFlowTests
         ("health-alert", Mail.HorseHealthAlertBody(text, "TR-1", text, link)),
         ("handover-scheduled", Mail.HandoverBody(text, "HO-1", false, text, link)),
         ("handover-cancelled", Mail.HandoverBody(text, "HO-1", true, text, link)),
+        ("claim-received", Mail.ClaimReceivedBody(text, "CLM-1", "REQ-1", text, link)),
+        ("claim-approved", Mail.ClaimResultBody(text, "CLM-1", "REQ-1", true, text, 18000000, "VND", link)),
+        ("claim-rejected", Mail.ClaimResultBody(text, "CLM-1", "REQ-1", false, text, null, "VND", link)),
+        ("claim-closed", Mail.ClaimClosedBody(text, "CLM-1", "REQ-1", link)),
+        ("audit-package-ready", Mail.AuditPackageReadyBody(text, "TR-1", "TR-1-standard.zip", 700L * 1024 * 1024, link, new DateTime(2026, 11, 2, 2, 0, 0))),
     ];
 
     [Fact]

@@ -40,10 +40,11 @@ public partial class HandoverPostgresTests
                 var result = await service.CompleteAsync(f.Delivery.HandoverRecordId, Request(f.Delivery), f.Coordinator.AccountId);
                 Assert.Equal(f.Clock.Now.AddHours(24), result.Effects!.ClaimWindowEndsAt); Assert.Equal("COMPLETED", result.Transport.Status);
             }
-            Assert.Equal(3, audit.Calls); Assert.Equal((1, 3, 4), audit.Writes); Assert.Empty(f.Realtime.Messages);
+            Assert.Equal(4, audit.Calls); Assert.Equal((1, 3, 4), audit.Writes); // three completions plus the financial report after the delivery commit Assert.Empty(f.Realtime.Messages);
             await using var verify = new AppDbContext(options);
             Assert.All(await verify.HandoverRecords.ToArrayAsync(), item => { Assert.Equal(HandoverStatus.COMPLETED, item.Status); Assert.Equal(item.ActualHandoverAt, item.CompletedAt); });
             Assert.Equal(TransportStatus.COMPLETED, (await verify.Transports.SingleAsync()).Status);
+            Assert.Matches("^FR-[0-9]{8}-[0-9]{4}$", (await verify.FinancialReports.SingleAsync()).ReportCode); // created after the delivery commit
             Assert.Equal(RoutePlanStatus.COMPLETED, (await verify.RoutePlans.SingleAsync()).Status); Assert.Equal(TransportPlanStatus.COMPLETED, (await verify.TransportPlans.SingleAsync()).Status);
             Assert.Equal(VehicleStatus.AVAILABLE, (await verify.Vehicles.SingleAsync(item => item.VehicleId == vehicle.VehicleId)).Status);
             Assert.Equal(7, await verify.Notifications.CountAsync()); Assert.Equal(8, await verify.OutboxMessages.CountAsync());

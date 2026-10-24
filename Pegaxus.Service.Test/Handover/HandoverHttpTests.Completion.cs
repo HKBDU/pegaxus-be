@@ -9,6 +9,29 @@ namespace Pegaxus.Service.Test;
 
 public partial class HandoverHttpTests
 {
+    [Fact]
+    public async Task Http_EpodIsTheFileItselfNotTheEnvelope_AndItsErrorsAreJson()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
+        await HandoverDeliveryTests.DeliverAsync(f);
+        await using var host = await StartAsync(db, f);
+        using var customer = Client(host, f.CustomerAccountId); using var manager = Client(host, f.Manager.AccountId, EmployeeRole.LOGISTICS_MANAGER);
+        var url = $"/api/v1/handover-records/{f.Delivery.HandoverRecordId}/epod";
+
+        using var file = await customer.GetAsync(url + "?format=pdf");
+
+        Assert.Equal(HttpStatusCode.OK, file.StatusCode); Assert.Equal("application/pdf", file.Content.Headers.ContentType!.MediaType);
+        Assert.Equal($"{f.Delivery.HandoverCode}-epod.pdf", file.Content.Headers.ContentDisposition!.FileName!.Trim('"'));
+        Assert.Equal("%PDF", System.Text.Encoding.ASCII.GetString((await file.Content.ReadAsByteArrayAsync()).AsSpan(0, 4)));
+        using var withoutFormat = await manager.GetAsync(url); Assert.Equal(HttpStatusCode.OK, withoutFormat.StatusCode);
+        Assert.Equal("VALIDATION_ERROR", (await ErrorAsync(await customer.GetAsync(url + "?format=docx"), HttpStatusCode.BadRequest)).GetProperty("errorCode").GetString());
+        using var anonymous = new HttpClient { BaseAddress = customer.BaseAddress };
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(url)).StatusCode);
+        Assert.Equal("HANDOVER_RECORD_NOT_FOUND", (await ErrorAsync(await customer.GetAsync($"/api/v1/handover-records/{f.Transfer.HandoverRecordId}/epod"), HttpStatusCode.NotFound)).GetProperty("errorCode").GetString());
+        f.Transfer.Status = HandoverStatus.IN_PROGRESS; await db.SaveChangesAsync();
+        Assert.Equal("INVALID_HANDOVER_STATUS", (await ErrorAsync(await manager.GetAsync($"/api/v1/handover-records/{f.Transfer.HandoverRecordId}/epod"), HttpStatusCode.Conflict)).GetProperty("errorCode").GetString());
+    }
+
     [Theory]
     [InlineData(EmployeeRole.LOGISTICS_MANAGER, 200)]
     [InlineData(EmployeeRole.FLEET_ROUTE_COORDINATOR, 200)]

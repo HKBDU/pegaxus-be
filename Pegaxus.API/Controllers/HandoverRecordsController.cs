@@ -65,6 +65,20 @@ public sealed class HandoverRecordsController(Handovers.IHandoverService service
     public async Task<IActionResult> CompleteAsync(Guid handoverRecordId, [FromBody] Handovers.Request.CompleteRequest request, CancellationToken cancellationToken) =>
         Success(await service.CompleteAsync(handoverRecordId, request, AccountId, cancellationToken), "Handover completed successfully");
 
+    /// <summary>Download the signed handover record (e-POD) as a PDF.</summary>
+    /// <remarks>Same visibility as the record: Logistics Managers, Route Coordinators, Transport Specialists, the assigned Driver and Escort, and the booking Customer for PICKUP and DELIVERY records. Only a COMPLETED record has an e-POD. A customer receives the PDF without the phone numbers of employees. The response is the file itself, not the JSON envelope; errors are JSON.</remarks>
+    /// <param name="handoverRecordId">The handover record identifier (UUID).</param>
+    /// <param name="format">Optional; only pdf is supported.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with application/pdf and a download file name; 400 for another format, 403 or 404 when the record is not visible, 409 when it is not COMPLETED.</returns>
+    [Authorize(Policy = JwtExtensions.HandoverViewerPolicy)]
+    [HttpGet("{handoverRecordId:guid}/epod")]
+    public async Task<IActionResult> GetEpodAsync(Guid handoverRecordId, [FromQuery] string? format, CancellationToken cancellationToken)
+    {
+        var epod = await service.GetEpodAsync(handoverRecordId, format, AccountId, cancellationToken);
+        return File(epod.Content, "application/pdf", epod.FileName);
+    }
+
     /// <summary>Cancel a planned or in-progress handover record.</summary>
     /// <remarks>Only LM/RC. Requires lastUpdatedAt from the latest record and a cancellationReason of at least 10 characters after trimming. Stale versions return 409 HANDOVER_MODIFIED. Completed/cancelled records are immutable. Cancellation and HIGH priority notifications to assigned RCs and active employee parties commit atomically; journey timestamps remain unchanged.</remarks>
     /// <param name="handoverRecordId">The handover record identifier (UUID).</param>

@@ -196,6 +196,57 @@ public class Service : IDocumentStorageService, IDisposable
         }
     }
 
+    public async Task<StoredDocumentFile> UploadExportAsync(string fileName, string contentType, Stream content, CancellationToken cancellationToken = default)
+    {
+        EnsureConfigured();
+        var name = Path.GetFileName(fileName.Replace('\\', '/'));
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 255 || name.Any(char.IsControl))
+            throw new BadRequestException("Export file name is invalid.");
+        var key = $"exports/{Guid.NewGuid():N}/{name}";
+        var storageUrl = $"s3://{_options.BucketName}/{key}";
+        try
+        {
+            await VerifyPrivateBucketAsync(cancellationToken);
+            content.Position = 0;
+            var response = await Client.PutObjectAsync(new PutObjectRequest
+            {
+                BucketName = _options.BucketName, Key = key, InputStream = content, ContentType = contentType,
+                ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256, IfNoneMatch = "*",
+                AutoCloseStream = false, Headers = { CacheControl = "private, no-store" }
+            }, cancellationToken);
+            if (response.ServerSideEncryptionMethod != ServerSideEncryptionMethod.AES256)
+                throw StorageUnavailable();
+            return new StoredDocumentFile(storageUrl, name, contentType, content.Length);
+        }
+        catch (Exception error) when (error is not OperationCanceledException && error is not Pegaxus.Service.Exceptions.Exceptions)
+        {
+            _logger.LogError(error, "Audit export upload failed");
+            throw StorageUnavailable();
+        }
+    }
+
+    public async Task<SignedDocumentUrl> CreateExportUrlAsync(string storageUrl, string fileName, DateTimeOffset expiresAt, CancellationToken cancellationToken = default)
+    {
+        EnsureConfigured();
+        var location = StorageLocation(storageUrl, "/exports/");
+        cancellationToken.ThrowIfCancellationRequested();
+        try
+        {
+            await VerifyPrivateBucketAsync(cancellationToken);
+            var url = await Client.GetPreSignedURLAsync(new GetPreSignedUrlRequest
+            {
+                BucketName = _options.BucketName, Key = location.Key, Verb = HttpVerb.GET, Protocol = Protocol.HTTPS, Expires = expiresAt.UtcDateTime,
+                ResponseHeaderOverrides = { ContentDisposition = $"attachment; filename=\"{fileName.Replace("\"", "")}\"" }
+            });
+            return new SignedDocumentUrl(url, expiresAt);
+        }
+        catch (Exception error) when (error is not OperationCanceledException && error is not Pegaxus.Service.Exceptions.Exceptions)
+        {
+            _logger.LogError(error, "Audit export URL signing failed");
+            throw StorageUnavailable();
+        }
+    }
+
     public async Task DeleteAsync(string storageUrl, CancellationToken cancellationToken = default)
     {
         EnsureConfigured();
@@ -217,11 +268,11 @@ public class Service : IDocumentStorageService, IDisposable
         _privateBucketVerified = true;
     }
 
-    private (string Key, string? VersionId) StorageLocation(string storageUrl)
+    private (string Key, string? VersionId) StorageLocation(string storageUrl, string prefix = "/documents/")
     {
         if (!Uri.TryCreate(storageUrl, UriKind.Absolute, out var uri) || uri.Scheme != "s3" ||
             uri.Host != _options.BucketName || !string.IsNullOrEmpty(uri.UserInfo) ||
-            !string.IsNullOrEmpty(uri.Fragment) || !uri.AbsolutePath.StartsWith("/documents/", StringComparison.Ordinal))
+            !string.IsNullOrEmpty(uri.Fragment) || !uri.AbsolutePath.StartsWith(prefix, StringComparison.Ordinal))
             throw new BadRequestException("Document storage reference is invalid.");
         var query = QueryHelpers.ParseQuery(uri.Query);
         if (query.Count > 1 || query.Count == 1 && (!query.TryGetValue("versionId", out var versions) ||
