@@ -38,6 +38,9 @@ public static class NotificationLinks
         _ => null
     };
 
+    /// <summary>The audit archive page of a transport (managers only).</summary>
+    public static string AuditArchive(Guid transportId) => $"/admin/transport-archive/{transportId}";
+
     /// <param name="view">Optional manager screen of the route plan: <c>change-decision</c> or <c>return-activation</c>.</param>
     public static string? RoutePlan(EmployeeRole? role, Guid routePlanId, string? view = null) => role switch
     {

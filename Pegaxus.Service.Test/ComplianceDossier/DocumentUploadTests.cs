@@ -478,6 +478,8 @@ public class DocumentUploadTests
             Deleted.Add(storageUrl);
             return Task.CompletedTask;
         }
+        public Task<Pegaxus.Service.DocumentStorageService.StoredDocumentFile> UploadExportAsync(string fileName, string contentType, Stream content, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.DocumentStorageService.SignedDocumentUrl> CreateExportUrlAsync(string storageUrl, string fileName, DateTimeOffset expiresAt, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     internal sealed class LostCommitTransactionManager : IDbContextTransactionManager

@@ -260,6 +260,15 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>The transport archive, the audit view and the audit package export (with its background worker).</summary>
+    public static IServiceCollection AddAuditModule(this IServiceCollection services)
+    {
+        services.AddSingleton<Pegaxus.Service.AuditService.AuditExportQueue>();
+        services.AddScoped<Pegaxus.Service.AuditService.IAuditService, Pegaxus.Service.AuditService.Service>();
+        services.AddHostedService<Pegaxus.API.Services.AuditExportWorker>();
+        return services;
+    }
+
     /// <summary>Read-only management reports for the logistics manager.</summary>
     public static IServiceCollection AddReportsModule(this IServiceCollection services)
     {

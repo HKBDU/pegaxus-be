@@ -462,6 +462,8 @@ public class DossierViewingTests
         public Task<Pegaxus.Service.DocumentStorageService.StoredDocumentFile> UploadAsync(Guid versionId, int sortOrder, Microsoft.AspNetCore.Http.IFormFile file, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Pegaxus.Service.DocumentStorageService.SignedDocumentUrl> CreateReadUrlAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task DeleteAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.DocumentStorageService.StoredDocumentFile> UploadExportAsync(string fileName, string contentType, Stream content, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.DocumentStorageService.SignedDocumentUrl> CreateExportUrlAsync(string storageUrl, string fileName, DateTimeOffset expiresAt, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class RecordingMediaService : Pegaxus.Service.MediaService.IMediaService
