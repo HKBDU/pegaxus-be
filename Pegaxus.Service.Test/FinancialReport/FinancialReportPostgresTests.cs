@@ -58,7 +58,7 @@ public class FinancialReportPostgresTests
         finally { await seed.Database.EnsureDeletedAsync(); }
     }
 
-    private sealed class EnumTranslator : INpgsqlNameTranslator
+    internal sealed class EnumTranslator : INpgsqlNameTranslator
     {
         public string TranslateTypeName(string name) => new NpgsqlSnakeCaseNameTranslator().TranslateTypeName(name);
         public string TranslateMemberName(string name) => name;

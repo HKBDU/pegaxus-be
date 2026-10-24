@@ -260,6 +260,13 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>Read-only management reports for the logistics manager.</summary>
+    public static IServiceCollection AddReportsModule(this IServiceCollection services)
+    {
+        services.AddScoped<Pegaxus.Service.ReportService.IReportService, Pegaxus.Service.ReportService.Service>();
+        return services;
+    }
+
     /// <summary>Invoices, online payment checkout and the payment webhook.</summary>
     public static IServiceCollection AddInvoicingModule(this IServiceCollection services, IConfiguration configuration)
     {
