@@ -232,6 +232,9 @@ public class HandoverDeliveryTests
     private sealed class FailingReports : Pegaxus.Service.FinancialReportService.IFinancialReportService
     {
         public Task EnsureAsync(Guid transportId, CancellationToken cancellationToken = default) => throw new InvalidOperationException("The report store is down");
+        public Task<Pegaxus.Service.FinancialReportService.Response.FinancialReportResponse> GetAsync(Guid accountId, Guid transportId, bool allowProvisional, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.FinancialReportService.Response.FinancialReportResponse> RefreshAsync(Guid accountId, Guid transportId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.FinancialReportService.Response.FinancialReportResponse> UpdateNoteAsync(Guid accountId, Guid transportId, Pegaxus.Service.FinancialReportService.Request.UpdateNoteRequest request, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     // ------------------------------------------------------------ EP1
