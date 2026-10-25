@@ -218,6 +218,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         proposed = InheritPersonnel(proposed, active);
         await ValidateResourcesAsync(proposed, plan, true, cancellationToken);
         var now = NextVersion(plan);
+        var removedVehicleIds = new List<Guid>();
         foreach (var segment in proposed)
         {
             var row = await db.RoutePlanRoutes.Include(x => x.RoutePlanRouteVehicles).SingleAsync(x => x.RoutePlanRouteId == segment.RoutePlanRouteId, cancellationToken);
@@ -225,7 +226,9 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             row.DriverEmployeeId = segment.Driver?.EmployeeId; row.EscortEmployeeId = segment.Escort?.EmployeeId;
             row.Note = segment.Note; row.UpdatedAt = now;
             var desired = segment.Vehicles.Select(x => x.VehicleId).ToArray();
-            db.RoutePlanRouteVehicles.RemoveRange(row.RoutePlanRouteVehicles.Where(x => !desired.Contains(x.VehicleId)));
+            var dropped = row.RoutePlanRouteVehicles.Where(x => !desired.Contains(x.VehicleId)).ToList();
+            removedVehicleIds.AddRange(dropped.Select(x => x.VehicleId));
+            db.RoutePlanRouteVehicles.RemoveRange(dropped);
             foreach (var id in desired.Where(id => !row.RoutePlanRouteVehicles.Any(x => x.VehicleId == id)))
                 db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = row.RoutePlanRouteId, VehicleId = id, AssignedAt = now });
             if (row.TransportProviderId is Guid providerId && !await db.TransportPlanProviders.AnyAsync(x =>
@@ -238,6 +241,19 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             var vehicle = await db.Vehicles.SingleAsync(x => x.VehicleId == id, cancellationToken);
             if (db.Database.IsRelational()) await db.Entry(vehicle).ReloadAsync(cancellationToken);
             if (vehicle.Status == VehicleStatus.AVAILABLE) { vehicle.Status = VehicleStatus.ASSIGNED; vehicle.UpdatedAt = now; }
+        }
+        // A vehicle dropped from the return route goes back to the pool unless this plan still uses it or another confirmed or active plan holds it.
+        var kept = proposed.SelectMany(x => x.Vehicles).Select(x => x.VehicleId).ToHashSet();
+        var droppedIds = removedVehicleIds.Where(id => !kept.Contains(id)).Distinct().ToList();
+        var heldElsewhere = await db.RoutePlanRouteVehicles.AsNoTracking()
+            .Where(x => droppedIds.Contains(x.VehicleId) && x.RoutePlanRoute.RoutePlanId != plan.RoutePlanId && x.RoutePlanRoute.ActualArrivalAt == null &&
+                (x.RoutePlanRoute.RoutePlan.Status == RoutePlanStatus.CONFIRMED || x.RoutePlanRoute.RoutePlan.Status == RoutePlanStatus.ACTIVE))
+            .Select(x => x.VehicleId).Distinct().ToListAsync(cancellationToken);
+        foreach (var id in droppedIds.Except(heldElsewhere))
+        {
+            var vehicle = await db.Vehicles.SingleAsync(x => x.VehicleId == id, cancellationToken);
+            if (db.Database.IsRelational()) await db.Entry(vehicle).ReloadAsync(cancellationToken);
+            if (vehicle.Status == VehicleStatus.ASSIGNED) { vehicle.Status = VehicleStatus.AVAILABLE; vehicle.UpdatedAt = now; }
         }
         await SupersedeAsync(remaining, now, cancellationToken);
         plan.Status = RoutePlanStatus.ACTIVE; plan.UpdatedAt = now;

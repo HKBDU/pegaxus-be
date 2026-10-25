@@ -41,6 +41,19 @@ public static class Request
         public string Reason { get; set; } = string.Empty;
     }
 
+    public sealed class ChangeVehiclesRequest
+    {
+        public DateTimeOffset LastUpdatedAt { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public List<SegmentVehiclesRequest> Segments { get; set; } = [];
+    }
+
+    public sealed class SegmentVehiclesRequest
+    {
+        public int SequenceNo { get; set; }
+        public List<Guid> VehicleIds { get; set; } = [];
+    }
+
     public sealed class SegmentRequest
     {
         public int SequenceNo { get; set; }
