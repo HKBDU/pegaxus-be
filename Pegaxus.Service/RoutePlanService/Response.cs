@@ -37,6 +37,14 @@ public static class Response
         public DateTimeOffset UpdatedAt { get; init; }
     }
 
+    public sealed class VehicleChangeResponse
+    {
+        public Guid RoutePlanId { get; init; }
+        public required string Status { get; init; }
+        public List<Guid> ReleasedVehicleIds { get; init; } = [];
+        public DateTimeOffset UpdatedAt { get; init; }
+    }
+
     public sealed class CancelResponse
     {
         public Guid RoutePlanId { get; init; }

@@ -154,8 +154,21 @@ public class HandoverCompletionTests
         db.Add(new RoutePlanRouteVehicle { RoutePlanRoute = segment, Vehicle = vehicle }); await db.SaveChangesAsync();
         await f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId);
         await f.Service.CompleteAsync(f.Transfer.HandoverRecordId, Request(f.Transfer), f.Manager.AccountId);
-        await f.Service.CompleteAsync(f.Delivery.HandoverRecordId, Request(f.Delivery), f.Manager.AccountId);
-        Assert.Equal(VehicleStatus.IN_USE, vehicle.Status);
+        var result = await f.Service.CompleteAsync(f.Delivery.HandoverRecordId, Request(f.Delivery), f.Manager.AccountId);
+        Assert.Equal(VehicleStatus.ASSIGNED, vehicle.Status); Assert.Empty(result.Effects!.ReleasedVehicles!);
+    }
+
+    [Fact]
+    public async Task Complete_PickupIsBlockedWhileVehicleIsStillOnAnotherTrip()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db); var vehicle = AddVehicle(db, f.First, f.Second);
+        var (other, segment) = await PersonnelAssignmentTests.RouteAsync(db, RoutePlanStatus.ACTIVE); other.TransportPlan.Transport.Status = TransportStatus.IN_TRANSIT;
+        segment.ActualDepartureAt = Fixture.Now.AddHours(-3);
+        db.Add(new RoutePlanRouteVehicle { RoutePlanRoute = segment, Vehicle = vehicle }); await db.SaveChangesAsync();
+
+        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId));
+
+        Assert.Equal("VEHICLE_STILL_ON_ANOTHER_TRIP", error.ErrorCode); Assert.Equal(VehicleStatus.ASSIGNED, vehicle.Status);
     }
 
     [Fact]

@@ -61,7 +61,8 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             var lastDay = request.AvailableTo.Value > today ? request.AvailableTo.Value : today;
             var assignments = UnfinishedAssignments();
             var now = Now();
-            query = query.Where(x => (x.Status == VehicleStatus.AVAILABLE || x.Status == VehicleStatus.ASSIGNED) &&
+            // IN_USE stays listed: the assignment filter below hides it only when its trip overlaps the requested window.
+            query = query.Where(x => (x.Status == VehicleStatus.AVAILABLE || x.Status == VehicleStatus.ASSIGNED || x.Status == VehicleStatus.IN_USE) &&
                 (!x.RegistrationExpiryDate.HasValue || x.RegistrationExpiryDate > lastDay) &&
                 (!x.InsuranceExpiryDate.HasValue || x.InsuranceExpiryDate > lastDay) &&
                 !assignments.Any(a => a.VehicleId == x.VehicleId &&

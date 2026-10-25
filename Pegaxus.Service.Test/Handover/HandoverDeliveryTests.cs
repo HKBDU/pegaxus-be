@@ -39,6 +39,20 @@ public class HandoverDeliveryTests
     // ------------------------------------------------------------ effects
 
     [Fact]
+    public async Task Delivery_SendsARepairVehicleToMaintenanceEvenWhenItIsBookedOnALaterTrip()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
+        var vehicle = AddVehicle(db, f.First, f.Second);
+        var (other, later) = await PersonnelAssignmentTests.RouteAsync(db, RoutePlanStatus.CONFIRMED); other.TransportPlan.Transport.Status = TransportStatus.READY;
+        db.Add(new RoutePlanRouteVehicle { RoutePlanRoute = later, Vehicle = vehicle }); AddRepairIncident(db, f, vehicle); await db.SaveChangesAsync();
+
+        var delivery = await DeliverAsync(f);
+
+        Assert.Equal(VehicleStatus.MAINTENANCE, vehicle.Status);
+        Assert.Equal("MAINTENANCE", Assert.Single(delivery.Effects!.ReleasedVehicles!).NewStatus);
+    }
+
+    [Fact]
     public async Task Delivery_ReportsTheDiscrepancyFlag_AndTheVehiclesItReleased()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
