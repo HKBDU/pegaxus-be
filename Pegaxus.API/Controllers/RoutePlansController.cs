@@ -62,6 +62,20 @@ public sealed class RoutePlansController(RoutePlanService.IRoutePlanService serv
         return Success(response, "Route plan updated successfully");
     }
 
+    /// <summary>Change the vehicles of a confirmed route plan before departure.</summary>
+    /// <remarks>Only the Route Coordinator can use this, and only while the PRIMARY route plan is CONFIRMED (legal review passed, PICKUP not yet completed). Each listed segment replaces its vehicles; the new vehicles pass the same checks as when planning (status, capacity, documents, schedule). A replaced vehicle that no other confirmed or active plan holds returns to AVAILABLE. Errors include INVALID_ROUTE_PLAN_STATUS, INVALID_ROUTE_PLAN_TYPE, ROUTE_PLAN_MODIFIED, VEHICLE_UNAVAILABLE and VEHICLE_SCHEDULE_CONFLICT.</remarks>
+    /// <param name="routePlanId">The route plan identifier.</param>
+    /// <param name="request">The reason, the concurrency token and the new vehicles per segment sequence number.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the route plan status and the vehicles that went back to the pool.</returns>
+    [HttpPatch("/api/v1/route-plans/{routePlanId:guid}/vehicles")]
+    [Authorize(Policy = JwtExtensions.EmployeePolicy)]
+    public async Task<IActionResult> ChangeVehicles(Guid routePlanId, [FromBody] RoutePlanService.Request.ChangeVehiclesRequest request, CancellationToken cancellationToken)
+    {
+        var response = await service.ChangeVehiclesAsync(AccountId, routePlanId, request, cancellationToken);
+        return Success(response, "Route plan vehicles changed successfully");
+    }
+
     /// <summary>Cancel a draft route plan.</summary>
     /// <param name="routePlanId">The route plan identifier.</param>
     /// <param name="request">The cancellation reason and concurrency token.</param>

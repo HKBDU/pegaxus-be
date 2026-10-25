@@ -66,6 +66,22 @@ public sealed partial class Service
     private static bool ValidParty(HandoverPartyType type, Guid? customerId, Guid? employeeId) => type switch
     { HandoverPartyType.CUSTOMER => customerId.HasValue && employeeId is null, HandoverPartyType.EMPLOYEE => employeeId.HasValue && customerId is null, _ => false };
 
+    private IQueryable<RoutePlanRouteVehicle> UnfinishedElsewhere(Guid[] vehicleIds, Guid transportId) => db.RoutePlanRouteVehicles.AsNoTracking().Where(link => vehicleIds.Contains(link.VehicleId) &&
+        link.RoutePlanRoute.RoutePlan.TransportPlan.TransportId != transportId && link.RoutePlanRoute.ActualArrivalAt == null &&
+        (link.RoutePlanRoute.SupersededAt == null || link.RoutePlanRoute.ActualDepartureAt != null) &&
+        link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
+        link.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED &&
+        link.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.CANCELLED);
+
+    /// <summary>A vehicle booked ahead for this trip may still be on its previous one when the planned times slip, so PICKUP must not take it.</summary>
+    private async Task EnsureVehiclesReturnedAsync(Transport transport, RoutePlanRoute[] effective, CancellationToken cancellationToken)
+    {
+        var segmentIds = effective.Select(segment => segment.RoutePlanRouteId).ToArray();
+        var vehicleIds = await db.RoutePlanRouteVehicles.Where(link => segmentIds.Contains(link.RoutePlanRouteId)).Select(link => link.VehicleId).Distinct().ToArrayAsync(cancellationToken);
+        if (await UnfinishedElsewhere(vehicleIds, transport.TransportId).AnyAsync(link => link.RoutePlanRoute.ActualDepartureAt != null, cancellationToken))
+            throw new UnprocessableEntityException("A vehicle of this transport is still on another unfinished trip", "VEHICLE_STILL_ON_ANOTHER_TRIP");
+    }
+
     private async Task<Response.CompletionEffects> ApplyEffectsAsync(HandoverRecord item, Transport transport, RoutePlanRoute[] segments, RoutePlanRoute[] effective, DateTime now, CancellationToken cancellationToken)
     {
         var from = segments.SingleOrDefault(segment => segment.RoutePlanRouteId == item.FromRoutePlanRouteId);
@@ -99,13 +115,7 @@ public sealed partial class Service
             var segmentIds = (item.HandoverType == HandoverType.PICKUP ? effective : segments).Select(segment => segment.RoutePlanRouteId).ToArray();
             var vehicleIds = await db.RoutePlanRouteVehicles.Where(link => segmentIds.Contains(link.RoutePlanRouteId)).Select(link => link.VehicleId).Distinct().OrderBy(id => id).ToArrayAsync(cancellationToken);
             foreach (var id in vehicleIds) await db.LockRowsAsync(db.Vehicles.Where(vehicle => vehicle.VehicleId == id), vehicle => vehicle.VehicleId, cancellationToken);
-            var busy = await db.RoutePlanRouteVehicles.AsNoTracking().Where(link => vehicleIds.Contains(link.VehicleId) &&
-                    link.RoutePlanRoute.RoutePlan.TransportPlan.TransportId != transport.TransportId && link.RoutePlanRoute.ActualArrivalAt == null &&
-                    (link.RoutePlanRoute.SupersededAt == null || link.RoutePlanRoute.ActualDepartureAt != null) &&
-                    link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && link.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
-                    link.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED &&
-                    link.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.COMPLETED && link.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.CANCELLED)
-                .Select(link => link.VehicleId).Distinct().ToArrayAsync(cancellationToken);
+            var busy = await UnfinishedElsewhere(vehicleIds, transport.TransportId).Select(link => link.VehicleId).Distinct().ToArrayAsync(cancellationToken);
             // O-F6-19: a vehicle that this trip left needing repair goes to maintenance instead of back to the pool.
             var needsRepair = item.HandoverType == HandoverType.DELIVERY
                 ? await db.VehicleIncidentDetails.AsNoTracking().Where(detail => detail.RepairRequired && vehicleIds.Contains(detail.VehicleId) &&
@@ -116,9 +126,10 @@ public sealed partial class Service
             {
                 await db.Entry(vehicle).ReloadAsync(cancellationToken);
                 if (!vehicle.IsDeleted && item.HandoverType == HandoverType.PICKUP && vehicle.Status == VehicleStatus.ASSIGNED) { vehicle.Status = VehicleStatus.IN_USE; vehicle.UpdatedAt = now; }
-                if (!vehicle.IsDeleted && item.HandoverType == HandoverType.DELIVERY && vehicle.Status == VehicleStatus.IN_USE && !busy.Contains(vehicle.VehicleId)) {
-                    vehicle.Status = needsRepair.Contains(vehicle.VehicleId) ? VehicleStatus.MAINTENANCE : VehicleStatus.AVAILABLE; vehicle.UpdatedAt = now;
-                    released.Add(new(vehicle.VehicleId, vehicle.VehicleCode, vehicle.LicensePlate, vehicle.Status.ToString()));
+                if (!vehicle.IsDeleted && item.HandoverType == HandoverType.DELIVERY && vehicle.Status == VehicleStatus.IN_USE) {
+                    // A vehicle already booked on a later trip is idle until that trip's PICKUP, so it returns to ASSIGNED rather than the pool.
+                    vehicle.Status = needsRepair.Contains(vehicle.VehicleId) ? VehicleStatus.MAINTENANCE : busy.Contains(vehicle.VehicleId) ? VehicleStatus.ASSIGNED : VehicleStatus.AVAILABLE; vehicle.UpdatedAt = now;
+                    if (vehicle.Status != VehicleStatus.ASSIGNED) released.Add(new(vehicle.VehicleId, vehicle.VehicleCode, vehicle.LicensePlate, vehicle.Status.ToString()));
                 }
             }
         }

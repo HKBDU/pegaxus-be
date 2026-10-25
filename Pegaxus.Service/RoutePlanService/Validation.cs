@@ -101,13 +101,13 @@ public sealed partial class Service
                     route.EstimatedDurationMinutes = metrics.DurationMinutes;
                 }
             }
-            await ValidateVehicleAndProviderAsync(request, route, plan, excludedRoutePlanId, routeType, cancellationToken);
+            await ValidateVehicleAndProviderAsync(request, route, plan, excludedRoutePlanId, cancellationToken);
             result.Add(new MaterializedSegment(request, route, typeOf(request)));
         }
         return result;
     }
 
-    private async Task ValidateVehicleAndProviderAsync(Request.SegmentRequest request, Route route, TransportPlan plan, Guid? excludedRoutePlanId, RouteType routeType, CancellationToken cancellationToken)
+    private async Task ValidateVehicleAndProviderAsync(Request.SegmentRequest request, Route route, TransportPlan plan, Guid? excludedRoutePlanId, CancellationToken cancellationToken)
     {
         if (request.Outsourcing is not null)
         {
@@ -124,13 +124,8 @@ public sealed partial class Service
             throw new NotFoundException("Vehicle not found", "VEHICLE_NOT_FOUND");
         if (vehicles.Any(item => item.TransportMode != route.TransportMode))
             throw new UnprocessableEntityException("The vehicle transport mode does not match the segment", "VEHICLE_MODE_MISMATCH");
-        // A RETURN continues the trip, so the vehicles already driving this plan's primary route are still usable.
-        var ownVehicleIds = routeType == RouteType.RETURN
-            ? await db.RoutePlanRouteVehicles.Where(item => item.RoutePlanRoute.RoutePlan.TransportPlanId == plan.TransportPlanId)
-                .Select(item => item.VehicleId).Distinct().ToListAsync(cancellationToken)
-            : [];
-        if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED) &&
-                !(item.Status == VehicleStatus.IN_USE && ownVehicleIds.Contains(item.VehicleId))))
+        // An IN_USE vehicle is mid-trip: whether it is free for this plan is decided by the schedule check below, not by its flag.
+        if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED or VehicleStatus.IN_USE)))
             throw new UnprocessableEntityException("The vehicle is not available", "VEHICLE_UNAVAILABLE");
         if (vehicles.Sum(item => item.CapacityHorses ?? 0) < plan.Transport.Booking.BookingHorses.Count)
             throw new UnprocessableEntityException("Total vehicle capacity is lower than the number of horses in the booking", "VEHICLE_CAPACITY_EXCEEDED");
@@ -143,6 +138,7 @@ public sealed partial class Service
         var vehicleIds = vehicles.Select(item => item.VehicleId).ToList();
         var departureAt = Truncate(request.PlannedDepartureAt);
         var arrivalAt = Truncate(request.PlannedArrivalAt);
+        var now = UtcNowTruncated();
         var overlappingAssignment = await db.RoutePlanRouteVehicles
             .Include(item => item.RoutePlanRoute)
                 .ThenInclude(item => item.RoutePlan)
@@ -150,8 +146,9 @@ public sealed partial class Service
                 item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                 (!excludedRoutePlanId.HasValue || item.RoutePlanRoute.RoutePlanId != excludedRoutePlanId.Value) &&
                 item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId &&
-                item.RoutePlanRoute.PlannedDepartureAt < arrivalAt &&
-                item.RoutePlanRoute.PlannedArrivalAt > departureAt)
+                (item.RoutePlanRoute.PlannedDepartureAt < arrivalAt && item.RoutePlanRoute.PlannedArrivalAt > departureAt ||
+                 // A segment that left but has not arrived keeps its vehicle past the planned arrival.
+                 item.RoutePlanRoute.ActualDepartureAt != null && item.RoutePlanRoute.ActualArrivalAt == null && item.RoutePlanRoute.PlannedArrivalAt < now))
             .Select(item => item.VehicleId)
             .FirstOrDefaultAsync(cancellationToken);
         if (overlappingAssignment != Guid.Empty)
