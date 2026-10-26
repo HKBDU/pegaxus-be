@@ -27,6 +27,8 @@ public class SeedIdTests
         ids.AddRange(await db.ComplianceDossiers.Select(x => x.ComplianceDossierId).ToListAsync());
         ids.AddRange(await db.DossierRequirements.Select(x => x.DossierRequirementId).ToListAsync());
         ids.AddRange(await db.Locations.Select(x => x.LocationId).ToListAsync());
+        ids.AddRange(await db.Vehicles.Select(x => x.VehicleId).ToListAsync());
+        ids.AddRange(await db.TransportProviders.Select(x => x.TransportProviderId).ToListAsync());
 
         Assert.True(ids.Count > 250);
         Assert.Equal(ids.Count, ids.Distinct().Count());
