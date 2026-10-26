@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Pegaxus.Service.DossierTemplateService;
 
 public static class Response
@@ -26,6 +28,10 @@ public static class Response
         public DateTimeOffset UpdatedAt { get; init; }
         public required IReadOnlyList<ItemResponse> Items { get; init; }
         public int ItemCount => Items.Count;
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public bool? IsRecommended { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public int? RecommendationRank { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public IReadOnlyList<string>? MatchedCountries { get; set; }
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public string? RecommendationReason { get; set; }
     }
 
     public sealed class ItemResponse

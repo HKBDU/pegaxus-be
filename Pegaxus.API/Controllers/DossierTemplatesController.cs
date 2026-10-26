@@ -17,8 +17,8 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
     /// <summary>
     /// List dossier templates.
     /// </summary>
-    /// <remarks>Transport Specialists may search and filter templates. An ACTIVE filter only returns templates effective today.</remarks>
-    /// <param name="request">The search, status, and pagination filters.</param>
+    /// <remarks>Transport Specialists may search and filter templates. An ACTIVE filter only returns templates effective today. With bookingId (an APPROVED booking) only templates that can be applied are listed, each with isRecommended, recommendationRank, matchedCountries and recommendationReason, ranked by how the countries of their requirements fit the route of the booking: both ends, one end, shared requirements only, then the rest. A template that asks for a country outside the route is never recommended. sortBy=recommendation:desc orders by that rank and needs bookingId; the direction of the trip is not considered.</remarks>
+    /// <param name="request">The search, status, pagination, booking and sort filters.</param>
     /// <param name="validator">The injected validator for the request.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with a paginated template list.</returns>
