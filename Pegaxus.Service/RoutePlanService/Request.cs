@@ -45,12 +45,14 @@ public static class Request
     {
         public DateTimeOffset LastUpdatedAt { get; set; }
         public string Reason { get; set; } = string.Empty;
+        public Guid? IncidentReportId { get; set; }
         public List<SegmentVehiclesRequest> Segments { get; set; } = [];
     }
 
     public sealed class SegmentVehiclesRequest
     {
-        public int SequenceNo { get; set; }
+        public int? SequenceNo { get; set; }
+        public Guid? RoutePlanRouteId { get; set; }
         public List<Guid> VehicleIds { get; set; } = [];
     }
 
