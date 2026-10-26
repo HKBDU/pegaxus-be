@@ -41,6 +41,7 @@ public partial class Service
             booking.CancellationReason = reason;
             if (booking.Transport is not null)
             {
+                await CancelTransportWorkAsync(booking, booking.Transport, accountId, reason, now, cancellationToken);
                 booking.Transport.Status = TransportStatus.CANCELLED;
                 booking.Transport.CancelledAt = now;
                 booking.Transport.CancellationReason = reason;
