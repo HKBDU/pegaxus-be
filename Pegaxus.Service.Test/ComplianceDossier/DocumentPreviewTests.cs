@@ -13,7 +13,7 @@ public class DocumentPreviewTests
     [Fact]
     public async Task AuthenticatedPreview_SupportsFiveMegabytesAndUsesExpiringPrivateDownload()
     {
-        var bytes = new byte[5 * 1024 * 1024];
+        var bytes = new byte[10 * 1024 * 1024];
         "%PDF-1.7"u8.CopyTo(bytes);
         var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(bytes) });
         var result = await CreateService(handler).DownloadPreviewAsync(
@@ -32,7 +32,7 @@ public class DocumentPreviewTests
     {
         var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
-            Content = new ByteArrayContent(new byte[5 * 1024 * 1024 + 1])
+            Content = new ByteArrayContent(new byte[10 * 1024 * 1024 + 1])
         });
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => CreateService(handler).DownloadPreviewAsync(url));
         Assert.Equal(413, error.StatusCode);
@@ -99,7 +99,7 @@ public class DocumentPreviewTests
     [InlineData(true)]
     public async Task OversizedFiles_AreRejectedEvenWithoutContentLength(bool withoutContentLength)
     {
-        var bytes = new byte[5 * 1024 * 1024 + 1];
+        var bytes = new byte[10 * 1024 * 1024 + 1];
         var handler = new RecordingHandler(_ => new HttpResponseMessage(HttpStatusCode.OK)
         {
             Content = withoutContentLength ? new UnknownLengthContent(bytes) : new ByteArrayContent(bytes)

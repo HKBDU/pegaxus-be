@@ -10,7 +10,7 @@ public interface IDocumentStorageService
     Task<SignedDocumentUrl> CreateReadUrlAsync(string storageUrl, CancellationToken cancellationToken = default);
     Task DeleteAsync(string storageUrl, CancellationToken cancellationToken = default);
 
-    /// <summary>Stores a generated audit package under <c>exports/</c>. Unlike documents there is no 5 MB or file type limit; the stream must be seekable.</summary>
+    /// <summary>Stores a generated audit package under <c>exports/</c>. Unlike documents there is no size or file type limit; the stream must be seekable.</summary>
     Task<StoredDocumentFile> UploadExportAsync(string fileName, string contentType, Stream content, CancellationToken cancellationToken = default);
 
     /// <summary>A download link for a stored audit package that stays valid until <paramref name="expiresAt"/>.</summary>

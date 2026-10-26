@@ -37,7 +37,7 @@ public class PrivateHealthImageTests
     public async Task Upload_RejectsInvalidImagesBeforeProviderCall(string scenario)
     {
         var service = new Storage(); byte[] bytes = scenario switch { "empty" => [], "signature" => "bad image"u8.ToArray(),
-            "oversized" => new byte[5 * 1024 * 1024 + 1], _ => HorseHealthLogTests.Png };
+            "oversized" => new byte[10 * 1024 * 1024 + 1], _ => HorseHealthLogTests.Png };
         var image = new PreviewFile(bytes, scenario == "type" ? "application/pdf" : "image/png");
         Assert.Equal("INVALID_IMAGE", (await Assert.ThrowsAsync<BadRequestException>(() =>
             service.UploadPrivateImageAsync(scenario == "emptyId" ? Guid.Empty : Guid.NewGuid(), image))).ErrorCode);

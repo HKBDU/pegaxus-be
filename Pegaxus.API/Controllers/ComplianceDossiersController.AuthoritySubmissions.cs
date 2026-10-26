@@ -33,7 +33,7 @@ public sealed partial class ComplianceDossiersController
     /// <summary>
     /// Record an authority submission.
     /// </summary>
-    /// <remarks>Transport Specialists record a dossier submission using JSON. Includes the authority, submission reference, submission time, and the publicId of the proof file (PDF/JPG/PNG up to 2 MB) uploaded through /api/v1/uploads/signature.</remarks>
+    /// <remarks>Transport Specialists record a dossier submission using JSON. Includes the authority, submission reference, submission time, and the publicId of the proof file (PDF/JPG/PNG up to 10 MB) uploaded through /api/v1/uploads/signature.</remarks>
     /// <param name="dossierId">The compliance dossier identifier (UUID).</param>
     /// <param name="request">The authority submission details and proof file publicId.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
@@ -60,7 +60,7 @@ public sealed partial class ComplianceDossiersController
     /// <summary>
     /// Record an authority decision.
     /// </summary>
-    /// <remarks>Transport Specialists submit APPROVED, REJECTED, or RETURNED decisions using JSON and a required decision file publicId (PDF/JPG/PNG up to 2 MB) uploaded through /api/v1/uploads/signature. Updates dossier status according to this decision and other mandatory submissions.</remarks>
+    /// <remarks>Transport Specialists submit APPROVED, REJECTED, or RETURNED decisions using JSON and a required decision file publicId (PDF/JPG/PNG up to 10 MB) uploaded through /api/v1/uploads/signature. Updates dossier status according to this decision and other mandatory submissions.</remarks>
     /// <param name="submissionId">The authority submission identifier (UUID).</param>
     /// <param name="request">The decision, decision file publicId, and decision-specific permit number, rejection reason, or revision deadline.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>

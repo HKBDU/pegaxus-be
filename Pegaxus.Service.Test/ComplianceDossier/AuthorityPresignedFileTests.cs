@@ -35,7 +35,7 @@ public class AuthorityPresignedFileTests
         var missing = await Assert.ThrowsAsync<BadRequestException>(() => service.RecordAuthoritySubmissionAsync(specialist, dossierId, Submission(null)));
         Assert.Equal("INVALID_FILE_TYPE", missing.ErrorCode);
         var oversized = await Assert.ThrowsAsync<Pegaxus.Service.Exceptions.Exceptions>(() => service.RecordAuthoritySubmissionAsync(specialist, dossierId,
-            Submission(DocumentUploadTests.File("proof.pdf", "application/pdf", 2 * 1024 * 1024 + 1))));
+            Submission(DocumentUploadTests.File("proof.pdf", "application/pdf", 10 * 1024 * 1024 + 1))));
         Assert.Equal("FILE_TOO_LARGE", oversized.ErrorCode);
         Assert.Empty(await db.AuthoritySubmissions.ToListAsync());
     }

@@ -78,7 +78,7 @@ public class VehicleIncidentHttpTests
         Assert.Equal(HttpStatusCode.OK, update.StatusCode);
         var updated = (await update.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("value");
         Assert.Equal(followed.GetProperty("horseDetails").GetRawText(), updated.GetProperty("horseDetails").GetRawText());
-        Assert.Equal("OUT_OF_SERVICE", updated.GetProperty("vehicleDetail").GetProperty("vehicle").GetProperty("status").GetString());
+        Assert.Equal("IN_USE", updated.GetProperty("vehicleDetail").GetProperty("vehicle").GetProperty("status").GetString());
         Assert.Equal(3, updated.GetProperty("photos").GetArrayLength());
         var medicalLog = await db.HorseHealthLogs.SingleAsync();
         Assert.Equal(HorseHealthStatus.CRITICAL, medicalLog.HealthStatus); Assert.Equal(39.2m, medicalLog.TemperatureCelsius);

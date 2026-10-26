@@ -17,7 +17,7 @@ public class CloudinaryUploadTests
     [Fact]
     public async Task Signature_SupportsFiveMegabytesAndPreventsPublicDeliveryOrOverwrite()
     {
-        var result = await new TestCloudinary().CreateSignedUploadAsync(AccountId, "attachment", "application/pdf", 5 * 1024 * 1024);
+        var result = await new TestCloudinary().CreateSignedUploadAsync(AccountId, "attachment", "application/pdf", 10 * 1024 * 1024);
         Assert.StartsWith($"evidence/{AccountId:D}/", result.PublicId);
         Assert.Equal("authenticated", result.Parameters["type"]);
         Assert.Equal("false", result.Parameters["overwrite"]);
@@ -29,7 +29,7 @@ public class CloudinaryUploadTests
     public async Task Signature_RejectsFilesLargerThanFiveMegabytes()
     {
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() =>
-            new TestCloudinary().CreateSignedUploadAsync(AccountId, "attachment", "application/pdf", 5 * 1024 * 1024 + 1));
+            new TestCloudinary().CreateSignedUploadAsync(AccountId, "attachment", "application/pdf", 10 * 1024 * 1024 + 1));
         Assert.Equal(413, error.StatusCode);
         Assert.Equal("FILE_TOO_LARGE", error.ErrorCode);
     }
@@ -83,7 +83,7 @@ public class CloudinaryUploadTests
         var resource = Resource();
         switch (invalid)
         {
-            case "oversized": resource.Bytes = 5 * 1024 * 1024 + 1; break;
+            case "oversized": resource.Bytes = 10 * 1024 * 1024 + 1; break;
             case "empty": resource.Bytes = 0; break;
             case "format": resource.Format = "exe"; break;
             case "public": resource.Type = "upload"; break;
@@ -126,13 +126,13 @@ public class CloudinaryUploadTests
     [Fact]
     public async Task AvatarSignature_IsPublicLimitedToTwoMegabytesAndScopedToTheAccount()
     {
-        var result = await new TestCloudinary().CreateSignedUploadAsync(AccountId, " Avatar ", "image/png", 2 * 1024 * 1024);
+        var result = await new TestCloudinary().CreateSignedUploadAsync(AccountId, " Avatar ", "image/png", 10 * 1024 * 1024);
         Assert.StartsWith($"avatars/{AccountId:D}/", result.PublicId);
         Assert.Equal("upload", result.Parameters["type"]);
         Assert.Equal("jpg,jpeg,png", result.Parameters["allowed_formats"]);
         Assert.Equal("false", result.Parameters["overwrite"]);
         var tooLarge = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() =>
-            new TestCloudinary().CreateSignedUploadAsync(AccountId, "avatar", "image/png", 2 * 1024 * 1024 + 1));
+            new TestCloudinary().CreateSignedUploadAsync(AccountId, "avatar", "image/png", 10 * 1024 * 1024 + 1));
         Assert.Equal(413, tooLarge.StatusCode);
         var pdf = await Assert.ThrowsAsync<BadRequestException>(() => new TestCloudinary().CreateSignedUploadAsync(AccountId, "avatar", "application/pdf", 1000));
         Assert.Equal("INVALID_FILE_TYPE", pdf.ErrorCode);
@@ -167,7 +167,7 @@ public class CloudinaryUploadTests
         {
             case "foreign-owner": requested = $"avatars/{Guid.NewGuid():D}/file"; break;
             case "authenticated": resource.Type = "authenticated"; break;
-            case "oversized": resource.Bytes = 2 * 1024 * 1024 + 1; break;
+            case "oversized": resource.Bytes = 10 * 1024 * 1024 + 1; break;
             case "format": resource.Format = "pdf"; break;
             case "missing": resource.StatusCode = HttpStatusCode.NotFound; break;
         }

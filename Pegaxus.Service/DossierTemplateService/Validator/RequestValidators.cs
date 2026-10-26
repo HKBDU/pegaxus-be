@@ -10,6 +10,10 @@ public sealed class ListRequestValidator : AbstractValidator<Request.ListRequest
         RuleFor(request => request.PageSize).InclusiveBetween(1, 100);
         RuleFor(request => request.PageIndex).Must((request, index) => ((long)index - 1) * request.PageSize <= int.MaxValue)
             .WithMessage("The requested page is too large.");
+        RuleFor(request => request.BookingId).Must(id => id != Guid.Empty).When(request => request.BookingId is not null)
+            .WithMessage("BookingId must be a valid identifier.");
+        RuleFor(request => request.BookingId).NotNull().When(request => string.Equals(request.SortBy?.Trim(), "recommendation:desc", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("BookingId is required when sortBy is recommendation:desc.");
         RuleFor(request => request.Status).Must(ChangeStatusRequestValidator.IsValidStatus)
             .When(request => request.Status is not null)
             .WithMessage("Status must be DRAFT, ACTIVE or INACTIVE.");

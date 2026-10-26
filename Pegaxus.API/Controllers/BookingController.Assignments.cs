@@ -13,7 +13,7 @@ public sealed partial class BookingController
     /// <summary>
     /// Record a negotiated booking status.
     /// </summary>
-    /// <remarks>A Logistics Manager may change an APPROVED booking to DRAFT or CANCELLED with a required reason. Related dossier operations are suspended and durable notifications are recorded.</remarks>
+    /// <remarks>A Logistics Manager may change an APPROVED booking to DRAFT or CANCELLED with a required reason. Related dossier operations are suspended and durable notifications are recorded. CANCELLED also closes the transport's plans, dossiers, open document requests, planned handovers and unpaid invoices, and frees its vehicles; paid invoices are kept. It is refused with TRANSPORT_ALREADY_DEPARTED once the transport is IN_TRANSIT or COMPLETED, so create a RETURN route plan instead.</remarks>
     /// <param name="bookingId">The booking identifier (UUID).</param>
     /// <param name="request">The negotiated status and required reason.</param>
     /// <param name="validator">The injected validator for the request.</param>

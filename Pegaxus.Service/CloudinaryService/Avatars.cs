@@ -1,4 +1,5 @@
 using CloudinaryDotNet.Actions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MediaService;
 
@@ -6,15 +7,15 @@ namespace Pegaxus.Service.CloudinaryService;
 
 public partial class Service
 {
-    private const long MaxAvatarSize = 2 * 1024 * 1024;
+    private const long MaxAvatarSize = Limits.UploadMaxBytes;
 
     // Avatars are shown in plain <img> tags across the app, so unlike attachments they are delivered publicly.
     private SignedUploadResult CreateAvatarUpload(Guid accountId, string contentType, long sizeBytes)
     {
         if (sizeBytes <= 0 || sizeBytes > MaxAvatarSize)
-            throw new Pegaxus.Service.Exceptions.Exceptions("Image must be greater than 0 and must not exceed 2 MB", 413, "FILE_TOO_LARGE");
+            throw new Pegaxus.Service.Exceptions.Exceptions($"Image must be greater than 0 and must not exceed {Limits.UploadMaxMegabytes} MB", 413, "FILE_TOO_LARGE");
         if (contentType?.Trim().ToLowerInvariant() is not ("image/jpeg" or "image/png"))
-            throw new BadRequestException("Image must be JPG/PNG and no larger than 2 MB", "INVALID_FILE_TYPE");
+            throw new BadRequestException($"Image must be JPG/PNG and no larger than {Limits.UploadMaxMegabytes} MB", "INVALID_FILE_TYPE");
         EnsureConfigured();
         return SignUpload($"avatars/{accountId:D}/{Guid.NewGuid():N}", "upload", "jpg,jpeg,png");
     }
@@ -48,12 +49,12 @@ public partial class Service
         if (result.PublicId != publicId || result.Type != "upload" || result.ResourceType != ResourceType.Image)
             throw new BadRequestException("Uploaded file metadata is invalid", "INVALID_FILE_TYPE");
         if (result.Bytes <= 0 || result.Bytes > MaxAvatarSize)
-            throw new Pegaxus.Service.Exceptions.Exceptions("Image must not be empty or exceed 2 MB", 413, "FILE_TOO_LARGE");
+            throw new Pegaxus.Service.Exceptions.Exceptions($"Image must not be empty or exceed {Limits.UploadMaxMegabytes} MB", 413, "FILE_TOO_LARGE");
         var mimeType = result.Format?.ToLowerInvariant() switch
         {
             "jpg" or "jpeg" => "image/jpeg",
             "png" => "image/png",
-            _ => throw new BadRequestException("Image must be JPG/PNG and no larger than 2 MB", "INVALID_FILE_TYPE")
+            _ => throw new BadRequestException($"Image must be JPG/PNG and no larger than {Limits.UploadMaxMegabytes} MB", "INVALID_FILE_TYPE")
         };
         var fileUrl = result.SecureUrl;
         var location = StorageLocation(fileUrl);

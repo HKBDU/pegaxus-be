@@ -116,7 +116,7 @@ internal static class TestSupport
             OriginCountry = "France",
             DestinationAddress = "Old destination",
             DestinationCountry = "Germany",
-            RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(21),
+            RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(2),
             CreatedAt = now,
             UpdatedAt = now
         };

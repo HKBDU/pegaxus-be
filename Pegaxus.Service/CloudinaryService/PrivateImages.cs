@@ -11,7 +11,7 @@ public partial class Service
     public async Task<string> UploadPrivateImageAsync(Guid imageId, PreviewFile image, CancellationToken cancellationToken = default)
     {
         if (imageId == Guid.Empty || !Images.IsValid(image.Content, image.ContentType))
-            throw new BadRequestException("Only JPG, JPEG, PNG images up to 5MB are accepted. Please try again.", "INVALID_IMAGE");
+            throw new BadRequestException($"Only JPG, JPEG, PNG images up to {Limits.UploadMaxMegabytes}MB are accepted. Please try again.", "INVALID_IMAGE");
         EnsureConfigured();
         cancellationToken.ThrowIfCancellationRequested();
         var publicId = $"health/{imageId:N}";

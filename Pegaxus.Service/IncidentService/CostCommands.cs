@@ -124,6 +124,8 @@ public sealed partial class Service
                         throw new FieldValidationException([new("decisionReason", "Decision reason must contain at least 10 characters after trimming.")]);
                     cost.Status = approve ? EmergencyCostStatus.APPROVED : EmergencyCostStatus.REJECTED;
                     cost.ApprovedAmount = amount;
+                    if (approve && cost.Category == EmergencyCostCategory.REPLACEMENT_VEHICLE)
+                        await LockBrokenVehicleAsync(incidentId, now, ct);
                     db.CostApprovalDecisions.Add(new CostApprovalDecision
                     {
                         CostApprovalDecisionId = Guid.NewGuid(), EmergencyCostRequestId = costId, EmployeeId = actor.EmployeeId,
@@ -158,6 +160,21 @@ public sealed partial class Service
                 throw new ConflictException("The request was just modified. Please reload the page", "EMERGENCY_COST_MODIFIED");
             }
         }
+    }
+
+    /// <summary>
+    /// A vehicle the crew reports as unable to run, and needing a replacement, is taken out of service once the manager approves the replacement cost,
+    /// not when the report arrives. A report made by mistake is cancelled before any cost is approved, so it never locks a vehicle.
+    /// </summary>
+    private async Task LockBrokenVehicleAsync(Guid incidentReportId, DateTime now, CancellationToken ct)
+    {
+        var detail = await db.VehicleIncidentDetails.Include(item => item.Vehicle).SingleOrDefaultAsync(item => item.IncidentReportId == incidentReportId, ct);
+        if (detail is null || detail.VehicleOperable || !detail.ReplacementVehicleRequired) return;
+        await db.LockRowsAsync(db.Vehicles.Where(item => item.VehicleId == detail.VehicleId), item => item.VehicleId, ct);
+        await db.Entry(detail.Vehicle).ReloadAsync(ct);
+        if (detail.Vehicle.Status == VehicleStatus.OUT_OF_SERVICE) return;
+        detail.Vehicle.Status = VehicleStatus.OUT_OF_SERVICE;
+        detail.Vehicle.UpdatedAt = now;
     }
 
     private static void EnsureCostIncidentOpen(IncidentReport incident)

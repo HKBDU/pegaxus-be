@@ -11,6 +11,13 @@ public sealed class InitializeRequestValidator : AbstractValidator<Request.Initi
         RuleFor(request => request.Items).NotEmpty()
             .When(request => request.DossierTemplateId is null || request.Items is not null)
             .WithMessage("Select at least one ComplianceRequirement.");
+        RuleFor(request => request.SelectedTemplateItemIds).NotEmpty()
+            .When(request => request.SelectedTemplateItemIds is not null)
+            .WithMessage("Select at least one ComplianceRequirement.");
+        RuleFor(request => request.SelectedTemplateItemIds)
+            .Must(ids => ids!.All(id => id != Guid.Empty) && ids!.Distinct().Count() == ids!.Count)
+            .When(request => request.SelectedTemplateItemIds is { Count: > 0 })
+            .WithMessage("Each selected DossierTemplateItem must be unique and valid.");
         RuleForEach(request => request.Items).NotNull().ChildRules(item =>
         {
             item.RuleFor(value => value.ComplianceRequirementId).NotEmpty();

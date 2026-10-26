@@ -64,7 +64,7 @@ public sealed class HorsesController : ApiControllerBase
     /// <summary>
     /// Create a horse profile.
     /// </summary>
-    /// <remarks>Creates a horse owned by the authenticated customer. Microchip and passport identifiers must be valid and unique.</remarks>
+    /// <remarks>Creates a horse owned by the authenticated customer. Microchip and passport identifiers must be valid and unique among horses that are not deleted. To give the horse a picture, request a signature from /api/v1/uploads/signature with entity "avatar", upload the JPG or PNG (up to 10 MB) directly to Cloudinary, then submit its publicId in avatar.</remarks>
     /// <param name="request">The horse identity, physical details, passport, and microchip information.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>201 Created with the new horse identifier.</returns>
@@ -90,7 +90,7 @@ public sealed class HorsesController : ApiControllerBase
     /// <summary>
     /// Update a horse profile.
     /// </summary>
-    /// <remarks>Replaces an owned horse's profile. Horses belonging to APPROVED bookings cannot be updated.</remarks>
+    /// <remarks>Replaces an owned horse's profile. Horses belonging to APPROVED bookings cannot be updated. Send avatar (a Cloudinary publicId, see the create action) to change the picture; leaving it out keeps the current one.</remarks>
     /// <param name="horseId">The horse identifier (UUID).</param>
     /// <param name="request">The complete replacement horse profile.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>

@@ -52,7 +52,8 @@ public sealed partial class Service
                 var (incident, transport) = await LockIncidentAsync(incidentReportId, ct);
                 var allowed = request switch
                 {
-                    Request.ResolveRequest or Request.CancelRequest => actor.Role == EmployeeRole.LOGISTICS_MANAGER,
+                    Request.ResolveRequest => actor.Role == EmployeeRole.LOGISTICS_MANAGER,
+                    Request.CancelRequest => actor.Role == EmployeeRole.LOGISTICS_MANAGER || Crew(actor) && await CrewAssignedAsync(transport.TransportId, actor, ct),
                     Request.SelfResolveRequest => Crew(actor) && await CrewAssignedAsync(transport.TransportId, actor, ct),
                     Request.RaiseSeverityRequest => actor.Role == EmployeeRole.LOGISTICS_MANAGER ||
                         await CoordinatorAssignedAsync(transport.TransportId, actor, ct) || Crew(actor) && await CrewAssignedAsync(transport.TransportId, actor, ct),
@@ -60,9 +61,12 @@ public sealed partial class Service
                 };
                 if (!allowed) throw new ForbiddenException("The account cannot perform this action on this incident", "FORBIDDEN");
                 var selfResolve = request is Request.SelfResolveRequest and not Request.ResolveRequest;
-                if (incident.Status is not (IncidentStatus.REPORTED or IncidentStatus.PENDING) || selfResolve && incident.Status != IncidentStatus.REPORTED)
-                    throw new UnprocessableEntityException(selfResolve
-                        ? "The incident has already been accepted or closed. Ask the logistics manager to close it"
+                // The crew that reported by mistake may cancel the report, but only before the manager has taken it up.
+                var crewCancel = request is Request.CancelRequest && actor.Role != EmployeeRole.LOGISTICS_MANAGER;
+                var byCrew = selfResolve || crewCancel;
+                if (incident.Status is not (IncidentStatus.REPORTED or IncidentStatus.PENDING) || byCrew && incident.Status != IncidentStatus.REPORTED)
+                    throw new UnprocessableEntityException(byCrew
+                        ? $"The incident has already been accepted or closed. Ask the logistics manager to {(crewCancel ? "cancel" : "close")} it"
                         : "The incident is already resolved or cancelled", "INVALID_INCIDENT_STATUS");
                 if (Truncate(request.LastUpdatedAt!.Value) != Truncate(incident.UpdatedAt))
                     throw new ConflictException("The incident was just modified. Please reload the page", "INCIDENT_MODIFIED");
@@ -89,6 +93,10 @@ public sealed partial class Service
                         Resolve(incident, resolve.ResolutionSummary, now);
                         break;
                     case Request.CancelRequest cancel:
+                        var openCosts = costs.Where(cost => cost.Status is EmergencyCostStatus.PENDING or EmergencyCostStatus.APPROVED).ToArray();
+                        if (crewCancel && openCosts.Length > 0)
+                            throw new UnprocessableEntityException("Incident has an emergency cost request that is pending or approved. The logistics manager must cancel it.", "HAS_OPEN_EMERGENCY_COSTS",
+                                new { requests = openCosts.Select(cost => new { cost.EmergencyCostRequestId, cost.RequestCode, Status = cost.Status.ToString() }).ToArray() });
                         var approved = costs.Where(cost => cost.Status == EmergencyCostStatus.APPROVED).ToArray();
                         if (approved.Length > 0)
                             throw new UnprocessableEntityException("An approved emergency cost already exists. Close the incident instead", "HAS_APPROVED_EMERGENCY_COST",
@@ -112,7 +120,8 @@ public sealed partial class Service
                     case Request.RaiseSeverityRequest raise:
                         var severity = Enum.Parse<IncidentSeverity>(raise.Severity);
                         if (severity == incident.Severity) throw new UnprocessableEntityException("The incident already has this severity", "SEVERITY_UNCHANGED");
-                        if (severity < incident.Severity) throw new UnprocessableEntityException("The severity can only be raised, never lowered", "SEVERITY_CANNOT_DECREASE");
+                        if (severity < incident.Severity && actor.Role != EmployeeRole.LOGISTICS_MANAGER)
+                            throw new ForbiddenException("Only the logistics manager can lower the severity", "SEVERITY_LOWER_MANAGER_ONLY");
                         incident.Severity = severity;
                         incident.Description += $"\n[{AsUtc(now).ToString("yyyy-MM-dd'T'HH:mm:ss'Z'", CultureInfo.InvariantCulture)} · {actor.FullName}] {raise.Reason.Trim()}";
                         break;
@@ -120,9 +129,11 @@ public sealed partial class Service
                 incident.UpdatedAt = now;
                 Response.Effects? effects = null;
                 if (request is Request.RaiseSeverityRequest)
-                    effects = await QueueSeverityRaisedAsync(incident, transport, previousSeverity, now, ct);
+                    effects = incident.Severity < previousSeverity
+                        ? await QueueSeverityLoweredAsync(incident, transport, actor, previousSeverity, now, ct)
+                        : await QueueSeverityRaisedAsync(incident, transport, previousSeverity, now, ct);
                 else
-                    await QueueLifecycleAsync(incident, transport, actor, selfResolve,
+                    await QueueLifecycleAsync(incident, transport, actor, byCrew,
                         costs.Where(cost => cost.CancelledAt == now).Select(cost => cost.RequestedByEmployeeId).ToArray(), now, ct);
                 await db.SaveChangesAsync(ct);
                 var response = await ReadIncidentAsync(incidentReportId, transport, actor, ct);

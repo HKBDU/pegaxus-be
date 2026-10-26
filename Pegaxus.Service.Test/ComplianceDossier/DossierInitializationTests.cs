@@ -65,6 +65,95 @@ public class DossierInitializationTests
         Assert.Null((await db.ComplianceDossiers.SingleAsync()).DossierTemplateId);
     }
 
+    [Fact]
+    public async Task Initialize_WithSelectedTemplateItemIds_OnlyCreatesThoseItems_AndReportsTheCount()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (booking, template, specialist) = await SeedAsync(db);
+        var kept = template.DossierTemplateItems.Last();
+        var request = new DossierRequest.InitializeRequest { DossierTemplateId = template.DossierTemplateId, SelectedTemplateItemIds = [kept.DossierTemplateItemId] };
+
+        var preview = await CreateService(db).PreviewAsync(specialist, booking.BookingId, request);
+        var result = await CreateService(db).InitializeAsync(specialist, booking.BookingId, request);
+
+        Assert.Equal(1, preview.GeneratedRequirementCount); Assert.Equal(1, result.GeneratedRequirementCount);
+        var stored = await db.DossierRequirements.ToListAsync();
+        Assert.Single(stored); Assert.Equal(kept.ComplianceRequirementId, stored[0].ComplianceRequirementId);
+        Assert.Equal(template.DossierTemplateId, (await db.ComplianceDossiers.SingleAsync()).DossierTemplateId);
+    }
+
+    [Fact]
+    public async Task Initialize_WithSelectedTemplateItemIds_ExpandsPerHorseItemsLikeTheFullTemplate()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (booking, template, specialist) = await SeedAsync(db);
+        var perHorse = template.DossierTemplateItems.First(item => item.AppliesPerHorse);
+        var request = new DossierRequest.InitializeRequest { DossierTemplateId = template.DossierTemplateId, SelectedTemplateItemIds = [perHorse.DossierTemplateItemId] };
+
+        var result = await CreateService(db).InitializeAsync(specialist, booking.BookingId, request);
+
+        Assert.Equal(booking.BookingHorses.Count, result.GeneratedRequirementCount);
+        Assert.All(result.Requirements, item => Assert.NotNull(item.HorseId));
+    }
+
+    [Fact]
+    public async Task Initialize_ItemsWinOverSelectedTemplateItemIds()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (booking, template, specialist) = await SeedAsync(db);
+        var first = template.DossierTemplateItems.First(); var last = template.DossierTemplateItems.Last();
+        var request = new DossierRequest.InitializeRequest { DossierTemplateId = template.DossierTemplateId, SelectedTemplateItemIds = [first.DossierTemplateItemId],
+            Items = [new() { ComplianceRequirementId = last.ComplianceRequirementId }] };
+
+        await CreateService(db).InitializeAsync(specialist, booking.BookingId, request);
+
+        Assert.Equal(last.ComplianceRequirementId, (await db.DossierRequirements.SingleAsync()).ComplianceRequirementId);
+    }
+
+    [Theory]
+    [InlineData("foreign-id", "TEMPLATE_ITEM_INVALID")]
+    [InlineData("empty", null)]
+    [InlineData("duplicate", null)]
+    public async Task Initialize_RejectsInvalidSelectedTemplateItemIds_AndWritesNothing(string kind, string? code)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (booking, template, specialist) = await SeedAsync(db);
+        var id = template.DossierTemplateItems.First().DossierTemplateItemId;
+        var request = new DossierRequest.InitializeRequest { DossierTemplateId = template.DossierTemplateId,
+            SelectedTemplateItemIds = kind switch { "foreign-id" => [Guid.NewGuid()], "empty" => [], _ => [id, id] } };
+
+        var error = await Assert.ThrowsAsync<BadRequestException>(() => CreateService(db).InitializeAsync(specialist, booking.BookingId, request));
+
+        if (code is not null) Assert.Equal(code, error.ErrorCode);
+        Assert.Empty(await db.ComplianceDossiers.ToListAsync()); Assert.Empty(await db.DossierRequirements.ToListAsync());
+    }
+
+    [Fact]
+    public void SelectedTemplateItemIds_IsBoundFromTheJsonBody()
+    {
+        var id = Guid.NewGuid();
+        var request = System.Text.Json.JsonSerializer.Deserialize<DossierRequest.InitializeRequest>(
+            $$"""{"dossierTemplateId":"{{Guid.NewGuid()}}","selectedTemplateItemIds":["{{id}}"]}""", new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web))!;
+
+        Assert.Equal([id], request.SelectedTemplateItemIds);
+    }
+
+    [Fact]
+    public async Task Initialize_WithATemplateAndFewerItems_OnlyCreatesTheItemsThatWereKept()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (booking, template, specialist) = await SeedAsync(db);
+        var kept = template.DossierTemplateItems.Last().ComplianceRequirementId;
+        var request = new DossierRequest.InitializeRequest { DossierTemplateId = template.DossierTemplateId, Items = [new() { ComplianceRequirementId = kept }] };
+
+        var result = await CreateService(db).InitializeAsync(specialist, booking.BookingId, request);
+
+        Assert.Equal(template.DossierTemplateId, (await db.ComplianceDossiers.SingleAsync()).DossierTemplateId);
+        Assert.Single(result.Requirements);
+        var stored = await db.DossierRequirements.ToListAsync();
+        Assert.Single(stored); Assert.Equal(kept, stored[0].ComplianceRequirementId);
+    }
+
     [Theory]
     [InlineData("pending")]
     [InlineData("inactive-template")]

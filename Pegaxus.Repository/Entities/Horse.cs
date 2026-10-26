@@ -36,6 +36,8 @@ public partial class Horse
 
     public string? IdentificationNotes { get; set; }
 
+    public string? AvatarUrl { get; set; }
+
     public bool IsDeleted { get; set; }
 
     public DateTime? DeletedAt { get; set; }

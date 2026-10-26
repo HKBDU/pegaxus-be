@@ -42,7 +42,7 @@ public sealed partial class ComplianceDossiersController
     /// <summary>
     /// Preview a compliance dossier.
     /// </summary>
-    /// <remarks>Transport Specialists submit a template or custom items for an approved transport. Generates a prospective checklist without saving a dossier.</remarks>
+    /// <remarks>Transport Specialists submit a template (optionally with selectedTemplateItemIds) or custom items for an approved transport. Generates a prospective checklist without saving a dossier.</remarks>
     /// <param name="transportId">The transport identifier (UUID).</param>
     /// <param name="request">The selected template or custom requirement items and optional booking concurrency timestamp.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
@@ -60,7 +60,7 @@ public sealed partial class ComplianceDossiersController
     /// <summary>
     /// Initialize a compliance dossier.
     /// </summary>
-    /// <remarks>Transport Specialists initialize a dossier from a template or custom items for an approved booking. Creates the checklist and notifies the customer.</remarks>
+    /// <remarks>Transport Specialists initialize a dossier from a template or custom items for an approved booking. With a template, selectedTemplateItemIds keeps only those template items (an id outside the template is TEMPLATE_ITEM_INVALID), items overrides them and gives explicit requirements, and sending neither generates every item of the template. The response reports generatedRequirementCount. Creates the checklist and notifies the customer.</remarks>
     /// <param name="bookingId">The booking identifier (UUID).</param>
     /// <param name="request">The selected template or custom requirement items, optional note, and booking concurrency timestamp.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>

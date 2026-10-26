@@ -264,7 +264,7 @@ public class HorseIncidentTests
         {
             case "owner": f.Storage.OwnerAccountId = f.Manager.AccountId; break;
             case "type": f.Storage.ConfirmedMimeType = "application/pdf"; break;
-            case "large": f.Storage.ConfirmedSize = 5 * 1024 * 1024 + 1; break;
+            case "large": f.Storage.ConfirmedSize = 10 * 1024 * 1024 + 1; break;
             case "empty": f.Storage.ConfirmedSize = 0; break;
             case "bytes": f.Storage.Preview = new("not an image"u8.ToArray(), "image/png"); break;
             case "metadata": f.Storage.ConfirmedSize = Png.Length + 1; break;

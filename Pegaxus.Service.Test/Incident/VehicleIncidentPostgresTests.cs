@@ -46,7 +46,7 @@ public class VehicleIncidentPostgresTests
                 request.EstimatedRepairCost = 1_000_000; request.EstimatedRepairHours = 6.5m; request.PhotoFiles = [Photo()];
                 incident = (await CreateService(writer, f.Storage).ReportVehicleAsync(request, f.Driver.AccountId)).Value;
                 Assert.Equal(1, saved.Calls); Assert.Equal((1, 1, 1, 4, 4, 5), saved.Added);
-                Assert.Equal("OUT_OF_SERVICE", incident.VehicleDetail!.Vehicle.Status); Assert.Equal(1_000_000, incident.VehicleDetail.EstimatedRepairCost);
+                Assert.Equal("IN_USE", incident.VehicleDetail!.Vehicle.Status); Assert.Equal(1_000_000, incident.VehicleDetail.EstimatedRepairCost);
                 Assert.Equal(Storage.SignedUrl, Assert.Single(incident.Photos).PhotoUrl);
             }
             foreach (var failure in new[] { "save", "sign" })
@@ -125,7 +125,7 @@ public class VehicleIncidentPostgresTests
             await using var verify = new AppDbContext(options);
             Assert.Single(await verify.IncidentReports.ToArrayAsync()); Assert.Single(await verify.VehicleIncidentDetails.ToArrayAsync());
             Assert.Equal(2, await verify.IncidentPhotos.CountAsync()); Assert.Equal(8, await verify.Notifications.CountAsync());
-            Assert.Equal(9, await verify.OutboxMessages.CountAsync()); Assert.Equal(VehicleStatus.OUT_OF_SERVICE, (await verify.Vehicles.SingleAsync()).Status);
+            Assert.Equal(9, await verify.OutboxMessages.CountAsync()); Assert.Equal(VehicleStatus.IN_USE, (await verify.Vehicles.SingleAsync()).Status);
         });
     }
 

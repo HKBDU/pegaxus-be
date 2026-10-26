@@ -33,7 +33,7 @@ public class ValidationRulesTests
         var (account, _) = await TestSupport.AddCustomerAsync(db);
         var request = Horse(decimal.Parse(weight, System.Globalization.CultureInfo.InvariantCulture), decimal.Parse(height, System.Globalization.CultureInfo.InvariantCulture));
 
-        await Assert.ThrowsAsync<BadRequestException>(() => new HorseServiceImpl(db).CreateHorseAsync(account.AccountId, request));
+        await Assert.ThrowsAsync<BadRequestException>(() => new HorseServiceImpl(db, new HorseTests.HorseMedia()).CreateHorseAsync(account.AccountId, request));
         Assert.Empty(db.Horses);
     }
 
@@ -42,7 +42,7 @@ public class ValidationRulesTests
     {
         await using var db = TestSupport.CreateDb();
         var (account, _) = await TestSupport.AddCustomerAsync(db);
-        var service = new HorseServiceImpl(db);
+        var service = new HorseServiceImpl(db, new HorseTests.HorseMedia());
 
         await service.CreateHorseAsync(account.AccountId, Horse(weight: 20, height: 50, ageYears: 40));
         var tooOld = Horse(ageYears: 41);

@@ -107,7 +107,14 @@ public sealed partial class Service
                 ?? throw new NotFoundException("DossierTemplate not found.", "DOSSIER_TEMPLATE_NOT_FOUND");
             if (template.Status != DossierTemplateStatus.ACTIVE || template.EffectiveFrom > today || template.EffectiveTo < today)
                 throw new BadRequestException("Select an ACTIVE DossierTemplate that is effective today.");
-            items ??= template.DossierTemplateItems.OrderBy(item => item.SequenceNo).Select(item => new Request.InitializationItemRequest
+            var templateItems = template.DossierTemplateItems.OrderBy(item => item.SequenceNo).ToList();
+            if (items is null && request.SelectedTemplateItemIds is { } selected)
+            {
+                if (selected.Any(id => templateItems.All(item => item.DossierTemplateItemId != id)))
+                    throw new BadRequestException("A selected DossierTemplateItem does not belong to the given DossierTemplate.", "TEMPLATE_ITEM_INVALID");
+                templateItems = templateItems.Where(item => selected.Contains(item.DossierTemplateItemId)).ToList();
+            }
+            items ??= templateItems.Select(item => new Request.InitializationItemRequest
             {
                 ComplianceRequirementId = item.ComplianceRequirementId, IsMandatory = item.IsMandatory,
                 AppliesPerHorse = item.AppliesPerHorse, Instruction = item.Instruction

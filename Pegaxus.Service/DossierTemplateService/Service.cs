@@ -42,6 +42,9 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
             }
         }
 
+        if (request.BookingId is Guid bookingId)
+            return await GetRecommendedListAsync(request, bookingId, query, cancellationToken);
+
         var count = await query.CountAsync(cancellationToken);
         var items = await Project(query.OrderBy(template => template.TemplateCode).ThenBy(template => template.DossierTemplateId)
                 .Skip(Paging.Offset(request.PageIndex, request.PageSize)).Take(request.PageSize))
@@ -50,6 +53,49 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
         {
             Items = items, PageIndex = request.PageIndex, PageSize = request.PageSize,
             TotalItems = count, TotalPages = Paging.TotalPages(count, request.PageSize)
+        };
+    }
+
+    /// <summary>
+    /// Apply-template list: the templates that can be applied (ACTIVE, effective, every requirement ACTIVE) ranked against the route of the booking.
+    /// Only the best template is flagged as recommended, and only when it matches the route.
+    /// </summary>
+    private async Task<Response.ListResponse> GetRecommendedListAsync(Request.ListRequest request, Guid bookingId, IQueryable<DossierTemplate> query, CancellationToken cancellationToken)
+    {
+        var booking = await db.Bookings.AsNoTracking().Where(item => item.BookingId == bookingId)
+            .Select(item => new { item.Status, item.OriginCountry, item.DestinationCountry }).SingleOrDefaultAsync(cancellationToken)
+            ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
+        if (booking.Status != BookingStatus.APPROVED)
+            throw new ConflictException("DossierTemplates can only be suggested for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var candidates = await query.Where(template => template.Status == DossierTemplateStatus.ACTIVE &&
+                (template.EffectiveFrom == null || template.EffectiveFrom <= today) && (template.EffectiveTo == null || template.EffectiveTo >= today) &&
+                template.DossierTemplateItems.Any() && template.DossierTemplateItems.All(item => !item.ComplianceRequirement.IsDeleted &&
+                    item.ComplianceRequirement.Status == ComplianceRequirementStatus.ACTIVE))
+            .Select(template => new { template.DossierTemplateId, template.TemplateCode, template.UpdatedAt,
+                Countries = template.DossierTemplateItems.Select(item => item.ComplianceRequirement.Country).ToList() })
+            .ToListAsync(cancellationToken);
+        var ranked = candidates.Select(item => (Template: item, Result: Recommendation.Evaluate(booking.OriginCountry, booking.DestinationCountry, item.Countries)))
+            .OrderBy(item => item.Result.Group).ThenByDescending(item => item.Result.MatchedCountries.Count)
+            .ThenByDescending(item => item.Template.UpdatedAt).ThenBy(item => item.Template.TemplateCode).ToList();
+        var rankById = ranked.Select((item, index) => (item.Template.DossierTemplateId, Rank: index + 1, item.Result)).ToDictionary(item => item.DossierTemplateId);
+        var byRecommendation = string.Equals(request.SortBy?.Trim(), "recommendation:desc", StringComparison.OrdinalIgnoreCase);
+        var pageIds = (byRecommendation ? ranked.Select(item => item.Template) : ranked.Select(item => item.Template).OrderBy(item => item.TemplateCode).ThenBy(item => item.DossierTemplateId))
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize)).Take(request.PageSize).Select(item => item.DossierTemplateId).ToList();
+        var rows = (await Project(db.DossierTemplates.AsNoTracking().Where(template => pageIds.Contains(template.DossierTemplateId))).ToListAsync(cancellationToken))
+            .ToDictionary(item => item.DossierTemplateId);
+        var items = pageIds.Select(id => rows[id]).ToList();
+        foreach (var item in items)
+        {
+            var (_, rank, result) = rankById[item.DossierTemplateId];
+            item.RecommendationRank = rank; item.IsRecommended = rank == 1 && result.Group <= 2;
+            item.MatchedCountries = result.MatchedCountries; item.RecommendationReason = result.Reason;
+        }
+        return new Response.ListResponse
+        {
+            Items = items, PageIndex = request.PageIndex, PageSize = request.PageSize,
+            TotalItems = ranked.Count, TotalPages = Paging.TotalPages(ranked.Count, request.PageSize)
         };
     }
 
