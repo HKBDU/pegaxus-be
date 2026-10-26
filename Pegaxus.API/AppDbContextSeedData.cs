@@ -48,7 +48,75 @@ public static class AppDbContextSeedData
         await db.SaveChangesAsync(cancellationToken);
         await SeedDemoOperationsAsync(db, now, cancellationToken);
         await SeedLocationsAsync(db, cancellationToken);
+        await SeedVehiclesAndProvidersAsync(db, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    public static async Task<(int Vehicles, int Providers)> SeedVehiclesAndProvidersAsync(
+        AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        var now = DbTime.UtcNow();
+        var expiryDate = DateOnly.FromDateTime(now).AddYears(2);
+        var vehicles = 0;
+        var providers = 0;
+        foreach (var number in Enumerable.Range(1, 10))
+        {
+            var vehicleCode = $"VEH-DEMO-{number:000}";
+            var vehicleId = StableGuid(vehicleCode);
+            var mode = number <= 6 ? TransportMode.ROAD : number <= 8 ? TransportMode.AIR : TransportMode.SEA;
+            var licensePlate = mode == TransportMode.ROAD ? $"DEMO-{number:000}" : null;
+            if (!await db.Vehicles.IgnoreQueryFilters().AnyAsync(item => item.VehicleId == vehicleId ||
+                item.VehicleCode == vehicleCode || (licensePlate != null && item.LicensePlate == licensePlate), cancellationToken))
+            {
+                db.Vehicles.Add(new Vehicle
+                {
+                    VehicleId = vehicleId,
+                    VehicleCode = vehicleCode,
+                    VehicleName = $"Pegaxus Demo {mode} {number:000}",
+                    TransportMode = mode,
+                    LicensePlate = licensePlate,
+                    VehicleType = mode == TransportMode.ROAD ? "Horse truck" : mode == TransportMode.AIR ? "Cargo aircraft" : "Livestock vessel",
+                    CapacityHorses = 2 + (number - 1) % 8,
+                    Status = VehicleStatus.AVAILABLE,
+                    RegistrationNumber = $"DEMO-REG-{number:000}",
+                    RegistrationExpiryDate = expiryDate,
+                    InsuranceNumber = $"DEMO-INS-{number:000}",
+                    InsuranceExpiryDate = expiryDate,
+                    SpecialEquipment = "Ventilation; temperature monitoring",
+                    Country = "FR",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+                vehicles++;
+            }
+
+            var providerCode = $"PRV-DEMO-{number:000}";
+            var providerId = StableGuid(providerCode);
+            var taxCode = $"DEMO-TAX-{number:000}";
+            if (!await db.TransportProviders.IgnoreQueryFilters().AnyAsync(item => item.TransportProviderId == providerId ||
+                item.ProviderCode == providerCode || item.TaxCode == taxCode, cancellationToken))
+            {
+                db.TransportProviders.Add(new TransportProvider
+                {
+                    TransportProviderId = providerId,
+                    ProviderCode = providerCode,
+                    ProviderName = $"Pegaxus Demo Provider {number:000}",
+                    Status = ProviderStatus.ACTIVE,
+                    ContactName = $"Demo Contact {number:000}",
+                    Email = $"provider{number:000}@example.com",
+                    Country = "FR",
+                    TaxCode = taxCode,
+                    SupportedModes = "AIR,ROAD,SEA",
+                    Note = "Seeded demo provider for transport planning tests.",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+                providers++;
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return (vehicles, providers);
     }
 
     public static async Task<int> SeedLocationsAsync(AppDbContext db, CancellationToken cancellationToken = default)

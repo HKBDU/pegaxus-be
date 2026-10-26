@@ -82,6 +82,19 @@ Seed không tạo `TransportPlan`, `EmployeeTransportPlan` hay `RoutePlan`. Tạ
 | `ROUTE-DEMO-FR-GB` | Paris Stable | London Stable | 920.5 km | 1260 phút |
 | `ROUTE-DEMO-DE-FR` | Berlin Stable | Paris Stable | 1050 km | 1440 phút |
 
+## Vehicle và TransportProvider
+
+Seed tạo 10 vehicle và 10 provider khi API khởi động:
+
+| Danh mục | Business code | Trạng thái | Chi tiết |
+|---|---|---|---|
+| Vehicle | `VEH-DEMO-001` đến `VEH-DEMO-010` | `AVAILABLE` | 6 `ROAD`, 2 `AIR`, 2 `SEA`; sức chứa 2–9 ngựa; quốc gia `FR` |
+| TransportProvider | `PRV-DEMO-001` đến `PRV-DEMO-010` | `ACTIVE` | Hỗ trợ `AIR`, `ROAD`, `SEA`; email mẫu thuộc `example.com`; mã số thuế `DEMO-TAX-001` đến `DEMO-TAX-010` |
+
+Vehicle đường bộ có biển số `DEMO-001` đến `DEMO-006`. Ngày hết hạn đăng ký và bảo hiểm được đặt sau ngày tạo hai năm.
+
+ID được tạo ổn định từ business code. Chạy lại chỉ bổ sung bản ghi thiếu, không ghi đè bản ghi đã chỉnh sửa hoặc khôi phục bản ghi đã xoá mềm. Seed bỏ qua bản ghi trùng ID, business code, biển số vehicle hoặc mã số thuế provider. Không tự gán vehicle/provider vào kế hoạch hay chặng vận chuyển.
+
 ## Compliance
 
 ### ComplianceRequirement
@@ -118,7 +131,7 @@ Các phần sau chưa tạo dữ liệu mẫu:
 - Compliance document và document version thực tế
 - Document request/comment/review
 - Notification và AccountNotification
-- Vehicle, TransportProvider và RoutePlanRouteVehicle
+- RoutePlanRouteVehicle
 - Authority submission, QuarantineProof, CustomsClearanceProof
 - Invoice, Receipt, Claim, Handover và Incident
 
