@@ -78,13 +78,13 @@ public sealed class IncidentsController(Incidents.IIncidentService service) : Ap
     }
 
     /// <summary>Cancel an incorrectly reported incident.</summary>
-    /// <remarks>IN10: LM only, REPORTED/PENDING. Approved costs block cancellation. Pending costs are cancelled atomically with the same reason. The settlement flag, vehicle availability and medical history are preserved.</remarks>
+    /// <remarks>IN10: LM (REPORTED or PENDING), or any Driver/Escort assigned to the transport while the incident is still REPORTED and has no pending or approved cost (HAS_OPEN_EMERGENCY_COSTS otherwise). Approved costs block cancellation. Pending costs are cancelled atomically with the same reason. The settlement flag, vehicle availability and medical history are preserved; a vehicle is only taken out of service when the replacement cost is approved, so a cancelled report never leaves one locked.</remarks>
     /// <param name="incidentReportId">The incident identifier.</param>
     /// <param name="request">The incident version and a cancellation reason of at least 10 trimmed characters.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the cancelled incident; 422 with value.approvedRequests for approved costs.</returns>
     [HttpPost("{incidentReportId}/cancel")]
-    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    [Authorize(Policy = JwtExtensions.IncidentOperatorPolicy)]
     public async Task<IActionResult> CancelAsync(Guid incidentReportId, [FromBody] Incidents.Request.CancelRequest request, CancellationToken cancellationToken)
     {
         var result = await service.CancelAsync(incidentReportId, request, AccountId, cancellationToken);
@@ -105,22 +105,23 @@ public sealed class IncidentsController(Incidents.IIncidentService service) : Ap
         return Success(result, $"Incident {result.IncidentCode} resolved");
     }
 
-    /// <summary>Raise the severity of an open incident.</summary>
-    /// <remarks>IN12: LM or assigned RC/Driver/Escort. Severity only increases; reason appends with author and UTC time. HIGH/CRITICAL queue urgent staff alerts, manager email and one sanitized customer notification per event. Status remains unchanged.</remarks>
+    /// <summary>Change the severity of an open incident.</summary>
+    /// <remarks>IN12: LM or assigned RC/Driver/Escort may raise it; only the LM may lower it (SEVERITY_LOWER_MANAGER_ONLY, 403, for anyone else). The reason appends with author and UTC time. Raising to HIGH/CRITICAL queues urgent staff alerts, manager email and one sanitized customer notification per event. Lowering notifies the staff in the app only and never the customer. Status remains unchanged.</remarks>
     /// <param name="incidentReportId">The incident identifier.</param>
-    /// <param name="request">The incident version, a higher severity and a reason of at least 10 trimmed characters.</param>
+    /// <param name="request">The incident version, the new severity and a reason of at least 10 trimmed characters.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
-    /// <returns>200 OK with the incident and notification effects; 422 for equal or decreased severity.</returns>
+    /// <returns>200 OK with the incident and notification effects; 422 for an unchanged severity; 403 when a non-manager lowers it.</returns>
     [HttpPost("{incidentReportId}/raise-severity")]
     [Authorize(Policy = JwtExtensions.IncidentOperatorPolicy)]
     public async Task<IActionResult> RaiseSeverityAsync(Guid incidentReportId, [FromBody] Incidents.Request.RaiseSeverityRequest request, CancellationToken cancellationToken)
     {
         var result = await service.RaiseSeverityAsync(incidentReportId, request, AccountId, cancellationToken);
-        return Success(result.Value, $"Incident {result.Value.IncidentCode} severity raised from {result.PreviousSeverity} to {result.Value.Severity}");
+        var verb = Enum.Parse<Pegaxus.Repository.Enum.IncidentSeverity>(result.Value.Severity) < Enum.Parse<Pegaxus.Repository.Enum.IncidentSeverity>(result.PreviousSeverity) ? "lowered" : "raised";
+        return Success(result.Value, $"Incident {result.Value.IncidentCode} severity {verb} from {result.PreviousSeverity} to {result.Value.Severity}");
     }
 
     /// <summary>Report a vehicle or combined vehicle and horse incident.</summary>
-    /// <remarks>IN1: Only an assigned Driver or Escort may report while IN_TRANSIT. Upload up to five JPG/PNG images (10MB each) through uploads/signature with entity attachment, then pass their publicIds in photoFiles. BOTH forces CRITICAL. A non-operable vehicle requiring replacement becomes OUT_OF_SERVICE. Alerts and urgent manager email are queued atomically. Replays with the same transport, reporter, vehicle, incident type and occurredAt return the original report without repeated effects.</remarks>
+    /// <remarks>IN1: Only an assigned Driver or Escort may report while IN_TRANSIT. Upload up to five JPG/PNG images (10MB each) through uploads/signature with entity attachment, then pass their publicIds in photoFiles. BOTH forces CRITICAL. A non-operable vehicle requiring replacement is taken out of service (OUT_OF_SERVICE) when the manager approves the REPLACEMENT_VEHICLE cost, not at report time. Alerts and urgent manager email are queued atomically. Replays with the same transport, reporter, vehicle, incident type and occurredAt return the original report without repeated effects.</remarks>
     /// <param name="request">The incident, vehicle, location and optional uploaded photos.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>201 Created with the incident, effects and safety contacts; 200 OK for an offline replay.</returns>

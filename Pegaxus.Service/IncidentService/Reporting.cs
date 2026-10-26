@@ -74,10 +74,9 @@ public sealed partial class Service
                 ApplyVehicleFields(detail, request);
                 incident.VehicleIncidentDetail = detail;
                 await AddPhotosAsync(incident, detail, request.PhotoFiles!, accountId, now, cancellationToken);
-                var statusChanged = !detail.VehicleOperable && detail.ReplacementVehicleRequired && vehicle.Status != VehicleStatus.OUT_OF_SERVICE;
-                if (statusChanged) { vehicle.Status = VehicleStatus.OUT_OF_SERVICE; vehicle.UpdatedAt = now; }
+                // The vehicle is not taken out of service on the crew's word alone (a mistaken report would leave it locked); see LockBrokenVehicleAsync.
                 db.IncidentReports.Add(incident);
-                var effects = await QueueReportedAsync(incident, transport, statusChanged, now, cancellationToken);
+                var effects = await QueueReportedAsync(incident, transport, false, now, cancellationToken);
                 var safetyResponse = await SafetyAsync(transport, cancellationToken);
                 await db.SaveChangesAsync(cancellationToken);
                 var response = await ReadIncidentAsync(incident.IncidentReportId, transport, actor, cancellationToken);

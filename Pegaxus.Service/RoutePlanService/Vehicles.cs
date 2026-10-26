@@ -123,6 +123,10 @@ public sealed partial class Service
                 .SelectMany(segment => segment.RoutePlanRouteVehicles.Select(link => link.VehicleId)).ToList();
             if (await db.Vehicles.AnyAsync(x => added.Contains(x.VehicleId) && x.Status == VehicleStatus.IN_USE && !withThisTransport.Contains(x.VehicleId), cancellationToken))
                 throw new UnprocessableEntityException("The vehicle is not available", "VEHICLE_UNAVAILABLE");
+            // A vehicle the crew has reported as unable to run is not taken out of service until the replacement cost is approved, so it must not be picked as a replacement meanwhile.
+            if (await db.VehicleIncidentDetails.AnyAsync(x => added.Contains(x.VehicleId) && !x.VehicleOperable &&
+                    (x.IncidentReport.Status == IncidentStatus.REPORTED || x.IncidentReport.Status == IncidentStatus.PENDING), cancellationToken))
+                throw new UnprocessableEntityException("The vehicle is not available", "VEHICLE_UNAVAILABLE");
         }
 
         var now = new DateTime(Math.Max(UtcNowTruncated().Ticks, routePlan.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);

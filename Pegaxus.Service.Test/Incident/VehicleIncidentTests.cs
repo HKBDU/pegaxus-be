@@ -33,14 +33,14 @@ public class VehicleIncidentTests
         Assert.Equal("Safe", value.VehicleDetail.DriverSafetyStatus); Assert.Equal("Calm horses", value.VehicleDetail.CargoConditionNote);
         Assert.Null(value.VehicleDetail.RepairNote); Assert.False(value.VehicleDetail.VehicleOperable);
         Assert.True(value.VehicleDetail.RepairRequired && value.VehicleDetail.TowingRequired && value.VehicleDetail.ReplacementVehicleRequired);
-        Assert.Equal("OUT_OF_SERVICE", value.VehicleDetail.Vehicle.Status); Assert.Equal(VehicleStatus.OUT_OF_SERVICE, f.Vehicle.Status);
+        Assert.Equal("IN_USE", value.VehicleDetail.Vehicle.Status); Assert.Equal(VehicleStatus.IN_USE, f.Vehicle.Status);
         Assert.Equal("Warning triangle", value.ImmediateAction); Assert.Equal("VND", value.CostSummary.Currency);
         Assert.Equal(Storage.SignedUrl, Assert.Single(value.Photos).PhotoUrl); Assert.Equal(1, value.PhotoCount);
         var photo = await db.IncidentPhotos.SingleAsync(); Assert.Equal(value.VehicleDetail.VehicleIncidentDetailId, photo.VehicleIncidentDetailId);
         Assert.Equal(value.IncidentReportId, photo.IncidentReportId); Assert.Equal(1, photo.SortOrder);
         Assert.NotEqual(photo.PhotoUrl, value.Photos[0].PhotoUrl); Assert.Equal(request.OccurredAt, value.OccurredAt);
         Assert.Equal(DateTimeKind.Unspecified, (await db.IncidentReports.SingleAsync()).OccurredAt.Kind);
-        Assert.True(value.Effects!.VehicleStatusChanged == true && value.Effects.EmailQueued); Assert.Equal("URGENT", value.Effects.NotifiedPriority);
+        Assert.True(value.Effects!.VehicleStatusChanged == false && value.Effects.EmailQueued); Assert.Equal("URGENT", value.Effects.NotifiedPriority);
         Assert.False(value.Effects.CanAddHorseDetails); Assert.NotEmpty(value.Safety!.Message);
         var contacts = await f.Service.GetEmergencyContactsAsync(f.Transport.TransportId, f.Driver.AccountId);
         Assert.Equal(contacts.Contacts, value.Safety.EmergencyContacts); Assert.Equal(4, contacts.Contacts.Count);
@@ -181,7 +181,7 @@ public class VehicleIncidentTests
         Assert.Equal("Fixed engine", updated.VehicleDetail!.RepairNote); Assert.Equal(250000, updated.VehicleDetail.EstimatedRepairCost);
         Assert.Equal(6.5m, updated.VehicleDetail.EstimatedRepairHours); Assert.Equal("All safe", updated.VehicleDetail.DriverSafetyStatus);
         Assert.True(updated.VehicleDetail.VehicleOperable); Assert.False(updated.VehicleDetail.ReplacementVehicleRequired);
-        Assert.Equal("OUT_OF_SERVICE", updated.VehicleDetail.Vehicle.Status); Assert.Equal(created.Description, updated.Description);
+        Assert.Equal("IN_USE", updated.VehicleDetail.Vehicle.Status); Assert.Equal(created.Description, updated.Description);
         Assert.Equal(created.Severity, updated.Severity); Assert.Equal(2, updated.PhotoCount);
         Assert.Equal(new[] { 1, 2 }, updated.Photos.Select(photo => photo.SortOrder)); Assert.True(updated.UpdatedAt > created.UpdatedAt);
         Assert.Equal(updated.UpdatedAt, updated.VehicleDetail.UpdatedAt); Assert.Null(updated.Effects); Assert.Null(updated.Safety);

@@ -197,6 +197,25 @@ public class RoutePlanMidTripVehicleChangeTests
         Assert.Equal(VehicleStatus.IN_USE, seed.Replacement.Status); Assert.Equal(VehicleStatus.MAINTENANCE, seed.Old.Status);
     }
 
+    [Theory]
+    [InlineData(IncidentStatus.REPORTED, false, true)]
+    [InlineData(IncidentStatus.PENDING, false, true)]
+    [InlineData(IncidentStatus.REPORTED, true, false)]
+    [InlineData(IncidentStatus.RESOLVED, false, false)]
+    public async Task Change_RefusesAReplacementThatAnOpenIncidentReportsAsUnableToRun(IncidentStatus status, bool operable, bool refused)
+    {
+        await using var db = TestSupport.CreateDb(); var seed = await CreateAsync(db);
+        var other = new IncidentReport { IncidentReportId = Guid.NewGuid(), TransportId = seed.F.Transport.TransportId, IncidentCode = "INC-2", EmployeeId = seed.F.Driver.EmployeeId,
+            LocationId = seed.F.Start.LocationId, Category = IncidentCategory.VEHICLE, Severity = IncidentSeverity.HIGH, Status = status, Title = "Second", Description = "Second incident" };
+        db.AddRange(other, new VehicleIncidentDetail { VehicleIncidentDetailId = Guid.NewGuid(), IncidentReport = other, VehicleId = seed.Replacement.VehicleId, VehicleOperable = operable });
+        await db.SaveChangesAsync();
+
+        var change = () => Run(db, seed, Change(seed, seed.Replacement.VehicleId));
+
+        if (refused) Assert.Equal("VEHICLE_UNAVAILABLE", (await Assert.ThrowsAsync<UnprocessableEntityException>(change)).ErrorCode);
+        else Assert.Equal(seed.Replacement.VehicleId, (await change()).Status == "ACTIVE" ? seed.Replacement.VehicleId : Guid.Empty);
+    }
+
     [Fact]
     public async Task Change_RefusesAVehicleThatIsInUseOnAnotherTripForAnySegment()
     {

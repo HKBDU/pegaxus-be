@@ -30,11 +30,21 @@ public sealed partial class Service
             ? NotificationPriority.HIGH : NotificationPriority.NORMAL;
         foreach (var employee in recipients)
             QueueIncident(incident, employee.AccountId, priority, $"Incident {incident.IncidentCode} {verb}",
-                selfResolved ? "The assigned crew resolved the incident." : $"The logistics manager {verb} the incident.",
+                selfResolved ? $"The assigned crew {verb} the incident{(cancelled ? " report" : string.Empty)}." : $"The logistics manager {verb} the incident.",
                 $"/{(Crew(employee) ? "crew" : "admin")}/incidents/{incident.IncidentReportId}", now);
         await QueueCustomerIncidentAsync(incident, transport, NotificationPriority.NORMAL, $"Transport incident {verb}",
             cancelled ? "The incident report has been cancelled. Our team will keep you updated."
                 : "The transport incident has been resolved. Our team will keep you updated.", now, ct);
+    }
+
+    /// <summary>Only the logistics manager lowers a severity. The staff are told in the app; the customer is not, since nothing the customer was told is withdrawn.</summary>
+    private async Task<Response.Effects> QueueSeverityLoweredAsync(IncidentReport incident, Transport transport, Employee actor,
+        IncidentSeverity previousSeverity, DateTime now, CancellationToken ct)
+    {
+        foreach (var employee in (await InternalRecipientsAsync(transport.TransportId, ct)).Where(employee => employee.AccountId != actor.AccountId))
+            QueueIncident(incident, employee.AccountId, NotificationPriority.NORMAL, $"Incident {incident.IncidentCode} severity lowered",
+                $"Severity lowered from {previousSeverity} to {incident.Severity} by the logistics manager.", $"/admin/incidents/{incident.IncidentReportId}", now);
+        return new(NotificationPriority.NORMAL.ToString(), false, CustomerNotified: false);
     }
 
     private async Task<Response.Effects> QueueSeverityRaisedAsync(IncidentReport incident, Transport transport,
