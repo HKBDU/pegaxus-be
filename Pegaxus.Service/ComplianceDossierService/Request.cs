@@ -107,6 +107,8 @@ public class Request
         public Guid? DossierTemplateId { get; set; }
         public DateTimeOffset? BookingUpdatedAt { get; set; }
         public List<InitializationItemRequest>? Items { get; set; }
+        /// <summary>The DossierTemplateItems to keep when a template is used; ignored when <see cref="Items"/> is given. Omitted keeps every item of the template.</summary>
+        public List<Guid>? SelectedTemplateItemIds { get; set; }
         public string? Note { get; set; }
     }
 
