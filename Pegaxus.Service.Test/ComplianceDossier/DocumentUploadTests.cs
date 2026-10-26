@@ -268,7 +268,7 @@ public class DocumentUploadTests
         var request = ValidRequest(dossier);
         request.Files = invalid switch
         {
-            "large" => [File("passport.pdf", "application/pdf", 5 * 1024 * 1024 + 1)],
+            "large" => [File("passport.pdf", "application/pdf", 10 * 1024 * 1024 + 1)],
             "mime" => [File("passport.pdf", "application/zip")],
             "extension" => [File("passport.exe", "application/pdf")],
             "empty" => [File("passport.pdf", "application/pdf", 0)],
@@ -278,7 +278,7 @@ public class DocumentUploadTests
         var storage = new RecordingStorage();
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => CreateService(db, storage).UploadDocumentAsync(account.AccountId,
             dossier.ComplianceDossierId, requirement.DossierRequirementId, request));
-        if (invalid == "large") Assert.Equal("File size exceeds the maximum limit of 5MB. Please compress your file.", error.Message);
+        if (invalid == "large") Assert.Equal("File size exceeds the maximum limit of 10MB. Please compress your file.", error.Message);
         if (invalid is "mime" or "extension") Assert.Equal("Invalid file format. Only PDF, JPG, JPEG, and PNG files are accepted for DocumentVersion.", error.Message);
         Assert.Empty(storage.Uploaded);
         Assert.Empty(await db.ComplianceDocuments.ToListAsync());

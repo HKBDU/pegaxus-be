@@ -37,8 +37,8 @@ public class ProofUploadTests
     [Theory]
     [InlineData(false, "stamp.pdf", "application/pdf", 10, "INVALID_FILE_TYPE")]
     [InlineData(true, "stamp.pdf", "application/pdf", 10, "INVALID_FILE_TYPE")]
-    [InlineData(false, "stamp.png", "image/png", 5242881, "FILE_TOO_LARGE")]
-    [InlineData(true, "stamp.png", "image/png", 5242881, "FILE_TOO_LARGE")]
+    [InlineData(false, "stamp.png", "image/png", 10485761, "FILE_TOO_LARGE")]
+    [InlineData(true, "stamp.png", "image/png", 10485761, "FILE_TOO_LARGE")]
     public async Task Submit_RejectsInvalidConfirmedMetadata(bool customs, string name, string mime, long size, string code)
     {
         await using var db = TestSupport.CreateDb();
@@ -62,7 +62,7 @@ public class ProofUploadTests
         var publicId = $"evidence/{accountId:D}/{Guid.NewGuid():N}";
         var resource = CloudinaryUploadTests.Resource();
         resource.PublicId = publicId;
-        resource.Bytes = 5 * 1024 * 1024 + 1;
+        resource.Bytes = 10 * 1024 * 1024 + 1;
         var media = new CloudinaryUploadTests.TestCloudinary(resource);
         var storage = new DocumentUploadTests.RecordingStorage();
         var service = new Pegaxus.Service.ComplianceDossierService.Service(db, media,
@@ -74,7 +74,7 @@ public class ProofUploadTests
 
         Assert.Equal(413, error.StatusCode);
         Assert.Equal("FILE_TOO_LARGE", error.ErrorCode);
-        Assert.Equal("Proof image must not exceed 5 MB", error.Message);
+        Assert.Equal("Proof image must not exceed 10 MB", error.Message);
         Assert.Equal(1, media.Calls);
         Assert.Empty(await db.ProofAttachments.ToListAsync());
         Assert.Empty(storage.Deleted);

@@ -5,6 +5,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.MediaService;
 
 using static Pegaxus.Service.Common.DbTime;
 using static Pegaxus.Service.Common.Text;
@@ -14,10 +15,12 @@ namespace Pegaxus.Service.HorseService;
 public sealed class Service : IHorseService
 {
     private readonly AppDbContext _appDbContext;
+    private readonly IMediaService _mediaService;
 
-    public Service(AppDbContext appDbContext)
+    public Service(AppDbContext appDbContext, IMediaService mediaService)
     {
         _appDbContext = appDbContext;
+        _mediaService = mediaService;
     }
 
     public async Task<Response.HorseListResponse> GetCustomerHorsesAsync(
@@ -68,7 +71,8 @@ public sealed class Service : IHorseService
                 HorseName = horse.HorseName,
                 Sex = horse.Sex.HasValue ? horse.Sex.Value.ToString() : null,
                 Breed = horse.Breed,
-                MicrochipNumber = horse.MicrochipNumber
+                MicrochipNumber = horse.MicrochipNumber,
+                AvatarUrl = horse.AvatarUrl
             })
             .ToListAsync(cancellationToken);
 
@@ -111,19 +115,20 @@ public sealed class Service : IHorseService
         ValidateRequiredMeasurement(request.HeightCm, "HeightCm", Limits.HorseHeightCm);
 
         var sex = ParseSex(request.Sex);
+        var avatarUrl = request.Avatar is null ? null : await _mediaService.ConfirmAvatarImageAsync(accountId, request.Avatar.PublicId, cancellationToken);
 
         var microchipNumber = EmptyToNull(request.MicrochipNumber);
         var passportNumber = EmptyToNull(request.PassportNumber);
 
         if (microchipNumber is not null && await _appDbContext.Horses.AnyAsync(
-                horse => horse.MicrochipNumber == microchipNumber,
+                horse => !horse.IsDeleted && horse.MicrochipNumber == microchipNumber,
                 cancellationToken))
             throw new ConflictException(
                 "Microchip number already exists",
                 "DUPLICATE_MICROCHIP");
 
         if (passportNumber is not null && await _appDbContext.Horses.AnyAsync(
-                horse => horse.PassportNumber == passportNumber,
+                horse => !horse.IsDeleted && horse.PassportNumber == passportNumber,
                 cancellationToken))
             throw new ConflictException(
                 "Passport number already exists",
@@ -145,6 +150,7 @@ public sealed class Service : IHorseService
             MicrochipNumber = microchipNumber,
             PassportNumber = passportNumber,
             IdentificationNotes = EmptyToNull(request.IdentificationNotes),
+            AvatarUrl = avatarUrl,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -211,6 +217,7 @@ public sealed class Service : IHorseService
             PassportNumber = horse.PassportNumber,
             MicrochipNumber = horse.MicrochipNumber,
             IdentificationNotes = horse.IdentificationNotes,
+            AvatarUrl = horse.AvatarUrl,
             CreatedAt = AsUtc(horse.CreatedAt),
             UpdatedAt = AsUtc(horse.UpdatedAt)
         };
@@ -256,18 +263,19 @@ public sealed class Service : IHorseService
         ValidateRequiredMeasurement(request.HeightCm, "HeightCm", Limits.HorseHeightCm);
 
         var sex = ParseSex(request.Sex);
+        var avatarUrl = request.Avatar is null ? null : await _mediaService.ConfirmAvatarImageAsync(accountId, request.Avatar.PublicId, cancellationToken);
         var microchipNumber = EmptyToNull(request.MicrochipNumber);
         var passportNumber = EmptyToNull(request.PassportNumber);
 
         if (microchipNumber is not null && await _appDbContext.Horses.AnyAsync(item =>
-                item.HorseId != horseId && item.MicrochipNumber == microchipNumber,
+                !item.IsDeleted && item.HorseId != horseId && item.MicrochipNumber == microchipNumber,
                 cancellationToken))
             throw new ConflictException(
                 "Microchip number already exists",
                 "DUPLICATE_MICROCHIP");
 
         if (passportNumber is not null && await _appDbContext.Horses.AnyAsync(item =>
-                item.HorseId != horseId && item.PassportNumber == passportNumber,
+                !item.IsDeleted && item.HorseId != horseId && item.PassportNumber == passportNumber,
                 cancellationToken))
             throw new ConflictException(
                 "Passport number already exists",
@@ -284,6 +292,9 @@ public sealed class Service : IHorseService
         horse.MicrochipNumber = microchipNumber;
         horse.PassportNumber = passportNumber;
         horse.IdentificationNotes = EmptyToNull(request.IdentificationNotes);
+        // A request without an avatar keeps the current one.
+        if (avatarUrl is not null)
+            horse.AvatarUrl = avatarUrl;
         horse.UpdatedAt = UtcNow();
 
         try

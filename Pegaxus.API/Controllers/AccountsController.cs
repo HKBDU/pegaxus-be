@@ -38,7 +38,7 @@ public sealed class AccountsController : ApiControllerBase
     /// <summary>
     /// Update the current account profile.
     /// </summary>
-    /// <remarks>Accepts JSON. Only supplied fields are changed. To change the profile image, request a signature from /api/v1/uploads/signature with entity "avatar", upload the JPG or PNG (up to 2 MB) directly to Cloudinary, then submit its publicId in avatar. Employees must send country as a 2-letter ISO code.</remarks>
+    /// <remarks>Accepts JSON. Only supplied fields are changed. To change the profile image, request a signature from /api/v1/uploads/signature with entity "avatar", upload the JPG or PNG (up to 10 MB) directly to Cloudinary, then submit its publicId in avatar. Employees must send country as a 2-letter ISO code.</remarks>
     /// <param name="request">The profile fields and optional avatar publicId to update.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the updated account profile.</returns>

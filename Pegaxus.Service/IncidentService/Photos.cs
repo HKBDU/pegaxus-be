@@ -36,7 +36,7 @@ public sealed partial class Service
     }
 
     private static BadRequestException InvalidImage() => new(
-        "Only JPG, JPEG, PNG images up to 5MB are accepted. Please try again.", "INVALID_IMAGE");
+        $"Only JPG, JPEG, PNG images up to {Limits.UploadMaxMegabytes}MB are accepted. Please try again.", "INVALID_IMAGE");
 
     private async Task<string[]> AddPhotosAsync(IncidentReport incident, IReadOnlyList<UploadService.Request.UploadedAssetReference> files,
         Guid accountId, DateTime now, CancellationToken ct, EmergencyCostRequest? cost = null)
@@ -52,7 +52,7 @@ public sealed partial class Service
         {
             var asset = await media.ConfirmUploadAsync(accountId, file.PublicId, ct);
             if (asset.SizeBytes > DocumentStorageService.Service.MaxFileSize)
-                throw new Pegaxus.Service.Exceptions.Exceptions("Each photo must not exceed 5 MB", 413, "FILE_TOO_LARGE");
+                throw new Pegaxus.Service.Exceptions.Exceptions($"Each photo must not exceed {Limits.UploadMaxMegabytes} MB", 413, "FILE_TOO_LARGE");
             if (asset.MimeType is not ("image/jpeg" or "image/png"))
                 throw new BadRequestException("Only JPG, JPEG and PNG images are accepted", "INVALID_FILE_TYPE");
             var image = await media.DownloadPreviewAsync(asset.FileUrl, ct);

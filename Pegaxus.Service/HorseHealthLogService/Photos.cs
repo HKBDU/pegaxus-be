@@ -90,5 +90,5 @@ public sealed partial class Service
     }
 
     private static BadRequestException InvalidImage() =>
-        new("Only JPG, JPEG, PNG images up to 5MB are accepted. Please try again.", "INVALID_IMAGE");
+        new($"Only JPG, JPEG, PNG images up to {Limits.UploadMaxMegabytes}MB are accepted. Please try again.", "INVALID_IMAGE");
 }

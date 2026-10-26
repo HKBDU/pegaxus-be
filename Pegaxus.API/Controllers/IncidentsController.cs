@@ -120,7 +120,7 @@ public sealed class IncidentsController(Incidents.IIncidentService service) : Ap
     }
 
     /// <summary>Report a vehicle or combined vehicle and horse incident.</summary>
-    /// <remarks>IN1: Only an assigned Driver or Escort may report while IN_TRANSIT. Upload up to five JPG/PNG images (5MB each) through uploads/signature with entity attachment, then pass their publicIds in photoFiles. BOTH forces CRITICAL. A non-operable vehicle requiring replacement becomes OUT_OF_SERVICE. Alerts and urgent manager email are queued atomically. Replays with the same transport, reporter, vehicle, incident type and occurredAt return the original report without repeated effects.</remarks>
+    /// <remarks>IN1: Only an assigned Driver or Escort may report while IN_TRANSIT. Upload up to five JPG/PNG images (10MB each) through uploads/signature with entity attachment, then pass their publicIds in photoFiles. BOTH forces CRITICAL. A non-operable vehicle requiring replacement becomes OUT_OF_SERVICE. Alerts and urgent manager email are queued atomically. Replays with the same transport, reporter, vehicle, incident type and occurredAt return the original report without repeated effects.</remarks>
     /// <param name="request">The incident, vehicle, location and optional uploaded photos.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>201 Created with the incident, effects and safety contacts; 200 OK for an offline replay.</returns>
