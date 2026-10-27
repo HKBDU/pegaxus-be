@@ -10,13 +10,23 @@ public class RouteRestRulesTests
     [InlineData(4.51, 0.74, false)]
     [InlineData(4.51, 0.75, true)]
     [InlineData(8, 0.75, true)]
-    [InlineData(8.01, 1, false)]
-    public void Driving_ChecksEightHourAndFortyFiveMinuteBoundaries(double hours, double restHours, bool passed)
+    [InlineData(8, 0.74, false)]
+    [InlineData(24, 0.75, true)]
+    [InlineData(24.01, 1, false)]
+    public void Driving_ChecksTwentyFourHourAndFortyFiveMinuteBoundaries(double hours, double restHours, bool passed)
     {
         var start = new DateTime(2026, 10, 22); var arrival = start.AddHours(hours);
         var checks = RouteRestRules.Evaluate([new(start, arrival, TransportMode.ROAD, null, null),
             new(arrival.AddHours(restHours), arrival.AddHours(restHours + 1), TransportMode.AIR, null, null)]);
-        Assert.Equal(passed, checks[0].Passed); Assert.True(checks[1].Passed);
+        Assert.Equal(passed, checks[0].Passed);
+    }
+
+    [Fact]
+    public void Driving_AllowsAnEightPlusHourRoadSegment_ButNotAnAirOrSeaOneToBeLimited()
+    {
+        var start = new DateTime(2026, 10, 22);
+        Assert.True(RouteRestRules.Evaluate([new(start, start.AddHours(12), TransportMode.ROAD, null, null)])[0].Passed);
+        Assert.Contains("24 hours", RouteRestRules.Evaluate([new(start, start.AddHours(25), TransportMode.ROAD, null, null)])[0].Message);
     }
 
     [Theory]
@@ -33,10 +43,12 @@ public class RouteRestRulesTests
     }
 
     [Fact]
-    public void FinalLongRoadLeg_StillRequiresRest()
+    public void FinalLongRoadLeg_NeedsNoRestAfterIt_ButAnEarlierOneStillDoes()
     {
         var start = new DateTime(2026, 10, 22);
-        Assert.False(RouteRestRules.Evaluate([new(start, start.AddHours(5), TransportMode.ROAD, null, null)])[0].Passed);
+        Assert.True(RouteRestRules.Evaluate([new(start, start.AddHours(5), TransportMode.ROAD, null, null)])[0].Passed);
+        Assert.False(RouteRestRules.Evaluate([new(start, start.AddHours(5), TransportMode.ROAD, null, null),
+            new(start.AddHours(5.5), start.AddHours(6), TransportMode.ROAD, null, null)])[0].Passed);
         Assert.All(RouteRestRules.Evaluate([]), check => Assert.False(check.Passed));
     }
 }
