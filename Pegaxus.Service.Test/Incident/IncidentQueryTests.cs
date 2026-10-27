@@ -105,12 +105,14 @@ public class IncidentQueryTests
         Assert.True(manager.CanResolve); Assert.Contains("RESOLVE", manager.AvailableActions); Assert.Contains("CANCEL_INCIDENT", manager.AvailableActions);
         var crew = Assert.IsType<Incidents.Response.Incident>(await f.Service.GetAsync(item.IncidentReportId, f.Escort.AccountId));
         Assert.Contains("SELF_RESOLVE", crew.AvailableActions); Assert.Contains("RAISE_SEVERITY", crew.AvailableActions);
+        Assert.Contains("CANCEL_INCIDENT", crew.AvailableActions); Assert.DoesNotContain("LOWER_SEVERITY", crew.AvailableActions); Assert.Contains("LOWER_SEVERITY", manager.AvailableActions);
         var specialist = Assert.IsType<Incidents.Response.Incident>(await f.Service.GetAsync(item.IncidentReportId, f.Specialist.AccountId));
         Assert.Empty(specialist.AvailableActions); Assert.False(specialist.CanResolve);
         AddCost(db, item, f.Driver, EmergencyCostStatus.PENDING); await db.SaveChangesAsync();
         manager = Assert.IsType<Incidents.Response.Incident>(await f.Service.GetAsync(item.IncidentReportId, f.Manager.AccountId));
         crew = Assert.IsType<Incidents.Response.Incident>(await f.Service.GetAsync(item.IncidentReportId, f.Driver.AccountId));
         Assert.False(manager.CanResolve); Assert.DoesNotContain("RESOLVE", manager.AvailableActions); Assert.DoesNotContain("SELF_RESOLVE", crew.AvailableActions);
+        Assert.DoesNotContain("CANCEL_INCIDENT", crew.AvailableActions); Assert.Contains("CANCEL_INCIDENT", manager.AvailableActions);
         Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.ListAsync(new(), f.CustomerAccountId))).ErrorCode);
     }
 
