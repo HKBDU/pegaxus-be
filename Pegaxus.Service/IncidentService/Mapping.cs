@@ -92,7 +92,11 @@ public sealed partial class Service
         if (manager && incident.EmergencyCostRequests.Any(cost => cost.Status == EmergencyCostStatus.PENDING)) actions.Add("DECIDE_COST");
         if (manager && canResolve) actions.Add("RESOLVE");
         if (incident.Severity != IncidentSeverity.CRITICAL && (manager || coordinator || crew)) actions.Add("RAISE_SEVERITY");
-        if (manager) actions.Add("CANCEL_INCIDENT");
+        // Only the manager lowers a severity.
+        if (manager && incident.Severity != IncidentSeverity.LOW) actions.Add("LOWER_SEVERITY");
+        // A crew may cancel its own mistaken report only until the manager takes it up, and only while no cost is open.
+        if (manager || crew && incident.Status == IncidentStatus.REPORTED &&
+            !incident.EmergencyCostRequests.Any(cost => cost.Status is EmergencyCostStatus.PENDING or EmergencyCostStatus.APPROVED)) actions.Add("CANCEL_INCIDENT");
         return actions;
     }
 
