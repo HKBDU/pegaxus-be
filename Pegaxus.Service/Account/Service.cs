@@ -178,7 +178,7 @@ public sealed class Service : IAccountService
         var asset = await _mediaService.ConfirmAvatarAsync(accountId, avatar.PublicId, cancellationToken);
         var content = await _mediaService.DownloadPreviewAsync(asset.FileUrl, cancellationToken);
         if (content.Content.Length != asset.SizeBytes || content.ContentType != asset.MimeType)
-            throw new BadRequestException("Image must be JPG/PNG and no larger than 2 MB", "INVALID_FILE");
+            throw new BadRequestException($"Image must be JPG/PNG and no larger than {Limits.UploadMaxMegabytes} MB", "INVALID_FILE");
         return asset.FileUrl;
     }
 

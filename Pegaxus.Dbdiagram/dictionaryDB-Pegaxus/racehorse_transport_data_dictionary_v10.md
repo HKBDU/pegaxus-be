@@ -123,8 +123,8 @@
 | `horse_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Horse`. |
 | `customer_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Customer.customer_id`. |
 | `horse_name` | `varchar(150)` |  | Yes | Tên của ngựa. |
-| `passport_number` | `varchar(100)` |  | No | Số hộ chiếu ngựa, nếu có. |
-| `microchip_number` | `varchar(100)` |  | No | Mã microchip nhận dạng ngựa, nếu có. |
+| `passport_number` | `varchar(100)` |  | No | Số hộ chiếu ngựa, nếu có. Duy nhất giữa các ngựa chưa xóa (chỉ mục một phần `WHERE is_deleted = false`), nên thêm lại ngựa đã xóa mềm được. |
+| `microchip_number` | `varchar(100)` |  | No | Mã microchip nhận dạng ngựa, nếu có. Duy nhất giữa các ngựa chưa xóa (chỉ mục một phần `WHERE is_deleted = false`). |
 | `breed` | `varchar(100)` |  | No | Giống ngựa. |
 | `sex` | `horse_sex` |  | No | Giới tính/trạng thái giới tính của ngựa. Enum `horse_sex`: MALE, FEMALE, GELDING. |
 | `date_of_birth` | `date` |  | No | Ngày sinh. |
@@ -133,6 +133,7 @@
 | `weight_kg` | `decimal(6,2)` |  | No | Cân nặng hiện tại của ngựa, đơn vị kg. |
 | `height_cm` | `decimal(5,2)` |  | No | Chiều cao hiện tại của ngựa, đơn vị cm. |
 | `identification_notes` | `text` |  | No | Ghi chú bổ sung để nhận dạng ngựa. |
+| `avatar_url` | `varchar(500)` |  | No | URL công khai của ảnh đại diện ngựa (Cloudinary). Null nếu chưa có. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
 | `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |

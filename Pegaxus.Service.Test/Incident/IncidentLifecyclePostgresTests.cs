@@ -77,7 +77,7 @@ public class IncidentLifecyclePostgresTests
                     Assert.Equal(cost.Status, (await verify.EmergencyCostRequests.SingleAsync()).Status);
                     Assert.Null((await verify.EmergencyCostRequests.SingleAsync()).CancelledAt);
                     Assert.Equal(notificationCount, await verify.Notifications.CountAsync()); Assert.Equal(notificationCount, await verify.AccountNotifications.CountAsync());
-                    Assert.Equal(outboxCount, await verify.OutboxMessages.CountAsync()); Assert.Equal(VehicleStatus.OUT_OF_SERVICE, (await verify.Vehicles.SingleAsync()).Status);
+                    Assert.Equal(outboxCount, await verify.OutboxMessages.CountAsync()); Assert.Equal(VehicleStatus.IN_USE, (await verify.Vehicles.SingleAsync()).Status);
                     Assert.Single(await verify.IncidentPhotos.ToArrayAsync());
                 }
             }

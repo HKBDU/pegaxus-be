@@ -9,6 +9,10 @@ public sealed record DecimalRange(decimal Min, decimal Max, int Scale);
 /// </summary>
 public static class Limits
 {
+    /// <summary>Largest file any upload may have; avatars, documents, proofs and photos all share it.</summary>
+    public const int UploadMaxMegabytes = 10;
+    public const long UploadMaxBytes = UploadMaxMegabytes * 1024 * 1024;
+
     public static readonly DecimalRange HorseWeightKg = new(20m, 1500m, 1);
     public static readonly DecimalRange HorseHeightCm = new(50m, 220m, 1);
     public static readonly DecimalRange PlanDistanceKm = new(0.1m, 30000m, 2);

@@ -244,7 +244,7 @@ public class HorseHealthLogTests
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db); var request = f.Request();
         request.Files = [Photo()];
-        f.Storage.Preview = new(kind switch { "empty" => [], "signature" => "invalid"u8.ToArray(), "oversized" => new byte[5 * 1024 * 1024 + 1], _ => Png }, kind == "pdf" ? "application/pdf" : "image/png");
+        f.Storage.Preview = new(kind switch { "empty" => [], "signature" => "invalid"u8.ToArray(), "oversized" => new byte[10 * 1024 * 1024 + 1], _ => Png }, kind == "pdf" ? "application/pdf" : "image/png");
         if (kind == "mime") f.Storage.ConfirmedMimeType = "image/jpeg";
         if (kind == "length") f.Storage.ConfirmedSize = Png.Length + 1;
         Assert.Equal("INVALID_IMAGE", (await Assert.ThrowsAsync<BadRequestException>(() =>

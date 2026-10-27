@@ -42,6 +42,8 @@ public static class Response
         public Guid RoutePlanId { get; init; }
         public required string Status { get; init; }
         public List<Guid> ReleasedVehicleIds { get; init; } = [];
+        public List<Guid> MaintenanceVehicleIds { get; init; } = [];
+        public List<Guid> AppliedSegmentIds { get; init; } = [];
         public DateTimeOffset UpdatedAt { get; init; }
     }
 

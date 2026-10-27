@@ -20,7 +20,6 @@ namespace Pegaxus.Service.ComplianceDossierService;
 
 public sealed partial class Service : IComplianceDossierService
 {
-    private const long MaxProofFileSize = 2 * 1024 * 1024;
 
     private static readonly HashSet<string> AuditActionTypes =
     [

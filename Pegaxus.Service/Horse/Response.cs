@@ -18,6 +18,7 @@ public static class Response
         public string? Sex { get; init; }
         public string? Breed { get; init; }
         public string? MicrochipNumber { get; init; }
+        public string? AvatarUrl { get; init; }
     }
 
     public sealed class HorseCreatedResponse
@@ -40,6 +41,7 @@ public static class Response
         public string? PassportNumber { get; init; }
         public string? MicrochipNumber { get; init; }
         public string? IdentificationNotes { get; init; }
+        public string? AvatarUrl { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }

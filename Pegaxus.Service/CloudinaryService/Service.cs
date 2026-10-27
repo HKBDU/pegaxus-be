@@ -3,6 +3,7 @@ using System.Text;
 using CloudinaryDotNet;
 using CloudinaryDotNet.Actions;
 using Microsoft.Extensions.Configuration;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MediaService;
 
@@ -40,7 +41,7 @@ public partial class Service : IMediaService
 
         if (sizeBytes <= 0 || sizeBytes > MaxSignedUploadSize)
             throw new Pegaxus.Service.Exceptions.Exceptions(
-                "File size must be greater than 0 and must not exceed 5 MB",
+                $"File size must be greater than 0 and must not exceed {Limits.UploadMaxMegabytes} MB",
                 413,
                 "FILE_TOO_LARGE");
 
@@ -128,7 +129,7 @@ public partial class Service : IMediaService
         if (result.PublicId != publicId || result.Type != "authenticated" || result.ResourceType is not (ResourceType.Image or ResourceType.Raw))
             throw new BadRequestException("Uploaded file metadata is invalid", "INVALID_FILE_TYPE");
         if (result.Bytes <= 0 || result.Bytes > MaxSignedUploadSize)
-            throw new Pegaxus.Service.Exceptions.Exceptions("File must not be empty or exceed 5 MB", 413, "FILE_TOO_LARGE");
+            throw new Pegaxus.Service.Exceptions.Exceptions($"File must not be empty or exceed {Limits.UploadMaxMegabytes} MB", 413, "FILE_TOO_LARGE");
         var format = (string.IsNullOrWhiteSpace(result.Format) ? Path.GetExtension(publicId).TrimStart('.') : result.Format).ToLowerInvariant();
         var mimeType = format switch
         {

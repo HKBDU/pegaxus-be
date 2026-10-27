@@ -317,6 +317,7 @@ public class Response
         public string Status { get; init; } = "DRAFT";
         public IReadOnlyList<Request.InitializationItemRequest> Items { get; init; } = [];
         public IReadOnlyList<GeneratedRequirementResponse> Requirements { get; init; } = [];
+        public int GeneratedRequirementCount => Requirements.Count;
     }
 
     public sealed class GeneratedRequirementResponse

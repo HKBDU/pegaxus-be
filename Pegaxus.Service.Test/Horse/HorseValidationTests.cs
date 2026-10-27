@@ -12,7 +12,7 @@ public class HorseValidationTests
     {
         await using var db = TestSupport.CreateDb();
         var (account, _) = await TestSupport.AddCustomerAsync(db);
-        var service = new HorseServiceImpl(db);
+        var service = new HorseServiceImpl(db, new HorseTests.HorseMedia());
 
         // Invalid microchip format (not 15 digits)
         var invalidMicrochipRequest = new HorseRequest.CreateHorseRequest

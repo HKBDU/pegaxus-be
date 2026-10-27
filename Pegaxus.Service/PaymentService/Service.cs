@@ -140,6 +140,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             ChangedByAccountId = null, ChangedAt = now, CreatedAt = now
         });
 
+        var planApproved = false;
         if (invoice.Type == InvoiceType.DEPOSIT)
         {
             var plan = await db.TransportPlans
@@ -153,11 +154,12 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
                 plan.Status = TransportPlanStatus.APPROVED;
                 plan.ApprovedByEmployeeId = null;
                 plan.ApprovedAt = plan.UpdatedAt = now;
+                planApproved = true;
             }
         }
 
         var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
-            .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName, TransportId = (Guid?)x.Transport!.TransportId })
+            .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName, TransportId = (Guid?)x.Transport!.TransportId, x.AssignedEmployeeId })
             .SingleAsync(cancellationToken);
         var message = $"Online payment for invoice {invoice.InvoiceCode} has been confirmed. Receipt: {receipt.ReceiptCode}. " +
             $"Amount: {Vnd.Format(receipt.Amount, receipt.Currency)}. Invoice status: PAID.";
@@ -175,6 +177,21 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
                 receipt.Amount, receipt.Currency, isPayout: false,
                 actionUrl: NotificationLinks.Invoice(null, invoice.BookingId, invoice.InvoiceId))
         }, now);
+        // Only the manager who approved the booking hears about the payment, and only in the app; nobody else is told when that manager is no longer active.
+        var manager = await db.Employees.AsNoTracking().Active()
+            .Where(x => x.Role == EmployeeRole.LOGISTICS_MANAGER && x.EmployeeId == customer.AssignedEmployeeId)
+            .Select(x => x.AccountId).SingleOrDefaultAsync(cancellationToken);
+        if (manager != Guid.Empty)
+            notifications.Queue(new NotificationCreateRequest
+            {
+                AccountId = manager, TransportId = customer.TransportId, Type = NotificationType.PAYMENT,
+                Priority = planApproved ? NotificationPriority.HIGH : NotificationPriority.NORMAL, Title = "Payment received",
+                Message = $"{customer.FullName} paid invoice {invoice.InvoiceCode} online. Receipt: {receipt.ReceiptCode}. " +
+                    $"Amount: {Vnd.Format(receipt.Amount, receipt.Currency)}. Invoice status: PAID." +
+                    (planApproved ? " The transport plan was approved automatically." : string.Empty),
+                ReferenceType = "Invoice", ReferenceId = invoice.InvoiceId,
+                ActionUrl = NotificationLinks.Invoice(EmployeeRole.LOGISTICS_MANAGER, invoice.BookingId, invoice.InvoiceId), CreatedAt = now
+            });
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);

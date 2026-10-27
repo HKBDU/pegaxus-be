@@ -42,7 +42,7 @@ public class BookingServiceTests
             DestinationCountry = "Germany",
             DestinationLatitude = 52.5200m,
             DestinationLongitude = 13.4050m,
-            RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(21),
+            RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(2),
             Horses = [new BookingRequest.BookingHorseRequest { HorseId = horse.HorseId }]
         });
 

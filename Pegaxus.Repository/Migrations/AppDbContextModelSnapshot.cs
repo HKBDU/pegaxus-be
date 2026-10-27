@@ -2533,6 +2533,11 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("horse_id");
 
+                    b.Property<string>("AvatarUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)")
+                        .HasColumnName("avatar_url");
+
                     b.Property<string>("Breed")
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)")
@@ -2624,10 +2629,12 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "IsDeleted" }, "Horse_is_deleted_idx");
 
                     b.HasIndex(new[] { "MicrochipNumber" }, "Horse_microchip_number_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.HasIndex(new[] { "PassportNumber" }, "Horse_passport_number_key")
-                        .IsUnique();
+                        .IsUnique()
+                        .HasFilter("is_deleted = false");
 
                     b.ToTable("Horse", (string)null);
                 });

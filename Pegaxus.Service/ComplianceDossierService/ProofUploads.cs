@@ -1,3 +1,4 @@
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MediaService;
 
@@ -21,10 +22,10 @@ public sealed partial class Service
         }
         catch (Pegaxus.Service.Exceptions.Exceptions exception) when (exception.ErrorCode == "FILE_TOO_LARGE")
         {
-            throw new Pegaxus.Service.Exceptions.Exceptions("Proof image must not exceed 5 MB", 413, "FILE_TOO_LARGE");
+            throw new Pegaxus.Service.Exceptions.Exceptions($"Proof image must not exceed {Limits.UploadMaxMegabytes} MB", 413, "FILE_TOO_LARGE");
         }
-        if (asset.SizeBytes > 5 * 1024 * 1024)
-            throw new Pegaxus.Service.Exceptions.Exceptions("Proof image must not exceed 5 MB", 413, "FILE_TOO_LARGE");
+        if (asset.SizeBytes > Limits.UploadMaxBytes)
+            throw new Pegaxus.Service.Exceptions.Exceptions($"Proof image must not exceed {Limits.UploadMaxMegabytes} MB", 413, "FILE_TOO_LARGE");
         var extension = Path.GetExtension(asset.FileName).ToLowerInvariant();
         if (asset.SizeBytes <= 0 || extension is not (".jpg" or ".jpeg" or ".png") ||
             asset.MimeType is not ("image/jpeg" or "image/png"))
@@ -47,10 +48,10 @@ public sealed partial class Service
         }
         catch (Pegaxus.Service.Exceptions.Exceptions exception) when (exception.ErrorCode == "FILE_TOO_LARGE")
         {
-            throw new Pegaxus.Service.Exceptions.Exceptions($"{label} must not exceed 2 MB", 413, "FILE_TOO_LARGE");
+            throw new Pegaxus.Service.Exceptions.Exceptions($"{label} must not exceed {Limits.UploadMaxMegabytes} MB", 413, "FILE_TOO_LARGE");
         }
-        if (asset.SizeBytes > MaxProofFileSize)
-            throw new Pegaxus.Service.Exceptions.Exceptions($"{label} must not exceed 2 MB", 413, "FILE_TOO_LARGE");
+        if (asset.SizeBytes > Limits.UploadMaxBytes)
+            throw new Pegaxus.Service.Exceptions.Exceptions($"{label} must not exceed {Limits.UploadMaxMegabytes} MB", 413, "FILE_TOO_LARGE");
         var content = await _mediaService.DownloadPreviewAsync(asset.FileUrl, cancellationToken);
         if (content.Content.Length != asset.SizeBytes || content.ContentType != asset.MimeType)
             throw new BadRequestException("Uploaded file content does not match its metadata.", "INVALID_FILE_TYPE");

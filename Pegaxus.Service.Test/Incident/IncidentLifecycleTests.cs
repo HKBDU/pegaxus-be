@@ -33,7 +33,7 @@ public class IncidentLifecycleTests
         var result = await ApplyAsync(f.Service, item, action, action == "self-resolve" ? f.Escort.AccountId : f.Manager.AccountId);
         Assert.Equal(action == "cancel" ? "CANCELLED" : "RESOLVED", result.Status);
         Assert.Equal(created.Severity, result.Severity); Assert.Equal(created.Description, result.Description);
-        Assert.Equal("OUT_OF_SERVICE", result.Vehicle!.Status); Assert.Equal(created.Photos, result.Photos);
+        Assert.Equal("IN_USE", result.Vehicle!.Status); Assert.Equal(created.Photos, result.Photos);
         Assert.Empty(result.AvailableActions); Assert.False(result.CanResolve); Assert.True(result.UpdatedAt > created.UpdatedAt);
         Assert.Equal(action == "cancel", result.EmergencySettlementRequired);
         Assert.Equal(action == "cancel" ? null : Summary, result.ResolutionSummary);
@@ -206,12 +206,17 @@ public class IncidentLifecycleTests
         Assert.Equal(2, customer.Length); Assert.All(customer, row => Assert.Equal(NotificationPriority.HIGH, row.Notification.Priority));
         Assert.Equal(3, await db.AccountNotifications.CountAsync(row => row.AccountId == f.Specialist.AccountId));
         Assert.Equal(2, await db.OutboxMessages.CountAsync(row => row.MessageType == "EMAIL"));
-        foreach (var severity in new[] { "CRITICAL", "HIGH", "LOW" })
-        {
-            var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.RaiseSeverityAsync(item.IncidentReportId,
-                new() { LastUpdatedAt = DbTime.AsUtc(item.UpdatedAt), Severity = severity, Reason = Reason }, actor.AccountId));
-            Assert.Equal(severity == "CRITICAL" ? "SEVERITY_UNCHANGED" : "SEVERITY_CANNOT_DECREASE", error.ErrorCode);
-        }
+        var unchanged = await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.RaiseSeverityAsync(item.IncidentReportId,
+            new() { LastUpdatedAt = DbTime.AsUtc(item.UpdatedAt), Severity = "CRITICAL", Reason = Reason }, actor.AccountId));
+        Assert.Equal("SEVERITY_UNCHANGED", unchanged.ErrorCode);
+        // Only the logistics manager may lower a severity (see IncidentManagementRulesTests).
+        if (role != EmployeeRole.LOGISTICS_MANAGER)
+            foreach (var severity in new[] { "HIGH", "LOW" })
+            {
+                var error = await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.RaiseSeverityAsync(item.IncidentReportId,
+                    new() { LastUpdatedAt = DbTime.AsUtc(item.UpdatedAt), Severity = severity, Reason = Reason }, actor.AccountId));
+                Assert.Equal("SEVERITY_LOWER_MANAGER_ONLY", error.ErrorCode);
+            }
         Assert.Equal(11, await db.Notifications.CountAsync());
     }
 

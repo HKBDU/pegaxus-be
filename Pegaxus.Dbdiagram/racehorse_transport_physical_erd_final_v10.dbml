@@ -9,6 +9,9 @@
 // V10 (Flow 5): adds incident detail fields, emergency cost requester/receipt state, and shared IncidentPhoto.
 // V10 fix (aligned with BE): file_size_bytes is bigint, Invoice.due_date is timestamp, HorseHealthLog.photo_urls is an array,
 //   Notification.transport_id is nullable.
+// V10 fix (horse numbers): passport_number and microchip_number are unique only among live horses (partial unique index
+//   WHERE is_deleted = false), so a soft-deleted horse does not block adding the same horse again.
+// V10 fix (horse avatar): Horse.avatar_url varchar(500), nullable, like Account.avatar_url.
 // V9 (Flow 4): adds HandoverRecord provider parties (handover_party_type.PROVIDER), RoutePlanRoute.status,
 //   ComplianceDossier.dossier_type (MAIN/EXTRA; one dossier per transport and type), TransportPlan origin/destination
 //   Location and Booking origin/destination coordinates. Coordinates use decimal(10,4), like Location.
@@ -669,8 +672,8 @@ Table Horse {
 
   horse_name varchar(150) [not null]
 
-  passport_number varchar(100) [unique]
-  microchip_number varchar(100) [unique]
+  passport_number varchar(100)
+  microchip_number varchar(100)
 
   breed varchar(100)
   sex horse_sex
@@ -687,6 +690,8 @@ Table Horse {
 
   identification_notes text
 
+  avatar_url varchar(500) // ảnh đại diện (public Cloudinary URL)
+
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp
@@ -699,6 +704,8 @@ Table Horse {
     is_deleted
     customer_id
     horse_name
+    passport_number [unique, name: "Horse_passport_number_key", note: "WHERE is_deleted = false"]
+    microchip_number [unique, name: "Horse_microchip_number_key", note: "WHERE is_deleted = false"]
   }
 }
 
