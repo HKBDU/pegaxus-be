@@ -94,13 +94,15 @@ public class LocationTrackingHttpTests
     [InlineData(EmployeeRole.LOGISTICS_MANAGER, 200, 403)]
     [InlineData(EmployeeRole.FLEET_ROUTE_COORDINATOR, 200, 403)]
     [InlineData(EmployeeRole.TRANSPORT_SPECIALIST, 200, 403)]
-    [InlineData(EmployeeRole.DRIVER, 403, 200)]
-    [InlineData(EmployeeRole.ESCORT, 403, 403)]
+    [InlineData(EmployeeRole.DRIVER, 200, 200)]
+    [InlineData(EmployeeRole.ESCORT, 200, 403)]
     public async Task Http_AndSignalRPoliciesRejectUnapprovedRolesAndForgedClaims(EmployeeRole role, int read, int write)
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         var actor = await PersonnelAssignmentTests.EmployeeAsync(db, role);
-        if (role == EmployeeRole.DRIVER) { f.First.DriverEmployeeId = actor.EmployeeId; await db.SaveChangesAsync(); }
+        if (role == EmployeeRole.DRIVER) f.First.DriverEmployeeId = actor.EmployeeId;
+        if (role == EmployeeRole.ESCORT) f.First.EscortEmployeeId = actor.EmployeeId;
+        await db.SaveChangesAsync();
         await using var host = await StartAsync(db, f);
         using var client = Client(host, actor.AccountId, role);
         var url = $"/api/v1/transports/{f.TransportId}";
@@ -112,6 +114,22 @@ public class LocationTrackingHttpTests
         Assert.Equal(HttpStatusCode.Forbidden, (await forged.PostAsJsonAsync(url + "/locations", f.Point(0.5m))).StatusCode);
         client.DefaultRequestHeaders.Authorization = null;
         Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync(url + "/tracking")).StatusCode);
+    }
+
+    [Theory]
+    [InlineData(EmployeeRole.DRIVER)]
+    [InlineData(EmployeeRole.ESCORT)]
+    public async Task Http_CrewNotAssignedToTheTransportIsForbiddenOnTrackingAndHub(EmployeeRole role)
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var stranger = await PersonnelAssignmentTests.EmployeeAsync(db, role);
+        await using var host = await StartAsync(db, f);
+        using var client = Client(host, stranger.AccountId, role);
+        using var response = await client.GetAsync($"/api/v1/transports/{f.TransportId}/tracking");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal("FORBIDDEN", (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("errorCode").GetString());
+        await using var hub = await Connection.OpenAsync(host, stranger.AccountId, role);
+        Assert.Contains("FORBIDDEN", (await hub.InvokeAsync("JoinTransport", f.TransportId)).GetProperty("error").GetString());
     }
 
     [Theory]
@@ -139,7 +157,8 @@ public class LocationTrackingHttpTests
         await using var owner = await Connection.OpenAsync(host, first.CustomerAccountId);
         await using var manager = await Connection.OpenAsync(host, first.Manager.AccountId, EmployeeRole.LOGISTICS_MANAGER);
         await using var stranger = await Connection.OpenAsync(host, second.CustomerAccountId);
-        await using var forged = await Connection.OpenAsync(host, first.Driver.AccountId, EmployeeRole.LOGISTICS_MANAGER);
+        var unassignedDriver = await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.DRIVER);
+        await using var forged = await Connection.OpenAsync(host, unassignedDriver.AccountId, EmployeeRole.LOGISTICS_MANAGER);
         Assert.False((await owner.InvokeAsync("JoinTransport", first.TransportId)).TryGetProperty("error", out _));
         Assert.False((await manager.InvokeAsync("JoinTransport", first.TransportId)).TryGetProperty("error", out _));
         Assert.False((await stranger.InvokeAsync("JoinTransport", second.TransportId)).TryGetProperty("error", out _));

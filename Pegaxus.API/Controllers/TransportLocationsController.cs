@@ -11,7 +11,7 @@ namespace Pegaxus.API.Controllers;
 public sealed class TransportLocationsController(Tracking.ILocationTrackingService service) : ApiControllerBase
 {
     /// <summary>Get the transport tracking snapshot.</summary>
-    /// <remarks>Managers, coordinators, specialists and the booking customer may view READY, IN_TRANSIT or COMPLETED transports. Returns the effective planned route, current stop, planned ETA and latest in-memory GPS sample. No GPS history is stored. Join /hubs/transport-tracking using JoinTransport(transportId), then load this snapshot on connection and reconnection. Subscribe to LocationUpdated for subsequent samples.</remarks>
+    /// <remarks>Managers, coordinators, specialists, the booking customer and the driver or escort assigned to the transport may view READY, IN_TRANSIT or COMPLETED transports. Returns the effective planned route, current stop, planned ETA and latest in-memory GPS sample. No GPS history is stored. Join /hubs/transport-tracking using JoinTransport(transportId), then load this snapshot on connection and reconnection. Subscribe to LocationUpdated for subsequent samples.</remarks>
     /// <param name="transportId">The transport identifier (UUID).</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the tracking snapshot.</returns>
