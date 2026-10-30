@@ -41,9 +41,13 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock, Trackin
     private async Task<Transport> ViewerTransportAsync(Guid transportId, Guid accountId, CancellationToken cancellationToken)
     {
         var actor = await ActorAsync(accountId, cancellationToken);
-        if (actor.Type != AccountType.CUSTOMER && actor.Role is not (EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.FLEET_ROUTE_COORDINATOR or EmployeeRole.TRANSPORT_SPECIALIST))
+        var isCrew = actor.Type == AccountType.EMPLOYEE && actor.Role is EmployeeRole.DRIVER or EmployeeRole.ESCORT;
+        if (actor.Type != AccountType.CUSTOMER && !isCrew && actor.Role is not (EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.FLEET_ROUTE_COORDINATOR or EmployeeRole.TRANSPORT_SPECIALIST))
             throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");
         var transport = await TransportAsync(transportId, cancellationToken);
+        if (isCrew && !await AssignedSegments(transportId).AnyAsync(segment =>
+                segment.DriverEmployeeId == actor.EmployeeId || segment.EscortEmployeeId == actor.EmployeeId, cancellationToken))
+            throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");
         if (actor.Type == AccountType.CUSTOMER && !await db.Bookings.AsNoTracking().AnyAsync(booking => booking.BookingId == transport.BookingId &&
                 booking.Customer.AccountId == accountId, cancellationToken))
             throw new NotFoundException("Transport not found", "TRANSPORT_NOT_FOUND");
@@ -88,12 +92,26 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock, Trackin
             ?? throw new NotFoundException("Transport not found", "TRANSPORT_NOT_FOUND");
     }
 
-    private Task<Guid[]> ViewerAccountsAsync(Guid transportId, CancellationToken cancellationToken) =>
-        db.Accounts.AsNoTracking().Where(account => !account.IsDeleted && account.Status == AccountStatus.ACTIVE &&
+    // Same crew rule as the handover module: a live internal segment of this transport, not a superseded one that never started.
+    private IQueryable<RoutePlanRoute> AssignedSegments(Guid transportId) =>
+        db.RoutePlanRoutes.AsNoTracking().Where(segment => segment.RoutePlan.TransportPlan.TransportId == transportId &&
+            EligibleStatuses.Contains(segment.RoutePlan.Status) && !segment.TransportProviderId.HasValue &&
+            (segment.SupersededAt == null || segment.ActualDepartureAt != null));
+
+    private async Task<Guid[]> ViewerAccountsAsync(Guid transportId, CancellationToken cancellationToken)
+    {
+        var staffAndCustomer = await db.Accounts.AsNoTracking().Where(account => !account.IsDeleted && account.Status == AccountStatus.ACTIVE &&
             (account.AccountType == AccountType.EMPLOYEE && db.Employees.Active().Any(employee => employee.AccountId == account.AccountId && ViewerRoles.Contains(employee.Role)) ||
              account.AccountType == AccountType.CUSTOMER && account.CustomerAccount != null && !account.CustomerAccount.IsDeleted &&
                 db.Transports.Any(transport => transport.TransportId == transportId && transport.Booking.Customer.AccountId == account.AccountId)))
             .Select(account => account.AccountId).ToArrayAsync(cancellationToken);
+        var assigned = AssignedSegments(transportId);
+        var crew = await db.Employees.Active().AsNoTracking().Where(employee => (employee.Role == EmployeeRole.DRIVER || employee.Role == EmployeeRole.ESCORT) &&
+                !employee.Account.IsDeleted && employee.Account.Status == AccountStatus.ACTIVE &&
+                assigned.Any(segment => segment.DriverEmployeeId == employee.EmployeeId || segment.EscortEmployeeId == employee.EmployeeId))
+            .Select(employee => employee.AccountId).ToArrayAsync(cancellationToken);
+        return staffAndCustomer.Concat(crew).Distinct().ToArray();
+    }
 
     private sealed record Actor(AccountType Type, Guid? EmployeeId, EmployeeRole? Role, string? FullName, bool HasCustomer);
 }

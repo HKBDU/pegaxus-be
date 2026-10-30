@@ -301,6 +301,24 @@ public class LocationTrackingTests
     }
 
     [Theory]
+    [InlineData(EmployeeRole.DRIVER)]
+    [InlineData(EmployeeRole.ESCORT)]
+    public async Task Viewer_AssignedCrewReadsTheSnapshotAndReceivesLiveSamples_AnUnassignedColleagueDoesNot(EmployeeRole role)
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var assigned = await PersonnelAssignmentTests.EmployeeAsync(db, role); var stranger = await PersonnelAssignmentTests.EmployeeAsync(db, role);
+        if (role == EmployeeRole.DRIVER) f.Second.DriverEmployeeId = assigned.EmployeeId; else f.Second.EscortEmployeeId = assigned.EmployeeId;
+        await db.SaveChangesAsync();
+
+        Assert.Equal(f.TransportId, (await f.Service.GetAsync(f.TransportId, assigned.AccountId)).TransportId);
+        Assert.Equal("FORBIDDEN", (await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.GetAsync(f.TransportId, stranger.AccountId))).ErrorCode);
+        await Assert.ThrowsAsync<NotFoundException>(() => f.Service.GetAsync(Guid.NewGuid(), assigned.AccountId));
+
+        await f.Service.RecordAsync(f.TransportId, f.Point(0.5m), f.Driver.AccountId);
+        Assert.Contains(assigned.AccountId, f.Realtime.Viewers); Assert.DoesNotContain(stranger.AccountId, f.Realtime.Viewers);
+    }
+
+    [Theory]
     [InlineData("wrongRole", false)]
     [InlineData("unassigned", false)]
     [InlineData("superseded", false)]
