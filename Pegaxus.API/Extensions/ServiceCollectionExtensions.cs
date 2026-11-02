@@ -57,6 +57,7 @@ public static class ServiceCollectionExtensions
     {
         services
             .AddControllers()
+            .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter()))
             .AddMvcOptions(options =>
             {
                 var factories = options.ValueProviderFactories;

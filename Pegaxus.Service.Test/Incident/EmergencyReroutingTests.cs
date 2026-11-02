@@ -93,7 +93,7 @@ public class EmergencyReroutingTests
         var backup = AddPlan(db, f, RouteType.BACKUP); var segment = backup.RoutePlanRoutes.Single();
         if (condition == "draft") backup.Status = RoutePlanStatus.DRAFT;
         if (condition == "departed") segment.ActualDepartureAt = Scenario.Now;
-        if (condition == "long-drive") segment.PlannedArrivalAt = segment.PlannedDepartureAt!.Value.AddHours(9);
+        if (condition == "long-drive") segment.PlannedArrivalAt = segment.PlannedDepartureAt!.Value.AddHours(25);
         if (condition == "missing-schedule") segment.PlannedArrivalAt = null;
         await db.SaveChangesAsync();
         var context = await f.Service.GetRerouteContextAsync(item.IncidentReportId, f.Coordinator.AccountId);

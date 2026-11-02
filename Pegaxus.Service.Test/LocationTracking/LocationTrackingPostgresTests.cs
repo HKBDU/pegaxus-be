@@ -26,7 +26,7 @@ public class LocationTrackingPostgresTests
                 var snapshot = await f.CreateService(writer).GetAsync(f.TransportId, f.CustomerAccountId);
                 Assert.Equal(2, snapshot.PlannedRoute.Segments.Count); Assert.Equal(0.5m, snapshot.Truck!.Longitude);
                 Assert.Contains(f.CustomerAccountId, f.Realtime.Viewers); Assert.Contains(f.Manager.AccountId, f.Realtime.Viewers);
-                Assert.DoesNotContain(f.Driver.AccountId, f.Realtime.Viewers);
+                Assert.Contains(f.Driver.AccountId, f.Realtime.Viewers);
             }
             // One driver runs both segments, so entering the end of segment 1 is timed by GPS and starts segment 2 in the same save.
             var point = f.Point(1); point.RecordedAt = point.RecordedAt!.Value.AddSeconds(15);

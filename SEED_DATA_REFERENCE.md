@@ -31,9 +31,9 @@ Mật khẩu mặc định của toàn bộ tài khoản: `pegaxusDemo@123`
 
 ## Horse
 
-Tổng cộng 16 horse. Mỗi customer có đúng 4 horse riêng, với `microchipNumber` gồm 15 chữ số và `passportNumber` duy nhất.
+Tổng cộng 16 horse. Mỗi customer có đúng 4 horse riêng, với `microchipNumber` gồm 15 chữ số và `passportNumber` duy nhất gồm 15 ký tự chữ/số. Tên, giống, màu lông, giới tính, ngày sinh, cân nặng và chiều cao dùng hồ sơ riêng theo bản dev.
 
-Mã `HRS-...` là khóa tham chiếu trong seed, nằm trong `passportNumber` với tiền tố `PEGAXUS-`; `horseId` vẫn là GUID.
+Mã `HRS-...` là khóa tham chiếu nội bộ để tạo `horseId` GUID ổn định. Passport dùng mẫu `250PEG001000001`, không dùng khóa `HRS-...` làm số passport.
 
 | Customer | Mã tham chiếu seed |
 |---|---|
@@ -57,6 +57,8 @@ Tất cả booking đều được gắn horse thuộc đúng customer sở hữ
 
 Booking có lịch sử trạng thái phù hợp cho các case `PENDING`, `APPROVED` và `REJECTED`.
 
+Booking có địa chỉ và tọa độ hai đầu theo bản dev. Ngày đi tính từ ngày seed lần đầu: booking `0001` đi sau 30 ngày; `0002`–`0006` lần lượt sau 90, 100, 110, 120, 130 ngày. Lịch đáp ứng quy tắc nội địa tối thiểu 21 ngày, quốc tế tối thiểu 2 tháng. Các cặp địa điểm lần lượt là Chantilly–Deauville, Grosbois–National Stud Newmarket, ParisLongchamp–Dalham Hall, Curragh–Chantilly, Chantilly–Ascot, Newbury–Quesnay. Đây là dữ liệu mẫu, chưa xác minh cổng tiếp nhận xe ngựa.
+
 ## Transport
 
 | Transport code | Booking | Status |
@@ -75,7 +77,7 @@ Seed nạp catalog location từ `Pegaxus.API/Data/locations-camelcase.json`, d�
 
 `locationId` số trong JSON là định danh cố định để tạo GUID, không phải số thứ tự: không đánh lại số hoặc dùng lại ID cho địa điểm khác. Catalog hiện có 300 địa điểm; 73 địa điểm bổ sung dùng ID `301`–`373` để tránh các ID đã được dùng. Khi mở rộng, cấp ID mới lớn hơn ID lớn nhất từng dùng, kể cả ID của địa điểm không còn trong catalog. Seed giữ nguyên địa điểm cũ và liên kết đang dùng, chỉ thêm địa điểm thiếu; vì vậy tổng số location trong DB có thể lớn hơn catalog.
 
-[Báo cáo đối chiếu từng địa điểm ngày 02/11/2026](docs/location-verification-2026-11-02.md) ghi rõ sai lệch địa chỉ/tọa độ, phạm vi chỉ định BCP và các mục chưa đủ bằng chứng. Đã sửa 51 mục trong catalog theo nguồn công bố, giữ nguyên ID. 7 cặp tọa độ lấy từ điểm do đơn vị công bố; 35 cặp chưa xác nhận được để `null`; 9 điểm đại diện khu/cơ sở hiện có được giữ, chưa xác minh là cổng. Địa điểm thiếu tọa độ vẫn tra theo tên được, nhưng không xuất hiện trong tìm kiếm quanh vị trí hoặc tự nhận diện đến điểm bằng geofence. Đây là kiểm chứng từ xa; giờ tiếp nhận, cổng xe ngựa và quyền nhập lô hàng cụ thể cần xác nhận riêng. DB hiện hữu chưa được cập nhật; seeder tiếp tục giữ bản ghi đã có, kể cả bản ghi đã chỉnh sửa hoặc xóa mềm.
+[Báo cáo đối chiếu từng địa điểm ngày 02/11/2026](docs/location-verification-2026-11-02.md) ghi rõ sai lệch địa chỉ/tọa độ, phạm vi chỉ định BCP và các mục chưa đủ bằng chứng. Đã sửa 51 mục trong catalog theo nguồn công bố, giữ nguyên ID. 7 cặp tọa độ lấy từ điểm do đơn vị công bố; 35 cặp chưa xác nhận được để `null`; 9 điểm đại diện khu/cơ sở hiện có được giữ, chưa xác minh là cổng. Địa điểm thiếu tọa độ vẫn tra theo tên được, nhưng không tạo được route, không xuất hiện trong tìm kiếm quanh vị trí hoặc tự nhận diện đến điểm bằng geofence. Đây là kiểm chứng từ xa; giờ tiếp nhận, cổng xe ngựa và quyền nhập lô hàng cụ thể cần xác nhận riêng. DB hiện hữu chưa được cập nhật; seeder tiếp tục giữ bản ghi đã có, kể cả bản ghi đã chỉnh sửa hoặc xóa mềm.
 
 ## Vehicle và TransportProvider
 
@@ -83,12 +85,14 @@ Seed tạo 10 vehicle và 10 provider khi API khởi động:
 
 | Danh mục | Business code | Trạng thái | Chi tiết |
 |---|---|---|---|
-| Vehicle | `VEH-20261010-0001` đến `VEH-20261010-0010` | `AVAILABLE` | 6 `ROAD`, 2 `AIR`, 2 `SEA`; sức chứa 2–9 ngựa; quốc gia `FR` |
-| TransportProvider | `PRV-20261010-0001` đến `PRV-20261010-0010` | `ACTIVE` | Hỗ trợ `AIR`, `ROAD`, `SEA`; email mẫu thuộc `example.com`; mã số thuế `FR00000000001` đến `FR00000000010` |
+| Vehicle | `VEH-20261010-0001` đến `VEH-20261010-0010` | `AVAILABLE` | 6 `ROAD`, 2 `AIR`, 2 `SEA`; sức chứa 2–9 ngựa; hồ sơ tại `FR`, `GB`, `DE`, `NL`, `IE` |
+| TransportProvider | `PRV-20261010-0001` đến `PRV-20261010-0010` | `ACTIVE` | Từng provider hỗ trợ một hoặc nhiều mode `AIR`, `ROAD`, `SEA`; email thuộc miền dành riêng `.example`; mã số thuế mẫu theo quốc gia |
 
-Vehicle đường bộ có biển số `GX-001-FR` đến `GX-006-FR`. Mã đăng ký dùng `FR-REG-2026-0001` đến `FR-REG-2026-0010`, mã bảo hiểm dùng `FR-INS-2026-0001` đến `FR-INS-2026-0010`. Ngày hết hạn đăng ký và bảo hiểm được đặt sau ngày tạo hai năm.
+Tên xe, biển số, mã đăng ký, bảo hiểm và thiết bị dùng hồ sơ riêng theo bản dev; ví dụ `Mercedes-Benz Actros Horse Lorry` với biển số mẫu `GH-482-PL`. Ngày hết hạn đăng ký và bảo hiểm được đặt sau ngày tạo hai năm. Không xác nhận xe, công ty hoặc giấy tờ đã đăng ký thực tế.
 
-ID được tạo ổn định từ business code. Chạy lại chỉ bổ sung bản ghi thiếu, không ghi đè bản ghi đã chỉnh sửa hoặc khôi phục bản ghi đã xoá mềm. Seed bỏ qua bản ghi trùng ID, business code, biển số vehicle hoặc mã số thuế provider. Không tự gán vehicle/provider vào kế hoạch hay chặng vận chuyển.
+ID được tạo ổn định từ business code. Seed bỏ qua bản ghi trùng ID, business code, biển số vehicle hoặc mã số thuế provider. Không tự gán vehicle/provider vào kế hoạch hay chặng vận chuyển.
+
+Theo bản dev, bản ghi đúng ID seed còn mang tên xe/provider, passport hoặc ghi chú booking placeholder được nâng cấp một lần, giữ ID và liên kết. Cũng nhận diện placeholder của bản seed mã `20261010` trước khi pull. Bản ghi đã đổi các dấu nhận diện đó, booking đã đổi status, hoặc horse/vehicle/provider đã xóa mềm được giữ nguyên. Lịch booking không bị dời lại mỗi lần restart. Không tự chuyển mã hoặc ID của bộ seed `DEMO` khác sang bộ mã mới.
 
 ## Compliance
 
