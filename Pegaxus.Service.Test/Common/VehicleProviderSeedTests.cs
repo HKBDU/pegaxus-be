@@ -79,10 +79,10 @@ public class VehicleProviderSeedTests
         db.TransportProviders.RemoveRange(await db.TransportProviders.Where(item => item.ProviderCode == "PRV-DEMO-002" || item.ProviderCode == "PRV-DEMO-003").ToArrayAsync());
         db.Vehicles.AddRange(
             new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = "VEH-DEMO-002", IsDeleted = true },
-            new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = "OTHER-VEHICLE", LicensePlate = "DEMO-003" });
+            new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = "OTHER-VEHICLE", LicensePlate = "EJ21 FXT" });
         db.TransportProviders.AddRange(
             new TransportProvider { TransportProviderId = Guid.NewGuid(), ProviderCode = "PRV-DEMO-002", ProviderName = "Existing provider", IsDeleted = true },
-            new TransportProvider { TransportProviderId = Guid.NewGuid(), ProviderCode = "OTHER-PROVIDER", ProviderName = "Tax conflict", TaxCode = "DEMO-TAX-003" });
+            new TransportProvider { TransportProviderId = Guid.NewGuid(), ProviderCode = "OTHER-PROVIDER", ProviderName = "Tax conflict", TaxCode = "IE-VAT-100003" });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();
 
