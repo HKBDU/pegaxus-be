@@ -383,7 +383,7 @@ public class BookingServiceTests
         await service.ApproveAsync(managerAccount.AccountId, booking.BookingId);
         var transportPlanService = CreateTransportPlanService(db);
 
-        var start = DateTimeOffset.UtcNow.AddDays(1);
+        var start = DateTimeOffset.UtcNow.AddMonths(3);
         var result = await transportPlanService.CreateAsync(
             managerAccount.AccountId,
             booking.BookingId,
@@ -414,7 +414,7 @@ public class BookingServiceTests
         await service.ApproveAsync(managerAccount.AccountId, booking.BookingId);
         var transportPlanService = CreateTransportPlanService(db);
 
-        var start = DateTimeOffset.UtcNow.AddDays(1);
+        var start = DateTimeOffset.UtcNow.AddMonths(3);
         var request = new TransportPlanRequest.CreateRequest
         {
             PlannedStartAt = start,

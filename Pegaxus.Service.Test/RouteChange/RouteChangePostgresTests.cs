@@ -272,7 +272,7 @@ public class RouteChangePostgresTests
 
         var plans = new Pegaxus.Service.TransportPlanService.Service(db, TestSupport.CreateNotifications(db));
         var plan = await plans.CreateAsync(manager.AccountId, booking.BookingId,
-            new() { PlannedStartAt = DateTimeOffset.UtcNow.AddDays(21), PlannedEndAt = DateTimeOffset.UtcNow.AddDays(23) });
+            new() { PlannedStartAt = DateTimeOffset.UtcNow.AddMonths(3), PlannedEndAt = DateTimeOffset.UtcNow.AddMonths(3).AddDays(2) });
 
         Assert.Equal(nearby.LocationId, plan.OriginLocationId);
         Assert.Equal(LocationType.OTHER.ToString(), plan.DestinationLocation!.LocationType);
