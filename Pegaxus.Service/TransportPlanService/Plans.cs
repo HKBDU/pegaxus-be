@@ -60,6 +60,8 @@ public sealed partial class Service
         var end = request.PlannedEndAt ?? plan.PlannedEndAt;
         if (start.HasValue && end.HasValue && end <= start)
             throw new BadRequestException("plannedEndAt must be after plannedStartAt");
+        if (request.PlannedStartAt.HasValue && Truncate(request.PlannedStartAt.Value.UtcDateTime) != plan.PlannedStartAt)
+            ValidatePlannedStart(request.PlannedStartAt.Value, plan.Transport.Booking);
 
         var now = UtcNowTruncated();
         plan.OriginLocationId = request.OriginLocationId ?? plan.OriginLocationId;
@@ -326,6 +328,19 @@ public sealed partial class Service
         };
     }
 
+    /// <summary>The start cannot be in the past or earlier than the booking's own lead time, counted from the day the booking was made.</summary>
+    private static void ValidatePlannedStart(DateTimeOffset plannedStartAt, Booking booking)
+    {
+        if (plannedStartAt.UtcDateTime < UtcNow())
+            throw new BadRequestException("plannedStartAt cannot be in the past", "PLANNED_START_IN_PAST");
+        var domestic = string.Equals(booking.OriginCountry?.Trim(), booking.DestinationCountry?.Trim(), StringComparison.OrdinalIgnoreCase);
+        var earliest = DepartureLeadTime.Earliest(DateOnly.FromDateTime(booking.CreatedAt), domestic);
+        if (DateOnly.FromDateTime(plannedStartAt.UtcDateTime) < earliest)
+            throw new BadRequestException(
+                $"plannedStartAt must be on or after {earliest:yyyy-MM-dd}: a {(domestic ? "domestic booking needs 3 weeks" : "international booking needs 2 months")} from the day it was made",
+                "PLANNED_START_TOO_EARLY");
+    }
+
     public async Task<Response.CreateResponse> CreateAsync(
         Guid accountId,
         Guid bookingId,
@@ -368,6 +383,7 @@ public sealed partial class Service
             throw new ConflictException(
                 "Transport Plan already exists for this booking. Please edit the existing plan.",
                 "TRANSPORT_PLAN_EXISTS");
+        ValidatePlannedStart(request.PlannedStartAt, booking);
 
         await ValidateLocationsAsync(request.OriginLocationId, request.DestinationLocationId, cancellationToken);
 

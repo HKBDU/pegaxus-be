@@ -30,9 +30,10 @@ internal static class TestSupport
         new(db, new Pegaxus.Service.NotificationService.NoopNotificationRealtimeService());
     internal static JwtService.IJwtService CreateJwtService() => new StubJwtService();
 
-    internal static Pegaxus.Service.RoutePlanService.Service CreateRoutePlans(AppDbContext db) =>
+    internal static Pegaxus.Service.RoutePlanService.Service CreateRoutePlans(AppDbContext db, Pegaxus.Service.RoutePlanService.IRoutePlanRealtimeService? realtime = null) =>
         new(db, CreateNotifications(db), new Pegaxus.Service.RouteService.Service(db,
-            new NoNetworkRouteClientFactory(), new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()));
+            new NoNetworkRouteClientFactory(), new Microsoft.Extensions.Configuration.ConfigurationBuilder().Build()),
+            realtime ?? new Pegaxus.Service.RoutePlanService.NoopRoutePlanRealtimeService());
 
     private sealed class NoNetworkRouteClientFactory : IHttpClientFactory
     {

@@ -58,6 +58,7 @@ public sealed partial class Service
             TotalDistanceKm = materializedSegments.Sum(item => item.Route.DistanceKm ?? 0),
             EstimatedDurationMinutes = CalculateDurationMinutes(materializedSegments),
             RouteNote = string.IsNullOrWhiteSpace(request.RouteNote) ? null : request.RouteNote.Trim(),
+            SubmittedForReviewAt = request.Action == "SUBMIT_FOR_LEGAL_REVIEW" ? now : null,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -200,6 +201,7 @@ public sealed partial class Service
         routePlan.EstimatedDurationMinutes = CalculateDurationMinutes(materializedSegments);
         routePlan.RouteNote = string.IsNullOrWhiteSpace(request.RouteNote) ? null : request.RouteNote.Trim();
         routePlan.UpdatedAt = now;
+        routePlan.SubmittedForReviewAt = request.Action == "SUBMIT_FOR_LEGAL_REVIEW" ? now : null;
         if (request.Action == "SUBMIT_FOR_LEGAL_REVIEW")
             await QueueUpdateNotificationsAsync(routePlan, request.UpdateReason.Trim(), now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
@@ -245,9 +247,29 @@ public sealed partial class Service
             ? $"Cancelled: {request.Reason.Trim()}"
             : $"{routePlan.RouteNote} | Cancelled: {request.Reason.Trim()}";
         routePlan.UpdatedAt = cancelledAt;
+        var specialistIds = routePlan.TransportPlan.EmployeeTransportPlans
+            .Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST && item.Employee.IsActive && !item.Employee.IsDeleted)
+            .Select(item => item.Employee.AccountId).Distinct().ToList();
+        foreach (var specialistId in specialistIds)
+            notificationService.Queue(new NotificationService.NotificationCreateRequest
+            {
+                AccountId = specialistId,
+                TransportId = routePlan.TransportPlan.TransportId,
+                Type = NotificationType.ROUTE,
+                Priority = NotificationPriority.HIGH,
+                Title = "Route plan cancelled",
+                Message = $"Route plan {routePlan.RoutePlanCode} ({routeType}) of transport plan {routePlan.TransportPlan.PlanCode} was cancelled by {employee.FullName}. Reason: {request.Reason.Trim()}",
+                ReferenceType = "RoutePlan",
+                ReferenceId = routePlan.RoutePlanId,
+                ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.TRANSPORT_SPECIALIST, routePlan.RoutePlanId),
+                CreatedAt = cancelledAt
+            });
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
+        await notificationService.FlushAsync(cancellationToken);
+        await realtime.PublishCancelledAsync(specialistIds, new Response.RoutePlanCancelledEvent(
+            routePlan.RoutePlanId, routePlan.TransportPlanId, routeType.ToString(), AsUtc(cancelledAt)), cancellationToken);
         return new Response.CancelResponse
         {
             RoutePlanId = routePlan.RoutePlanId,

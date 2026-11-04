@@ -27,6 +27,9 @@ public sealed class RoutePlanConfiguration : IEntityTypeConfiguration<RoutePlan>
         entity.Property(e => e.RoutePlanCode)
             .HasMaxLength(50)
             .HasColumnName("route_plan_code");
+        entity.Property(e => e.SubmittedForReviewAt)
+            .HasColumnType("timestamp without time zone")
+            .HasColumnName("submitted_for_review_at");
         entity.Property(e => e.TotalDistanceKm)
             .HasPrecision(10, 2)
             .HasColumnName("total_distance_km");

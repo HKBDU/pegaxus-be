@@ -5,4 +5,6 @@ namespace Pegaxus.API.Hubs;
 public interface INotificationClient
 {
     Task ReceiveNotification(NotificationRealtimeDto notification);
+
+    Task RoutePlanCancelled(Pegaxus.Service.RoutePlanService.Response.RoutePlanCancelledEvent routePlanCancelled);
 }

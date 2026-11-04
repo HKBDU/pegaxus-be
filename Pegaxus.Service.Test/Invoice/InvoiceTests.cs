@@ -182,7 +182,9 @@ public class InvoiceTests
         Assert.Equal(latest.TransportPlanId, result.TransportPlan!.TransportPlanId);
         latest.Status = f.Plan.Status = TransportPlanStatus.CANCELLED;
         await db.SaveChangesAsync();
-        result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Fixture.Request("SUPPLEMENTARY"));
+        var supplementary = Fixture.Request("SUPPLEMENTARY");
+        supplementary.DueDate = supplementary.DueDate!.Value.AddDays(3); // a supplementary invoice falls due after the quotation
+        result = await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, supplementary);
         Assert.Null(result.TransportPlan);
     }
 

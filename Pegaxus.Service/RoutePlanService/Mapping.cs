@@ -89,6 +89,7 @@ public sealed partial class Service
             BranchSequenceNo = TransportItinerary.BranchSequenceNo(item),
             BranchLocation = BranchLocation(item),
             LegalReview = legalReview,
+            SubmittedForReviewAt = item.SubmittedForReviewAt.HasValue ? AsUtc(item.SubmittedForReviewAt.Value) : null,
             RouteNote = item.RouteNote,
             CreatedAt = AsUtc(item.CreatedAt),
             UpdatedAt = AsUtc(item.UpdatedAt)

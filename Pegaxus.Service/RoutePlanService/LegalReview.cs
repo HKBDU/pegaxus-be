@@ -58,6 +58,9 @@ public sealed partial class Service
             throw new ForbiddenException("Only the Transport Specialist assigned to this Transport Plan can review it");
         EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
         var routeType = GetRouteType(routePlan);
+        // A RETURN plan reaches the specialist through the Logistics Manager's approval instead of a submit.
+        if (routeType != RouteType.RETURN && routePlan.SubmittedForReviewAt is null)
+            throw new ConflictException("The route plan has not been submitted for legal review", "ROUTE_PLAN_NOT_SUBMITTED");
         var validSequences = routePlan.RoutePlanRoutes.Select(item => item.SequenceNo).ToHashSet();
         if (request.BlockedSegments.Any(sequence => !validSequences.Contains(sequence)))
             throw new BadRequestException("blockedSegments contains an unknown sequenceNo");
@@ -110,6 +113,8 @@ public sealed partial class Service
         {
             AddDossierAudit(auditDossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW_REJECTED", routePlan, request, now, "Route Plan requires revision.");
         }
+        // A rejected plan must be revised and submitted again before the specialist can review it a second time.
+        if (!request.IsFeasible) routePlan.SubmittedForReviewAt = null;
         routePlan.UpdatedAt = now;
         await QueueLegalReviewNotificationsAsync(routePlan, reviewer, routeType, request, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
