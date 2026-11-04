@@ -3124,6 +3124,13 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("tax_amount");
 
+                    b.Property<decimal>("TaxRate")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasDefaultValue(20m)
+                        .HasColumnName("tax_rate");
+
                     b.Property<decimal>("TotalAmount")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
@@ -3201,6 +3208,10 @@ namespace Pegaxus.Repository.Migrations
                     b.Property<string>("Note")
                         .HasColumnType("text")
                         .HasColumnName("note");
+
+                    b.Property<Guid?>("PriceListItemId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("price_list_item_id");
 
                     b.Property<decimal>("Quantity")
                         .ValueGeneratedOnAdd()
@@ -3587,6 +3598,148 @@ namespace Pegaxus.Repository.Migrations
                     b.HasIndex(new[] { "Status", "AvailableAt" }, "OutboxMessage_pending_idx");
 
                     b.ToTable("OutboxMessage", (string)null);
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.PriceList", b =>
+                {
+                    b.Property<Guid>("PriceListId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("price_list_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<Guid?>("CreatedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("created_by_account_id");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .HasColumnName("currency")
+                        .HasDefaultValueSql("'VND'")
+                        .IsFixedLength();
+
+                    b.Property<decimal>("DepositRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("deposit_rate");
+
+                    b.Property<bool>("IsActive")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_active");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<decimal>("TaxRate")
+                        .HasPrecision(5, 2)
+                        .HasColumnType("numeric(5,2)")
+                        .HasColumnName("tax_rate");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<Guid?>("UpdatedByAccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("updated_by_account_id");
+
+                    b.HasKey("PriceListId")
+                        .HasName("PriceList_pkey");
+
+                    b.HasIndex("CreatedByAccountId");
+
+                    b.HasIndex("UpdatedByAccountId");
+
+                    b.HasIndex(new[] { "CreatedAt" }, "PriceList_created_at_idx");
+
+                    b.HasIndex(new[] { "IsActive" }, "PriceList_single_active_idx")
+                        .IsUnique()
+                        .HasFilter("is_active = true");
+
+                    b.ToTable("PriceList", null, t =>
+                        {
+                            t.HasCheckConstraint("PriceList_deposit_rate_check", "deposit_rate >= 0 AND deposit_rate <= 100");
+
+                            t.HasCheckConstraint("PriceList_tax_rate_check", "tax_rate >= 0 AND tax_rate <= 100");
+                        });
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.PriceListItem", b =>
+                {
+                    b.Property<Guid>("PriceListItemId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasColumnName("price_list_item_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("ItemCode")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("item_code");
+
+                    b.Property<string>("ItemName")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("item_name");
+
+                    b.Property<InvoiceItemType>("ItemType")
+                        .HasColumnType("invoice_item_type")
+                        .HasColumnName("item_type");
+
+                    b.Property<Guid>("PriceListId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("price_list_id");
+
+                    b.Property<int>("SortOrder")
+                        .HasColumnType("integer")
+                        .HasColumnName("sort_order");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)")
+                        .HasColumnName("unit");
+
+                    b.Property<decimal>("UnitPrice")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("unit_price");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("updated_at");
+
+                    b.Property<string>("VehicleTier")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)")
+                        .HasColumnName("vehicle_tier");
+
+                    b.HasKey("PriceListItemId")
+                        .HasName("PriceListItem_pkey");
+
+                    b.HasIndex(new[] { "PriceListId", "ItemCode" }, "PriceListItem_price_list_id_item_code_key")
+                        .IsUnique();
+
+                    b.ToTable("PriceListItem", null, t =>
+                        {
+                            t.HasCheckConstraint("PriceListItem_unit_price_check", "unit_price > 0");
+
+                            t.HasCheckConstraint("PriceListItem_vehicle_tier_check", "vehicle_tier IS NULL OR vehicle_tier IN ('S', 'M', 'L')");
+                        });
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.ProofAttachment", b =>
@@ -5565,6 +5718,31 @@ namespace Pegaxus.Repository.Migrations
                     b.Navigation("Transport");
                 });
 
+            modelBuilder.Entity("Pegaxus.Repository.Entities.PriceList", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("CreatedByAccountId")
+                        .HasConstraintName("PriceList_created_by_account_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("UpdatedByAccountId")
+                        .HasConstraintName("PriceList_updated_by_account_id_fkey");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.PriceListItem", b =>
+                {
+                    b.HasOne("Pegaxus.Repository.Entities.PriceList", "PriceList")
+                        .WithMany("PriceListItems")
+                        .HasForeignKey("PriceListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("PriceListItem_price_list_id_fkey");
+
+                    b.Navigation("PriceList");
+                });
+
             modelBuilder.Entity("Pegaxus.Repository.Entities.ProofAttachment", b =>
                 {
                     b.HasOne("Pegaxus.Repository.Entities.CustomsClearanceProof", "CustomsClearanceProof")
@@ -6043,6 +6221,11 @@ namespace Pegaxus.Repository.Migrations
             modelBuilder.Entity("Pegaxus.Repository.Entities.Notification", b =>
                 {
                     b.Navigation("AccountNotifications");
+                });
+
+            modelBuilder.Entity("Pegaxus.Repository.Entities.PriceList", b =>
+                {
+                    b.Navigation("PriceListItems");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.QuarantineProof", b =>

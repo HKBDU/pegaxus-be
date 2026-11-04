@@ -263,6 +263,8 @@ public class BookingCoordinatesTests
         Assert.Equal(("RP-1", "BACKUP", "CONFIRMED"), (route.RoutePlanCode, route.RouteType, route.Status));
         Assert.Equal((49.1943m, 2.4716m, 52.2455m, 0.4062m),
             (detail.Booking.OriginLatitude, detail.Booking.OriginLongitude, detail.Booking.DestinationLatitude, detail.Booking.DestinationLongitude));
+        Assert.Equal(new DateTimeOffset(DateTime.SpecifyKind(a.Booking.CreatedAt, DateTimeKind.Utc)), detail.Booking.CreatedAt);
+        Assert.NotEqual(default, detail.CreatedAt);
         Assert.Equal(detail.OriginLocationId, detail.OriginLocation!.LocationId);
         Assert.Equal(49.1943m, detail.OriginLocation.Latitude);
     }

@@ -117,7 +117,7 @@ public sealed class InvoicesController(InvoiceService.IInvoiceService service) :
     /// <summary>
     /// Update a draft invoice.
     /// </summary>
-    /// <remarks>Only active Logistics Managers may edit DRAFT invoices. Supply the latest lastUpdatedAt; type is immutable. Items replace the complete list: existing identifiers keep their rows, missing rows are deleted and rows without identifiers are added. The server recalculates fixed 20 percent tax and regenerates FINAL paid-deposit deductions atomically. Empty drafts are allowed. Payment and itemDate are ignored pending database support. No status history or notifications are created.</remarks>
+    /// <remarks>Only active Logistics Managers may edit DRAFT invoices. Supply the latest lastUpdatedAt; type is immutable. Items replace the complete list: existing identifiers keep their rows, missing rows are deleted and rows without identifiers are added. The server recalculates tax at the taxRate of the active price list (none for credit notes) and regenerates FINAL paid-deposit deductions atomically. Empty drafts are allowed. Payment and itemDate are ignored pending database support. No status history or notifications are created.</remarks>
     /// <param name="invoiceId">The invoice identifier (UUID).</param>
     /// <param name="request">The latest invoice timestamp, due date, note and replacement items with whole-VND prices and whole quantities.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>

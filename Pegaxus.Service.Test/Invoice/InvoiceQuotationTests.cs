@@ -22,7 +22,7 @@ public class QuotationCatalogTests
     [InlineData(9, "L", 8_480, 4_070, 6_106)]
     public void Table_MatchesTheDocumentedSubtotalDepositAndRemaining(int horses, string tier, long subtotal, long depositTotal, long remaining)
     {
-        var lines = QuotationCatalog.Generate(new QuotationOptions(), horses, 2);
+        var lines = QuotationCatalog.Generate(PriceListSnapshot.Default, horses, 2);
         Assert.Equal(tier, QuotationCatalog.Tier(horses));
         Assert.Equal(9, lines.Count);
         Assert.Equal(subtotal, lines.Sum(line => line.Quantity * line.UnitPrice));
@@ -36,7 +36,7 @@ public class QuotationCatalogTests
     [Fact]
     public void OneHorse_UsesTierSWithRealHorseCount()
     {
-        var lines = QuotationCatalog.Generate(new QuotationOptions(), 1, 2);
+        var lines = QuotationCatalog.Generate(PriceListSnapshot.Default, 1, 2);
         Assert.Equal("Base vehicle fare, Tier S", lines[0].Description);
         Assert.Equal(2_520, lines.Sum(line => line.Quantity * line.UnitPrice));
     }
@@ -44,8 +44,8 @@ public class QuotationCatalogTests
     [Fact]
     public void TransitDays_OnlyScaleTheFeedLine()
     {
-        var two = QuotationCatalog.Generate(new QuotationOptions(), 4, 2);
-        var five = QuotationCatalog.Generate(new QuotationOptions(), 4, 5);
+        var two = QuotationCatalog.Generate(PriceListSnapshot.Default, 4, 2);
+        var five = QuotationCatalog.Generate(PriceListSnapshot.Default, 4, 5);
         Assert.Equal(4 * 3 * 35, five.Sum(line => line.Quantity * line.UnitPrice) - two.Sum(line => line.Quantity * line.UnitPrice));
         Assert.Equal(4 * 5, five.Single(line => line.Description == "Feed and electrolyte water").Quantity);
     }
@@ -54,7 +54,7 @@ public class QuotationCatalogTests
     [InlineData(0)]
     [InlineData(10)]
     public void UnsupportedHorseCount_IsRejected(int horses) =>
-        Assert.Equal("HORSE_COUNT_UNSUPPORTED", Assert.Throws<UnprocessableEntityException>(() => QuotationCatalog.Generate(new QuotationOptions(), horses, 2)).ErrorCode);
+        Assert.Equal("HORSE_COUNT_UNSUPPORTED", Assert.Throws<UnprocessableEntityException>(() => QuotationCatalog.Generate(PriceListSnapshot.Default, horses, 2)).ErrorCode);
 
     [Fact]
     public void Deposit_RoundsHalfUpToWholeVnd()
@@ -66,14 +66,43 @@ public class QuotationCatalogTests
     }
 
     [Fact]
-    public void Options_ValidateRatesAndPrices()
+    public void DefaultList_HasEveryTierAndOnlySupportedUnits()
     {
-        Assert.True(new QuotationOptions().IsValid());
-        Assert.False(new QuotationOptions { DepositRatePercent = 29 }.IsValid());
-        Assert.False(new QuotationOptions { DepositRatePercent = 51 }.IsValid());
-        Assert.False(new QuotationOptions { FeedPerHorseDay = 0 }.IsValid());
-        Assert.False(new QuotationOptions { DefaultTransitDays = 61 }.IsValid());
+        var items = PriceListSnapshot.Default.Items;
+        Assert.Equal(11, items.Count);
+        Assert.Equal(new[] { "L", "M", "S" }, items.Where(item => item.VehicleTier is not null).Select(item => item.VehicleTier!).Order().ToArray());
+        Assert.All(items, item => Assert.Contains(item.Unit, QuotationCatalog.Units));
+        Assert.Equal(items.Count, items.Select(item => item.ItemCode).Distinct().Count());
+        Assert.Equal((20m, 40m), (PriceListSnapshot.Default.TaxRate, PriceListSnapshot.Default.DepositRate));
     }
+
+    [Fact]
+    public void Generate_FollowsTheListLines_PriceTierUnitAndOrder()
+    {
+        var items = PriceListSnapshot.Default.Items.Select(item => item.ItemCode == "TRUCK_M" ? item with { UnitPrice = 3_000 } : item)
+            .Append(new PriceItem(Guid.NewGuid(), "STRAW", "Extra straw", InvoiceItemType.OTHER, "HORSE_DAY", 10, null, 5)).ToList();
+        var prices = PriceListSnapshot.Default with { Items = items };
+
+        var medium = QuotationCatalog.Generate(prices, 4, 3);
+        Assert.Equal(10, medium.Count);
+        Assert.Equal("STRAW", medium[0].ItemCode);
+        Assert.Equal(4 * 3, medium[0].Quantity);
+        Assert.Equal(3_000, medium.Single(line => line.VehicleTier == "M").UnitPrice);
+        Assert.DoesNotContain(medium, line => line.VehicleTier is "S" or "L");
+
+        var small = QuotationCatalog.Generate(prices, 2, 3);
+        Assert.Equal(1_600, small.Single(line => line.VehicleTier is not null).UnitPrice);
+    }
+
+    [Fact]
+    public void Generate_RejectsAnUnknownUnit()
+    {
+        var prices = PriceListSnapshot.Default with { Items = [new(null, "X", "X", InvoiceItemType.OTHER, "PALLET", 1, null, 1)] };
+        Assert.Equal("PRICE_LIST_UNIT_UNSUPPORTED", Assert.Throws<UnprocessableEntityException>(() => QuotationCatalog.Generate(prices, 2, 2)).ErrorCode);
+    }
+
+    [Fact]
+    public void Deposit_AcceptsAFractionalRate() => Assert.Equal(1_830, QuotationCatalog.Deposit(4_880, 37.5m));
 }
 
 public class InvoiceQuotationTests

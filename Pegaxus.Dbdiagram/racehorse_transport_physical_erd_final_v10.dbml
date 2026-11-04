@@ -12,6 +12,8 @@
 // V10 fix (horse numbers): passport_number and microchip_number are unique only among live horses (partial unique index
 //   WHERE is_deleted = false), so a soft-deleted horse does not block adding the same horse again.
 // V10 fix (horse avatar): Horse.avatar_url varchar(500), nullable, like Account.avatar_url.
+// V10 (price list): adds PriceList and PriceListItem (quotation price list, one active at a time, edited by Logistics Managers),
+//   Invoice.tax_rate (VAT percentage the invoice was built with) and InvoiceItem.price_list_item_id (source line, no foreign key).
 // V9 (Flow 4): adds HandoverRecord provider parties (handover_party_type.PROVIDER), RoutePlanRoute.status,
 //   ComplianceDossier.dossier_type (MAIN/EXTRA; one dossier per transport and type), TransportPlan origin/destination
 //   Location and Booking origin/destination coordinates. Coordinates use decimal(10,4), like Location.
@@ -1559,6 +1561,7 @@ Table Invoice {
   subtotal decimal(18,2) [not null, default: 0]
   discount_amount decimal(18,2) [not null, default: 0]
   tax_amount decimal(18,2) [not null, default: 0]
+  tax_rate decimal(5,2) [not null, default: 20, note: 'VAT % dùng để tính tax_amount, lấy từ PriceList active lúc dựng hóa đơn; CREDIT_NOTE là 0']
   total_amount decimal(18,2) [not null, default: 0]
 
   issued_at timestamp
@@ -1591,6 +1594,8 @@ Table InvoiceItem {
   horse_id uuid
 
   emergency_cost_request_id uuid [unique]
+
+  price_list_item_id uuid [note: 'Dòng giá nguồn của dòng phí được sinh; chỉ để truy vết, không có FK']
 
   item_type invoice_item_type [not null]
 
@@ -2473,6 +2478,60 @@ Table CatalogAuditLog {
 
 
 //////////////////////////////////////////////////////////////
+// PRICE LIST (QUOTATION PRICING)
+//////////////////////////////////////////////////////////////
+
+Table PriceList {
+  Note: 'PriceList: Bảng giá định mức dùng để sinh dòng phí cho hóa đơn QUOTATION, DEPOSIT, FINAL. Tại mỗi thời điểm chỉ có đúng một bảng is_active = true (partial unique index). Bảng đang active bị khóa: không sửa header, không thêm/xóa dòng giá; muốn đổi thì clone, sửa bản sao rồi kích hoạt. Mỗi thay đổi được ghi vào CatalogAuditLog.'
+
+  price_list_id uuid [pk]
+
+  name varchar(200) [not null]
+  currency char(3) [not null, default: 'VND', note: 'Mã ISO 4217. Chỉ bảng VND được kích hoạt vì hóa đơn chỉ phát hành bằng VND']
+  tax_rate decimal(5,2) [not null, note: 'VAT %, 0 đến 100. Áp dụng cho hóa đơn tạo hoặc lưu khi bảng này active; CREDIT_NOTE luôn 0%']
+  deposit_rate decimal(5,2) [not null, note: 'Tỷ lệ cọc % trên subtotal báo giá, 0 đến 100']
+
+  is_active boolean [not null, default: false]
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null, note: 'Dùng làm version (lastUpdatedAt) để phát hiện sửa đồng thời']
+
+  created_by_account_id uuid [note: 'NULL với bảng giá khởi tạo bởi migration']
+  updated_by_account_id uuid
+
+  indexes {
+    is_active [unique, name: 'PriceList_single_active_idx', note: 'Partial unique index WHERE is_active = true']
+    created_at
+    created_by_account_id
+    updated_by_account_id
+  }
+}
+
+Table PriceListItem {
+  Note: 'PriceListItem: Một dòng giá định mức của PriceList. item_type ánh xạ trực tiếp sang invoice_item_type. Số lượng của dòng phí khi sinh hóa đơn tính theo unit: TRIP = 1, HORSE = số ngựa, HORSE_DAY = số ngựa x số ngày hành trình.'
+
+  price_list_item_id uuid [pk]
+
+  price_list_id uuid [not null]
+
+  item_code varchar(50) [not null, note: 'A-Z, 0-9, _; unique trong cùng PriceList']
+  item_name varchar(200) [not null, note: 'Dùng làm description của InvoiceItem được sinh ra']
+  item_type invoice_item_type [not null]
+  unit varchar(50) [not null, note: 'TRIP, HORSE hoặc HORSE_DAY']
+  unit_price decimal(18,2) [not null, note: 'Lớn hơn 0; API chỉ nhận số nguyên VND']
+  vehicle_tier varchar(10) [note: 'S, M, L hoặc NULL. Dòng có tier chỉ được dùng khi booking thuộc tier đó: S 1-3 ngựa, M 4-6, L 7-9']
+  sort_order int [not null, default: 0, note: 'Thứ tự dòng phí trên hóa đơn']
+
+  created_at timestamp [not null]
+  updated_at timestamp [not null]
+
+  indexes {
+    (price_list_id, item_code) [unique, name: 'PriceListItem_price_list_id_item_code_key']
+  }
+}
+
+
+//////////////////////////////////////////////////////////////
 // FLOW 8 - NOTIFICATION
 //////////////////////////////////////////////////////////////
 
@@ -2773,6 +2832,10 @@ Ref: ProofAttachment.customs_clearance_proof_id > CustomsClearanceProof.customs_
 Ref: AuditDossier.compliance_dossier_id > ComplianceDossier.compliance_dossier_id
 Ref: AuditDossier.actor_account_id > Account.account_id
 Ref: CatalogAuditLog.actor_account_id > Account.account_id
+Ref: PriceListItem.price_list_id > PriceList.price_list_id [delete: cascade]
+Ref: PriceList.created_by_account_id > Account.account_id
+Ref: PriceList.updated_by_account_id > Account.account_id
+// InvoiceItem.price_list_item_id is a traceability value without a foreign key: the line may be deleted and the invoice snapshot must stay.
 
 
 //////////////////////////////////////////////////////////////

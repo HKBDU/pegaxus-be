@@ -98,6 +98,7 @@ public class Response
         public ApprovedTransportPlanResponse? TransportPlan { get; init; }
         public required IReadOnlyList<ComplianceDossierItemResponse> ComplianceDossiers { get; init; }
         public required IReadOnlyList<ApprovedRoutePlanResponse> RoutePlans { get; init; }
+        public DateTimeOffset CreatedAt { get; init; }
     }
 
     public sealed class ApprovedRoutePlanResponse
