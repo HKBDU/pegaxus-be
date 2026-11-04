@@ -53,6 +53,7 @@ builder.Services.AddAuthModule();
 builder.Services.AddAccountsModule();
 builder.Services.AddBookingModule();
 builder.Services.AddInvoicingModule(builder.Configuration);
+builder.Services.AddPriceListRateLimiting();
 builder.Services.AddClaimsModule();
 builder.Services.AddReportsModule();
 builder.Services.AddAuditModule();
@@ -95,6 +96,7 @@ app.Use(async (context, next) =>
 });
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
     .WithSummary("Check deployment health.")

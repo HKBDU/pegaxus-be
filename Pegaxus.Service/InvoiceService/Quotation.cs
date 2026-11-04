@@ -1,3 +1,4 @@
+using System.Globalization;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Common;
@@ -9,15 +10,12 @@ public sealed partial class Service
 {
     private const string QuotationDisclaimer = "Additional costs may arise during the trip and will be added to the final invoice.";
     private const string PricingVersion = "QUOTATION_V1";
-    private const int TaxRatePercent = 20;
-
-    private QuotationOptions Prices => quotation?.Value ?? new();
 
     // QUOTATION, DEPOSIT and FINAL lines come from the server; only SUPPLEMENTARY and CREDIT_NOTE are typed by hand.
     private static bool IsGenerated(InvoiceType type) => type is InvoiceType.QUOTATION or InvoiceType.DEPOSIT or InvoiceType.FINAL;
 
     private sealed record Line(Guid? ItemId, InvoiceItemType ItemType, string Description, decimal Quantity, decimal Price,
-        Guid? HorseId = null, string? Note = null, Guid? EmergencyCostRequestId = null);
+        Guid? HorseId = null, string? Note = null, Guid? EmergencyCostRequestId = null, Guid? PriceListItemId = null);
 
     private sealed record Generated(IReadOnlyList<Line> Lines, Response.PricingResponse Pricing, bool Locked);
 
@@ -49,7 +47,7 @@ public sealed partial class Service
     private async Task<Generated?> GenerateAsync(Guid bookingId, Guid transportId, InvoiceType type, bool hasManualItems,
         int? transitDays, Guid? invoiceId, bool lenient, CancellationToken cancellationToken)
     {
-        var prices = Prices;
+        var prices = await db.LoadActivePriceListAsync(cancellationToken, withItems: type == InvoiceType.QUOTATION);
         var horseCount = await db.BookingHorses.AsNoTracking().CountAsync(item => item.BookingId == bookingId, cancellationToken);
         if (type == InvoiceType.QUOTATION)
         {
@@ -60,15 +58,15 @@ public sealed partial class Service
                 return null;
             }
             if (!supported && lenient)
-                return new([], new(PricingVersion, horseCount, null, null, prices.DepositRatePercent, TaxRatePercent), false);
+                return new([], new(PricingVersion, horseCount, null, null, prices.DepositRate, prices.TaxRate), false);
             var dates = await db.Bookings.AsNoTracking().Where(item => item.BookingId == bookingId)
                 .Select(item => new { item.RequestedDepartureDate, item.RequestedArrivalDate }).SingleAsync(cancellationToken);
             var days = transitDays ?? (dates.RequestedArrivalDate is { } arrival && arrival >= dates.RequestedDepartureDate
                 ? Math.Clamp(arrival.DayNumber - dates.RequestedDepartureDate.DayNumber + 1, QuotationCatalog.MinTransitDays, QuotationCatalog.MaxTransitDays)
-                : prices.DefaultTransitDays);
+                : QuotationCatalog.DefaultTransitDays);
             var lines = QuotationCatalog.Generate(prices, horseCount, days)
-                .Select(line => new Line(null, line.ItemType, line.Description, line.Quantity, line.UnitPrice)).ToList();
-            return new(lines, new(PricingVersion, horseCount, days, QuotationCatalog.Tier(horseCount), prices.DepositRatePercent, TaxRatePercent), true);
+                .Select(line => new Line(null, line.ItemType, line.Description, line.Quantity, line.UnitPrice, PriceListItemId: line.PriceListItemId)).ToList();
+            return new(lines, new(PricingVersion, horseCount, days, QuotationCatalog.Tier(horseCount), prices.DepositRate, prices.TaxRate), true);
         }
 
         if (hasManualItems) throw ItemsGenerated();
@@ -78,10 +76,10 @@ public sealed partial class Service
             .OrderByDescending(item => item.IssuedAt).ThenByDescending(item => item.InvoiceId)
             .Select(item => new { item.InvoiceId, item.InvoiceCode, item.Subtotal }).FirstOrDefaultAsync(cancellationToken)
             ?? throw QuotationRequired();
-        var pricing = new Response.PricingResponse(PricingVersion, horseCount, null, null, prices.DepositRatePercent, TaxRatePercent);
+        var pricing = new Response.PricingResponse(PricingVersion, horseCount, null, null, prices.DepositRate, prices.TaxRate);
         if (type == InvoiceType.DEPOSIT)
-            return new([new Line(null, InvoiceItemType.OTHER, $"Deposit {prices.DepositRatePercent}% of quotation {quote.InvoiceCode}", 1,
-                QuotationCatalog.Deposit(Vnd.ToLong(quote.Subtotal), prices.DepositRatePercent))], pricing, true);
+            return new([new Line(null, InvoiceItemType.OTHER, $"Deposit {prices.DepositRate.ToString("0.##", CultureInfo.InvariantCulture)}% of quotation {quote.InvoiceCode}", 1,
+                QuotationCatalog.Deposit(Vnd.ToLong(quote.Subtotal), prices.DepositRate))], pricing, true);
 
         var costs = db.EmergencyCostRequests.AsNoTracking().Where(item => item.IncidentReport.TransportId == transportId);
         if (await costs.AnyAsync(item => item.Status == EmergencyCostStatus.PENDING, cancellationToken))
@@ -89,7 +87,7 @@ public sealed partial class Service
                 "PENDING_EMERGENCY_COSTS");
         var quoteLines = await db.InvoiceItems.AsNoTracking().Where(item => item.InvoiceId == quote.InvoiceId)
             .OrderBy(item => item.CreatedAt).ThenBy(item => item.InvoiceItemId)
-            .Select(item => new Line(null, item.ItemType, item.Description, item.Quantity, item.UnitPrice, item.HorseId, item.Note, null))
+            .Select(item => new Line(null, item.ItemType, item.Description, item.Quantity, item.UnitPrice, item.HorseId, item.Note, null, item.PriceListItemId))
             .ToListAsync(cancellationToken);
         // A cost already tied to another invoice item must not be billed twice (the link is unique).
         var approved = await costs.Where(item => item.Status == EmergencyCostStatus.APPROVED && item.ApprovedAmount > 0 &&

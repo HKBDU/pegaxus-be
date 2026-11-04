@@ -86,6 +86,7 @@ public static class Response
         public DateOnly RequestedDepartureDate { get; init; }
         public DateOnly? RequestedArrivalDate { get; init; }
         public string? SpecialRequirements { get; init; }
+        public DateTimeOffset CreatedAt { get; init; }
     }
 
     public sealed class TransportResponse

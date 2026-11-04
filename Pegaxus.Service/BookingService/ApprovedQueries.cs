@@ -144,7 +144,8 @@ public sealed partial class Service
                     RouteType = TransportItinerary.PlanType(item).ToString(),
                     Status = item.Status.ToString()
                 })
-                .ToList() ?? []
+                .ToList() ?? [],
+            CreatedAt = AsUtc(booking.CreatedAt)
         };
     }
 

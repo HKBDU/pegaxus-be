@@ -22,6 +22,7 @@
 - `ComplianceDossier` là bộ hồ sơ do TS chuẩn bị trước khi xuất phát. Mọi kết quả kiểm dịch/hải quan tại cửa khẩu, kể cả `FAILED` hoặc `REJECTED`, chỉ cập nhật proof tương ứng và không thay đổi `ComplianceDossier.status`.
 - `AuditDossier` là bảng append-only; `target_entity + target_id` là polymorphic reference được backend kiểm tra.
 - `CatalogAuditLog` là bảng append-only dành cho thay đổi catalog/master, ví dụ `ComplianceRequirement`; không dùng thay thế `AuditDossier`.
+- `PriceList` và `PriceListItem` là bảng giá định mức dùng để sinh dòng phí hóa đơn báo giá. Tại mỗi thời điểm chỉ có một `PriceList` active; bảng active bị khóa (xem Appendix A, rule 18-20). `Invoice.tax_rate` lưu VAT % mà hóa đơn được tính, `InvoiceItem.price_list_item_id` lưu dòng giá nguồn (không có FK).
 
 # 1. `Account`
 
@@ -669,6 +670,7 @@
 | `subtotal` | `decimal(18,2)` |  | Yes | Tổng tiền trước giảm giá và thuế. |
 | `discount_amount` | `decimal(18,2)` |  | Yes | Số tiền giảm giá. |
 | `tax_amount` | `decimal(18,2)` |  | Yes | Số tiền thuế. |
+| `tax_rate` | `decimal(5,2)` |  | Yes | VAT % dùng để tính `tax_amount`, lấy từ `PriceList` đang active khi hóa đơn được dựng hoặc lưu lại; `CREDIT_NOTE` là 0. Mặc định 20 cho hóa đơn cũ. |
 | `total_amount` | `decimal(18,2)` |  | Yes | Tổng tiền cuối cùng của hóa đơn. |
 | `issued_at` | `timestamp` |  | No | Thời điểm hóa đơn được phát hành. |
 | `due_date` | `timestamp` |  | No | Thời điểm đến hạn thanh toán (UTC, có cả giờ). Job nền chạy mỗi giờ đánh dấu hóa đơn `OVERDUE` khi quá hạn. |
@@ -689,6 +691,7 @@
 | `invoice_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Invoice.invoice_id`. |
 | `horse_id` | `uuid` | FK | No | Horse liên quan trực tiếp tới dòng phí; có thể NULL với phí chung. |
 | `emergency_cost_request_id` | `uuid` | FK | No | EmergencyCostRequest được billing vào dòng này; NULL nếu không phải emergency cost. |
+| `price_list_item_id` | `uuid` |  | No | `PriceListItem` mà dòng phí được sinh ra từ đó; NULL với dòng nhập tay hoặc dòng khấu trừ. Chỉ để truy vết, không có FK nên có thể trỏ tới dòng giá đã bị xóa. |
 | `item_type` | `invoice_item_type` |  | Yes | Loại dòng phí của InvoiceItem. Enum `invoice_item_type`: TRANSPORT_FEE, HORSE_SERVICE_FEE, HANDLING_FEE, COMPLIANCE_FEE, EMERGENCY_COST, OTHER. |
 | `description` | `varchar(500)` |  | Yes | Mô tả chi tiết. |
 | `quantity` | `decimal(10,2)` |  | Yes | Số lượng tính phí của dòng InvoiceItem. |
@@ -1242,6 +1245,41 @@
 | `created_at` | `timestamp` |  | Yes | Thời điểm tạo message trong transaction nghiệp vụ. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm cập nhật message gần nhất. |
 
+# 56. `PriceList`
+
+**Ý nghĩa bảng:** Header của một bảng giá định mức cho hóa đơn `QUOTATION`, `DEPOSIT`, `FINAL`. Tại mỗi thời điểm chỉ có đúng một bảng `is_active = true`, được DB bảo vệ bằng partial unique index `PriceList_single_active_idx`. Bảng active bị khóa: Logistics Manager clone, sửa bản sao rồi kích hoạt. Migration tạo sẵn bảng "Default price list" (VND, VAT 20%, cọc 40%) với 11 dòng giá bằng bảng giá cũ trong `business/quotation.md`. Mỗi thay đổi được ghi vào `CatalogAuditLog` với `entity_type = PriceList`.
+
+| Field | Type | Key | Required | Ý nghĩa |
+|---|---|---|---|---|
+| `price_list_id` | `uuid` | PK | No | Khóa chính định danh bảng giá. |
+| `name` | `varchar(200)` |  | Yes | Tên bảng giá, ví dụ "Bảng Giá Q1-2027". |
+| `currency` | `char(3)` |  | Yes | Mã tiền tệ ISO 4217, mặc định `VND`. Chỉ bảng VND được kích hoạt. |
+| `tax_rate` | `decimal(5,2)` |  | Yes | VAT %, từ 0 đến 100 (CHECK). Áp dụng cho hóa đơn tạo hoặc lưu khi bảng này active; `CREDIT_NOTE` luôn 0%. |
+| `deposit_rate` | `decimal(5,2)` |  | Yes | Tỷ lệ cọc % trên subtotal báo giá, từ 0 đến 100 (CHECK). |
+| `is_active` | `boolean` |  | Yes | Bảng giá đang dùng để sinh hóa đơn. Tối đa một dòng `true`. |
+| `created_at` | `timestamp` |  | Yes | Thời điểm tạo. |
+| `updated_at` | `timestamp` |  | Yes | Lần sửa gần nhất; API dùng làm version (`lastUpdatedAt`). |
+| `created_by_account_id` | `uuid` | FK | No | Account tạo bảng giá; NULL với bảng giá khởi tạo bởi migration. |
+| `updated_by_account_id` | `uuid` | FK | No | Account sửa hoặc kích hoạt gần nhất. |
+
+# 57. `PriceListItem`
+
+**Ý nghĩa bảng:** Một dòng giá định mức trong `PriceList`. Khi sinh hóa đơn, mỗi dòng giá thành một `InvoiceItem` (trừ dòng có `vehicle_tier` khác tier của booking). `item_name`, `unit_price` và số lượng được snapshot vào `InvoiceItem`; `InvoiceItem.price_list_item_id` trỏ ngược về dòng này nhưng không có FK nên xóa dòng giá không ảnh hưởng hóa đơn đã lập.
+
+| Field | Type | Key | Required | Ý nghĩa |
+|---|---|---|---|---|
+| `price_list_item_id` | `uuid` | PK | No | Khóa chính định danh dòng giá. |
+| `price_list_id` | `uuid` | FK | Yes | `PriceList` chứa dòng giá; xóa bảng giá thì xóa các dòng (cascade). |
+| `item_code` | `varchar(50)` |  | Yes | Mã dòng giá, ký tự `A-Z`, `0-9`, `_`; unique trong cùng `price_list_id`. Mã chuẩn: `TRUCK_S`, `TRUCK_M`, `TRUCK_L`, `HORSE_LOAD`, `FEEDING`, `MEDICAL`, `HANDLING`, `DISINFECTION`, `COMPLIANCE_FILING`, `CLINICAL_CHECK`, `INSURANCE`. |
+| `item_name` | `varchar(200)` |  | Yes | Tên hiển thị, dùng làm `description` của `InvoiceItem`. |
+| `item_type` | `invoice_item_type` |  | Yes | Loại phí. Enum `invoice_item_type`: TRANSPORT_FEE, HORSE_SERVICE_FEE, HANDLING_FEE, COMPLIANCE_FEE, EMERGENCY_COST, OTHER. |
+| `unit` | `varchar(50)` |  | Yes | Đơn vị tính: `TRIP` (số lượng 1), `HORSE` (theo số ngựa), `HORSE_DAY` (số ngựa x số ngày hành trình). |
+| `unit_price` | `decimal(18,2)` |  | Yes | Đơn giá, lớn hơn 0 (CHECK); API chỉ nhận số nguyên VND. |
+| `vehicle_tier` | `varchar(10)` |  | No | `S`, `M`, `L` (CHECK) hoặc NULL. Dòng có tier chỉ áp dụng khi booking thuộc tier đó: S 1-3 ngựa, M 4-6, L 7-9. |
+| `sort_order` | `int` |  | Yes | Thứ tự dòng phí trên hóa đơn (tăng dần, sau đó theo `item_code`). |
+| `created_at` | `timestamp` |  | Yes | Thời điểm tạo. |
+| `updated_at` | `timestamp` |  | Yes | Lần sửa gần nhất; API dùng làm version. |
+
 # Appendix A — Các business rule V8 cần backend kiểm tra
 
 1. `Vehicle.transport_mode` phải phù hợp với `Route.transport_mode` của chặng được gán qua `RoutePlanRouteVehicle`.
@@ -1262,6 +1300,9 @@
 15. `ProofAttachment` phải tham chiếu đúng một Proof bằng XOR giữa `quarantine_proof_id` và `customs_clearance_proof_id`; không được lưu đồng thời cả hai hoặc để cả hai NULL.
 16. `AuditDossier` là append-only: không update/delete qua API; `target_entity + target_id` phải được validate vì đây là polymorphic reference.
 17. Các file trong `DocumentAttachment` thuộc đúng một `DocumentVersion`; các file phản hồi Authority thuộc `AuthoritySubmissionEvidenceFile`, không gộp vào hồ sơ Customer.
+18. `PriceList` chỉ có một dòng `is_active = true`. Kích hoạt bảng mới phải vô hiệu hóa bảng cũ trong cùng một transaction; chỉ kích hoạt bảng VND có ít nhất một dòng và có dòng cho cả ba `vehicle_tier` S, M, L.
+19. `PriceList` đang active bị khóa: không sửa header, không thêm/xóa `PriceListItem`. Dòng giá của bảng active chỉ được đổi `item_name`, `unit_price`, `vehicle_tier` (và bảng vẫn phải đủ ba tier). Muốn thay đổi lớn thì clone sang bảng mới.
+20. `Invoice.tax_rate` là VAT % dùng để tính `tax_amount` lần dựng gần nhất (0 với `CREDIT_NOTE`); `InvoiceItem.price_list_item_id` chỉ để truy vết và không có FK. Đổi `PriceList` không sửa hóa đơn đã lưu.
 
 # Appendix B — Phân biệt nhanh nhóm Compliance
 
@@ -1284,7 +1325,7 @@
 | `ProofAttachment` | File vật lý của QuarantineProof hoặc CustomsClearanceProof; một proof có thể có nhiều file. |
 | `AuditDossier` | Nhật ký audit append-only cho các thay đổi trong compliance dossier. |
 
-**Tổng số bảng:** 56
+**Tổng số bảng:** 58
 **Tổng số enum:** 56
-**Tổng số field được mô tả:** 702
+**Tổng số field được mô tả:** 725
 

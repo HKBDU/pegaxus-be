@@ -282,10 +282,11 @@ public sealed partial class Service
                     InvoiceItemId = Guid.NewGuid(), ItemType = line.ItemType, Description = line.Description,
                     Quantity = line.Quantity, UnitPrice = line.Price, LineAmount = Money(line.Quantity * line.Price),
                     HorseId = line.HorseId, Note = line.Note, EmergencyCostRequestId = line.EmergencyCostRequestId,
-                    CreatedAt = now, UpdatedAt = now
+                    PriceListItemId = line.PriceListItemId, CreatedAt = now, UpdatedAt = now
                 });
             invoice.Subtotal = Money(invoice.InvoiceItems.Sum(item => item.LineAmount));
-            invoice.TaxAmount = Money(Vnd.Tax(invoice.Subtotal, type));
+            invoice.TaxRate = type == InvoiceType.CREDIT_NOTE ? 0 : (await db.LoadActivePriceListAsync(cancellationToken, withItems: false)).TaxRate;
+            invoice.TaxAmount = Money(Vnd.Tax(invoice.Subtotal, type, invoice.TaxRate));
             foreach (var deposit in deposits)
                 invoice.InvoiceItems.Add(new InvoiceItem
                 {
@@ -375,7 +376,7 @@ public sealed partial class Service
                 .Select(item => new { item.InvoiceCode, item.Currency, item.TotalAmount }).ToListAsync(cancellationToken);
             var now = new DateTime(Math.Max(clock.GetUtcNow().UtcTicks / 10 * 10, invoice.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
             var items = new List<InvoiceItem>();
-            decimal subtotal, tax, total;
+            decimal subtotal, tax, total, taxRate;
             try
             {
                 foreach (var line in lines)
@@ -386,10 +387,12 @@ public sealed partial class Service
                         Quantity = line.Quantity, UnitPrice = line.Price,
                         LineAmount = Money(line.Quantity * line.Price),
                         HorseId = line.HorseId, Note = line.Note, EmergencyCostRequestId = line.EmergencyCostRequestId,
+                        PriceListItemId = line.PriceListItemId,
                         CreatedAt = line.ItemId.HasValue ? existing[line.ItemId.Value].CreatedAt : now, UpdatedAt = now
                     });
                 subtotal = Money(items.Sum(item => item.LineAmount));
-                tax = Money(Vnd.Tax(subtotal, invoice.Type));
+                taxRate = invoice.Type == InvoiceType.CREDIT_NOTE ? 0 : (await db.LoadActivePriceListAsync(cancellationToken, withItems: false)).TaxRate;
+                tax = Money(Vnd.Tax(subtotal, invoice.Type, taxRate));
                 foreach (var deposit in deposits)
                     items.Add(new InvoiceItem
                     {
@@ -423,6 +426,7 @@ public sealed partial class Service
             invoice.BillingNote = invoice.Type == InvoiceType.QUOTATION && generated is not null ? ComposeQuotationNote(request.Note) : request.Note;
             invoice.Subtotal = subtotal;
             invoice.TaxAmount = tax;
+            invoice.TaxRate = taxRate;
             invoice.DiscountAmount = 0;
             invoice.TotalAmount = total;
             invoice.UpdatedAt = now;
@@ -483,7 +487,7 @@ public sealed partial class Service
                 IsDeduction(invoice, item), item.Note)).ToArray(),
             Summary = new(Vnd.ToLong(invoice.Subtotal), Vnd.ToLong(invoice.TaxAmount),
                 Vnd.ToLong(items.Where(item => IsDeduction(invoice, item)).Sum(item => item.LineAmount)), Vnd.ToLong(invoice.TotalAmount))
-            { TaxRatePercent = Vnd.TaxRatePercent(invoice.Type) },
+            { TaxRatePercent = invoice.Type == InvoiceType.CREDIT_NOTE ? 0 : invoice.TaxRate },
             ContactPerson = new(employee.FullName, employee.Account.Email, employee.Phone),
             Booking = new(booking.BookingId, booking.BookingCode, booking.Status.ToString(), booking.OriginAddress,
                 booking.OriginCountry, booking.DestinationAddress, booking.DestinationCountry, booking.RequestedDepartureDate),

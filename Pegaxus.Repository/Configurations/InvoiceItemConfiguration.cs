@@ -28,6 +28,7 @@ public sealed class InvoiceItemConfiguration : IEntityTypeConfiguration<InvoiceI
             .HasMaxLength(500)
             .HasColumnName("description");
         entity.Property(e => e.EmergencyCostRequestId).HasColumnName("emergency_cost_request_id");
+        entity.Property(e => e.PriceListItemId).HasColumnName("price_list_item_id");
         entity.Property(e => e.HorseId).HasColumnName("horse_id");
         entity.Property(e => e.InvoiceId).HasColumnName("invoice_id");
         entity.Property(e => e.LineAmount)

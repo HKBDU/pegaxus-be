@@ -18,6 +18,9 @@ public partial class InvoiceItem
 
     public Guid? EmergencyCostRequestId { get; set; }
 
+    /// <summary>The price list item this line was generated from; a traceability value only, so it has no foreign key and may outlive the item.</summary>
+    public Guid? PriceListItemId { get; set; }
+
     public InvoiceItemType ItemType { get; set; }
 
     public string Description { get; set; } = null!;

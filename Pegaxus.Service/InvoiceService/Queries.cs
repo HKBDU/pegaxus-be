@@ -122,7 +122,7 @@ public sealed partial class Service
             DateOnly.FromDateTime(invoice.IssuedAt ?? invoice.CreatedAt), AsUtc(invoice.DueDate), invoice.Currency, invoice.BillingNote,
             new(client.CustomerId, client.CustomerCode, client.FullName, client.Phone, client.Address, client.Account.Email), items,
             new(Vnd.ToLong(invoice.Subtotal), Vnd.ToLong(invoice.TaxAmount), items.Where(item => item.IsDepositDeduction).Sum(item => item.Total), Vnd.ToLong(invoice.TotalAmount))
-            { TaxRatePercent = Vnd.TaxRatePercent(invoice.Type) },
+            { TaxRatePercent = invoice.Type == InvoiceType.CREDIT_NOTE ? 0 : invoice.TaxRate },
             new(contact.FullName, contact.Account.Email, contact.Phone), AsUtc(invoice.IssuedAt), AsUtc(invoice.PaidAt), AsUtc(invoice.CancelledAt),
             invoice.CancellationReason, new(booking.BookingId, booking.BookingCode, booking.Status.ToString(), booking.OriginAddress, booking.OriginCountry,
                 booking.DestinationAddress, booking.DestinationCountry, booking.RequestedDepartureDate),

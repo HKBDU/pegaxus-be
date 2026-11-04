@@ -59,7 +59,7 @@ public static class Response
         IReadOnlyList<ItemResponse> Items, PricingResponse? Pricing, bool IsLocked);
 
     public sealed record PricingResponse(string Version, int HorseCount, int? TransitDays, string? VehicleTier,
-        int DepositRatePercent, int TaxRatePercent);
+        decimal DepositRatePercent, decimal TaxRatePercent);
 
     public sealed class DraftResponse
     {

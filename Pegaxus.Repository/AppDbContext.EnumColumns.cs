@@ -53,6 +53,7 @@ public partial class AppDbContext
         Configure<Invoice>(modelBuilder, "type", "invoice_type", nameof(Invoice.Type), "Invoice_type_idx", "QUOTATION");
         Configure<Invoice>(modelBuilder, "status", "invoice_status", nameof(Invoice.Status), "Invoice_status_idx", "DRAFT");
         Configure<InvoiceItem>(modelBuilder, "item_type", "invoice_item_type", nameof(InvoiceItem.ItemType), "InvoiceItem_item_type_idx");
+        Configure<PriceListItem>(modelBuilder, "item_type", "invoice_item_type", nameof(PriceListItem.ItemType));
         Configure<InvoiceStatusHistory>(modelBuilder, "type", "invoice_history_type", nameof(InvoiceStatusHistory.Type), "InvoiceStatusHistory_type_idx");
         Configure<InvoiceStatusHistory>(modelBuilder, "previous_status", "invoice_status", nameof(InvoiceStatusHistory.PreviousStatus));
         Configure<InvoiceStatusHistory>(modelBuilder, "new_status", "invoice_status", nameof(InvoiceStatusHistory.NewStatus), "InvoiceStatusHistory_new_status_idx");
