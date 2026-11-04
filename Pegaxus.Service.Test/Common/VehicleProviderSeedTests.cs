@@ -21,6 +21,7 @@ public class VehicleProviderSeedTests
         Assert.Equal(2, vehicles.Count(item => item.TransportMode == TransportMode.SEA));
         Assert.All(vehicles, item =>
         {
+            Assert.Matches(@"^VEH-\d{8}-\d{4}$", item.VehicleCode);
             Assert.Equal(VehicleStatus.AVAILABLE, item.Status);
             Assert.False(item.IsDeleted);
             Assert.Equal(DateTimeKind.Unspecified, item.CreatedAt.Kind);
@@ -38,6 +39,7 @@ public class VehicleProviderSeedTests
         });
         Assert.All(providers, item =>
         {
+            Assert.Matches(@"^PRV-\d{8}-\d{4}$", item.ProviderCode);
             Assert.Equal(ProviderStatus.ACTIVE, item.Status);
             Assert.False(item.IsDeleted);
             Assert.Equal(DateTimeKind.Unspecified, item.CreatedAt.Kind);
@@ -64,24 +66,24 @@ public class VehicleProviderSeedTests
     {
         await using var db = TestSupport.CreateDb();
         await AppDbContextSeedData.SeedVehiclesAndProvidersAsync(db);
-        var vehicle = await db.Vehicles.SingleAsync(item => item.VehicleCode == "VEH-DEMO-001");
+        var vehicle = await db.Vehicles.SingleAsync(item => item.VehicleCode == "VEH-20261010-0001");
         vehicle.VehicleCode = "EDITED-VEHICLE";
         vehicle.VehicleName = "Keep edited vehicle";
         vehicle.LicensePlate = "EDITED-PLATE";
         vehicle.IsDeleted = true;
-        var provider = await db.TransportProviders.SingleAsync(item => item.ProviderCode == "PRV-DEMO-001");
+        var provider = await db.TransportProviders.SingleAsync(item => item.ProviderCode == "PRV-20261010-0001");
         provider.ProviderCode = "EDITED-PROVIDER";
         provider.ProviderName = "Keep edited provider";
         provider.TaxCode = "EDITED-TAX";
         provider.IsDeleted = true;
 
-        db.Vehicles.RemoveRange(await db.Vehicles.Where(item => item.VehicleCode == "VEH-DEMO-002" || item.VehicleCode == "VEH-DEMO-003").ToArrayAsync());
-        db.TransportProviders.RemoveRange(await db.TransportProviders.Where(item => item.ProviderCode == "PRV-DEMO-002" || item.ProviderCode == "PRV-DEMO-003").ToArrayAsync());
+        db.Vehicles.RemoveRange(await db.Vehicles.Where(item => item.VehicleCode == "VEH-20261010-0002" || item.VehicleCode == "VEH-20261010-0003").ToArrayAsync());
+        db.TransportProviders.RemoveRange(await db.TransportProviders.Where(item => item.ProviderCode == "PRV-20261010-0002" || item.ProviderCode == "PRV-20261010-0003").ToArrayAsync());
         db.Vehicles.AddRange(
-            new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = "VEH-DEMO-002", IsDeleted = true },
+            new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = "VEH-20261010-0002", IsDeleted = true },
             new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = "OTHER-VEHICLE", LicensePlate = "EJ21 FXT" });
         db.TransportProviders.AddRange(
-            new TransportProvider { TransportProviderId = Guid.NewGuid(), ProviderCode = "PRV-DEMO-002", ProviderName = "Existing provider", IsDeleted = true },
+            new TransportProvider { TransportProviderId = Guid.NewGuid(), ProviderCode = "PRV-20261010-0002", ProviderName = "Existing provider", IsDeleted = true },
             new TransportProvider { TransportProviderId = Guid.NewGuid(), ProviderCode = "OTHER-PROVIDER", ProviderName = "Tax conflict", TaxCode = "IE-VAT-100003" });
         await db.SaveChangesAsync();
         db.ChangeTracker.Clear();

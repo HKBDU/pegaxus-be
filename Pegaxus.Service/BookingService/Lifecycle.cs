@@ -397,7 +397,7 @@ public sealed partial class Service
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var domestic = string.Equals(originCountry?.Trim(), destinationCountry?.Trim(), StringComparison.OrdinalIgnoreCase);
-        if (departureDate < (domestic ? today.AddDays(21) : today.AddMonths(2)))
+        if (departureDate < DepartureLeadTime.Earliest(today, domestic))
             throw new BadRequestException(
                 domestic ? "A domestic booking needs a departure date at least 3 weeks from today"
                     : "An international booking needs a departure date at least 2 months from today",

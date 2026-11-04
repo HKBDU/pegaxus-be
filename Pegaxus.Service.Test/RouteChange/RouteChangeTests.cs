@@ -71,7 +71,8 @@ public class RouteChangeTests
         var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Geoapify:ApiKey"] = "test-key" }).Build();
         var routes = new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db),
-            new Pegaxus.Service.RouteService.Service(db, new RoutingClientFactory(), configuration));
+            new Pegaxus.Service.RouteService.Service(db, new RoutingClientFactory(), configuration),
+            new Pegaxus.Service.RoutePlanService.NoopRoutePlanRealtimeService());
         var result = await routes.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, new()
         {
             RouteType = "RETURN", Action = "SAVE_DRAFT", RouteNote = "Return to origin after road closure",
@@ -649,7 +650,7 @@ public class RouteChangeTests
             f.Transport = new() { TransportId = Guid.NewGuid(), TransportCode = "TR1", BookingId = booking.BookingId, Status = TransportStatus.IN_TRANSIT };
             booking.Status = BookingStatus.APPROVED;
             var transportPlan = new TransportPlan { TransportPlanId = Guid.NewGuid(), TransportId = f.Transport.TransportId, PlanCode = "TP1", Status = TransportPlanStatus.APPROVED, PlannedEndAt = DbTime(StartAt.AddHours(2)) };
-            f.Plan = new() { RoutePlanId = Guid.NewGuid(), TransportPlanId = transportPlan.TransportPlanId, RoutePlanCode = "RP1", Status = RoutePlanStatus.ACTIVE, CreatedAt = DbTime(StartAt), UpdatedAt = DbTime(StartAt) };
+            f.Plan = new() { RoutePlanId = Guid.NewGuid(), TransportPlanId = transportPlan.TransportPlanId, RoutePlanCode = "RP1", Status = RoutePlanStatus.ACTIVE, SubmittedForReviewAt = DbTime(StartAt), CreatedAt = DbTime(StartAt), UpdatedAt = DbTime(StartAt) };
             f.Completed = new() { RoutePlanRouteId = Guid.NewGuid(), RoutePlanId = f.Plan.RoutePlanId, RouteId = completedRoute.RouteId, SequenceNo = 1,
                 PlannedDepartureAt = DbTime(StartAt.AddHours(-3)), PlannedArrivalAt = DbTime(StartAt.AddHours(-1)),
                 ActualDepartureAt = DbTime(StartAt.AddHours(-3)), ActualArrivalAt = DbTime(StartAt.AddHours(-1)) };
@@ -679,7 +680,7 @@ public class RouteChangeTests
             var plan = new RoutePlan { RoutePlanId = Guid.NewGuid(), TransportPlanId = Plan.TransportPlanId,
                 PrimaryRoutePlanId = Plan.RoutePlanId, RoutePlanCode = type + "-" + Guid.NewGuid().ToString("N"),
                 Status = status ?? (type == RouteType.RETURN ? RoutePlanStatus.DRAFT : RoutePlanStatus.CONFIRMED),
-                CreatedAt = DbTime(StartAt), UpdatedAt = DbTime(StartAt), RouteNote = "Emergency route planning" };
+                SubmittedForReviewAt = DbTime(StartAt), CreatedAt = DbTime(StartAt), UpdatedAt = DbTime(StartAt), RouteNote = "Emergency route planning" };
             if (type == RouteType.RETURN)
             {
                 db.Add(new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = plan, Route = NewRoute(Start, Origin, 70), SequenceNo = 1,

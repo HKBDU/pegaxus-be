@@ -24,7 +24,7 @@ public class TransportPlanLocationsTests
         db.AddRange(origin, destination);
         await db.SaveChangesAsync();
         var service = new Plans.Service(db, TestSupport.CreateNotifications(db));
-        var start = DateTimeOffset.UtcNow.AddDays(1);
+        var start = DateTimeOffset.UtcNow.AddMonths(3);
         var created = await service.CreateAsync(manager.AccountId, booking.BookingId, new()
         {
             OriginLocationId = origin.LocationId, DestinationLocationId = destination.LocationId,
@@ -68,7 +68,7 @@ public class TransportPlanLocationsTests
         booking.Transport = new Transport { TransportId = Guid.NewGuid(), TransportCode = "TR-UNKNOWN", Booking = booking };
         db.Transports.Add(booking.Transport);
         await db.SaveChangesAsync();
-        var start = DateTimeOffset.UtcNow.AddDays(1);
+        var start = DateTimeOffset.UtcNow.AddMonths(3);
         var error = await Assert.ThrowsAsync<NotFoundException>(() => new Plans.Service(db, TestSupport.CreateNotifications(db))
             .CreateAsync(manager.AccountId, booking.BookingId, new()
             {

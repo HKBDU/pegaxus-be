@@ -4034,6 +4034,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnName("status")
                         .HasDefaultValueSql("'DRAFT'::route_plan_status");
 
+                    b.Property<DateTime?>("SubmittedForReviewAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("submitted_for_review_at");
+
                     b.Property<decimal?>("TotalDistanceKm")
                         .HasPrecision(10, 2)
                         .HasColumnType("numeric(10,2)")

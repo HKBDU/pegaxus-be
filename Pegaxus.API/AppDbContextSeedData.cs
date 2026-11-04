@@ -66,7 +66,7 @@ public static class AppDbContextSeedData
         foreach (var number in Enumerable.Range(1, 10))
         {
             var vehicleProfile = VehicleProfiles[number - 1];
-            var vehicleCode = $"VEH-DEMO-{number:000}";
+            var vehicleCode = $"VEH-20261010-{number:0000}";
             var vehicleId = StableGuid(vehicleCode);
             var licensePlate = vehicleProfile.LicensePlate;
             var vehicle = await db.Vehicles.IgnoreQueryFilters().FirstOrDefaultAsync(item => item.VehicleId == vehicleId ||
@@ -85,14 +85,16 @@ public static class AppDbContextSeedData
                 db.Vehicles.Add(vehicle);
                 vehicles++;
             }
-            else if (vehicle.VehicleId == vehicleId && vehicle.VehicleName?.StartsWith(LegacyDemoVehiclePrefix, StringComparison.Ordinal) == true)
+            else if (vehicle.VehicleId == vehicleId && !vehicle.IsDeleted &&
+                (vehicle.VehicleName?.StartsWith(LegacyDemoVehiclePrefix, StringComparison.Ordinal) == true ||
+                 vehicle.VehicleName == $"Pegaxus {vehicleProfile.Mode} {number:000}"))
             {
                 ApplyVehicleDetails(vehicle, vehicleProfile, expiryDate);
                 vehicle.UpdatedAt = now;
             }
 
             var providerProfile = ProviderProfiles[number - 1];
-            var providerCode = $"PRV-DEMO-{number:000}";
+            var providerCode = $"PRV-20261010-{number:0000}";
             var providerId = StableGuid(providerCode);
             var taxCode = providerProfile.TaxCode;
             var provider = await db.TransportProviders.IgnoreQueryFilters().FirstOrDefaultAsync(item => item.TransportProviderId == providerId ||
@@ -111,7 +113,9 @@ public static class AppDbContextSeedData
                 db.TransportProviders.Add(provider);
                 providers++;
             }
-            else if (provider.TransportProviderId == providerId && provider.ProviderName?.StartsWith(LegacyDemoProviderPrefix, StringComparison.Ordinal) == true)
+            else if (provider.TransportProviderId == providerId && !provider.IsDeleted &&
+                (provider.ProviderName?.StartsWith(LegacyDemoProviderPrefix, StringComparison.Ordinal) == true ||
+                 provider.ProviderName == $"Pegaxus Transport {number:000}"))
             {
                 ApplyProviderDetails(provider, providerProfile);
                 provider.UpdatedAt = now;
@@ -222,7 +226,7 @@ public static class AppDbContextSeedData
         await db.SaveChangesAsync(cancellationToken);
 
         var bookings = await db.Bookings
-            .Where(item => item.BookingCode.StartsWith("REQ-20261010-DEMO-"))
+            .Where(item => item.BookingCode.StartsWith("REQ-20261010-"))
             .ToDictionaryAsync(item => item.BookingCode, cancellationToken);
         var transports = await SeedDemoTransportsAsync(db, bookings, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
@@ -253,7 +257,7 @@ public static class AppDbContextSeedData
         var seeds = orderedCustomerEmails.SelectMany((customerEmail, customerIndex) =>
                 HorseProfiles[customerIndex].Select((profile, horseIndex) => new HorseSeed(
                     customerEmail,
-                    $"DEMO-C{customerIndex + 1}-HORSE-{horseIndex + 1:000}",
+                    $"HRS-20261010-{customerIndex * 4 + horseIndex + 1:0000}",
                     profile,
                     $"985112{customerIndex + 1:000}{horseIndex + 1:000000}",
                     $"250PEG{customerIndex + 1:000}{horseIndex + 1:000000}")))
@@ -261,7 +265,7 @@ public static class AppDbContextSeedData
 
         foreach (var seed in seeds)
         {
-            var horse = await db.Horses.SingleOrDefaultAsync(item => item.HorseId == seed.Id, cancellationToken);
+            var horse = await db.Horses.IgnoreQueryFilters().SingleOrDefaultAsync(item => item.HorseId == seed.Id, cancellationToken);
             if (horse is null)
             {
                 horse = new Horse
@@ -274,7 +278,9 @@ public static class AppDbContextSeedData
                 ApplyHorseDetails(horse, seed);
                 db.Horses.Add(horse);
             }
-            else if (horse.PassportNumber?.StartsWith(LegacyDemoPassportPrefix, StringComparison.Ordinal) == true)
+            else if (!horse.IsDeleted &&
+                (horse.PassportNumber?.StartsWith(LegacyDemoPassportPrefix, StringComparison.Ordinal) == true ||
+                 horse.PassportNumber == $"PEGAXUS-{seed.Code}"))
             {
                 ApplyHorseDetails(horse, seed);
                 horse.UpdatedAt = now;
@@ -316,24 +322,24 @@ public static class AppDbContextSeedData
         var today = DateOnly.FromDateTime(now);
         var seeds = new[]
         {
-            new BookingSeed("REQ-20261010-DEMO-0001", "trinhnganquan@gmail.com", BookingStatus.DRAFT, Chantilly, Deauville, 30, 1,
+            new BookingSeed("REQ-20261010-0001", "trinhnganquan@gmail.com", BookingStatus.DRAFT, Chantilly, Deauville, 30, 1,
                 "Hay net and water stop every four hours.", "Both horses are moving to the summer meeting at Deauville.", null,
-                new[] { "DEMO-C1-HORSE-001", "DEMO-C1-HORSE-002" }),
-            new BookingSeed("REQ-20261010-DEMO-0002", "batquyquan@gmail.com", BookingStatus.PENDING, Grosbois, NationalStud, 90, 4,
+                new[] { "HRS-20261010-0001", "HRS-20261010-0002" }),
+            new BookingSeed("REQ-20261010-0002", "batquyquan@gmail.com", BookingStatus.PENDING, Grosbois, NationalStud, 90, 4,
                 "Temperature monitoring required throughout the journey.", "Two horses are going to a training yard for the autumn season.", null,
-                new[] { "DEMO-C2-HORSE-001", "DEMO-C2-HORSE-002" }),
-            new BookingSeed("REQ-20261010-DEMO-0003", "kimvetuan@gmail.com", BookingStatus.APPROVED, Longchamp, DalhamHall, 100, 5,
+                new[] { "HRS-20261010-0005", "HRS-20261010-0006" }),
+            new BookingSeed("REQ-20261010-0003", "kimvetuan@gmail.com", BookingStatus.APPROVED, Longchamp, DalhamHall, 100, 5,
                 "Border control post inspection required on arrival in the United Kingdom.", "Three horses are travelling to the Newmarket sales.", null,
-                new[] { "DEMO-C3-HORSE-001", "DEMO-C3-HORSE-002", "DEMO-C3-HORSE-003" }),
-            new BookingSeed("REQ-20261010-DEMO-0004", "khuyenvkse200481@fpt.edu.vn", BookingStatus.APPROVED, Curragh, Chantilly, 110, 4,
+                new[] { "HRS-20261010-0009", "HRS-20261010-0010", "HRS-20261010-0011" }),
+            new BookingSeed("REQ-20261010-0004", "khuyenvkse200481@fpt.edu.vn", BookingStatus.APPROVED, Curragh, Chantilly, 110, 4,
                 "Overnight stabling needed before the sea crossing.", "Two horses are joining a stable in Chantilly.", null,
-                new[] { "DEMO-C4-HORSE-001", "DEMO-C4-HORSE-002" }),
-            new BookingSeed("REQ-20261010-DEMO-0005", "trinhnganquan@gmail.com", BookingStatus.APPROVED, Chantilly, Ascot, 120, 5,
+                new[] { "HRS-20261010-0013", "HRS-20261010-0014" }),
+            new BookingSeed("REQ-20261010-0005", "trinhnganquan@gmail.com", BookingStatus.APPROVED, Chantilly, Ascot, 120, 5,
                 "Collection at 06:00; vet check before loading.", "Entries confirmed for the Ascot meeting.", null,
-                new[] { "DEMO-C1-HORSE-003", "DEMO-C1-HORSE-004" }),
-            new BookingSeed("REQ-20261010-DEMO-0006", "batquyquan@gmail.com", BookingStatus.REJECTED, Newbury, Quesnay, 130, 5,
+                new[] { "HRS-20261010-0003", "HRS-20261010-0004" }),
+            new BookingSeed("REQ-20261010-0006", "batquyquan@gmail.com", BookingStatus.REJECTED, Newbury, Quesnay, 130, 5,
                 "Return after the autumn sales.", "One horse is coming back to its home stud.", "The passport of the horse expires before the departure date.",
-                new[] { "DEMO-C2-HORSE-003" })
+                new[] { "HRS-20261010-0007" })
         };
 
         foreach (var seed in seeds)
@@ -341,8 +347,12 @@ public static class AppDbContextSeedData
             var existing = await db.Bookings.SingleOrDefaultAsync(item => item.BookingCode == seed.BookingCode, cancellationToken);
             if (existing is not null)
             {
-                if (existing.CustomerNote == LegacyDemoBookingNote && existing.Status == seed.Status)
+                if (existing.Status == seed.Status &&
+                    (existing.CustomerNote == LegacyDemoBookingNote || existing.CustomerNote == "Please confirm transport arrangements before departure."))
+                {
                     ApplyBookingDetails(existing, seed, today);
+                    existing.UpdatedAt = now;
+                }
                 continue;
             }
 
@@ -423,9 +433,9 @@ public static class AppDbContextSeedData
     {
         var seeds = new[]
         {
-            new TransportSeed("TR-20261010-DEMO-0003", "REQ-20261010-DEMO-0003", TransportStatus.CREATED),
-            new TransportSeed("TR-20261010-DEMO-0004", "REQ-20261010-DEMO-0004", TransportStatus.PLANNING),
-            new TransportSeed("TR-20261010-DEMO-0005", "REQ-20261010-DEMO-0005", TransportStatus.READY)
+            new TransportSeed("TR-20261010-0003", "REQ-20261010-0003", TransportStatus.CREATED),
+            new TransportSeed("TR-20261010-0004", "REQ-20261010-0004", TransportStatus.PLANNING),
+            new TransportSeed("TR-20261010-0005", "REQ-20261010-0005", TransportStatus.READY)
         };
         var result = new Dictionary<string, Transport>(StringComparer.OrdinalIgnoreCase);
         foreach (var seed in seeds)
@@ -454,8 +464,8 @@ public static class AppDbContextSeedData
         var requirementIds = await db.ComplianceRequirements.ToDictionaryAsync(item => item.RequirementCode, item => item.ComplianceRequirementId, cancellationToken);
         var seeds = new[]
         {
-            new TemplateSeed("TPL-DEMO-EU-GB", "EU to GB Equine Transport", DossierTemplateStatus.ACTIVE, new[] { "EQUINE_PASSPORT", "EHC_EU_TO_GB", "IPAFFS_PRE_NOTIF", "ATA_CARNET_EXPORT" }),
-            new TemplateSeed("TPL-DEMO-DRAFT", "Draft Demo Template", DossierTemplateStatus.DRAFT, new[] { "EQUINE_PASSPORT", "JOURNEY_LOG_EC1_2005" })
+            new TemplateSeed("TPL-EU-GB", "EU to GB Equine Transport", DossierTemplateStatus.ACTIVE, new[] { "EQUINE_PASSPORT", "EHC_EU_TO_GB", "IPAFFS_PRE_NOTIF", "ATA_CARNET_EXPORT" }),
+            new TemplateSeed("TPL-EQUINE-IDENTITY", "Equine Identity and Journey Log", DossierTemplateStatus.DRAFT, new[] { "EQUINE_PASSPORT", "JOURNEY_LOG_EC1_2005" })
         };
         var result = new Dictionary<string, DossierTemplate>(StringComparer.OrdinalIgnoreCase);
         foreach (var seed in seeds)
@@ -469,7 +479,7 @@ public static class AppDbContextSeedData
                     TemplateCode = seed.Code,
                     TemplateName = seed.Name,
                     Status = seed.Status,
-                    Description = "Seeded demo dossier template for Swagger testing.",
+                    Description = "Document requirements for equine transport.",
                     VersionNo = 1,
                     EffectiveFrom = new DateOnly(2026, 1, 1),
                     CreatedAt = now,
@@ -497,8 +507,8 @@ public static class AppDbContextSeedData
 
     private static async Task SeedDemoDossiersAsync(AppDbContext db, IReadOnlyDictionary<string, Transport> transports, IReadOnlyDictionary<string, DossierTemplate> templates, IReadOnlyDictionary<string, Horse> horses, DateTime now, CancellationToken cancellationToken)
     {
-        var transport = transports["REQ-20261010-DEMO-0005"];
-        if (await db.ComplianceDossiers.AnyAsync(item => item.DossierCode == "CD-20261010-DEMO-0001", cancellationToken))
+        var transport = transports["REQ-20261010-0005"];
+        if (await db.ComplianceDossiers.AnyAsync(item => item.DossierCode == "CD-20261010-0001", cancellationToken))
             return;
 
         var requirements = await db.ComplianceRequirements
@@ -506,13 +516,13 @@ public static class AppDbContextSeedData
             .ToDictionaryAsync(item => item.RequirementCode, cancellationToken);
         var dossier = new ComplianceDossier
         {
-            ComplianceDossierId = StableGuid("CD-20261010-DEMO-0001"),
-            DossierCode = "CD-20261010-DEMO-0001",
+            ComplianceDossierId = StableGuid("CD-20261010-0001"),
+            DossierCode = "CD-20261010-0001",
             TransportId = transport.TransportId,
-            DossierTemplateId = templates["TPL-DEMO-EU-GB"].DossierTemplateId,
+            DossierTemplateId = templates["TPL-EU-GB"].DossierTemplateId,
             Status = ComplianceDossierStatus.IN_PREPARATION,
             OpenedAt = now.AddDays(-1),
-            Note = "Seeded demo dossier for Swagger testing.",
+            Note = "Prepare passport, health certificate and import pre-notification.",
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -520,10 +530,10 @@ public static class AppDbContextSeedData
         db.DossierRequirements.AddRange(
             new DossierRequirement
             {
-                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:EQUINE_PASSPORT"),
+                DossierRequirementId = StableGuid("CD-20261010-0001:EQUINE_PASSPORT"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["EQUINE_PASSPORT"].ComplianceRequirementId,
-                HorseId = horses["DEMO-C1-HORSE-003"].HorseId,
+                HorseId = horses["HRS-20261010-0003"].HorseId,
                 Status = DossierRequirementStatus.PROVIDED,
                 IsMandatory = true,
                 DueDate = DateOnly.FromDateTime(now).AddDays(70),
@@ -532,7 +542,7 @@ public static class AppDbContextSeedData
             },
             new DossierRequirement
             {
-                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:EHC_EU_TO_GB"),
+                DossierRequirementId = StableGuid("CD-20261010-0001:EHC_EU_TO_GB"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["EHC_EU_TO_GB"].ComplianceRequirementId,
                 Status = DossierRequirementStatus.PENDING,
@@ -543,7 +553,7 @@ public static class AppDbContextSeedData
             },
             new DossierRequirement
             {
-                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:IPAFFS_PRE_NOTIF"),
+                DossierRequirementId = StableGuid("CD-20261010-0001:IPAFFS_PRE_NOTIF"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["IPAFFS_PRE_NOTIF"].ComplianceRequirementId,
                 Status = DossierRequirementStatus.REQUESTED,

@@ -249,6 +249,7 @@ public sealed partial class Service
             throw new ConflictException("An unresolved invoice of the same type already exists. Please edit or cancel the existing invoice.", "INVOICE_ALREADY_EXISTS");
         if (type == InvoiceType.CREDIT_NOTE && !invoices.Any(item => item.Type == InvoiceType.FINAL && item.Status == InvoiceStatus.PAID))
             throw new UnprocessableEntityException("Cannot create a claim/compensation invoice. The FINAL invoice of this booking must be PAID first.", "UNPAID_FINAL_INVOICE");
+        await EnsureDueDateOrderAsync(bookingId, null, type, request.DueDate!.Value, cancellationToken);
         var deposits = invoices.Where(item => type == InvoiceType.FINAL && item.Type == InvoiceType.DEPOSIT && item.Status == InvoiceStatus.PAID).ToArray();
 
         var requestedItems = (request.Items ?? []).Where(item => !item.IsDepositDeduction).ToArray();
@@ -340,6 +341,7 @@ public sealed partial class Service
             if (request.Type is not null && !string.Equals(request.Type.Trim(), invoice.Type.ToString(), StringComparison.OrdinalIgnoreCase))
                 throw new FieldValidationException([new("type", "Invoice type cannot be changed.")]);
 
+            await EnsureDueDateOrderAsync(invoice.BookingId, invoiceId, invoice.Type, request.DueDate!.Value, cancellationToken);
             if (!IsGenerated(invoice.Type) && request.Items is null)
                 throw new FieldValidationException([new("items", "Items are required; an empty array is allowed.")]);
             var existing = invoice.InvoiceItems.ToDictionary(item => item.InvoiceItemId);

@@ -167,7 +167,7 @@ public class BookingCoordinatesTests
 
     private static TransportPlanRequest.CreateRequest PlanRequest() => new()
     {
-        PlannedStartAt = DateTimeOffset.UtcNow.AddDays(21), PlannedEndAt = DateTimeOffset.UtcNow.AddDays(23)
+        PlannedStartAt = DateTimeOffset.UtcNow.AddMonths(3), PlannedEndAt = DateTimeOffset.UtcNow.AddMonths(3).AddDays(2)
     };
 
     private static Location NewLocation(string name, decimal? latitude, decimal? longitude, bool deleted = false) => new()

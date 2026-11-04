@@ -59,8 +59,7 @@ public class PersonnelAssignmentTests
     {
         await using var db = TestSupport.CreateDb();
         await Pegaxus.API.AppDbContextSeedData.SeedAsync(db);
-        Assert.DoesNotContain(await db.TransportPlans.ToListAsync(), x =>
-            x.PlanCode is "TP-20261010-DEMO-0004" or "TP-20261010-DEMO-0005");
+        Assert.Empty(await db.TransportPlans.ToListAsync());
         Assert.Empty(await db.EmployeeTransportPlans.ToListAsync());
     }
 
