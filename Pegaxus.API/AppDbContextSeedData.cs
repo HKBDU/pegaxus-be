@@ -265,13 +265,20 @@ public static class AppDbContextSeedData
 
         foreach (var seed in seeds)
         {
-            var horse = await db.Horses.IgnoreQueryFilters().SingleOrDefaultAsync(item => item.HorseId == seed.Id, cancellationToken);
+            var customerId = customers[seed.CustomerEmail].CustomerId;
+            // The seed codes were renamed once, which changed the IDs derived from them. A horse an earlier seed made keeps its old ID
+            // but still carries this seed's microchip, so it is reused instead of inserted again.
+            var horse = await db.Horses.IgnoreQueryFilters()
+                .Where(item => item.HorseId == seed.Id || !item.IsDeleted && item.CustomerId == customerId &&
+                    (item.MicrochipNumber == seed.MicrochipNumber || item.PassportNumber == seed.PassportNumber))
+                .OrderByDescending(item => item.HorseId == seed.Id)
+                .FirstOrDefaultAsync(cancellationToken);
             if (horse is null)
             {
                 horse = new Horse
                 {
                     HorseId = seed.Id,
-                    CustomerId = customers[seed.CustomerEmail].CustomerId,
+                    CustomerId = customerId,
                     CreatedAt = now,
                     UpdatedAt = now
                 };
