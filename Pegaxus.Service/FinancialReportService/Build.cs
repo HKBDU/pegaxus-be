@@ -60,7 +60,7 @@ public sealed partial class Service
     }
 
     /// <summary>
-    /// R24: the nine standard lines at the list prices for the trip's real horse count and duration, for the manager to copy into the FINAL invoice,
+    /// R24: the standard lines of the active price list for the trip's real horse count and duration, for the manager to copy into the FINAL invoice,
     /// plus one reference line for the approved emergency costs. They are a suggestion only: the invoice itself is built from the issued quotation.
     /// </summary>
     private async Task<IReadOnlyList<Response.SuggestedItem>> SuggestionsAsync(TransportInfo transport, Guid? dossierId, Guid? templateId, CancellationToken cancellationToken)
@@ -70,31 +70,25 @@ public sealed partial class Service
         // A booking holds 1 to 9 horses (BR-BOOKING-02), so the list prices always apply; odd legacy data just gets no standard lines instead of a failing page.
         if (QuotationCatalog.Supports(horseCount))
         {
-            var prices = Prices;
+            var prices = await db.LoadActivePriceListAsync(cancellationToken);
             var days = transport.ActualDepartureAt is { } departure && transport.ActualArrivalAt is { } arrival && arrival > departure
                 ? Math.Clamp((int)Math.Ceiling((arrival - departure).TotalHours / 24), QuotationCatalog.MinTransitDays, QuotationCatalog.MaxTransitDays)
-                : prices.DefaultTransitDays;
+                : QuotationCatalog.DefaultTransitDays;
             var dossier = dossierId is { } id ? new[] { new Response.SourceRef("ComplianceDossier", id) } : [];
-            var lines = QuotationCatalog.Generate(prices, horseCount, days);
-            // The catalog lists its nine lines in a fixed order; the basis of each line follows that order (its golden-table test guards it).
-            var basis = new IReadOnlyDictionary<string, object?>[]
+            foreach (var line in QuotationCatalog.Generate(prices, horseCount, days))
             {
-                new Dictionary<string, object?> { ["vehicleTier"] = "TIER_" + QuotationCatalog.Tier(horseCount), ["horseCount"] = horseCount },
-                new Dictionary<string, object?> { ["horseCount"] = horseCount },
-                new Dictionary<string, object?> { ["horseCount"] = horseCount, ["transportDays"] = days },
-                new Dictionary<string, object?> { ["horseCount"] = horseCount },
-                new Dictionary<string, object?> { ["horseCount"] = horseCount },
-                new Dictionary<string, object?>(),
-                new Dictionary<string, object?> { ["dossierTemplateId"] = templateId },
-                new Dictionary<string, object?> { ["horseCount"] = horseCount },
-                new Dictionary<string, object?> { ["horseCount"] = horseCount }
-            };
-            for (var index = 0; index < lines.Count; index++)
-            {
-                var line = lines[index];
-                // The two filing lines only exist when the trip has a legal dossier.
+                // The filing and clinical lines only exist when the trip has a legal dossier.
                 if (line.ItemType == InvoiceItemType.COMPLIANCE_FEE && dossierId is null) continue;
-                items.Add(new(line.ItemType.ToString(), line.Description, line.Quantity, line.UnitPrice, null, basis[index],
+                // What each line was derived from follows its unit, so a price list may add or reorder lines freely.
+                IReadOnlyDictionary<string, object?> basis = line switch
+                {
+                    { VehicleTier: not null } => new Dictionary<string, object?> { ["vehicleTier"] = "TIER_" + line.VehicleTier, ["horseCount"] = horseCount },
+                    { ItemType: InvoiceItemType.COMPLIANCE_FEE, Unit: "TRIP" } => new Dictionary<string, object?> { ["dossierTemplateId"] = templateId },
+                    { Unit: "TRIP" } => new Dictionary<string, object?>(),
+                    { Unit: "HORSE_DAY" } => new Dictionary<string, object?> { ["horseCount"] = horseCount, ["transportDays"] = days },
+                    _ => new Dictionary<string, object?> { ["horseCount"] = horseCount }
+                };
+                items.Add(new(line.ItemType.ToString(), line.Description, line.Quantity, line.UnitPrice, null, basis,
                     line.ItemType == InvoiceItemType.COMPLIANCE_FEE ? dossier : [], null));
             }
         }

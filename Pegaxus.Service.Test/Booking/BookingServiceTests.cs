@@ -271,6 +271,7 @@ public class BookingServiceTests
 
         Assert.Equal(booking.BookingId, result.BookingId);
         Assert.Equal(BookingStatus.APPROVED.ToString(), result.Status);
+        Assert.Equal(new DateTimeOffset(DateTime.SpecifyKind(booking.CreatedAt, DateTimeKind.Utc)), result.CreatedAt);
         Assert.Equal(customer.FullName, result.Customer.FullName);
         Assert.Equal(horse!.HorseId, Assert.Single(result.Horses).HorseId);
         Assert.Null(result.TransportPlan);

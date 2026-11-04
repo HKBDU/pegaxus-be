@@ -185,7 +185,8 @@ public sealed partial class Service
                 TotalHorses = booking.BookingHorses.Count,
                 RequestedDepartureDate = booking.RequestedDepartureDate,
                 RequestedArrivalDate = booking.RequestedArrivalDate,
-                SpecialRequirements = booking.SpecialRequirements
+                SpecialRequirements = booking.SpecialRequirements,
+                CreatedAt = AsUtc(booking.CreatedAt)
             },
             Transport = new Response.TransportResponse
             {

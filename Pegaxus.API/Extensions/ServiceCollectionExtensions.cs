@@ -329,9 +329,12 @@ public static class ServiceCollectionExtensions
         services.AddOptions<LocationTrackingService.TrackingOptions>().BindConfiguration("Tracking")
             .Validate(options => double.IsFinite(options.GeofenceRadiusMeters) && options.GeofenceRadiusMeters > 0,
                 "Tracking:GeofenceRadiusMeters must be a positive finite number.").ValidateOnStart();
-        services.AddOptions<Pegaxus.Service.InvoiceService.QuotationOptions>().BindConfiguration("Quotation")
-            .Validate(options => options.IsValid(),
-                "Quotation: unit prices must be positive, DepositRatePercent 30-50 and DefaultTransitDays 1-60.").ValidateOnStart();
+        services.AddScoped<Pegaxus.Service.PriceListService.IPriceListService, Pegaxus.Service.PriceListService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.PriceListService.Request.ListRequest>, Pegaxus.Service.PriceListService.Validator.ListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.PriceListService.Request.CreateRequest>, Pegaxus.Service.PriceListService.Validator.CreateRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.PriceListService.Request.UpdateRequest>, Pegaxus.Service.PriceListService.Validator.UpdateRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.PriceListService.Request.CreateItemRequest>, Pegaxus.Service.PriceListService.Validator.CreateItemRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.PriceListService.Request.UpdateItemRequest>, Pegaxus.Service.PriceListService.Validator.UpdateItemRequestValidator>();
         services.AddScoped<HorseHealthLogService.IHorseHealthLogService, HorseHealthLogService.Service>();
         services.AddScoped<IValidator<HorseHealthLogService.Request.RecordRequest>, HorseHealthLogService.Validator.RecordRequestValidator>();
         services.AddScoped<IValidator<HorseHealthLogService.Request.CreateRequest>, HorseHealthLogService.Validator.CreateRequestValidator>();

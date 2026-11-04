@@ -1,6 +1,5 @@
 using FluentValidation;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Npgsql;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
@@ -8,16 +7,13 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
-using Pegaxus.Service.InvoiceService;
 
 using static Pegaxus.Service.Common.DbTime;
 
 namespace Pegaxus.Service.FinancialReportService;
 
-public sealed partial class Service(AppDbContext db, TimeProvider clock, IOptions<QuotationOptions>? quotation = null) : IFinancialReportService
+public sealed partial class Service(AppDbContext db, TimeProvider clock) : IFinancialReportService
 {
-    private QuotationOptions Prices => quotation?.Value ?? new();
-
     public async Task EnsureAsync(Guid transportId, CancellationToken cancellationToken = default)
     {
         if (await db.FinancialReports.AsNoTracking().AnyAsync(item => item.TransportId == transportId, cancellationToken)) return;
