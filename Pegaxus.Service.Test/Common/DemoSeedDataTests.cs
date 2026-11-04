@@ -1,6 +1,7 @@
 using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.API;
+using Pegaxus.Repository.Entities;
 using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.Test;
@@ -50,6 +51,30 @@ public class DemoSeedDataTests
             Assert.NotNull(booking.OriginLatitude); Assert.NotNull(booking.OriginLongitude);
             Assert.NotNull(booking.DestinationLatitude); Assert.NotNull(booking.DestinationLongitude);
         });
+    }
+
+    [Fact]
+    public async Task Seed_ReusesHorsesAnEarlierSeedMadeUnderOtherIds_InsteadOfInsertingThemAgain()
+    {
+        await using var db = TestSupport.CreateDb();
+        await AppDbContextSeedData.SeedAsync(db);
+        db.ChangeTracker.Clear();
+        var earlier = await db.Horses.AsNoTracking().ToArrayAsync();
+        var renamed = earlier.Select(item => new Horse
+        {
+            HorseId = Guid.NewGuid(), CustomerId = item.CustomerId, HorseName = item.HorseName, MicrochipNumber = item.MicrochipNumber,
+            PassportNumber = item.PassportNumber, CreatedAt = item.CreatedAt, UpdatedAt = item.UpdatedAt
+        }).ToArray();
+        db.Horses.RemoveRange(earlier);
+        db.Horses.AddRange(renamed);
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+
+        await AppDbContextSeedData.SeedAsync(db);
+
+        var horses = await db.Horses.ToArrayAsync();
+        Assert.Equal(16, horses.Length);
+        Assert.Equal(renamed.Select(item => item.HorseId).Order(), horses.Select(item => item.HorseId).Order());
     }
 
     [Theory]
