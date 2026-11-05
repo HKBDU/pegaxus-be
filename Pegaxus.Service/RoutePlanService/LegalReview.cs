@@ -99,6 +99,7 @@ public sealed partial class Service
             foreach (var backup in confirmedBackups)
             {
                 backup.Status = RoutePlanStatus.CONFIRMED;
+                backup.SubmittedForReviewAt = null;
                 backup.UpdatedAt = now;
             }
             foreach (var vehicle in routePlan.RoutePlanRoutes.Concat(confirmedBackups.SelectMany(item => item.RoutePlanRoutes))
@@ -113,8 +114,8 @@ public sealed partial class Service
         {
             AddDossierAudit(auditDossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW_REJECTED", routePlan, request, now, "Route Plan requires revision.");
         }
-        // A rejected plan must be revised and submitted again before the specialist can review it a second time.
-        if (!request.IsFeasible) routePlan.SubmittedForReviewAt = null;
+        // The request is answered either way: a confirmed plan is done, a rejected one must be revised and submitted again.
+        routePlan.SubmittedForReviewAt = null;
         routePlan.UpdatedAt = now;
         await QueueLegalReviewNotificationsAsync(routePlan, reviewer, routeType, request, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
@@ -134,6 +135,8 @@ public sealed partial class Service
                 DossierType = dossier.DossierType.ToString(),
                 Status = dossier.Status.ToString()
             },
+            LegalReviewRequested = false,
+            LegalReviewRequestedAt = null,
             ConfirmedBackupRoutePlanIds = confirmedBackups.Select(item => item.RoutePlanId).ToList(),
             CustomerUploadEnabled = request.IsFeasible && routeType != RouteType.BACKUP,
             PersonnelAssignmentPhase2Enabled = request.IsFeasible && routeType == RouteType.PRIMARY,

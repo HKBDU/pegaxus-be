@@ -37,6 +37,8 @@ public sealed partial class Service
             BranchSequenceNo = TransportItinerary.BranchSequenceNo(item),
             BranchLocation = BranchLocation(item),
             RouteNote = item.RouteNote,
+            LegalReviewRequested = item.SubmittedForReviewAt.HasValue,
+            LegalReviewRequestedAt = AsUtc(item.SubmittedForReviewAt),
             UpdatedAt = AsUtc(item.UpdatedAt)
         };
     }
@@ -90,6 +92,8 @@ public sealed partial class Service
             BranchLocation = BranchLocation(item),
             LegalReview = legalReview,
             SubmittedForReviewAt = item.SubmittedForReviewAt.HasValue ? AsUtc(item.SubmittedForReviewAt.Value) : null,
+            LegalReviewRequested = item.SubmittedForReviewAt.HasValue,
+            LegalReviewRequestedAt = AsUtc(item.SubmittedForReviewAt),
             RouteNote = item.RouteNote,
             CreatedAt = AsUtc(item.CreatedAt),
             UpdatedAt = AsUtc(item.UpdatedAt)

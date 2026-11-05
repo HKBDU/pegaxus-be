@@ -141,7 +141,10 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
     private static Response Map(RoutePlan route, RoutePlanRoute segment, TransportProvider? provider,
         IReadOnlyList<RoutePlanRouteVehicle> vehicles, bool clearedPersonnel, bool clearedVehicles) => new()
     {
-        RoutePlanId = route.RoutePlanId, RoutePlanStatus = route.Status.ToString(), ClearedPersonnel = clearedPersonnel, ClearedVehicles = clearedVehicles,
+        RoutePlanId = route.RoutePlanId, RoutePlanStatus = route.Status.ToString(),
+        LegalReviewRequested = route.SubmittedForReviewAt.HasValue,
+        LegalReviewRequestedAt = route.SubmittedForReviewAt.HasValue ? new DateTimeOffset(DateTime.SpecifyKind(route.SubmittedForReviewAt.Value, DateTimeKind.Utc)) : null,
+        ClearedPersonnel = clearedPersonnel, ClearedVehicles = clearedVehicles,
         UpdatedAt = new DateTimeOffset(DateTime.SpecifyKind(route.UpdatedAt, DateTimeKind.Utc)),
         Segment = new Response.SegmentResponse
         {

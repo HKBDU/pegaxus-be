@@ -242,7 +242,9 @@ public sealed partial class Service
                     RoutePlanId = item.RoutePlanId,
                     RoutePlanCode = item.RoutePlanCode,
                     RouteType = TransportItinerary.PlanType(item).ToString(),
-                    Status = item.Status.ToString()
+                    Status = item.Status.ToString(),
+                    LegalReviewRequested = item.SubmittedForReviewAt.HasValue,
+                    LegalReviewRequestedAt = AsUtc(item.SubmittedForReviewAt)
                 })
                 .ToList(),
             CreatedAt = AsUtc(plan.CreatedAt),

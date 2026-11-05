@@ -142,7 +142,9 @@ public sealed partial class Service
                     RoutePlanId = item.RoutePlanId,
                     RoutePlanCode = item.RoutePlanCode,
                     RouteType = TransportItinerary.PlanType(item).ToString(),
-                    Status = item.Status.ToString()
+                    Status = item.Status.ToString(),
+                    LegalReviewRequested = item.SubmittedForReviewAt.HasValue,
+                    LegalReviewRequestedAt = AsUtc(item.SubmittedForReviewAt)
                 })
                 .ToList() ?? [],
             CreatedAt = AsUtc(booking.CreatedAt)
@@ -318,7 +320,9 @@ public sealed partial class Service
                             {
                                 RoutePlanId = routePlan.RoutePlanId,
                                 RoutePlanCode = routePlan.RoutePlanCode,
-                                Status = routePlan.Status.ToString()
+                                Status = routePlan.Status.ToString(),
+                                LegalReviewRequested = routePlan.SubmittedForReviewAt != null,
+                                LegalReviewRequestedAt = AsUtc(routePlan.SubmittedForReviewAt)
                             }))
                         .FirstOrDefault()
             })

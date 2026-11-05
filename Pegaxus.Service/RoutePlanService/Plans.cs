@@ -201,9 +201,12 @@ public sealed partial class Service
         routePlan.EstimatedDurationMinutes = CalculateDurationMinutes(materializedSegments);
         routePlan.RouteNote = string.IsNullOrWhiteSpace(request.RouteNote) ? null : request.RouteNote.Trim();
         routePlan.UpdatedAt = now;
-        routePlan.SubmittedForReviewAt = request.Action == "SUBMIT_FOR_LEGAL_REVIEW" ? now : null;
+        // Saving a draft keeps an earlier request: only a submit sets it, and only a legal review result clears it.
         if (request.Action == "SUBMIT_FOR_LEGAL_REVIEW")
+        {
+            routePlan.SubmittedForReviewAt = now;
             await QueueUpdateNotificationsAsync(routePlan, request.UpdateReason.Trim(), now, cancellationToken);
+        }
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
@@ -219,6 +222,8 @@ public sealed partial class Service
             IsPersonnelComplete = segments.Where(item => !item.TransportProviderId.HasValue).All(item => item.DriverEmployeeId.HasValue && item.EscortEmployeeId.HasValue),
             BranchSequenceNo = TransportItinerary.BranchSequenceNo(routePlan),
             BranchLocation = BranchLocation(routePlan),
+            LegalReviewRequested = routePlan.SubmittedForReviewAt.HasValue,
+            LegalReviewRequestedAt = AsUtc(routePlan.SubmittedForReviewAt),
             UpdatedAt = AsUtc(routePlan.UpdatedAt)
         };
     }
@@ -285,6 +290,15 @@ public sealed partial class Service
         if ((routeType is RouteType.PRIMARY or RouteType.BACKUP) && action == "SUBMIT_FOR_LEGAL_REVIEW")
             foreach (var accountId in plan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST).Select(item => item.Employee.AccountId).Distinct())
                 notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.COMPLIANCE, Priority = NotificationPriority.NORMAL, Title = routeType == RouteType.BACKUP ? "Backup route requires legal review" : "Route plan requires legal review", Message = $"Route plan {routePlan.RoutePlanCode} for transport plan {plan.PlanCode} was submitted for legal review. Check that it is feasible, then confirm it or request changes.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.TRANSPORT_SPECIALIST, routePlan.RoutePlanId), CreatedAt = now });
+        if ((routeType is RouteType.PRIMARY or RouteType.BACKUP) && action == "SUBMIT_FOR_LEGAL_REVIEW")
+        {
+            var specialistIds = plan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST)
+                .Select(item => item.Employee.AccountId).Distinct().ToList();
+            await MailService.MailRecipients.QueueAsync(db, specialistIds, now, recipient => MailService.MailRecipients.Mail(recipient,
+                $"{MailService.EmailBodies.RouteReviewTitle(MailService.EmailBodies.RouteReviewKind.LegalReviewRequested)} — {routePlan.RoutePlanCode}",
+                MailService.EmailBodies.RouteReviewBody(recipient.FullName, routePlan.RoutePlanCode, MailService.EmailBodies.RouteReviewKind.LegalReviewRequested, null,
+                    NotificationLinks.RoutePlan(recipient.Role, routePlan.RoutePlanId))), cancellationToken);
+        }
         var managerIds = routeType == RouteType.RETURN
             // A Logistics Manager who drafts the RETURN decides on it through the same approval call, so they are not asked to approve their own draft.
             ? await db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted && item.AccountId != creatorAccountId)

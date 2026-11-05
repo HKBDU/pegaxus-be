@@ -106,7 +106,7 @@ public class RoutePlanCancelAndSubmitTests
     }
 
     [Fact]
-    public async Task SubmitSetsTheSubmissionTime_AndSavingAsDraftClearsIt()
+    public async Task Submit_SetsTheLegalReviewRequest_AndSavingAsDraftKeepsIt()
     {
         await using var db = TestSupport.CreateDb();
         var f = await RouteChangeTests.Fixture.CreateAsync(db);
@@ -126,15 +126,81 @@ public class RoutePlanCancelAndSubmitTests
             RouteType = "BACKUP", Action = "SUBMIT_FOR_LEGAL_REVIEW", RouteNote = "Snow on the primary road near the safe stop", Segments = [.. segments]
         });
         Assert.NotNull(submitted.SubmittedForReviewAt);
+        Assert.True(submitted.LegalReviewRequested);
+        Assert.Equal(submitted.SubmittedForReviewAt, submitted.LegalReviewRequestedAt);
+        // A plan created and submitted in one step also e-mails the Transport Specialist, like a later submit does.
+        Assert.Contains(await db.OutboxMessages.ToListAsync(), item => item.MessageType == "EMAIL");
 
         f.Transport.Status = TransportStatus.READY;
         await db.SaveChangesAsync();
-        await service.UpdateAsync(f.Coordinator.AccountId, submitted.RoutePlanId, new()
+        var saved = await service.UpdateAsync(f.Coordinator.AccountId, submitted.RoutePlanId, new()
         {
             LastUpdatedAt = submitted.UpdatedAt, UpdateReason = "Back to editing", Action = "SAVE_DRAFT",
             RouteNote = "Snow on the primary road near the safe stop", Segments = [.. segments]
         });
 
-        Assert.Null((await service.GetByIdAsync(f.Manager.AccountId, submitted.RoutePlanId)).SubmittedForReviewAt);
+        Assert.Equal("DRAFT", saved.Status);
+        Assert.True(saved.LegalReviewRequested);
+        Assert.Equal(submitted.LegalReviewRequestedAt, saved.LegalReviewRequestedAt);
+        var detail = await service.GetByIdAsync(f.Manager.AccountId, submitted.RoutePlanId);
+        Assert.True(detail.LegalReviewRequested);
+        Assert.Equal(submitted.LegalReviewRequestedAt, detail.LegalReviewRequestedAt);
+        var listed = Assert.Single((await service.GetListAsync(f.Manager.AccountId, f.Plan.TransportPlanId, new() { RouteType = "BACKUP" })).Items, item => item.RoutePlanId == submitted.RoutePlanId);
+        Assert.True(listed.LegalReviewRequested);
+    }
+
+    [Fact]
+    public async Task SaveDraft_OnCreate_DoesNotRequestALegalReview()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await RouteChangeTests.Fixture.CreateAsync(db);
+        f.Transport.Booking.OriginCountry = f.Transport.Booking.DestinationCountry = "FR";
+        await db.SaveChangesAsync();
+        var completed = await db.Routes.SingleAsync(item => item.RouteId == f.Completed.RouteId);
+        RoutePlanRequest.SegmentRequest Segment(int sequenceNo, string type, Route route, int fromHour, int toHour) => new()
+        {
+            SequenceNo = sequenceNo, RouteType = type, RouteId = route.RouteId,
+            PlannedDepartureAt = RouteChangeTests.Fixture.StartAt.AddHours(fromHour), PlannedArrivalAt = RouteChangeTests.Fixture.StartAt.AddHours(toHour)
+        };
+
+        var draft = await TestSupport.CreateRoutePlans(db).CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, new()
+        {
+            RouteType = "BACKUP", Action = "SAVE_DRAFT", RouteNote = "Snow on the primary road near the safe stop",
+            Segments = [Segment(1, "PRIMARY", completed, -3, -1), Segment(2, "BACKUP", f.Alternative, 0, 2)]
+        });
+
+        Assert.Equal("DRAFT", draft.Status);
+        Assert.False(draft.LegalReviewRequested);
+        Assert.Null(draft.LegalReviewRequestedAt);
+        Assert.Null(draft.SubmittedForReviewAt);
+        Assert.DoesNotContain(await db.OutboxMessages.ToListAsync(), item => item.MessageType == "EMAIL");
+    }
+
+    [Fact]
+    public async Task LegalReview_AnswersTheRequest_WhateverTheResult()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await RouteChangeTests.Fixture.CreateAsync(db);
+        var backup = await f.AlternateAsync(RouteType.BACKUP, RoutePlanStatus.DRAFT);
+        var specialist = await db.Employees.SingleAsync(item => item.Role == EmployeeRole.TRANSPORT_SPECIALIST);
+        var service = TestSupport.CreateRoutePlans(db);
+        Assert.NotNull(backup.SubmittedForReviewAt);
+
+        var rejected = await service.ReviewLegalAsync(specialist.AccountId, backup.RoutePlanId,
+            new() { LastUpdatedAt = RouteChangeTests.Fixture.Version(backup), IsFeasible = false, Note = "A permit is missing" });
+        Assert.Equal("DRAFT", rejected.Status);
+        Assert.False(rejected.LegalReviewRequested);
+        Assert.Null(rejected.LegalReviewRequestedAt);
+        Assert.Equal("A permit is missing", rejected.LegalReview.Note);
+        Assert.Empty(rejected.LegalReview.BlockedSegments);
+
+        backup.SubmittedForReviewAt = backup.UpdatedAt;
+        await db.SaveChangesAsync();
+        var confirmed = await service.ReviewLegalAsync(specialist.AccountId, backup.RoutePlanId,
+            new() { LastUpdatedAt = RouteChangeTests.Fixture.Version(backup), IsFeasible = true });
+        Assert.Equal("CONFIRMED", confirmed.Status);
+        Assert.False(confirmed.LegalReviewRequested);
+        Assert.Null(confirmed.LegalReviewRequestedAt);
+        Assert.Null(backup.SubmittedForReviewAt);
     }
 }

@@ -21,6 +21,8 @@ public static class Response
         public int? BranchSequenceNo { get; init; }
         public LocationResponse? BranchLocation { get; init; }
         public string? RouteNote { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }
 
@@ -34,6 +36,8 @@ public static class Response
         public bool IsPersonnelComplete { get; init; }
         public int? BranchSequenceNo { get; init; }
         public LocationResponse? BranchLocation { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }
 
@@ -78,6 +82,8 @@ public static class Response
         public LocationResponse? BranchLocation { get; init; }
         public LegalReviewResponse? LegalReview { get; init; }
         public DateTimeOffset? SubmittedForReviewAt { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
         public string? RouteNote { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
@@ -169,6 +175,8 @@ public static class Response
         public required IReadOnlyList<Guid> ConfirmedBackupRoutePlanIds { get; init; }
         public bool CustomerUploadEnabled { get; init; }
         public bool PersonnelAssignmentPhase2Enabled { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }
 
