@@ -57,17 +57,17 @@ public sealed partial class Service
         {
             if (transport.Status != TransportStatus.IN_TRANSIT)
                 throw new ConflictException("The transport is not in transit", "TRANSPORT_NOT_IN_TRANSIT");
-            incidentId = request.IncidentReportId ?? throw new BadRequestException("incidentReportId is required while the route plan is ACTIVE", "INCIDENT_REQUIRED");
+            incidentId = request.IncidentReportId ?? throw new BadRequestException("An incident report is required while the route plan is active.", "INCIDENT_REQUIRED");
         }
         else
         {
             if (GetRouteType(routePlan) != RouteType.PRIMARY)
-                throw new ConflictException("Only a PRIMARY route plan can have its vehicles changed here", "INVALID_ROUTE_PLAN_TYPE");
+                throw new ConflictException("Only a primary route plan can have its vehicles changed here", "INVALID_ROUTE_PLAN_TYPE");
             // CONFIRMED turns ACTIVE at PICKUP, so this is the window between legal review and departure.
             if (routePlan.Status != RoutePlanStatus.CONFIRMED)
-                throw new ConflictException($"Vehicles can only be changed while the route plan is CONFIRMED or ACTIVE, not {routePlan.Status}", "INVALID_ROUTE_PLAN_STATUS");
+                throw new ConflictException($"Vehicles can only be changed while the route plan is confirmed or active, not {UserFacingText.Label(routePlan.Status)}", "INVALID_ROUTE_PLAN_STATUS");
             if (request.IncidentReportId.HasValue)
-                throw new BadRequestException("incidentReportId is only used while the route plan is ACTIVE", "VALIDATION_ERROR");
+                throw new BadRequestException("An incident report is only used while the route plan is active.", "VALIDATION_ERROR");
         }
         EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
 
@@ -75,7 +75,7 @@ public sealed partial class Service
         RoutePlanRoute Find(Request.SegmentVehiclesRequest change)
         {
             if (change.SequenceNo.HasValue && midTrip)
-                throw new BadRequestException("segments must use routePlanRouteId while the route plan is ACTIVE");
+                throw new BadRequestException("Segments must identify an existing route segment while the route plan is active.");
             return pool.FirstOrDefault(item => change.SequenceNo.HasValue ? item.RoutePlanId == routePlan.RoutePlanId && item.SequenceNo == change.SequenceNo : item.RoutePlanRouteId == change.RoutePlanRouteId)
                 ?? throw new BadRequestException("segments contains an unknown segment");
         }
@@ -269,7 +269,7 @@ public sealed partial class Service
     {
         var plan = segment.RoutePlan;
         if (plan.Status is not (RoutePlanStatus.CONFIRMED or RoutePlanStatus.ACTIVE))
-            throw new ConflictException($"Vehicles can only be changed on a CONFIRMED or ACTIVE route plan, not {plan.Status}", "INVALID_ROUTE_PLAN_STATUS");
+            throw new ConflictException($"Vehicles can only be changed on a confirmed or active route plan, not {UserFacingText.Label(plan.Status)}", "INVALID_ROUTE_PLAN_STATUS");
         if (segment.ActualArrivalAt.HasValue)
             throw new UnprocessableEntityException("The segment is already completed", "SEGMENT_ALREADY_COMPLETED");
         if (segment.SupersededAt.HasValue || segment.SequenceNo < (TransportItinerary.BranchSequenceNo(plan) ?? 0))

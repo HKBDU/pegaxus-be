@@ -17,11 +17,11 @@ public sealed partial class Service
         if (request.Segments.Count == 0)
             throw new BadRequestException("At least one route segment is required");
         if (request.Action is not ("SAVE_DRAFT" or "SUBMIT_FOR_LEGAL_REVIEW"))
-            throw new BadRequestException("action must be SAVE_DRAFT or SUBMIT_FOR_LEGAL_REVIEW");
+            throw new BadRequestException("Please choose Save draft or submit for legal review.");
         if (request.IncidentReportId.HasValue && routeType != RouteType.RETURN)
-            throw new BadRequestException("incidentReportId is only allowed for RETURN route plans", "VALIDATION_ERROR");
+            throw new BadRequestException("An incident report can only be linked to a return route plan.", "VALIDATION_ERROR");
         if (routeType == RouteType.RETURN && !updating && request.Action != "SAVE_DRAFT")
-            throw new BadRequestException("RETURN route plans only support SAVE_DRAFT");
+            throw new BadRequestException("A returned route plan can only be saved as a draft.");
         if (routeType is RouteType.BACKUP or RouteType.RETURN && string.IsNullOrWhiteSpace(request.RouteNote) || routeType is RouteType.BACKUP or RouteType.RETURN && request.RouteNote!.Trim().Length < 10)
             throw new BadRequestException("routeNote is required and must contain at least 10 characters");
         var expected = 1;
@@ -200,7 +200,7 @@ public sealed partial class Service
     private static void EnsureReadRole(EmployeeRole role, TransportPlan plan, Guid employeeId)
     {
         if (role is not (EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.TRANSPORT_SPECIALIST or EmployeeRole.FLEET_ROUTE_COORDINATOR))
-            throw new ForbiddenException("Only RC, LM and TS can access Route Plans");
+            throw new ForbiddenException("Only Fleet Route Coordinators, Logistics Managers, and Transport Specialists can access route plans.");
         if (role == EmployeeRole.TRANSPORT_SPECIALIST && !plan.EmployeeTransportPlans.Any(item => item.EmployeeId == employeeId))
             throw new ForbiddenException("You are not assigned to this Transport Plan");
     }
@@ -208,7 +208,7 @@ public sealed partial class Service
     private static async Task EnsurePlanCanBeUsedAsync(TransportPlan plan, CancellationToken cancellationToken)
     {
         if (plan.Transport.Booking.Status != BookingStatus.APPROVED)
-            throw new ConflictException($"This action cannot be performed while the booking is in {plan.Transport.Booking.Status} status", "INVALID_BOOKING_STATUS");
+            throw new ConflictException($"This action cannot be performed while the booking is in {UserFacingText.Label(plan.Transport.Booking.Status)} status", "INVALID_BOOKING_STATUS");
         if (plan.Status != TransportPlanStatus.APPROVED)
             throw new ConflictException("Route Plan requires an approved Transport Plan", "INVALID_TRANSPORT_PLAN_STATUS");
         await Task.CompletedTask;
@@ -216,7 +216,7 @@ public sealed partial class Service
 
     private static RouteType ParseRouteType(string value) => EnumParser.TryParseDefined<RouteType>(value, out var result) && result is RouteType.PRIMARY or RouteType.BACKUP or RouteType.RETURN
         ? result
-        : throw new BadRequestException("routeType must be PRIMARY, BACKUP or RETURN");
+        : throw new BadRequestException("The route type must be primary, backup, or return.");
 
     private static TransportMode ParseTransportMode(string value) => EnumParser.TryParseDefined<TransportMode>(value, out var result)
         ? result

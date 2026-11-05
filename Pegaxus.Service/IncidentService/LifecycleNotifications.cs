@@ -4,6 +4,7 @@ using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.MailService;
 using Pegaxus.Service.OutboxService;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.IncidentService;
 
@@ -43,7 +44,7 @@ public sealed partial class Service
     {
         foreach (var employee in (await InternalRecipientsAsync(transport.TransportId, ct)).Where(employee => employee.AccountId != actor.AccountId))
             QueueIncident(incident, employee.AccountId, NotificationPriority.NORMAL, $"Incident {incident.IncidentCode} severity lowered",
-                $"Severity lowered from {previousSeverity} to {incident.Severity} by the logistics manager.", $"/admin/incidents/{incident.IncidentReportId}", now);
+                $"Severity lowered from {UserFacingText.Label(previousSeverity)} to {UserFacingText.Label(incident.Severity)} by the logistics manager.", $"/admin/incidents/{incident.IncidentReportId}", now);
         return new(NotificationPriority.NORMAL.ToString(), false, CustomerNotified: false);
     }
 
@@ -56,7 +57,7 @@ public sealed partial class Service
         foreach (var employee in await InternalRecipientsAsync(transport.TransportId, ct))
         {
             QueueIncident(incident, employee.AccountId, priority, $"Incident {incident.IncidentCode} severity raised",
-                $"Severity raised from {previousSeverity} to {incident.Severity}.", $"/admin/incidents/{incident.IncidentReportId}", now);
+                $"Severity raised from {UserFacingText.Label(previousSeverity)} to {UserFacingText.Label(incident.Severity)}.", $"/admin/incidents/{incident.IncidentReportId}", now);
             if (priority != NotificationPriority.URGENT || employee.Role != EmployeeRole.LOGISTICS_MANAGER || string.IsNullOrWhiteSpace(employee.Account.Email)) continue;
             OutboxQueue.AddEmail(db, new MailContent
             {

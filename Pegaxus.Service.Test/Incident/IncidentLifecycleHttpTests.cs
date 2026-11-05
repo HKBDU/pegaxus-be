@@ -101,7 +101,7 @@ public class IncidentLifecycleHttpTests
         Assert.Equal(action == "raise-severity" ? "CRITICAL" : "HIGH", value.GetProperty("severity").GetString());
         if (action == "raise-severity")
         {
-            Assert.Equal($"Incident {item.IncidentCode} severity raised from HIGH to CRITICAL", root.GetProperty("message").GetString());
+            Assert.Equal($"Incident {item.IncidentCode} severity raised from high to critical", root.GetProperty("message").GetString());
             var effects = value.GetProperty("effects"); Assert.True(effects.GetProperty("customerNotified").GetBoolean());
             Assert.True(effects.GetProperty("emailQueued").GetBoolean()); Assert.Equal("URGENT", effects.GetProperty("notifiedPriority").GetString());
         }

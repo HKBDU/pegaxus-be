@@ -240,7 +240,7 @@ public class DossierViewingTests
         var result = await service.GetByBookingAsync(account.AccountId, booking.BookingId, new());
         Assert.False(result.IsInitialized);
         Assert.Null(result.ComplianceDossierId);
-        Assert.Equal("ComplianceDossier has not been initialized. Waiting for transport booking approval.", result.Message);
+        Assert.Equal("Compliance dossier has not been initialized. Waiting for transport booking approval.", result.Message);
         Assert.False(result.Actions.CanUpload);
         await Assert.ThrowsAsync<ForbiddenException>(() => service.GetByBookingAsync(foreign.AccountId, booking.BookingId, new()));
     }

@@ -126,7 +126,7 @@ public class InvoicePaymentTests
         var (actor, _, invoice, _) = await SeedAsync(db); invoice.Status = status; await db.SaveChangesAsync();
         var service = CreateService(db);
         var invalid = await Assert.ThrowsAsync<ConflictException>(() => service.RecordPaymentAsync(invoice.InvoiceId, ValidRequest(), actor.AccountId));
-        Assert.Equal("INVALID_INVOICE_STATUS", invalid.ErrorCode); Assert.Equal($"Cannot pay an invoice in status {status}", invalid.Message);
+        Assert.Equal("INVALID_INVOICE_STATUS", invalid.ErrorCode); Assert.Equal($"Cannot pay an invoice in status {status.ToString().ToLowerInvariant().Replace('_', ' ')}", invalid.Message);
         invoice.Type = InvoiceType.QUOTATION; await db.SaveChangesAsync();
         var quotation = await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.RecordPaymentAsync(invoice.InvoiceId, ValidRequest(), actor.AccountId));
         Assert.Equal("UNPAYABLE_INVOICE_TYPE", quotation.ErrorCode); Assert.Equal("This invoice type cannot be paid", quotation.Message);
@@ -137,7 +137,7 @@ public class InvoicePaymentTests
     [InlineData("missing", 404, "INVOICE_NOT_FOUND", "Invoice not found")]
     [InlineData("partial", 422, "PARTIAL_PAYMENT_NOT_SUPPORTED", "Only full payment of the invoice total is accepted")]
     [InlineData("excess", 422, "PARTIAL_PAYMENT_NOT_SUPPORTED", "Only full payment of the invoice total is accepted")]
-    [InlineData("confirmed", 409, "INVALID_INVOICE_STATUS", "Cannot pay an invoice in status ISSUED")]
+    [InlineData("confirmed", 409, "INVALID_INVOICE_STATUS", "Cannot pay an invoice in status issued")]
     public async Task InvalidPayment_IsRejectedWithoutChangingPendingReceipts(string scenario, int status, string code, string message)
     {
         await using var db = TestSupport.CreateDb();

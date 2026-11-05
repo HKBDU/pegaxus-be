@@ -109,7 +109,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             // The money arrived but the invoice cannot take it (already paid by another receipt, or cancelled).
             LogForAccounting(receipt, payment.Reference);
             await FlagForReconciliationAsync(receipt, invoice, payment.Reference!,
-                $"A payment was received for invoice {invoice.InvoiceCode}, which is already {invoice.Status}", now, cancellationToken);
+                $"A payment was received for invoice {invoice.InvoiceCode}, which is already {UserFacingText.Label(invoice.Status)}", now, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);
@@ -215,9 +215,9 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             return;
         }
 
-        var message = $"{reason}. Receipt: {receipt.ReceiptCode} ({receipt.Status}). Gateway reference: {reference}. " +
+        var message = $"{reason}. Receipt: {receipt.ReceiptCode} ({UserFacingText.Label(receipt.Status)}). Gateway reference: {reference}. " +
             $"Amount: {Vnd.Format(receipt.Amount, receipt.Currency)}. " +
-            $"Invoice: {invoice.InvoiceCode} ({invoice.Status}). Check the bank statement and refund or reconcile manually.";
+            $"Invoice: {invoice.InvoiceCode} ({UserFacingText.Label(invoice.Status)}). Check the bank statement and refund or reconcile manually.";
         foreach (var manager in managers)
         {
             notifications.Queue(new NotificationCreateRequest

@@ -68,7 +68,7 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock, Trackin
                 (segment.SupersededAt == null || segment.ActualDepartureAt != null), cancellationToken))
             throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");
         if (transport.Status != TransportStatus.IN_TRANSIT)
-            throw new ConflictException("Locations can only be recorded while the transport is IN_TRANSIT", "INVALID_TRANSPORT_STATUS");
+            throw new ConflictException("Locations can only be recorded while the transport is in transit", "INVALID_TRANSPORT_STATUS");
         return (actor, transport);
     }
 

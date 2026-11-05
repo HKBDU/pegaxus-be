@@ -113,24 +113,18 @@ public class ValidationLimitsTests
     }
 
     [Fact]
-    public async Task Middleware_ShowsTheUnhandledErrorOnlyWhileTheDiagnosticsSwitchIsOn()
+    public async Task Middleware_NeverShowsTheTextOfAnUnhandledError()
     {
-        async Task<string> MessageAsync()
-        {
-            var context = new DefaultHttpContext();
-            context.Response.Body = new MemoryStream();
-            await new GlobalExceptionHandlerMiddleware(NullLogger<GlobalExceptionHandlerMiddleware>.Instance)
-                .InvokeAsync(context, _ => throw new InvalidOperationException("outer", new PostgresException("column x is missing", "ERROR", "ERROR", "42703")));
-            Assert.Equal(500, context.Response.StatusCode);
-            context.Response.Body.Position = 0;
-            return JsonDocument.Parse(context.Response.Body).RootElement.GetProperty("message").GetString()!;
-        }
+        var context = new DefaultHttpContext();
+        context.Response.Body = new MemoryStream();
+        await new GlobalExceptionHandlerMiddleware(NullLogger<GlobalExceptionHandlerMiddleware>.Instance)
+            .InvokeAsync(context, _ => throw new InvalidOperationException("outer", new PostgresException("column x is missing", "ERROR", "ERROR", "42703")));
 
-        Assert.DoesNotContain("column x", await MessageAsync());
-        Environment.SetEnvironmentVariable("Diagnostics__ExposeErrors", "true");
-        try { var message = await MessageAsync(); Assert.Contains("InvalidOperationException: outer <- PostgresException:", message); Assert.Contains("column x is missing", message); }
-        finally { Environment.SetEnvironmentVariable("Diagnostics__ExposeErrors", null); }
-        Assert.DoesNotContain("column x", await MessageAsync());
+        Assert.Equal(500, context.Response.StatusCode);
+        context.Response.Body.Position = 0;
+        var body = JsonDocument.Parse(context.Response.Body).RootElement;
+        Assert.Equal("A system error occurred. Please try again later.", body.GetProperty("message").GetString());
+        Assert.Equal("SYSTEM_ERROR", body.GetProperty("errorCode").GetString());
     }
 
     [Fact]

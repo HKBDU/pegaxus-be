@@ -85,7 +85,7 @@ public sealed partial class Service
         foreach (var employee in await InternalRecipientsAsync(transport.TransportId, ct))
         {
             QueueHorseNotification(incident, employee.AccountId, NotificationPriority.URGENT,
-                $"[CẢNH BÁO NGUY CẤP NGỰA ĐUA] Mã: {incident.IncidentCode}", incident.Title, now);
+                $"Urgent horse health alert ({incident.IncidentCode})", incident.Title, now);
             if (employee.Role != EmployeeRole.LOGISTICS_MANAGER || string.IsNullOrWhiteSpace(employee.Account.Email)) continue;
             OutboxQueue.AddEmail(db, new MailContent
             {
@@ -104,8 +104,8 @@ public sealed partial class Service
                 notifications.Queue(new()
                 {
                     AccountId = customerAccountId.Value, TransportId = transport.TransportId, Type = NotificationType.INCIDENT,
-                    Priority = NotificationPriority.HIGH, Title = $"Chuyến {transport.TransportCode} gặp sự cố nghiêm trọng",
-                    Message = "Đội ngũ đang xử lý, sẽ cập nhật.", ReferenceType = nameof(IncidentReport), ReferenceId = incident.IncidentReportId,
+                    Priority = NotificationPriority.HIGH, Title = $"Transport {transport.TransportCode} requires attention",
+                    Message = "Our operations team is addressing an incident and will provide updates.", ReferenceType = nameof(IncidentReport), ReferenceId = incident.IncidentReportId,
                     ActionUrl = $"/bookings/{transport.BookingId}/transports/{transport.TransportId}/incidents/{incident.IncidentReportId}", CreatedAt = now
                 });
         }

@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Pegaxus.API.Extensions;
+using Pegaxus.Service.Common;
 
 using Incidents = Pegaxus.Service.IncidentService;
 
@@ -117,7 +118,7 @@ public sealed class IncidentsController(Incidents.IIncidentService service) : Ap
     {
         var result = await service.RaiseSeverityAsync(incidentReportId, request, AccountId, cancellationToken);
         var verb = Enum.Parse<Pegaxus.Repository.Enum.IncidentSeverity>(result.Value.Severity) < Enum.Parse<Pegaxus.Repository.Enum.IncidentSeverity>(result.PreviousSeverity) ? "lowered" : "raised";
-        return Success(result.Value, $"Incident {result.Value.IncidentCode} severity {verb} from {result.PreviousSeverity} to {result.Value.Severity}");
+        return Success(result.Value, $"Incident {result.Value.IncidentCode} severity {verb} from {UserFacingText.Label(result.PreviousSeverity)} to {UserFacingText.Label(result.Value.Severity)}");
     }
 
     /// <summary>Report a vehicle or combined vehicle and horse incident.</summary>

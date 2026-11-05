@@ -50,7 +50,7 @@ public sealed partial class Service
                 await db.Receipts.AnyAsync(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.CONFIRMED, cancellationToken))
                 throw new UnprocessableEntityException("Cannot cancel an invoice that has a confirmed payment. Please contact accounting for the refund process", "INVOICE_HAS_PAYMENT");
             if (invoice.Status is not (InvoiceStatus.DRAFT or InvoiceStatus.ISSUED or InvoiceStatus.OVERDUE))
-                throw new ConflictException($"Cannot cancel an invoice in status {invoice.Status}", "INVALID_INVOICE_STATUS");
+                throw new ConflictException($"Cannot cancel an invoice in status {UserFacingText.Label(invoice.Status)}", "INVALID_INVOICE_STATUS");
             if (await db.Receipts.AnyAsync(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.PENDING, cancellationToken))
                 throw new ConflictException("A payment for this invoice is being processed. Please try again after it completes", "PAYMENT_IN_PROGRESS");
 
@@ -75,7 +75,7 @@ public sealed partial class Service
                 var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
                     .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName,
                         TransportId = x.Transport == null ? (Guid?)null : x.Transport.TransportId }).SingleAsync(cancellationToken);
-                var message = $"Invoice {invoice.InvoiceCode} ({invoice.Type}) has been cancelled. Reason: {reason}. Please contact support if you need more information.";
+                var message = $"Invoice {invoice.InvoiceCode} ({UserFacingText.Label(invoice.Type)}) has been cancelled. Reason: {reason}. Please contact support if you need more information.";
                 notifications.Queue(new NotificationCreateRequest
                 {
                     AccountId = customer.AccountId, TransportId = customer.TransportId, Type = NotificationType.PAYMENT,
@@ -125,7 +125,7 @@ public sealed partial class Service
             // A reused context can already track a version from before the row lock.
             if (db.Database.IsRelational()) await db.Entry(invoice).ReloadAsync(cancellationToken);
             if (invoice.Status != InvoiceStatus.DRAFT)
-                throw new ConflictException("Invoice must be in DRAFT status to be issued", "INVALID_INVOICE_STATUS");
+                throw new ConflictException("Invoice must be in draft status to be issued", "INVALID_INVOICE_STATUS");
             if (Truncate(invoice.UpdatedAt) != Truncate(request.LastUpdatedAt!.Value.UtcDateTime)) throw Modified();
 
             var items = await db.InvoiceItems.AsNoTracking().Where(x => x.InvoiceId == invoiceId)
@@ -228,7 +228,7 @@ public sealed partial class Service
             .SingleOrDefaultAsync(item => item.BookingId == bookingId, cancellationToken)
             ?? throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
         if (booking.Status != BookingStatus.APPROVED)
-            throw new ConflictException("Booking must be APPROVED", "INVALID_BOOKING_STATUS");
+            throw new ConflictException("Booking must be approved", "INVALID_BOOKING_STATUS");
         var validTransport = booking.Transport is not null && type switch
         {
             InvoiceType.DEPOSIT => booking.Transport.Status is TransportStatus.CREATED or TransportStatus.PLANNING or TransportStatus.READY,
@@ -243,12 +243,12 @@ public sealed partial class Service
             .Select(item => new { item.Type, item.Status, item.InvoiceCode, item.Currency, item.TotalAmount })
             .ToListAsync(cancellationToken);
         if (type == InvoiceType.FINAL && invoices.Any(item => item.Type == InvoiceType.FINAL && item.Status != InvoiceStatus.CANCELLED))
-            throw new ConflictException("This booking already has a FINAL invoice. A second FINAL invoice is only allowed after the previous one is cancelled.",
+            throw new ConflictException("This booking already has a final invoice. A second final invoice is only allowed after the previous one is cancelled.",
                 "FINAL_INVOICE_ALREADY_EXISTS");
         if (invoices.Any(item => item.Type == type && item.Status is InvoiceStatus.DRAFT or InvoiceStatus.ISSUED or InvoiceStatus.OVERDUE))
             throw new ConflictException("An unresolved invoice of the same type already exists. Please edit or cancel the existing invoice.", "INVOICE_ALREADY_EXISTS");
         if (type == InvoiceType.CREDIT_NOTE && !invoices.Any(item => item.Type == InvoiceType.FINAL && item.Status == InvoiceStatus.PAID))
-            throw new UnprocessableEntityException("Cannot create a claim/compensation invoice. The FINAL invoice of this booking must be PAID first.", "UNPAID_FINAL_INVOICE");
+            throw new UnprocessableEntityException("Cannot create a claim/compensation invoice. The final invoice of this booking must be paid first.", "UNPAID_FINAL_INVOICE");
         await EnsureDueDateOrderAsync(bookingId, null, type, request.DueDate!.Value, cancellationToken);
         var deposits = invoices.Where(item => type == InvoiceType.FINAL && item.Type == InvoiceType.DEPOSIT && item.Status == InvoiceStatus.PAID).ToArray();
 
@@ -337,7 +337,7 @@ public sealed partial class Service
                 .SingleOrDefaultAsync(item => item.InvoiceId == invoiceId, cancellationToken)
                 ?? throw new NotFoundException("Invoice not found", "INVOICE_NOT_FOUND");
             if (invoice.Status != InvoiceStatus.DRAFT)
-                throw new ConflictException("Only DRAFT invoices can be edited", "INVOICE_LOCKED");
+                throw new ConflictException("Only draft invoices can be edited", "INVOICE_LOCKED");
             if (invoice.UpdatedAt.Ticks != request.LastUpdatedAt!.Value.UtcDateTime.Ticks) throw Modified();
             if (request.Type is not null && !string.Equals(request.Type.Trim(), invoice.Type.ToString(), StringComparison.OrdinalIgnoreCase))
                 throw new FieldValidationException([new("type", "Invoice type cannot be changed.")]);

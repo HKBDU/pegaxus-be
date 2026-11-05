@@ -30,7 +30,7 @@ public sealed partial class Service
                     throw new ForbiddenException(CostForbiddenMessage, "FORBIDDEN");
                 EnsureCostIncidentOpen(incident);
                 if (transport.Status != TransportStatus.IN_TRANSIT)
-                    throw new ConflictException("Emergency cost can only be requested while the transport is IN_TRANSIT", "INVALID_TRANSPORT_STATUS");
+                    throw new ConflictException("Emergency cost can only be requested while the transport is in transit", "INVALID_TRANSPORT_STATUS");
                 var now = Truncate(clock.GetUtcNow());
                 var cost = new EmergencyCostRequest
                 {
@@ -47,7 +47,7 @@ public sealed partial class Service
                 if (actor.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR) incident.Status = IncidentStatus.PENDING;
                 incident.UpdatedAt = NextUpdate(incident);
                 await QueueCostManagersAsync(cost, incident, NotificationPriority.HIGH,
-                    $"[YÊU CẦU DUYỆT CHI PHÍ KHẨN] Mã: {cost.RequestCode}", now, ct);
+                    $"Emergency cost approval requested ({cost.RequestCode})", now, ct);
                 await db.SaveChangesAsync(ct);
                 var response = await ReadCostAsync(cost.EmergencyCostRequestId, ct);
                 await transaction.CommitAsync(ct);
@@ -137,7 +137,7 @@ public sealed partial class Service
                         employee.EmployeeId == cost.RequestedByEmployeeId && employee.Account.AccountType == AccountType.EMPLOYEE, ct);
                     if (proposer is not null)
                         QueueCost(cost, incident, proposer.AccountId, NotificationPriority.HIGH,
-                            approve ? $"[CHI PHÍ ĐÃ ĐƯỢC DUYỆT] Mã ECR: {cost.RequestCode}" : "Emergency cost request rejected",
+                            approve ? $"Emergency cost request approved ({cost.RequestCode})" : "Emergency cost request was not approved",
                             $"/{(Crew(proposer) ? "crew" : "admin")}/incidents/{incidentId}", now);
                 }
                 else if (request is Request.CancelRequest cancel)

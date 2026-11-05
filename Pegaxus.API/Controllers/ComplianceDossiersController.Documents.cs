@@ -30,7 +30,7 @@ public sealed partial class ComplianceDossiersController
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> UploadDocument(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.DocumentUploadRequest request, CancellationToken cancellationToken) =>
-        SuccessCreated(await _service.UploadDocumentAsync(AccountId, dossierId, requirementId, request, cancellationToken), "ComplianceDocument uploaded successfully (Version v1). Pending DocumentReview by Transport Specialist.");
+        SuccessCreated(await _service.UploadDocumentAsync(AccountId, dossierId, requirementId, request, cancellationToken), "Document uploaded successfully. Pending review by a Transport Specialist.");
 
     /// <summary>
     /// Update or replace uploaded documents.
@@ -78,7 +78,7 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> UpdateDocumentMetadata(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.DocumentMetadataRequest request, CancellationToken cancellationToken) =>
-        Success(await _service.UpdateDocumentMetadataAsync(AccountId, dossierId, requirementId, request, cancellationToken), "ComplianceDocument metadata updated successfully.");
+        Success(await _service.UpdateDocumentMetadataAsync(AccountId, dossierId, requirementId, request, cancellationToken), "Document metadata updated successfully.");
 
     /// <summary>
     /// Get document version history.
@@ -95,7 +95,7 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     [ResponseCache(NoStore = true, Location = ResponseCacheLocation.None)]
     public async Task<IActionResult> GetDocumentVersions(Guid dossierId, Guid requirementId, CancellationToken cancellationToken) =>
-        Success(await _service.GetDocumentVersionsAsync(AccountId, dossierId, requirementId, cancellationToken), "DocumentVersion history retrieved successfully.");
+        Success(await _service.GetDocumentVersionsAsync(AccountId, dossierId, requirementId, cancellationToken), "Document version history retrieved successfully.");
 
     /// <summary>
     /// Add a document request comment.
@@ -115,7 +115,7 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.CustomerOrTransportSpecialistPolicy)]
     public async Task<IActionResult> AddDocumentRequestComment(Guid dossierId, Guid requirementId, Guid requestId,
         [FromBody] ComplianceDossierService.Request.DocumentRequestCommentRequest request, CancellationToken cancellationToken) =>
-        SuccessCreated(await _service.AddDocumentRequestCommentAsync(AccountId, dossierId, requirementId, requestId, request, cancellationToken), "DocumentRequest comment added successfully.");
+        SuccessCreated(await _service.AddDocumentRequestCommentAsync(AccountId, dossierId, requirementId, requestId, request, cancellationToken), "Document request comment added successfully.");
 
     /// <summary>
     /// Get document request comments.
@@ -131,7 +131,7 @@ public sealed partial class ComplianceDossiersController
     [HttpGet("{dossierId:guid}/requirements/{requirementId:guid}/document-requests/{requestId:guid}/comments")]
     [Authorize(Policy = JwtExtensions.CustomerOrTransportSpecialistPolicy)]
     public async Task<IActionResult> GetDocumentRequestComments(Guid dossierId, Guid requirementId, Guid requestId, CancellationToken cancellationToken) =>
-        Success(await _service.GetDocumentRequestCommentsAsync(AccountId, dossierId, requirementId, requestId, cancellationToken), "DocumentRequest comments retrieved successfully.");
+        Success(await _service.GetDocumentRequestCommentsAsync(AccountId, dossierId, requirementId, requestId, cancellationToken), "Document request comments retrieved successfully.");
 
     /// <summary>
     /// List missing dossier requirements.
@@ -146,7 +146,7 @@ public sealed partial class ComplianceDossiersController
     [HttpGet("{dossierId:guid}/missing-requirements")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> GetMissingRequirements(Guid dossierId, CancellationToken cancellationToken) =>
-        Success(await _service.GetMissingRequirementsAsync(AccountId, dossierId, cancellationToken), "Danh sách giấy tờ còn thiếu.");
+        Success(await _service.GetMissingRequirementsAsync(AccountId, dossierId, cancellationToken), "Missing documents retrieved successfully.");
 
     /// <summary>
     /// Send a missing-document reminder.
@@ -166,8 +166,8 @@ public sealed partial class ComplianceDossiersController
         [FromBody] ComplianceDossierService.Request.MissingDocumentsRequest request, CancellationToken cancellationToken)
     {
         var result = await _service.RequestMissingDocumentsAsync(AccountId, dossierId, request, cancellationToken);
-        return SuccessCreated(result, result.EmailSent ? "Đã gửi thông báo nhắc nộp bổ sung giấy tờ thành công cho khách hàng." :
-                "Đã lưu thông báo Web; email nhắc nộp giấy tờ đang chờ gửi lại.");
+        return SuccessCreated(result, result.EmailSent ? "The document reminder was sent successfully." :
+                "The document reminder was saved and email delivery will be retried automatically.");
     }
 
     /// <summary>

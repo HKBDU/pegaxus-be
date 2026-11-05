@@ -44,7 +44,7 @@ public sealed partial class Service
             if (invoice.Type is not (InvoiceType.DEPOSIT or InvoiceType.FINAL or InvoiceType.SUPPLEMENTARY))
                 throw new UnprocessableEntityException("This invoice type cannot be paid", "UNPAYABLE_INVOICE_TYPE");
             if (invoice.Status is not (InvoiceStatus.ISSUED or InvoiceStatus.OVERDUE))
-                throw new ConflictException($"Cannot pay an invoice in status {invoice.Status}", "INVALID_INVOICE_STATUS");
+                throw new ConflictException($"Cannot pay an invoice in status {UserFacingText.Label(invoice.Status)}", "INVALID_INVOICE_STATUS");
             if (await db.Receipts.AnyAsync(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.CONFIRMED, cancellationToken))
                 throw new ConflictException("Cannot pay an invoice that already has a confirmed payment", "INVALID_INVOICE_STATUS");
             if (invoice.TotalAmount <= 0)
@@ -124,7 +124,7 @@ public sealed partial class Service
                 throw new UnprocessableEntityException("This invoice type cannot be paid", "UNPAYABLE_INVOICE_TYPE");
             if (invoice.Status is not (InvoiceStatus.ISSUED or InvoiceStatus.OVERDUE) ||
                 await db.Receipts.AnyAsync(x => x.InvoiceId == invoiceId && x.Status == ReceiptStatus.CONFIRMED, cancellationToken))
-                throw new ConflictException($"Cannot pay an invoice in status {invoice.Status}", "INVALID_INVOICE_STATUS");
+                throw new ConflictException($"Cannot pay an invoice in status {UserFacingText.Label(invoice.Status)}", "INVALID_INVOICE_STATUS");
             if (request.Amount != invoice.TotalAmount)
                 throw new UnprocessableEntityException("Only full payment of the invoice total is accepted", "PARTIAL_PAYMENT_NOT_SUPPORTED");
 

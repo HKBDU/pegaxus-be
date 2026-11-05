@@ -26,7 +26,7 @@ public sealed class ComplianceRequirementsController(Catalog.IComplianceRequirem
     public async Task<IActionResult> GetList([FromQuery] Catalog.Request.ListRequest request, CancellationToken cancellationToken)
     {
         var result = await service.GetListAsync(request, cancellationToken);
-        return Success(result, "ComplianceRequirements retrieved successfully.");
+        return Success(result, "Compliance requirements retrieved successfully.");
     }
 
     /// <summary>
@@ -42,7 +42,7 @@ public sealed class ComplianceRequirementsController(Catalog.IComplianceRequirem
     public async Task<IActionResult> Get(Guid id, CancellationToken cancellationToken)
     {
         var result = await service.GetAsync(id, cancellationToken);
-        return Success(result, "ComplianceRequirement retrieved successfully.");
+        return Success(result, "Compliance requirement retrieved successfully.");
     }
 
     /// <summary>
@@ -61,7 +61,7 @@ public sealed class ComplianceRequirementsController(Catalog.IComplianceRequirem
     {
         var result = await service.CreateAsync(request, AccountId, cancellationToken);
         return CreatedAtAction(nameof(Get), new { id = result.ComplianceRequirementId }, ResponseBuilder.SuccessResponse(
-            result, "ComplianceRequirement entry saved successfully.", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
+            result, "Compliance requirement entry saved successfully.", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
     }
 
     /// <summary>
@@ -83,7 +83,7 @@ public sealed class ComplianceRequirementsController(Catalog.IComplianceRequirem
         try
         {
             var result = await service.UpdateAsync(id, request, AccountId, cancellationToken);
-            return Success(result, "ComplianceRequirement updated successfully.");
+            return Success(result, "Compliance requirement updated successfully.");
         }
         catch (Catalog.Service.ReferenceImpactException exception)
         {
@@ -130,7 +130,7 @@ public sealed class ComplianceRequirementsController(Catalog.IComplianceRequirem
     public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
     {
         await service.DeleteAsync(id, AccountId, cancellationToken);
-        return Success(null, "ComplianceRequirement deleted successfully.");
+        return Success(null, "Compliance requirement deleted successfully.");
     }
 
 }

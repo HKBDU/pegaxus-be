@@ -3,6 +3,7 @@ using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 
 using static Pegaxus.Service.Common.TransportItinerary;
 
@@ -20,7 +21,7 @@ public sealed class TransportNotifications(AppDbContext db)
         if (logs.Count == 0) return [];
         var first = logs[0];
         var message = logs.Count == 1
-            ? $"{await HorseNameAsync(first.HorseId, cancellationToken)} is {first.HealthStatus}{(first.VeterinarianRequired ? " and needs a veterinarian" : "")}."
+            ? $"{await HorseNameAsync(first.HorseId, cancellationToken)} is {UserFacingText.Label(first.HealthStatus)}{(first.VeterinarianRequired ? " and needs a veterinarian" : "")}."
             : $"{logs.Count} horses need urgent attention.";
         var recipients = (await ManagersAsync(cancellationToken)).Concat(await CoordinatorsAsync(transportId, cancellationToken));
         return Build(recipients, transportId, NotificationType.HORSE_HEALTH, NotificationPriority.URGENT,

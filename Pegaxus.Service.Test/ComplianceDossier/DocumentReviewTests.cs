@@ -110,7 +110,7 @@ public class DocumentReviewTests
         var service = CreateService(db);
         var error = await Assert.ThrowsAsync<ConflictException>(() => service.ApproveDocumentAsync(specialist, dossier.ComplianceDossierId,
             requirement.DossierRequirementId, version.DocumentVersionId, request));
-        Assert.Equal("Warning: Expiry date of this DocumentVersion is before the transport departure date. Are you sure you want to approve?", error.Message);
+        Assert.Equal("Warning: Expiry date of this document version is before the transport departure date. Are you sure you want to approve?", error.Message);
         Assert.Empty(await db.DocumentReviews.ToListAsync());
         request.ExpiryExceptionReason = "Accepted by the competent authority";
         await service.ApproveDocumentAsync(specialist, dossier.ComplianceDossierId, requirement.DossierRequirementId, version.DocumentVersionId, request);

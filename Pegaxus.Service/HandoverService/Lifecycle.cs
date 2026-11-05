@@ -72,5 +72,5 @@ public sealed partial class Service
     }
 
     private static ConflictException InvalidStatus(HandoverRecord item) =>
-        new($"This action cannot be performed while the handover record is in {item.Status} status", "INVALID_HANDOVER_STATUS");
+        new($"This action cannot be performed while the handover record is in {UserFacingText.Label(item.Status)} status", "INVALID_HANDOVER_STATUS");
 }

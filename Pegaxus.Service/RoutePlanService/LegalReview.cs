@@ -53,7 +53,7 @@ public sealed partial class Service
         if (GetRouteType(routePlan) == RouteType.RETURN && routePlan.TransportPlan.Transport.Status != TransportStatus.IN_TRANSIT)
             throw new ConflictException("The transport is not in transit", "TRANSPORT_NOT_IN_TRANSIT");
         if (routePlan.Status != RoutePlanStatus.DRAFT)
-            throw new ConflictException($"This action cannot be performed while the route plan is in {routePlan.Status} status", "INVALID_ROUTE_PLAN_STATUS");
+            throw new ConflictException($"This action cannot be performed while the route plan is in {UserFacingText.Label(routePlan.Status)} status", "INVALID_ROUTE_PLAN_STATUS");
         if (!routePlan.TransportPlan.EmployeeTransportPlans.Any(item => item.EmployeeId == reviewer.EmployeeId && item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST))
             throw new ForbiddenException("Only the Transport Specialist assigned to this Transport Plan can review it");
         EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
@@ -70,9 +70,9 @@ public sealed partial class Service
         if (routeType == RouteType.PRIMARY && dossier is null)
             throw new ConflictException("Compliance Dossier must be initialized before legal review", "DOSSIER_NOT_INITIALIZED");
         if (routeType == RouteType.RETURN && (dossier is null || dossier.Status != ComplianceDossierStatus.DRAFT))
-            throw new ConflictException("Route Plan RETURN has not been approved by the Logistics Manager", "RETURN_NOT_APPROVED");
+            throw new ConflictException("Route Plan return has not been approved by the Logistics Manager", "RETURN_NOT_APPROVED");
         if (routeType == RouteType.PRIMARY && request.IsFeasible && dossier!.Status != ComplianceDossierStatus.DRAFT)
-            throw new ConflictException("Compliance Dossier must be in DRAFT before legal review", "INVALID_DOSSIER_STATUS");
+            throw new ConflictException("Compliance Dossier must be in draft before legal review", "INVALID_DOSSIER_STATUS");
 
         var now = new DateTime(Math.Max(UtcNowTruncated().Ticks, routePlan.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
         var auditDossier = dossier ?? transport.MainDossier;

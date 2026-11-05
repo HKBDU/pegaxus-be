@@ -116,7 +116,7 @@ public class DocumentVersionTests
 
     [Theory]
     [InlineData(true, "This ComplianceDocument has already been satisfied and locked by Transport Specialist. Please contact support to unlock.")]
-    [InlineData(false, "Cannot submit new DocumentVersions while ComplianceDossier is undergoing official authority review.")]
+    [InlineData(false, "Cannot submit new document versions while compliance dossier is undergoing official authority review.")]
     public async Task LockedDocument_BlocksFilesAndMetadata(bool satisfied, string message)
     {
         await using var db = TestSupport.CreateDb();

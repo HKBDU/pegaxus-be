@@ -104,14 +104,14 @@ public sealed partial class Service
         {
             var template = await _db.DossierTemplates.AsNoTracking().Include(value => value.DossierTemplateItems)
                 .SingleOrDefaultAsync(value => value.DossierTemplateId == templateId && !value.IsDeleted, cancellationToken)
-                ?? throw new NotFoundException("DossierTemplate not found.", "DOSSIER_TEMPLATE_NOT_FOUND");
+                ?? throw new NotFoundException("Dossier template not found.", "DOSSIER_TEMPLATE_NOT_FOUND");
             if (template.Status != DossierTemplateStatus.ACTIVE || template.EffectiveFrom > today || template.EffectiveTo < today)
-                throw new BadRequestException("Select an ACTIVE DossierTemplate that is effective today.");
+                throw new BadRequestException("Select an active dossier template that is effective today.");
             var templateItems = template.DossierTemplateItems.OrderBy(item => item.SequenceNo).ToList();
             if (items is null && request.SelectedTemplateItemIds is { } selected)
             {
                 if (selected.Any(id => templateItems.All(item => item.DossierTemplateItemId != id)))
-                    throw new BadRequestException("A selected DossierTemplateItem does not belong to the given DossierTemplate.", "TEMPLATE_ITEM_INVALID");
+                    throw new BadRequestException("A selected DossierTemplateItem does not belong to the given dossier template.", "TEMPLATE_ITEM_INVALID");
                 templateItems = templateItems.Where(item => selected.Contains(item.DossierTemplateItemId)).ToList();
             }
             items ??= templateItems.Select(item => new Request.InitializationItemRequest
@@ -121,14 +121,14 @@ public sealed partial class Service
             }).ToList();
         }
         if (items is null || items.Count == 0)
-            throw new BadRequestException("Select at least one ComplianceRequirement.");
+            throw new BadRequestException("Select at least one compliance requirement.");
         var ids = items.Select(item => item.ComplianceRequirementId).ToArray();
         var requirements = await _db.ComplianceRequirements.AsNoTracking()
             .Where(requirement => ids.Contains(requirement.ComplianceRequirementId) && !requirement.IsDeleted &&
                 requirement.Status == ComplianceRequirementStatus.ACTIVE)
             .ToDictionaryAsync(requirement => requirement.ComplianceRequirementId, cancellationToken);
         if (requirements.Count != ids.Length)
-            throw new BadRequestException("All selected ComplianceRequirements must be unique, existing and ACTIVE.");
+            throw new BadRequestException("All selected compliance requirements must be unique, existing and active.");
 
         var result = new List<Response.GeneratedRequirementResponse>();
         foreach (var item in items)
@@ -165,9 +165,9 @@ public sealed partial class Service
             throw new NotFoundException("Transport not found.", "TRANSPORT_NOT_FOUND");
         if (expectedUpdatedAt.HasValue &&
             (DateTime.SpecifyKind(booking.UpdatedAt, DateTimeKind.Utc) != expectedUpdatedAt.Value.UtcDateTime || booking.Status != BookingStatus.APPROVED))
-            throw new ConflictException("Operation aborted: The associated Booking status has changed and is no longer APPROVED.", "BOOKING_STATUS_CHANGED");
+            throw new ConflictException("Operation aborted: The associated Booking status has changed and is no longer approved.", "BOOKING_STATUS_CHANGED");
         if (booking.Status != BookingStatus.APPROVED)
-            throw new ConflictException("ComplianceDossier can only be initialized for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
+            throw new ConflictException("Compliance dossier can only be initialized for approved transport bookings.", "BOOKING_NOT_APPROVED");
         if (transport.Status is TransportStatus.CANCELLED or TransportStatus.COMPLETED)
             throw new ConflictException("The Transport is no longer active.", "TRANSPORT_NOT_ACTIVE");
         if (transport.MainDossier is not null)
@@ -194,9 +194,9 @@ public sealed partial class Service
         var booking = transport.Booking;
         if (expectedUpdatedAt.HasValue &&
             (DateTime.SpecifyKind(booking.UpdatedAt, DateTimeKind.Utc) != expectedUpdatedAt.Value.UtcDateTime || booking.Status != BookingStatus.APPROVED))
-            throw new ConflictException("Operation aborted: The associated Booking status has changed and is no longer APPROVED.", "BOOKING_STATUS_CHANGED");
+            throw new ConflictException("Operation aborted: The associated Booking status has changed and is no longer approved.", "BOOKING_STATUS_CHANGED");
         if (booking.Status != BookingStatus.APPROVED)
-            throw new ConflictException("ComplianceDossier can only be initialized for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
+            throw new ConflictException("Compliance dossier can only be initialized for approved transport bookings.", "BOOKING_NOT_APPROVED");
         if (transport.Status is TransportStatus.CANCELLED or TransportStatus.COMPLETED)
             throw new ConflictException("The Transport is no longer active.", "TRANSPORT_NOT_ACTIVE");
         if (transport.MainDossier is not null)
@@ -213,7 +213,7 @@ public sealed partial class Service
             .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
             ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
         if (booking.Status != BookingStatus.APPROVED)
-            throw new ConflictException("DossierTemplates can only be suggested for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
+            throw new ConflictException("Dossier templates can only be suggested for approved transport bookings.", "BOOKING_NOT_APPROVED");
         return booking;
     }
 

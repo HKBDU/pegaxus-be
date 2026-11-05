@@ -376,7 +376,7 @@ public sealed partial class Service
             throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
         if (booking.Status != BookingStatus.APPROVED)
             throw new ConflictException(
-                $"This action cannot be performed while the booking is in {booking.Status} status",
+                $"This action cannot be performed while the booking is in {UserFacingText.Label(booking.Status)} status",
                 "INVALID_BOOKING_STATUS");
         if (booking.Transport is null)
             throw new ConflictException("The approved booking has no Transport", "TRANSPORT_NOT_FOUND");

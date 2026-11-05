@@ -62,7 +62,7 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
             if (provider is null || provider.IsDeleted)
                 throw new BadRequestException("Please select a valid Transport Provider for this outsourced segment.", "PROVIDER_REQUIRED");
             if (provider.Status != ProviderStatus.ACTIVE)
-                throw new ConflictException("Provider is not ACTIVE", "PROVIDER_INACTIVE");
+                throw new ConflictException("Provider is not active", "PROVIDER_INACTIVE");
             if (!(provider.SupportedModes ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Contains(segment.Route.TransportMode.ToString(), StringComparer.OrdinalIgnoreCase))
                 throw new UnprocessableEntityException("The provider does not support the transport mode of this segment", "PROVIDER_MODE_MISMATCH");
