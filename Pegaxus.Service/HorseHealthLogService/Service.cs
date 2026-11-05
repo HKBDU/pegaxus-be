@@ -58,7 +58,7 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock, IValida
                 (segment.SupersededAt == null || segment.ActualDepartureAt != null), cancellationToken))
             throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");
         if (transport.Status is not (TransportStatus.READY or TransportStatus.IN_TRANSIT))
-            throw new ConflictException("Horse health logs can only be recorded while the transport is READY or IN_TRANSIT", "INVALID_TRANSPORT_STATUS");
+            throw new ConflictException("Horse health logs can only be recorded while the transport is ready or in transit", "INVALID_TRANSPORT_STATUS");
         return transport.BookingId;
     }
 

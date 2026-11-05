@@ -81,6 +81,6 @@ public sealed partial class ComplianceDossiersController
         var response = await _service.RecordAuthorityDecisionAsync(
             AccountId, submissionId, request, cancellationToken);
 
-        return Success(response, "Authority decision recorded successfully for ComplianceDossier");
+        return Success(response, "Authority decision recorded successfully for compliance dossier");
     }
 }

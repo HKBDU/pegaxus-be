@@ -43,7 +43,7 @@ public sealed partial class Service
                     return new(replay with { Effects = new(false, false, VehicleStatusChanged: false, CanAddHorseDetails: false), Safety = safety }, false);
                 }
                 if (transport.Status != TransportStatus.IN_TRANSIT)
-                    throw new ConflictException("Incidents can only be reported while the transport is IN_TRANSIT", "INVALID_TRANSPORT_STATUS");
+                    throw new ConflictException("Incidents can only be reported while the transport is in transit", "INVALID_TRANSPORT_STATUS");
                 if (!await db.RoutePlanRouteVehicles.AsNoTracking().AnyAsync(item => item.VehicleId == request.VehicleId &&
                         item.RoutePlanRoute.RoutePlan.TransportPlan.TransportId == transport.TransportId &&
                         AssignmentStatuses.Contains(item.RoutePlanRoute.RoutePlan.Status) &&
@@ -117,6 +117,6 @@ public sealed partial class Service
     }
 
     private async Task<Response.Safety> SafetyAsync(Transport transport, CancellationToken ct) => new(
-        "Báo cáo sự cố đã được gửi khẩn cấp về Trung tâm Điều hành. Quản lý Logistics và Điều phối viên đang xử lý.",
+        "The incident report was sent to the operations team for urgent review.",
         await ContactsAsync(transport, ct));
 }

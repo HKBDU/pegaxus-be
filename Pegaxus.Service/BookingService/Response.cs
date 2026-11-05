@@ -107,6 +107,8 @@ public class Response
         public required string RoutePlanCode { get; init; }
         public required string RouteType { get; init; }
         public required string Status { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
     }
 
     public class BookingHorseResponse
@@ -228,6 +230,8 @@ public class Response
         public Guid RoutePlanId { get; init; }
         public required string RoutePlanCode { get; init; }
         public required string Status { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
     }
 
     public class CreateBookingResponse

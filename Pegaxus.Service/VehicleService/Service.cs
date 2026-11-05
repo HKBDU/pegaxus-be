@@ -186,7 +186,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         CheckVersion(vehicle, request.LastUpdatedAt);
         if (vehicle.Status is VehicleStatus.ASSIGNED or VehicleStatus.IN_USE ||
             await UnfinishedAssignments().AnyAsync(x => x.VehicleId == vehicleId, cancellationToken))
-            throw new ConflictException("Vehicle is currently assigned/IN_USE on an active trip. Status is managed automatically by the trip execution system.", "VEHICLE_STATUS_LOCKED");
+            throw new ConflictException("Vehicle is currently in use on an active trip. Its status is managed automatically during the trip.", "VEHICLE_STATUS_LOCKED");
         var before = Snapshot(vehicle);
         var previous = vehicle.Status.ToString();
         vehicle.Status = Enum.Parse<VehicleStatus>(request.Status.Trim(), true);
@@ -247,7 +247,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var (title, outcome) = action switch
         {
             "CREATE" => ("Vehicle added", "was added to the catalog"),
-            "STATUS_CHANGE" => ("Vehicle status changed", $"changed status to {vehicle.Status}"),
+            "STATUS_CHANGE" => ("Vehicle status changed", $"changed status to {UserFacingText.Label(vehicle.Status)}"),
             _ => ("Vehicle updated", "was updated")
         };
         var message = $"Vehicle {vehicle.VehicleCode} ({vehicle.LicensePlate}) {outcome}.{(string.IsNullOrWhiteSpace(reason) ? "" : " Reason: " + reason)}";
@@ -259,7 +259,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             await MailService.MailRecipients.QueueAsync(db, recipients.Select(item => item.AccountId), vehicle.UpdatedAt,
                 recipient => MailService.MailRecipients.Mail(recipient, $"Vehicle status changed — {vehicle.VehicleCode}",
                     MailService.EmailBodies.CatalogChangeBody(recipient.FullName, "Vehicle", vehicle.VehicleCode, vehicle.VehicleName,
-                        $"is now {vehicle.Status} and may be unavailable for assignments", string.IsNullOrWhiteSpace(reason) ? null : reason,
+                        $"is now {UserFacingText.Label(vehicle.Status)} and may be unavailable for assignments", string.IsNullOrWhiteSpace(reason) ? null : reason,
                         NotificationLinks.Vehicle(recipient.Role, vehicle.VehicleId))), cancellationToken);
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw Modified(); }

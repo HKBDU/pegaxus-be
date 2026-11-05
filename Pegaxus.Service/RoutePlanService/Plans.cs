@@ -24,7 +24,7 @@ public sealed partial class Service
         EnsureWriteRole(employee.Role, routeType);
         if (routeType == RouteType.RETURN && employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && !plan.EmployeeTransportPlans.Any(x => x.EmployeeId == employee.EmployeeId &&
                 x.Responsibility == "FLEET_ROUTE_COORDINATOR"))
-            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan or a Logistics Manager may create RETURN.");
+            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan or a Logistics Manager may create return.");
         ValidateSaveRequest(request, routeType);
 
         var primary = plan.RoutePlans.FirstOrDefault(item => item.Status is not (RoutePlanStatus.CANCELLED or RoutePlanStatus.REJECTED_BY_MANAGER) && GetRouteType(item) == RouteType.PRIMARY);
@@ -34,7 +34,7 @@ public sealed partial class Service
             throw new ConflictException("A backup route plan requires an existing primary route plan", "PRIMARY_ROUTE_PLAN_REQUIRED");
         if (routeType == RouteType.RETURN)
         {
-            if (primary is null) throw new ConflictException("A return route requires an existing PRIMARY.", "PRIMARY_ROUTE_PLAN_REQUIRED");
+            if (primary is null) throw new ConflictException("A return route requires an existing primary.", "PRIMARY_ROUTE_PLAN_REQUIRED");
             if (plan.Transport.Status != TransportStatus.IN_TRANSIT)
                 throw new ConflictException("A return route plan can only be created while the transport is in transit", "TRANSPORT_NOT_IN_TRANSIT");
             if (plan.Transport.MainDossier?.Status != ComplianceDossierStatus.APPROVED)
@@ -148,7 +148,7 @@ public sealed partial class Service
         EnsureWriteRole(employee.Role, routeType);
         if (routeType == RouteType.RETURN && employee.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR && !routePlan.TransportPlan.EmployeeTransportPlans.Any(x => x.EmployeeId == employee.EmployeeId &&
                 x.Responsibility == "FLEET_ROUTE_COORDINATOR"))
-            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan or a Logistics Manager may edit RETURN.");
+            throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan or a Logistics Manager may edit return.");
         if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.Status != TransportStatus.IN_TRANSIT)
             throw new ConflictException("The transport is not in transit", "TRANSPORT_NOT_IN_TRANSIT");
         if (routePlan.TransportPlan.Transport.Status == TransportStatus.IN_TRANSIT && routeType != RouteType.RETURN)
@@ -156,7 +156,7 @@ public sealed partial class Service
         if (routePlan.Status != RoutePlanStatus.DRAFT)
             throw new ConflictException("Transport is currently in transit. Please use Emergency Route Change (UC-48) for in-transit modifications.", "ROUTE_LOCKED");
         if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.ExtraDossier?.Status != ComplianceDossierStatus.DRAFT)
-            throw new ConflictException("RETURN must be approved by the Logistics Manager before editing.", "RETURN_NOT_APPROVED");
+            throw new ConflictException("Return must be approved by the Logistics Manager before editing.", "RETURN_NOT_APPROVED");
         EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
         if (string.IsNullOrWhiteSpace(request.UpdateReason))
             throw new BadRequestException("updateReason is required");
@@ -201,9 +201,12 @@ public sealed partial class Service
         routePlan.EstimatedDurationMinutes = CalculateDurationMinutes(materializedSegments);
         routePlan.RouteNote = string.IsNullOrWhiteSpace(request.RouteNote) ? null : request.RouteNote.Trim();
         routePlan.UpdatedAt = now;
-        routePlan.SubmittedForReviewAt = request.Action == "SUBMIT_FOR_LEGAL_REVIEW" ? now : null;
+        // Saving a draft keeps an earlier request: only a submit sets it, and only a legal review result clears it.
         if (request.Action == "SUBMIT_FOR_LEGAL_REVIEW")
+        {
+            routePlan.SubmittedForReviewAt = now;
             await QueueUpdateNotificationsAsync(routePlan, request.UpdateReason.Trim(), now, cancellationToken);
+        }
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
@@ -219,6 +222,8 @@ public sealed partial class Service
             IsPersonnelComplete = segments.Where(item => !item.TransportProviderId.HasValue).All(item => item.DriverEmployeeId.HasValue && item.EscortEmployeeId.HasValue),
             BranchSequenceNo = TransportItinerary.BranchSequenceNo(routePlan),
             BranchLocation = BranchLocation(routePlan),
+            LegalReviewRequested = routePlan.SubmittedForReviewAt.HasValue,
+            LegalReviewRequestedAt = AsUtc(routePlan.SubmittedForReviewAt),
             UpdatedAt = AsUtc(routePlan.UpdatedAt)
         };
     }
@@ -237,9 +242,9 @@ public sealed partial class Service
         if (string.IsNullOrWhiteSpace(request.Reason))
             throw new BadRequestException("reason is required");
         if (routeType == RouteType.RETURN && routePlan.TransportPlan.Transport.ExtraDossier is not null)
-            throw new ConflictException("The RETURN Route Plan has already been approved by the Logistics Manager and cannot be cancelled.", "RETURN_ALREADY_APPROVED");
+            throw new ConflictException("The return Route Plan has already been approved by the Logistics Manager and cannot be cancelled.", "RETURN_ALREADY_APPROVED");
         if (routePlan.Status != RoutePlanStatus.DRAFT)
-            throw new ConflictException($"Cannot cancel a {routePlan.Status} Route Plan. Please contact Logistics Manager if a route change is required.", "INVALID_ROUTE_PLAN_STATUS");
+            throw new ConflictException($"Cannot cancel a {UserFacingText.Label(routePlan.Status)} Route Plan. Please contact Logistics Manager if a route change is required.", "INVALID_ROUTE_PLAN_STATUS");
         EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
         var cancelledAt = UtcNowTruncated();
         routePlan.Status = RoutePlanStatus.CANCELLED;
@@ -258,7 +263,7 @@ public sealed partial class Service
                 Type = NotificationType.ROUTE,
                 Priority = NotificationPriority.HIGH,
                 Title = "Route plan cancelled",
-                Message = $"Route plan {routePlan.RoutePlanCode} ({routeType}) of transport plan {routePlan.TransportPlan.PlanCode} was cancelled by {employee.FullName}. Reason: {request.Reason.Trim()}",
+                Message = $"Route plan {routePlan.RoutePlanCode} ({UserFacingText.Label(routeType)}) of transport plan {routePlan.TransportPlan.PlanCode} was cancelled by {employee.FullName}. Reason: {request.Reason.Trim()}",
                 ReferenceType = "RoutePlan",
                 ReferenceId = routePlan.RoutePlanId,
                 ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.TRANSPORT_SPECIALIST, routePlan.RoutePlanId),
@@ -285,6 +290,15 @@ public sealed partial class Service
         if ((routeType is RouteType.PRIMARY or RouteType.BACKUP) && action == "SUBMIT_FOR_LEGAL_REVIEW")
             foreach (var accountId in plan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST).Select(item => item.Employee.AccountId).Distinct())
                 notificationService.Queue(new NotificationService.NotificationCreateRequest { AccountId = accountId, TransportId = plan.TransportId, Type = NotificationType.COMPLIANCE, Priority = NotificationPriority.NORMAL, Title = routeType == RouteType.BACKUP ? "Backup route requires legal review" : "Route plan requires legal review", Message = $"Route plan {routePlan.RoutePlanCode} for transport plan {plan.PlanCode} was submitted for legal review. Check that it is feasible, then confirm it or request changes.", ReferenceType = "RoutePlan", ReferenceId = routePlan.RoutePlanId, ActionUrl = NotificationLinks.RoutePlan(EmployeeRole.TRANSPORT_SPECIALIST, routePlan.RoutePlanId), CreatedAt = now });
+        if ((routeType is RouteType.PRIMARY or RouteType.BACKUP) && action == "SUBMIT_FOR_LEGAL_REVIEW")
+        {
+            var specialistIds = plan.EmployeeTransportPlans.Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST)
+                .Select(item => item.Employee.AccountId).Distinct().ToList();
+            await MailService.MailRecipients.QueueAsync(db, specialistIds, now, recipient => MailService.MailRecipients.Mail(recipient,
+                $"{MailService.EmailBodies.RouteReviewTitle(MailService.EmailBodies.RouteReviewKind.LegalReviewRequested)} — {routePlan.RoutePlanCode}",
+                MailService.EmailBodies.RouteReviewBody(recipient.FullName, routePlan.RoutePlanCode, MailService.EmailBodies.RouteReviewKind.LegalReviewRequested, null,
+                    NotificationLinks.RoutePlan(recipient.Role, routePlan.RoutePlanId))), cancellationToken);
+        }
         var managerIds = routeType == RouteType.RETURN
             // A Logistics Manager who drafts the RETURN decides on it through the same approval call, so they are not asked to approve their own draft.
             ? await db.Employees.Where(item => item.Role == EmployeeRole.LOGISTICS_MANAGER && item.IsActive && !item.IsDeleted && item.AccountId != creatorAccountId)

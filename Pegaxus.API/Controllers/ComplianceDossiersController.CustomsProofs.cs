@@ -33,7 +33,7 @@ public sealed partial class ComplianceDossiersController
         var proofId = await _service.SubmitCustomsClearanceProofAsync(
             AccountId, dossierId, request, cancellationToken);
 
-        return SuccessCreated(new { CustomsClearanceProofId = proofId }, "Customs proof submitted successfully. Awaiting TS Verification.");
+        return SuccessCreated(new { CustomsClearanceProofId = proofId }, "Customs proof submitted successfully. Awaiting verification by a Transport Specialist.");
     }
 
     /// <summary>

@@ -335,7 +335,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         segments.Any(x => x.RouteType == "BACKUP") ? "BACKUP" : segments.Count > 0 && segments.All(x => x.RouteType == "RETURN") ? "RETURN" : "PRIMARY";
 
     private static ConflictException InvalidStatus(RoutePlan plan) =>
-        new($"This action cannot be performed while the route plan is in {plan.Status} status", "INVALID_ROUTE_PLAN_STATUS");
+        new($"This action cannot be performed while the route plan is in {UserFacingText.Label(plan.Status)} status", "INVALID_ROUTE_PLAN_STATUS");
 
     private static void CheckVersion(RoutePlan plan, DateTimeOffset version)
     {

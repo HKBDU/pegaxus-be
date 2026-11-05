@@ -28,14 +28,14 @@ public sealed partial class Service
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken);
 
         if (dossier is null)
-            throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
+            throw new NotFoundException("Compliance dossier not found", "DOSSIER_NOT_FOUND");
 
         var isEmployee = await _db.Employees.Active().AnyAsync(employee => employee.AccountId == accountId,
             cancellationToken);
 
         var isOwner = dossier.Transport.Booking.Customer.AccountId == accountId;
         if (!isEmployee && !isOwner)
-            throw new ForbiddenException("You do not have permission to view this ComplianceDossier");
+            throw new ForbiddenException("You do not have permission to view this compliance dossier");
 
         var submissions = await _db.AuthoritySubmissions
             .AsNoTracking()
@@ -123,7 +123,7 @@ public sealed partial class Service
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken);
 
         if (dossier is null)
-            throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
+            throw new NotFoundException("Compliance dossier not found", "DOSSIER_NOT_FOUND");
 
         await _db.Entry(dossier).ReloadAsync(cancellationToken);
         var canSubmit = dossier.Status is
@@ -137,7 +137,7 @@ public sealed partial class Service
 
         if (!canSubmit || !requirementsReady)
             throw new ConflictException(
-                "Cannot submit ComplianceDossier. All mandatory DossierRequirements must be SATISFIED or WAIVED first, and the dossier must be READY_FOR_SUBMISSION (or SUBMITTED/PENDING for an additional authority)",
+                "Cannot submit compliance dossier. All mandatory dossier requirements must be satisfied or waived first, and the dossier must be ready for submission (or submitted/pending for an additional authority)",
                 "DOSSIER_NOT_READY");
 
         var normalizedReference = request.SubmissionReference.Trim();
@@ -149,7 +149,7 @@ public sealed partial class Service
 
         if (duplicateReference)
             throw new ConflictException(
-                "This submission reference number is already linked to another ComplianceDossier",
+                "This submission reference number is already linked to another compliance dossier",
                 "DUPLICATE_SUBMISSION_REFERENCE");
 
         var submissionNo = (await _db.AuthoritySubmissions
@@ -444,7 +444,7 @@ public sealed partial class Service
     {
         if (!EnumParser.TryParseDefined<AuthoritySubmissionStatus>(request.Decision, out var decision) ||
             decision is not (AuthoritySubmissionStatus.APPROVED or AuthoritySubmissionStatus.REJECTED or AuthoritySubmissionStatus.RETURNED))
-            throw new BadRequestException("Decision must be APPROVED, REJECTED, or RETURNED");
+            throw new BadRequestException("Decision must be approved, rejected, or returned");
 
         if (decision == AuthoritySubmissionStatus.APPROVED && string.IsNullOrWhiteSpace(request.PermitNumber))
             throw new BadRequestException("Permit number is required", "PERMIT_NUMBER_REQUIRED");

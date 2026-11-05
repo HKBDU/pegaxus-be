@@ -175,7 +175,7 @@ public class DossierRequirementTests
         var removeError = await Assert.ThrowsAsync<ConflictException>(() => service.RemoveRequirementAsync(specialist,
             dossier.ComplianceDossierId, optional.DossierRequirementId, new DossierRequest.RemoveRequirementRequest { Reason = "Too late" }));
         Assert.All(new[] { addError, updateError, removeError }, error => Assert.Equal(
-            "Cannot modify DossierRequirements after dossier submission to official authorities.", error.Message));
+            "Cannot modify dossier requirements after dossier submission to official authorities.", error.Message));
         Assert.False(optional.IsDeleted);
         Assert.Null(optional.Instruction);
         Assert.Empty(await db.AuditDossiers.ToListAsync());
@@ -297,7 +297,7 @@ public class DossierRequirementTests
         var response = Assert.IsType<OkObjectResult>(await controller.WaiveRequirement(dossier.ComplianceDossierId,
             added.DossierRequirementId, new DossierRequest.WaiveRequirementRequest { WaivedReason = " Veterinary exemption " }, CancellationToken.None));
         var envelope = Assert.IsType<Pegaxus.API.Models.ApiResponse>(response.Value);
-        Assert.Equal("DossierRequirement waived successfully", envelope.Message);
+        Assert.Equal("Dossier requirement waived successfully", envelope.Message);
         Assert.Equal(200, envelope.Code);
         var waived = Assert.IsType<Pegaxus.Service.ComplianceDossierService.Response.RequirementResponse>(envelope.Value);
         Assert.Equal(added.DossierRequirementId, waived.DossierRequirementId);
@@ -333,7 +333,7 @@ public class DossierRequirementTests
         var error = await Assert.ThrowsAsync<BadRequestException>(() => CreateService(db).WaiveRequirementAsync(specialist,
             dossier.ComplianceDossierId, item.DossierRequirementId, new DossierRequest.WaiveRequirementRequest { WaivedReason = reason }));
         Assert.Equal("WAIVE_REASON_REQUIRED", error.ErrorCode);
-        Assert.Equal("Please provide the reason for waiving this DossierRequirement", error.Message);
+        Assert.Equal("Please provide the reason for waiving this dossier requirement", error.Message);
         Assert.Equal(DossierRequirementStatus.SATISFIED, item.Status);
         Assert.Null(item.WaivedReason);
         Assert.Empty(await db.AuditDossiers.ToListAsync());

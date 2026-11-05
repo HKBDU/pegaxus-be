@@ -24,7 +24,7 @@ public static class ResponseBuilder
         {
             IsSuccess = true,
             Code = code,
-            Message = message,
+            Message = UserFacingMessages.Success(message, code),
             Value = value,
             TraceId = traceId,
             Timestamp = DateTimeOffset.UtcNow
@@ -44,7 +44,7 @@ public static class ResponseBuilder
             IsSuccess = false,
             Code = code,
             ErrorCode = errorCode,
-            Message = message,
+            Message = UserFacingMessages.Error(errorCode, message, code),
             Errors = errors,
             Value = value,
             TraceId = traceId,

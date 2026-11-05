@@ -46,7 +46,7 @@ public sealed partial class Service
                     return new(replay with { Effects = new(false, false, HealthLogsCreated: 0, FirstAidGuide: []), Safety = safety }, false);
                 }
                 if (transport.Status != TransportStatus.IN_TRANSIT)
-                    throw new ConflictException("Incidents can only be reported while the transport is IN_TRANSIT", "INVALID_TRANSPORT_STATUS");
+                    throw new ConflictException("Incidents can only be reported while the transport is in transit", "INVALID_TRANSPORT_STATUS");
                 var horses = await BookingHorsesAsync(transport, request.Horses, cancellationToken);
                 var now = Truncate(clock.GetUtcNow());
                 var first = request.Horses[0];
@@ -55,7 +55,7 @@ public sealed partial class Service
                     IncidentReportId = Guid.NewGuid(), TransportId = transport.TransportId, EmployeeId = actor.EmployeeId,
                     IncidentCode = await CodeGeneration.NextAsync("INC", now, code => db.IncidentReports.AnyAsync(item => item.IncidentCode == code, cancellationToken)),
                     Category = IncidentCategory.HORSE_HEALTH, Severity = Enum.Parse<IncidentSeverity>(request.Severity), Status = IncidentStatus.REPORTED,
-                    Title = EmptyToNull(request.Title) ?? $"[SỰ CỐ Y TẾ] Ngựa {horses[first.HorseId].HorseName} - {first.IncidentType}",
+                    Title = EmptyToNull(request.Title) ?? $"Horse health incident: {horses[first.HorseId].HorseName}",
                     Description = string.Join("\n", request.Horses.Select(horse => horse.ConditionDescription.Trim())),
                     ImmediateAction = EmptyToNull(request.ImmediateAction) ?? EmptyToNull(first.FirstAidProvided),
                     EmergencySettlementRequired = request.EmergencySettlementRequired, Location = await ResolveLocationAsync(request, now, cancellationToken),
@@ -83,5 +83,5 @@ public sealed partial class Service
     }
 
     private async Task<Response.Safety> HorseSafetyAsync(Transport transport, CancellationToken ct) => new(
-        "Báo cáo y tế khẩn cấp đã được gửi. Hãy ưu tiên sơ cứu theo hướng dẫn bên dưới.", await ContactsAsync(transport, ct));
+        "The emergency health report was sent. Please follow the first-aid guidance below.", await ContactsAsync(transport, ct));
 }

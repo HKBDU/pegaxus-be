@@ -27,7 +27,7 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> ApproveDocument(Guid dossierId, Guid requirementId, Guid versionId,
         [FromBody] ComplianceDossierService.Request.ApproveDocumentRequest request, CancellationToken cancellationToken) =>
-        SuccessCreated(await _service.ApproveDocumentAsync(AccountId, dossierId, requirementId, versionId, request, cancellationToken), "DocumentReview recorded: APPROVED. DossierRequirement status updated to SATISFIED by TS.");
+        SuccessCreated(await _service.ApproveDocumentAsync(AccountId, dossierId, requirementId, versionId, request, cancellationToken), "Document approved successfully.");
 
     /// <summary>
     /// Revoke a document approval.
@@ -48,7 +48,7 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> RevokeDocumentReview(Guid dossierId, Guid requirementId, Guid versionId, Guid reviewId,
         [FromBody] ComplianceDossierService.Request.RevokeDocumentReviewRequest request, CancellationToken cancellationToken) =>
-        SuccessCreated(await _service.RevokeDocumentReviewAsync(AccountId, dossierId, requirementId, versionId, reviewId, request, cancellationToken), "DocumentReview revoked successfully. DossierRequirement status updated by TS.");
+        SuccessCreated(await _service.RevokeDocumentReviewAsync(AccountId, dossierId, requirementId, versionId, reviewId, request, cancellationToken), "Approval revoked successfully. The requirement status has been updated.");
 
     /// <summary>
     /// Mark a dossier as ready for submission.
@@ -63,7 +63,7 @@ public sealed partial class ComplianceDossiersController
     [HttpPost("{dossierId:guid}/ready-for-submission")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> MarkReadyForSubmission(Guid dossierId, CancellationToken cancellationToken) =>
-        Success(await _service.MarkReadyForSubmissionAsync(AccountId, dossierId, cancellationToken), "ComplianceDossier marked READY_FOR_SUBMISSION by TS. No authority submission was created.");
+        Success(await _service.MarkReadyForSubmissionAsync(AccountId, dossierId, cancellationToken), "Dossier marked as ready for submission. No authority submission was created.");
 
     /// <summary>
     /// Reject a document version.
@@ -83,5 +83,5 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> RejectDocument(Guid dossierId, Guid requirementId, Guid versionId,
         [FromBody] ComplianceDossierService.Request.RejectDocumentRequest request, CancellationToken cancellationToken) =>
-        SuccessCreated(await _service.RejectDocumentAsync(AccountId, dossierId, requirementId, versionId, request, cancellationToken), "DocumentReview (REJECTED) recorded. Status updated by TS. DocumentRequest sent to customer.");
+        SuccessCreated(await _service.RejectDocumentAsync(AccountId, dossierId, requirementId, versionId, request, cancellationToken), "Document rejected. A request for a new upload was sent to the customer.");
 }

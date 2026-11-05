@@ -242,7 +242,9 @@ public sealed partial class Service
                     RoutePlanId = item.RoutePlanId,
                     RoutePlanCode = item.RoutePlanCode,
                     RouteType = TransportItinerary.PlanType(item).ToString(),
-                    Status = item.Status.ToString()
+                    Status = item.Status.ToString(),
+                    LegalReviewRequested = item.SubmittedForReviewAt.HasValue,
+                    LegalReviewRequestedAt = AsUtc(item.SubmittedForReviewAt)
                 })
                 .ToList(),
             CreatedAt = AsUtc(plan.CreatedAt),
@@ -376,7 +378,7 @@ public sealed partial class Service
             throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
         if (booking.Status != BookingStatus.APPROVED)
             throw new ConflictException(
-                $"This action cannot be performed while the booking is in {booking.Status} status",
+                $"This action cannot be performed while the booking is in {UserFacingText.Label(booking.Status)} status",
                 "INVALID_BOOKING_STATUS");
         if (booking.Transport is null)
             throw new ConflictException("The approved booking has no Transport", "TRANSPORT_NOT_FOUND");

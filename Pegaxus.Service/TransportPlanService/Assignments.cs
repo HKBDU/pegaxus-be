@@ -62,9 +62,9 @@ public sealed partial class Service
             throw new UnprocessableEntityException("Selected employee is inactive.", "INVALID_ROLE_ASSIGNMENT");
         }
         if (specialist.Role != EmployeeRole.TRANSPORT_SPECIALIST)
-            throw new UnprocessableEntityException("transportSpecialistId must reference an active TRANSPORT_SPECIALIST", "INVALID_ROLE_ASSIGNMENT");
+            throw new UnprocessableEntityException("Select an active Transport Specialist.", "INVALID_ROLE_ASSIGNMENT");
         if (coordinator.Role != EmployeeRole.FLEET_ROUTE_COORDINATOR)
-            throw new UnprocessableEntityException("routeCoordinatorId must reference an active FLEET_ROUTE_COORDINATOR", "INVALID_ROLE_ASSIGNMENT");
+            throw new UnprocessableEntityException("Select an active Fleet Route Coordinator.", "INVALID_ROLE_ASSIGNMENT");
 
         var now = UtcNowTruncated();
         var assignments = new[]
@@ -213,7 +213,7 @@ public sealed partial class Service
                 throw new UnprocessableEntityException("Selected employee is inactive.", "INVALID_ROLE_ASSIGNMENT");
             }
             if (replacementSpecialist.Role != EmployeeRole.TRANSPORT_SPECIALIST)
-                throw new UnprocessableEntityException("transportSpecialistId must reference an active TRANSPORT_SPECIALIST", "INVALID_ROLE_ASSIGNMENT");
+                throw new UnprocessableEntityException("Select an active Transport Specialist.", "INVALID_ROLE_ASSIGNMENT");
         }
         if (request.RouteCoordinatorId.HasValue)
         {
@@ -225,7 +225,7 @@ public sealed partial class Service
                 throw new UnprocessableEntityException("Selected employee is inactive.", "INVALID_ROLE_ASSIGNMENT");
             }
             if (replacementCoordinator.Role != EmployeeRole.FLEET_ROUTE_COORDINATOR)
-                throw new UnprocessableEntityException("routeCoordinatorId must reference an active FLEET_ROUTE_COORDINATOR", "INVALID_ROLE_ASSIGNMENT");
+                throw new UnprocessableEntityException("Select an active Fleet Route Coordinator.", "INVALID_ROLE_ASSIGNMENT");
         }
 
         var replacedAssignments = new List<(Employee OldEmployee, Employee NewEmployee, string Responsibility)>();

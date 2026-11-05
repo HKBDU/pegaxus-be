@@ -33,7 +33,7 @@ public sealed partial class Service
         var today = DateOnly.FromDateTime(now);
         if (request.RequirementIds is null || request.RequirementIds.Count is < 1 or > 100 ||
             request.RequirementIds.Any(item => item == Guid.Empty) || request.RequirementIds.Distinct().Count() != request.RequirementIds.Count)
-            throw new BadRequestException("Select 1 to 100 distinct DossierRequirement IDs.");
+            throw new BadRequestException("Select between 1 and 100 different requirements.");
         if (request.DueDate == default || request.DueDate < today || request.Note?.Length > 2000)
             throw new BadRequestException("DueDate cannot be in the past; Note must not exceed 2000 characters.");
         Response.MissingDocumentsResponse response;
@@ -48,7 +48,7 @@ public sealed partial class Service
                 var missing = await MissingRequirementsQuery(dossierId).AsTracking().Include(item => item.ComplianceRequirement)
                     .Include(item => item.Horse).OrderBy(item => item.DossierRequirementId).ToListAsync(cancellationToken);
                 if (missing.Count == 0)
-                    throw new ConflictException("Tất cả các mục giấy tờ đã được tải lên hoặc đã được duyệt. Không có giấy tờ nào cần nhắc nộp.");
+                    throw new ConflictException("All required documents have already been provided or approved. No reminder is needed.");
                 var selected = missing.Where(item => request.RequirementIds.Contains(item.DossierRequirementId)).ToList();
                 if (selected.Count != request.RequirementIds.Count)
                     throw new BadRequestException("Every selected requirement must belong to this dossier and still be missing.");
@@ -83,7 +83,7 @@ public sealed partial class Service
                     {
                         AuditDossierId = Guid.NewGuid(), ComplianceDossierId = dossierId, ActorAccountId = accountId,
                         ActionType = "DOSSIER_REQUIREMENT_REMINDED", TargetEntity = nameof(DossierRequirement), TargetId = item.DossierRequirementId,
-                        Summary = "Nhắc nộp bổ sung giấy tờ còn thiếu.", Visibility = AuditVisibility.Public, CreatedAt = now,
+                        Summary = "Requested the remaining required documents.", Visibility = AuditVisibility.Public, CreatedAt = now,
                         Details = JsonSerializer.SerializeToDocument(new { PreviousStatus = previousStatus.ToString(), PreviousDueDate = previousDueDate,
                             NewStatus = item.Status.ToString(), item.DueDate, DocumentRequestId = revision.DocumentRequestId, request.Note })
                     });
@@ -106,7 +106,7 @@ public sealed partial class Service
         await _notificationService.FlushAsync(CancellationToken.None);
         response.EmailSent = await DeliverMissingReminderAsync(response.ReminderId, CancellationToken.None);
         if (!response.EmailSent)
-            response.DeliveryWarning = "Email chưa được xác nhận gửi; thông báo Web đã lưu. Hệ thống sẽ thử gửi lại.";
+            response.DeliveryWarning = "The in-app notification was saved. Email delivery will be retried automatically.";
         return response;
     }
 
@@ -257,7 +257,7 @@ public sealed partial class Service
         query = forUpdate ? query.AsTracking() : query.AsNoTracking();
         var dossier = await query.Include(item => item.Transport).ThenInclude(item => item.Booking).ThenInclude(item => item.Customer)
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)
-            ?? throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
+            ?? throw new NotFoundException("Compliance dossier not found.", "DOSSIER_NOT_FOUND");
         if (forUpdate)
         {
             await _db.Entry(dossier).ReloadAsync(cancellationToken);
@@ -269,7 +269,7 @@ public sealed partial class Service
     private static void EnsurePreparingForReminder(ComplianceDossier dossier)
     {
         if (dossier.Status != ComplianceDossierStatus.IN_PREPARATION || dossier.Transport.Booking.Status is BookingStatus.CANCELLED or BookingStatus.REJECTED)
-            throw new ConflictException("Không thể gửi nhắc nhở khi hồ sơ đã hoàn tất hoặc đã đóng.");
+            throw new ConflictException("A reminder cannot be sent because this dossier is no longer active.");
     }
 
     private static bool AutomaticReminderEligible(ComplianceDossier dossier, DateOnly today)

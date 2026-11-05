@@ -291,7 +291,7 @@ public sealed partial class Service
             }).SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
         if (booking.Status != BookingStatus.APPROVED)
-            throw new ConflictException("Booking must be APPROVED", "INVALID_BOOKING_STATUS");
+            throw new ConflictException("Booking must be approved", "INVALID_BOOKING_STATUS");
 
         var validTransport = booking.TransportStatus.HasValue && type switch
         {
@@ -307,13 +307,13 @@ public sealed partial class Service
             .Select(invoice => new { invoice.Type, invoice.Status, invoice.InvoiceCode, invoice.Currency, invoice.TotalAmount })
             .ToListAsync(cancellationToken);
         if (type == InvoiceType.FINAL && invoices.Any(invoice => invoice.Type == InvoiceType.FINAL && invoice.Status != InvoiceStatus.CANCELLED))
-            throw new ConflictException("This booking already has a FINAL invoice. A second FINAL invoice is only allowed after the previous one is cancelled.",
+            throw new ConflictException("This booking already has a final invoice. A second final invoice is only allowed after the previous one is cancelled.",
                 "FINAL_INVOICE_ALREADY_EXISTS");
         if (invoices.Any(invoice => invoice.Type == type && invoice.Status is InvoiceStatus.DRAFT or InvoiceStatus.ISSUED or InvoiceStatus.OVERDUE))
             throw new ConflictException("An unresolved invoice of the same type already exists. Please edit or cancel the existing invoice.",
                 "INVOICE_ALREADY_EXISTS");
         if (type == InvoiceType.CREDIT_NOTE && !invoices.Any(invoice => invoice.Type == InvoiceType.FINAL && invoice.Status == InvoiceStatus.PAID))
-            throw new UnprocessableEntityException("Cannot create a claim/compensation invoice. The FINAL invoice of this booking must be PAID first.",
+            throw new UnprocessableEntityException("Cannot create a claim/compensation invoice. The final invoice of this booking must be paid first.",
                 "UNPAID_FINAL_INVOICE");
 
         var deposits = invoices.Where(invoice => invoice.Type == InvoiceType.DEPOSIT && invoice.Status == InvoiceStatus.PAID).ToArray();

@@ -3,6 +3,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.OutboxService;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.HandoverService;
 
@@ -63,7 +64,7 @@ public sealed partial class Service
                     employee.EmployeeTransportPlans.Any(link => link.TransportPlan.TransportId == transport.TransportId)))
             .Select(employee => new { employee.AccountId, employee.Role }).Distinct().ToArrayAsync(cancellationToken);
         var vehicles = effects.ReleasedVehicles is { Count: > 0 } list
-            ? " Vehicles released: " + string.Join(", ", list.Select(vehicle => $"{vehicle.VehicleCode} ({vehicle.NewStatus})")) + "."
+            ? " Vehicles released: " + string.Join(", ", list.Select(vehicle => $"{vehicle.VehicleCode} ({UserFacingText.Label(vehicle.NewStatus)})")) + "."
             : "";
         foreach (var recipient in staff)
             switch (recipient.Role)

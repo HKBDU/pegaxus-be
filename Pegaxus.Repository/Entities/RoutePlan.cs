@@ -25,7 +25,7 @@ public partial class RoutePlan
 
     public string? RouteNote { get; set; }
 
-    /// <summary>Set when the plan is submitted for legal review; cleared when it is saved as a draft again or the specialist asks for changes.</summary>
+    /// <summary>When legal review was requested (the API shows it as legalReviewRequested and legalReviewRequestedAt). Set by a submit, kept when the draft is saved again, and cleared when the specialist answers the request.</summary>
     public DateTime? SubmittedForReviewAt { get; set; }
 
     public DateTime CreatedAt { get; set; }

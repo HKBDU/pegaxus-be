@@ -169,7 +169,7 @@ public sealed partial class Service
             if (!committed && commitAttempted)
                 _logger.LogError(error, "Document commit outcome is unknown for {StorageId}; files retained to prevent data loss", storageId);
             if (PostgresErrors.IsWriteConflict(error))
-                throw new ConflictException("ComplianceDocument already exists or the dossier changed. Reload before uploading.", "DOCUMENT_UPLOAD_CONFLICT");
+                throw new ConflictException("Document already exists or the dossier changed. Reload before uploading.", "DOCUMENT_UPLOAD_CONFLICT");
             throw;
         }
     }
@@ -198,39 +198,39 @@ public sealed partial class Service
             .Select(item => (Guid?)item.CustomerId).SingleOrDefaultAsync(cancellationToken);
         var specialist = readOnly && await _db.Employees.AsNoTracking().Active().AnyAsync(item => item.AccountId == accountId && item.Account.AccountType == AccountType.EMPLOYEE && (item.Role == EmployeeRole.TRANSPORT_SPECIALIST || item.Role == EmployeeRole.LOGISTICS_MANAGER), cancellationToken);
         if (!customerId.HasValue && !specialist)
-            throw new ForbiddenException("Only an active Customer can upload ComplianceDocuments.");
+            throw new ForbiddenException("Only an active Customer can upload documents.");
         var dossiers = _db.ComplianceDossiers.Include(item => item.Transport).ThenInclude(item => item.Booking);
         var dossier = await (tracking ? dossiers.AsTracking() : dossiers.AsNoTracking())
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)
-            ?? throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
+            ?? throw new NotFoundException("Compliance dossier not found.", "DOSSIER_NOT_FOUND");
         if (tracking)
         {
             await _db.Entry(dossier).ReloadAsync(cancellationToken);
             if (_db.Entry(dossier).State == EntityState.Detached)
-                throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
+                throw new NotFoundException("Compliance dossier not found.", "DOSSIER_NOT_FOUND");
             await _db.Entry(dossier.Transport.Booking).ReloadAsync(cancellationToken);
         }
         if (!specialist && dossier.Transport.Booking.CustomerId != customerId)
-            throw new ForbiddenException("You do not have permission to upload to this ComplianceDossier.");
+            throw new ForbiddenException("You do not have permission to upload to this compliance dossier.");
         var requirements = _db.DossierRequirements.Include(item => item.ComplianceRequirement);
         var requirement = await (tracking ? requirements.AsTracking() : requirements.AsNoTracking())
             .SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId && item.ComplianceDossierId == dossierId &&
                 !item.IsDeleted, cancellationToken)
-            ?? throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+            ?? throw new NotFoundException("Dossier requirement not found.", "REQUIREMENT_NOT_FOUND");
         if (tracking)
         {
             await _db.Entry(requirement).ReloadAsync(cancellationToken);
             await _db.Entry(requirement.ComplianceRequirement).ReloadAsync(cancellationToken);
         }
         if (requirement.IsDeleted || _db.Entry(requirement).State == EntityState.Detached && tracking)
-            throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+            throw new NotFoundException("Dossier requirement not found.", "REQUIREMENT_NOT_FOUND");
         if (readOnly) return (dossier, requirement);
         if (existing && requirement.Status == DossierRequirementStatus.SATISFIED)
             throw SatisfiedDocument();
         if (existing && dossier.Status is ComplianceDossierStatus.SUBMITTED or ComplianceDossierStatus.PENDING)
-            throw new ConflictException("Cannot submit new DocumentVersions while ComplianceDossier is undergoing official authority review.");
+            throw new ConflictException("Cannot submit new document versions while compliance dossier is undergoing official authority review.");
         if (dossier.Status is not (ComplianceDossierStatus.IN_PREPARATION or ComplianceDossierStatus.REJECTED))
-            throw new ConflictException("ComplianceDocuments can only be uploaded while the dossier is IN_PREPARATION or REJECTED.");
+            throw new ConflictException("Documents can only be uploaded while the dossier is in preparation or rejected.");
         if (existing ? requirement.Status is not (DossierRequirementStatus.PROVIDED or DossierRequirementStatus.REJECTED or DossierRequirementStatus.REQUESTED)
             : requirement.Status is not (DossierRequirementStatus.PENDING or DossierRequirementStatus.REQUESTED or DossierRequirementStatus.REJECTED))
             throw new ConflictException(existing
@@ -239,9 +239,9 @@ public sealed partial class Service
         if (!existing && requirement.Status == DossierRequirementStatus.REQUESTED &&
             !await _db.DocumentRequests.AnyAsync(item => item.DossierRequirementId == requirementId &&
                 item.RequestType == DocumentRequestType.MISSING_DOCUMENT && item.Status == DocumentRequestStatus.OPEN, cancellationToken))
-            throw new ConflictException("An OPEN missing-document request is required before uploading a REQUESTED requirement.");
+            throw new ConflictException("An open missing-document request is required before uploading a requested requirement.");
         if (!existing && await _db.ComplianceDocuments.AnyAsync(item => item.DossierRequirementId == requirementId, cancellationToken))
-            throw new ConflictException("ComplianceDocument already exists. Submit a new DocumentVersion instead.", "DOCUMENT_ALREADY_EXISTS");
+            throw new ConflictException("Document already exists. Submit a new document version instead.", "DOCUMENT_ALREADY_EXISTS");
         return (dossier, requirement);
     }
 
@@ -256,12 +256,12 @@ public sealed partial class Service
         if (request.UploadNote?.Length > 2000)
             throw new BadRequestException("UploadNote must not exceed 2000 characters.");
         if ((requirement.ValidUntil.HasValue || requirement.ComplianceRequirement.ValidityRequired) && !request.ExpiryDate.HasValue)
-            throw new BadRequestException("ExpiryDate is required for this DossierRequirement.");
+            throw new BadRequestException("An expiry date is required for this requirement.");
         if (request.ExpiryDate.HasValue && request.ExpiryDate <= dossier.Transport.Booking.RequestedDepartureDate)
             throw new BadRequestException("The document expiry date must be after the planned transport departure date.");
         if (request.ExpiryDate < request.IssuedDate)
             throw new BadRequestException("ExpiryDate must not be before IssuedDate.");
         if (request.ExpiryDate.HasValue && requirement.ValidUntil.HasValue && request.ExpiryDate < requirement.ValidUntil)
-            throw new BadRequestException("The document expiry date must satisfy the DossierRequirement valid_until date.");
+            throw new BadRequestException("The document expiry date must be on or before the requirement's valid-until date.");
     }
 }

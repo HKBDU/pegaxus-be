@@ -27,7 +27,7 @@ public partial class Service
             ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
         await _db.Entry(booking).ReloadAsync(cancellationToken);
         if (booking.Status != BookingStatus.APPROVED)
-            throw new ConflictException("Only APPROVED bookings can be changed through negotiation.", "INVALID_BOOKING_STATUS");
+            throw new ConflictException("Only approved bookings can be changed through negotiation.", "INVALID_BOOKING_STATUS");
 
         var now = UtcNowTruncated();
         var status = request.Status.Trim().ToUpperInvariant() == "CANCELLED" ? BookingStatus.CANCELLED : BookingStatus.DRAFT;

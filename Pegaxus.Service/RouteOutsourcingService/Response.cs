@@ -4,6 +4,8 @@ public sealed class Response
 {
     public Guid RoutePlanId { get; init; }
     public required string RoutePlanStatus { get; init; }
+    public bool LegalReviewRequested { get; init; }
+    public DateTimeOffset? LegalReviewRequestedAt { get; init; }
     public required SegmentResponse Segment { get; init; }
     public bool ClearedPersonnel { get; init; }
     public bool ClearedVehicles { get; init; }

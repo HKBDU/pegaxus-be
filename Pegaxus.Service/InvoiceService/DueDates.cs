@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.InvoiceService;
 
@@ -37,10 +38,10 @@ public sealed partial class Service
         var earlier = others.Where(item => after.Contains(item.Type)).OrderByDescending(item => item.DueDate).FirstOrDefault();
         if (earlier is not null && day <= DateOnly.FromDateTime(earlier.DueDate))
             throw new FieldValidationException([new("dueDate",
-                $"Due date must be after the {earlier.Type} invoice due date ({earlier.InvoiceCode}, {DateOnly.FromDateTime(earlier.DueDate):yyyy-MM-dd}).")]);
+                $"Due date must be after the {UserFacingText.Label(earlier.Type)} invoice due date ({earlier.InvoiceCode}, {DateOnly.FromDateTime(earlier.DueDate):yyyy-MM-dd}).")]);
         var later = others.Where(item => before.Contains(item.Type)).OrderBy(item => item.DueDate).FirstOrDefault();
         if (later is not null && day >= DateOnly.FromDateTime(later.DueDate))
             throw new FieldValidationException([new("dueDate",
-                $"Due date must be before the {later.Type} invoice due date ({later.InvoiceCode}, {DateOnly.FromDateTime(later.DueDate):yyyy-MM-dd}).")]);
+                $"Due date must be before the {UserFacingText.Label(later.Type)} invoice due date ({later.InvoiceCode}, {DateOnly.FromDateTime(later.DueDate):yyyy-MM-dd}).")]);
     }
 }
