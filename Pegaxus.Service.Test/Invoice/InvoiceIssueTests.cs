@@ -135,7 +135,7 @@ public class InvoiceIssueTests
 
     [Theory]
     [InlineData("missing", 404, "INVOICE_NOT_FOUND", "Invoice not found")]
-    [InlineData("status", 409, "INVALID_INVOICE_STATUS", "Invoice must be in DRAFT status to be issued")]
+    [InlineData("status", 409, "INVALID_INVOICE_STATUS", "Invoice must be in draft status to be issued")]
     [InlineData("version", 409, "INVOICE_MODIFIED", "The invoice was just modified. Please reload the page")]
     [InlineData("empty", 422, "EMPTY_INVOICE_ITEMS", "The invoice must have at least one fee line before it can be issued")]
     [InlineData("deductionOnly", 422, "EMPTY_INVOICE_ITEMS", "The invoice must have at least one fee line before it can be issued")]

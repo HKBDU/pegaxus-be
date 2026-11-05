@@ -33,7 +33,7 @@ public sealed partial class ComplianceDossiersController
         var proofId = await _service.SubmitQuarantineProofAsync(
             AccountId, dossierId, request, cancellationToken);
 
-        return SuccessCreated(new { QuarantineProofId = proofId }, "Quarantine proof submitted successfully. Awaiting TS Verification.");
+        return SuccessCreated(new { QuarantineProofId = proofId }, "Quarantine proof submitted successfully. Awaiting verification by a Transport Specialist.");
     }
 
     /// <summary>

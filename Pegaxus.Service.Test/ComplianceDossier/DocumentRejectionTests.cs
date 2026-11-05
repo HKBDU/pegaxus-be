@@ -65,7 +65,7 @@ public class DocumentRejectionTests
         request.RejectionNote = note;
         var error = await Assert.ThrowsAsync<BadRequestException>(() => CreateService(db, mail).RejectDocumentAsync(seed.Specialist,
             seed.Dossier.ComplianceDossierId, seed.Requirement.DossierRequirementId, seed.Version.DocumentVersionId, request));
-        Assert.Equal("Please provide detailed instructions in the DocumentRequest (minimum 15 characters) so the customer knows what to re-upload.", error.Message);
+        Assert.Equal("Please provide detailed instructions (minimum 15 characters) so the customer knows what to re-upload.", error.Message);
         Assert.Empty(await db.DocumentReviews.ToListAsync());
         Assert.Empty(await db.DocumentRequests.ToListAsync());
         Assert.Empty(await db.Notifications.ToListAsync());
@@ -85,7 +85,7 @@ public class DocumentRejectionTests
         await db.SaveChangesAsync();
         var error = await Assert.ThrowsAsync<ConflictException>(() => CreateService(db, new CaptureMailService()).RejectDocumentAsync(seed.Specialist,
             seed.Dossier.ComplianceDossierId, seed.Requirement.DossierRequirementId, seed.Version.DocumentVersionId, RejectRequest(seed.Version)));
-        Assert.Equal("Cannot create DocumentRequests after dossier submission to official authorities.", error.Message);
+        Assert.Equal("Cannot create document requests after dossier submission to official authorities.", error.Message);
         Assert.Empty(await db.DocumentRequests.ToListAsync());
     }
 

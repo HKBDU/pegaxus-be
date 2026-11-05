@@ -76,7 +76,7 @@ public static class ServiceCollectionExtensions
                             field = string.IsNullOrEmpty(entry.Key)
                                 ? "$"
                                 : char.ToLowerInvariant(entry.Key[0]) + entry.Key[1..],
-                            message = error.ErrorMessage
+                            message = UserFacingMessages.FieldError(entry.Key, error.ErrorMessage)
                         }))
                         .ToArray();
 

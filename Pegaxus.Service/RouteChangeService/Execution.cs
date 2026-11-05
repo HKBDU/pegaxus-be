@@ -61,7 +61,7 @@ public sealed partial class Service
                 if (vehicles.TryGetValue(vehicle.VehicleId, out var inUse) && inUse.Status == VehicleStatus.IN_USE &&
                     !await db.RoutePlanRouteVehicles.AnyAsync(x => x.VehicleId == vehicle.VehicleId &&
                         x.RoutePlanRoute.RoutePlan.TransportPlanId == plan.TransportPlanId && x.RoutePlanRoute.RouteType == RouteType.PRIMARY, token))
-                    throw new UnprocessableEntityException("An IN_USE vehicle must belong to this transport's PRIMARY.", "VEHICLE_UNAVAILABLE");
+                    throw new UnprocessableEntityException("A vehicle that is in use must belong to this transport's primary route plan.", "VEHICLE_UNAVAILABLE");
                 if (!vehicles.TryGetValue(vehicle.VehicleId, out var current) || current.IsDeleted || current.TransportMode.ToString() != segment.Route.TransportMode ||
                     current.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED or VehicleStatus.IN_USE) ||
                     current.RegistrationExpiryDate <= toDate || current.InsuranceExpiryDate <= toDate)

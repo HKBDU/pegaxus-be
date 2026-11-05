@@ -131,7 +131,7 @@ public sealed partial class Service
         items.AddRange(incidents.Select(item => new Response.TimelineItem(AsUtc(item.OccurredAt), "INCIDENT",
             actor.IsManager ? $"Incident {item.Code}: {item.Title}" : $"Incident {item.Code} reported", item.Id,
             item.Severity is IncidentSeverity.HIGH or IncidentSeverity.CRITICAL ? "PUBLIC" : "INTERNAL")));
-        items.AddRange(audits.Select(item => new Response.TimelineItem(AsUtc(item.CreatedAt), "AUDIT", item.Summary ?? $"{item.ActionType} on {item.TargetEntity}", item.Id,
+        items.AddRange(audits.Select(item => new Response.TimelineItem(AsUtc(item.CreatedAt), "AUDIT", item.Summary ?? $"{UserFacingText.Label(item.ActionType)} on {item.TargetEntity}", item.Id,
             item.Visibility.ToString().ToUpperInvariant())));
         return items.OrderBy(item => item.At).ThenBy(item => item.Source, StringComparer.Ordinal).ThenBy(item => item.Title, StringComparer.Ordinal).Take(limit).ToList();
     }

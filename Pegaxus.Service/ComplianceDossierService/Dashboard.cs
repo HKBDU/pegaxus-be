@@ -81,7 +81,7 @@ public sealed partial class Service
         {
             var risk = request.Risk.Trim().ToUpperInvariant();
             if (risk is not ("URGENT_RISK" or "NORMAL"))
-                throw new BadRequestException("Risk must be URGENT_RISK or NORMAL", "INVALID_RISK_PARAMETER");
+                throw new BadRequestException("The risk level must be urgent or normal.", "INVALID_RISK_PARAMETER");
             filtered = filtered.Where(item => risk == "URGENT_RISK" ? item.IsUrgentRisk : !item.IsUrgentRisk);
         }
 
@@ -89,7 +89,7 @@ public sealed partial class Service
         {
             var routeType = request.RouteType.Trim().ToUpperInvariant();
             if (routeType is not ("DOMESTIC" or "CROSS_BORDER"))
-                throw new BadRequestException("Route type must be DOMESTIC or CROSS_BORDER", "INVALID_ROUTE_TYPE_PARAMETER");
+                throw new BadRequestException("The route type must be domestic or cross-border.", "INVALID_ROUTE_TYPE_PARAMETER");
             filtered = filtered.Where(item => GetRouteType(item.Dossier) == routeType);
         }
 
@@ -329,7 +329,7 @@ public sealed partial class Service
             .AsNoTracking()
             .AnyAsync(dossier => dossier.ComplianceDossierId == dossierId, cancellationToken);
         if (!dossierExists)
-            throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
+            throw new NotFoundException("Compliance dossier not found", "DOSSIER_NOT_FOUND");
 
         var query = _db.AuditDossiers
             .AsNoTracking()

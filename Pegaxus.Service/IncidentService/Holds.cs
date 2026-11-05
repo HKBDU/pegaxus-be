@@ -80,7 +80,7 @@ public sealed partial class Service
                 db.Notifications.Add(new Notification
                 {
                     NotificationId = Guid.NewGuid(), TransportId = transport.TransportId, NotificationType = NotificationType.ROUTE,
-                    Priority = NotificationPriority.URGENT, Title = "Hold expiry processed", Message = "HOLD_EXPIRED",
+                    Priority = NotificationPriority.URGENT, Title = "Transport hold has ended", Message = "The transport hold has ended. Review the latest transport status before continuing.",
                     ReferenceType = HoldExpiredReference, ReferenceId = notificationId, CreatedAt = now
                 });
                 await db.SaveChangesAsync(ct);

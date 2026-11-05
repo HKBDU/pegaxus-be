@@ -61,7 +61,7 @@ public partial class Service
         await GetLogisticsManagerAsync(accountId, cancellationToken);
         if (!EnumParser.TryParseDefined<EmployeeRole>(request.Role.Trim(), out var role) ||
             role is not (EmployeeRole.TRANSPORT_SPECIALIST or EmployeeRole.FLEET_ROUTE_COORDINATOR))
-            throw new BadRequestException("Role must be TRANSPORT_SPECIALIST or FLEET_ROUTE_COORDINATOR", "INVALID_ASSIGNMENT_ROLE");
+            throw new BadRequestException("Role must be Transport Specialist or Fleet Route Coordinator", "INVALID_ASSIGNMENT_ROLE");
 
         var booking = await _db.Bookings
             .Include(item => item.Transport)

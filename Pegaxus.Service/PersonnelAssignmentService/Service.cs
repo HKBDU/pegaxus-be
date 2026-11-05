@@ -39,7 +39,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             x.TransportPlan.Status != TransportPlanStatus.CANCELLED && x.TransportPlan.Status != TransportPlanStatus.COMPLETED &&
             x.TransportPlan.Transport.Status != TransportStatus.CANCELLED && x.TransportPlan.Transport.Status != TransportStatus.COMPLETED &&
             x.RoutePlanRoutes.Any() && x.RoutePlanRoutes.All(s => s.RouteType == RouteType.PRIMARY)).ToListAsync(cancellationToken);
-        if (candidates.Count > 1) throw new ConflictException("Multiple confirmed PRIMARY routes exist for this plan.", "AMBIGUOUS_PRIMARY_ROUTE");
+        if (candidates.Count > 1) throw new ConflictException("Multiple confirmed primary routes exist for this plan.", "AMBIGUOUS_PRIMARY_ROUTE");
         var route = candidates.SingleOrDefault();
         var segments = route is null ? [] : await LoadSegmentsAsync(route.RoutePlanId, false, cancellationToken);
         var specialist = phase1.FirstOrDefault(x => x.Responsibility == "TRANSPORT_SPECIALIST" && x.IsPrimary);
@@ -103,7 +103,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             return copy;
         }).ToList();
         if (route.Status != RoutePlanStatus.CONFIRMED || segments.Count == 0 || segments.Any(x => x.RouteType != RouteType.PRIMARY))
-            throw new UnprocessableEntityException("Cannot assign Driver and Escort until the PRIMARY Route Plan is Confirmed.", "ROUTE_NOT_CONFIRMED");
+            throw new UnprocessableEntityException("Cannot assign Driver and Escort until the primary Route Plan is Confirmed.", "ROUTE_NOT_CONFIRMED");
         var before = Snapshot(segments);
         if (changes.Any(x => !segments.Any(s => s.RoutePlanRouteId == x.RoutePlanRouteId)))
             throw new NotFoundException("Segment not found in this route plan", "SEGMENT_NOT_FOUND");
@@ -123,7 +123,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             if (segment.ActualDepartureAt.HasValue || segment.ActualArrivalAt.HasValue)
                 throw new ConflictException("Cannot change personnel on a started or completed segment", "SEGMENT_LOCKED");
             if (reason is not null && (!segment.DriverEmployeeId.HasValue || !segment.EscortEmployeeId.HasValue))
-                throw new ConflictException("Assign this segment through POST before replacing personnel.", "SEGMENT_NOT_ASSIGNED");
+                throw new ConflictException("Assign personnel to this segment before replacing them.", "SEGMENT_NOT_ASSIGNED");
             if (!segment.PlannedDepartureAt.HasValue || !segment.PlannedArrivalAt.HasValue || segment.PlannedDepartureAt >= segment.PlannedArrivalAt)
                 throw new BadRequestException("A valid departure and arrival schedule is required before assigning personnel.", "INVALID_SEGMENT_SCHEDULE");
             var driver = change.DriverEmployeeId ?? (reason is not null ? segment.DriverEmployeeId : null);
@@ -176,7 +176,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                         x.PlannedDepartureAt, x.PlannedArrivalAt
                     }).FirstOrDefaultAsync(cancellationToken);
                 if (external is not null)
-                    throw new ConflictException($"{employees[employeeId].Role} {employees[employeeId].EmployeeCode} is already assigned to Transport {external.TransportCode} during this time slot.",
+                    throw new ConflictException($"{RoleLabel.Of(employees[employeeId].Role)} {employees[employeeId].EmployeeCode} is already assigned to Transport {external.TransportCode} during this time slot.",
                         "SCHEDULE_CONFLICT", new Response.ScheduleConflictResponse(employeeId, employees[employeeId].EmployeeCode,
                             employees[employeeId].Role.ToString(), segment.RoutePlanRouteId, external.PlanCode,
                             external.FromLocationName, external.ToLocationName,
@@ -189,7 +189,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 throw new UnprocessableEntityException("An outsourced segment cannot have a driver or escort", "OUTSOURCED_SEGMENT");
             var provider = segment.TransportProvider;
             if (provider is null || provider.IsDeleted || provider.Status != ProviderStatus.ACTIVE)
-                throw new UnprocessableEntityException("Provider is not ACTIVE", "PROVIDER_INACTIVE");
+                throw new UnprocessableEntityException("Provider is not active", "PROVIDER_INACTIVE");
         }
         var firstAssignment = !await db.CatalogAuditLogs.AnyAsync(x => x.EntityId == routePlanId && x.EntityType == nameof(RoutePlan) &&
             x.ActionType == "PERSONNEL_ASSIGNED", cancellationToken);

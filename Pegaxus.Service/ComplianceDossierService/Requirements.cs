@@ -26,7 +26,7 @@ public sealed partial class Service
         var requirement = await _db.ComplianceRequirements.SingleOrDefaultAsync(item =>
             item.ComplianceRequirementId == request.ComplianceRequirementId && !item.IsDeleted &&
             item.Status == ComplianceRequirementStatus.ACTIVE, cancellationToken)
-            ?? throw new BadRequestException("The ComplianceRequirement is not ACTIVE", "REQUIREMENT_INACTIVE");
+            ?? throw new BadRequestException("The compliance requirement is not active", "REQUIREMENT_INACTIVE");
         var horse = request.HorseId.HasValue ? await _db.BookingHorses
             .Where(value => value.BookingId == booking.BookingId && value.HorseId == request.HorseId && !value.Horse.IsDeleted)
             .Select(value => value.Horse).SingleOrDefaultAsync(cancellationToken) : null;
@@ -35,7 +35,7 @@ public sealed partial class Service
         if (await _db.DossierRequirements.AnyAsync(item => item.ComplianceDossierId == dossierId &&
             item.ComplianceRequirementId == request.ComplianceRequirementId && item.HorseId == request.HorseId &&
             !item.IsDeleted, cancellationToken))
-            throw new ConflictException("This ComplianceRequirement is already required for this dossier/horse combination", "DR_DUPLICATE");
+            throw new ConflictException("This compliance requirement is already required for this dossier/horse combination", "DR_DUPLICATE");
 
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         var item = new DossierRequirement
@@ -68,7 +68,7 @@ public sealed partial class Service
                 ConstraintName: "DossierRequirement_dossier_requirement_global_key" or
                     "DossierRequirement_dossier_requirement_horse_key" })
         {
-            throw new ConflictException("This ComplianceRequirement is already required for this dossier/horse combination", "DR_DUPLICATE");
+            throw new ConflictException("This compliance requirement is already required for this dossier/horse combination", "DR_DUPLICATE");
         }
         await _notificationService.FlushAsync(cancellationToken);
         return MapRequirement(item, booking.RequestedDepartureDate);
@@ -79,14 +79,14 @@ public sealed partial class Service
     {
         await RequireSpecialistAsync(accountId, cancellationToken);
         if (string.IsNullOrWhiteSpace(request.WaivedReason))
-            throw new BadRequestException("Please provide the reason for waiving this DossierRequirement", "WAIVE_REASON_REQUIRED");
+            throw new BadRequestException("Please provide the reason for waiving this dossier requirement", "WAIVE_REASON_REQUIRED");
         if (request.WaivedReason.Length > 2000)
             throw new BadRequestException("WaivedReason must not exceed 2000 characters.");
         var dossier = await EditableDossierAsync(dossierId, cancellationToken);
         var item = await _db.DossierRequirements.Include(value => value.ComplianceRequirement).Include(value => value.Horse)
             .SingleOrDefaultAsync(value => value.DossierRequirementId == requirementId &&
                 value.ComplianceDossierId == dossierId && !value.IsDeleted, cancellationToken)
-            ?? throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+            ?? throw new NotFoundException("Dossier requirement not found.", "REQUIREMENT_NOT_FOUND");
         var before = new { item.Status, item.WaivedReason, item.SatisfiedAt };
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         item.Status = DossierRequirementStatus.WAIVED;
@@ -114,7 +114,7 @@ public sealed partial class Service
         await RequireSpecialistAsync(accountId, cancellationToken);
         ValidateReason(request.Reason);
         if (request.IsMandatory is null && request.LeadTimeDays is null && request.Instruction is null)
-            throw new BadRequestException("Provide at least one DossierRequirement change.");
+            throw new BadRequestException("Provide at least one dossier requirement change.");
         if (request.LeadTimeDays is < 0 or > 3650)
             throw new BadRequestException("LeadTimeDays must be between 0 and 3650.");
         if (request.Instruction?.Length > 2000)
@@ -123,10 +123,10 @@ public sealed partial class Service
         var item = await _db.DossierRequirements.Include(value => value.ComplianceRequirement).Include(value => value.Horse)
             .SingleOrDefaultAsync(value => value.DossierRequirementId == requirementId &&
                 value.ComplianceDossierId == dossierId && !value.IsDeleted, cancellationToken)
-            ?? throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+            ?? throw new NotFoundException("Dossier requirement not found.", "REQUIREMENT_NOT_FOUND");
         // ponytail: protect every mandatory item; add a core marker if custom mandatory items must be downgraded.
         if (item.IsMandatory && request.IsMandatory == false)
-            throw new ConflictException("Mandatory core DossierRequirements cannot be removed. You may only modify optional requirements.");
+            throw new ConflictException("Mandatory core dossier requirements cannot be removed. You may only modify optional requirements.");
 
         var before = new { item.IsMandatory, item.DueDate, item.Instruction };
         if (request.IsMandatory.HasValue) item.IsMandatory = request.IsMandatory.Value;
@@ -158,9 +158,9 @@ public sealed partial class Service
         var item = await _db.DossierRequirements.Include(value => value.ComplianceRequirement)
             .SingleOrDefaultAsync(value => value.DossierRequirementId == requirementId &&
                 value.ComplianceDossierId == dossierId && !value.IsDeleted, cancellationToken)
-            ?? throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+            ?? throw new NotFoundException("Dossier requirement not found.", "REQUIREMENT_NOT_FOUND");
         if (item.IsMandatory)
-            throw new ConflictException("Mandatory core DossierRequirements cannot be removed. You may only modify optional requirements.");
+            throw new ConflictException("Mandatory core dossier requirements cannot be removed. You may only modify optional requirements.");
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         item.IsDeleted = true;
         item.DeletedAt = now;
@@ -193,9 +193,9 @@ public sealed partial class Service
         var dossier = await _db.ComplianceDossiers.Include(item => item.Transport)
             .ThenInclude(item => item.Booking).ThenInclude(item => item.Customer)
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)
-            ?? throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
+            ?? throw new NotFoundException("Compliance dossier not found.", "DOSSIER_NOT_FOUND");
         if (dossier.Status is not (ComplianceDossierStatus.DRAFT or ComplianceDossierStatus.IN_PREPARATION or ComplianceDossierStatus.READY_FOR_SUBMISSION))
-            throw new ConflictException("Cannot modify DossierRequirements after dossier submission to official authorities.", "DOSSIER_LOCKED");
+            throw new ConflictException("Cannot modify dossier requirements after dossier submission to official authorities.", "DOSSIER_LOCKED");
         return dossier;
     }
 

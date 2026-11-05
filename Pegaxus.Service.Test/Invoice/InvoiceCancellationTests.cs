@@ -123,7 +123,7 @@ public class InvoiceCancellationTests
     [InlineData("confirmed", 422, "INVOICE_HAS_PAYMENT", "Cannot cancel an invoice that has a confirmed payment. Please contact accounting for the refund process")]
     [InlineData("confirmedAndPending", 422, "INVOICE_HAS_PAYMENT", "Cannot cancel an invoice that has a confirmed payment. Please contact accounting for the refund process")]
     [InlineData("pending", 409, "PAYMENT_IN_PROGRESS", "A payment for this invoice is being processed. Please try again after it completes")]
-    [InlineData("legacyPartial", 409, "INVALID_INVOICE_STATUS", "Cannot cancel an invoice in status PARTIALLY_PAID")]
+    [InlineData("legacyPartial", 409, "INVALID_INVOICE_STATUS", "Cannot cancel an invoice in status partially paid")]
     public async Task Cancel_BlockedInvoices_HaveExactErrorsAndNoSideEffects(string scenario, int status, string code, string message)
     {
         await using var db = TestSupport.CreateDb();

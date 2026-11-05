@@ -34,12 +34,12 @@ public sealed partial class Service
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken);
 
         if (dossier is null)
-            throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
+            throw new NotFoundException("Compliance dossier not found", "DOSSIER_NOT_FOUND");
 
         await _db.Entry(dossier).ReloadAsync(cancellationToken);
         if (dossier.Status != ComplianceDossierStatus.APPROVED)
             throw new ConflictException(
-                "Customs proof can only be submitted when the ComplianceDossier is APPROVED",
+                "Customs proof can only be submitted when the compliance dossier is approved",
                 "DOSSIER_NOT_APPROVED");
 
         var latestQuarantineStatus = await _db.QuarantineProofs
@@ -228,7 +228,7 @@ public sealed partial class Service
     {
         var action = request.Action.Trim().ToUpperInvariant();
         if (action is not ("FINALIZE" or "REJECT_PROOF"))
-            throw new BadRequestException("Action must be FINALIZE or REJECT_PROOF");
+            throw new BadRequestException("Choose either finalize or reject for the proof.");
 
         var employee = await _db.Employees
             .Active()
@@ -262,7 +262,7 @@ public sealed partial class Service
         {
             if (string.IsNullOrWhiteSpace(request.RejectionReason))
                 throw new BadRequestException(
-                    "rejectionReason is required for REJECT_PROOF",
+                    "A rejection reason is required when rejecting a proof.",
                     "FIELD_REQUIRED_FOR_ACTION");
             InputRules.MaxLength(request.RejectionReason, Limits.NoteMaxLength, "rejectionReason");
 
@@ -301,7 +301,7 @@ public sealed partial class Service
             string.IsNullOrWhiteSpace(request.CustomsLane) ||
             string.IsNullOrWhiteSpace(request.Status))
             throw new BadRequestException(
-                "mrnNumber, customsLane, and status are required for FINALIZE",
+                "The MRN number, customs lane, and status are required to finalize the proof.",
                 "FIELD_REQUIRED_FOR_ACTION");
 
         InputRules.MaxLength(request.MrnNumber, 100, "mrnNumber");
@@ -316,7 +316,7 @@ public sealed partial class Service
         var customsLane = ParseCustomsLane(request.CustomsLane);
         if (customsLane is null)
             throw new BadRequestException(
-                "mrnNumber, customsLane, and status are required for FINALIZE",
+                "The MRN number, customs lane, and status are required to finalize the proof.",
                 "FIELD_REQUIRED_FOR_ACTION");
 
         var status = request.Status.Trim().ToUpperInvariant() switch
@@ -328,12 +328,12 @@ public sealed partial class Service
         };
 
         if (status is null)
-            throw new BadRequestException("Status must be CLEARED, HELD, or REJECTED");
+            throw new BadRequestException("Status must be cleared, held, or rejected");
 
         if (status == CustomsClearanceProofStatus.Rejected &&
             string.IsNullOrWhiteSpace(request.RejectionReason))
             throw new BadRequestException(
-                "rejectionReason is required when status is REJECTED",
+                "A rejection reason is required when the status is rejected.",
                 "FIELD_REQUIRED_FOR_ACTION");
 
         proof.MrnNumber = request.MrnNumber.Trim();
@@ -480,7 +480,7 @@ public sealed partial class Service
             "ORANGE_LANE" => CustomsLane.OrangeLane,
             "RED_LANE" => CustomsLane.RedLane,
             _ => throw new BadRequestException(
-                "Customs lane must be GREEN_LANE, ORANGE_LANE, or RED_LANE")
+                "The customs lane must be green, orange, or red.")
         };
     }
 

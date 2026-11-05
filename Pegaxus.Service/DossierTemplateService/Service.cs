@@ -66,7 +66,7 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
             .Select(item => new { item.Status, item.OriginCountry, item.DestinationCountry }).SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
         if (booking.Status != BookingStatus.APPROVED)
-            throw new ConflictException("DossierTemplates can only be suggested for APPROVED transport bookings.", "BOOKING_NOT_APPROVED");
+            throw new ConflictException("Dossier templates can only be suggested for approved transport bookings.", "BOOKING_NOT_APPROVED");
 
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var candidates = await query.Where(template => template.Status == DossierTemplateStatus.ACTIVE &&
@@ -102,13 +102,13 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
     public async Task<Response.TemplateResponse> GetAsync(Guid templateId, CancellationToken cancellationToken = default) =>
         await Project(db.DossierTemplates.AsNoTracking().Where(template => !template.IsDeleted && template.DossierTemplateId == templateId))
             .SingleOrDefaultAsync(cancellationToken)
-        ?? throw new NotFoundException("DossierTemplate not found.", "DOSSIER_TEMPLATE_NOT_FOUND");
+        ?? throw new NotFoundException("Dossier template not found.", "DOSSIER_TEMPLATE_NOT_FOUND");
 
     public async Task<Response.TemplateResponse> CreateAsync(Request.SaveRequest request, CancellationToken cancellationToken = default)
     {
         var status = ParseStatus(request.Status);
         if (status == DossierTemplateStatus.INACTIVE)
-            throw new BadRequestException("Initial status must be DRAFT or ACTIVE.");
+            throw new BadRequestException("Initial status must be draft or active.");
         await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         await ValidateSaveAsync(request, status, null, cancellationToken);
         var now = UtcNow();
@@ -183,7 +183,7 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
     private async Task<DossierTemplate> FindAsync(Guid templateId, CancellationToken cancellationToken) =>
         await db.DossierTemplates.Include(template => template.DossierTemplateItems)
             .SingleOrDefaultAsync(template => !template.IsDeleted && template.DossierTemplateId == templateId, cancellationToken)
-        ?? throw new NotFoundException("DossierTemplate not found.", "DOSSIER_TEMPLATE_NOT_FOUND");
+        ?? throw new NotFoundException("Dossier template not found.", "DOSSIER_TEMPLATE_NOT_FOUND");
 
     private async Task ValidateSaveAsync(Request.SaveRequest request, DossierTemplateStatus status, Guid? templateId, CancellationToken cancellationToken)
     {
@@ -201,15 +201,15 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
     private async Task ValidateItemsAsync(List<Request.ItemRequest>? items, CancellationToken cancellationToken)
     {
         if (items is null || items.Count == 0)
-            throw new BadRequestException("DossierTemplate must contain at least one DossierTemplateItem.");
+            throw new BadRequestException("Dossier template must contain at least one DossierTemplateItem.");
         if (items.Any(item => item is null || item.ComplianceRequirementId == Guid.Empty || item.SequenceNo <= 0))
-            throw new BadRequestException("Each item must contain a ComplianceRequirement and a positive SequenceNo.");
+            throw new BadRequestException("Each item must contain a compliance requirement and a positive sequence number.");
         var ids = items.Select(item => item.ComplianceRequirementId).ToArray();
         if (ids.Distinct().Count() != items.Count || items.Select(item => item.SequenceNo).Distinct().Count() != items.Count)
             throw new BadRequestException(DuplicateItem, "DUPLICATE_TEMPLATE_ITEM");
         if (await db.ComplianceRequirements.CountAsync(requirement => ids.Contains(requirement.ComplianceRequirementId) &&
                 !requirement.IsDeleted && requirement.Status == ComplianceRequirementStatus.ACTIVE, cancellationToken) != ids.Length)
-            throw new BadRequestException("All template items must reference existing ACTIVE ComplianceRequirements.", "INVALID_COMPLIANCE_REQUIREMENT");
+            throw new BadRequestException("All template items must reference existing active compliance requirements.", "INVALID_COMPLIANCE_REQUIREMENT");
     }
 
     private static void ValidateDates(DateOnly? from, DateOnly? to, DossierTemplateStatus status)
@@ -218,7 +218,7 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
             throw new BadRequestException("EffectiveTo must be on or after EffectiveFrom.");
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         if (status == DossierTemplateStatus.ACTIVE && (from > today || to < today))
-            throw new BadRequestException("An ACTIVE DossierTemplate must be effective today.");
+            throw new BadRequestException("An active dossier template must be effective today.");
     }
 
     private static DossierTemplateStatus ParseStatus(string? value) => value?.Trim().ToUpperInvariant() switch
@@ -226,7 +226,7 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
         "DRAFT" => DossierTemplateStatus.DRAFT,
         "ACTIVE" => DossierTemplateStatus.ACTIVE,
         "INACTIVE" => DossierTemplateStatus.INACTIVE,
-        _ => throw new BadRequestException("Status must be DRAFT, ACTIVE or INACTIVE.")
+        _ => throw new BadRequestException("Status must be draft, active or inactive.")
     };
 
     private static void ValidateTransition(DossierTemplateStatus current, DossierTemplateStatus next)
@@ -234,7 +234,7 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
         if (current != next && (current, next) is not
             ((DossierTemplateStatus.DRAFT, DossierTemplateStatus.ACTIVE) or
              (DossierTemplateStatus.ACTIVE, DossierTemplateStatus.INACTIVE)))
-            throw new BadRequestException("Allowed status transitions are DRAFT to ACTIVE and ACTIVE to INACTIVE.", "INVALID_TEMPLATE_STATUS_TRANSITION");
+            throw new BadRequestException("Allowed status transitions are draft to active and active to inactive.", "INVALID_TEMPLATE_STATUS_TRANSITION");
     }
 
     private static void Apply(DossierTemplate template, Request.SaveRequest request, DossierTemplateStatus status)
@@ -279,7 +279,7 @@ public sealed class Service(AppDbContext db) : IDossierTemplateService
         }
         catch (DbUpdateConcurrencyException)
         {
-            throw new ConflictException("DossierTemplate changed. Reload it and try again.", "DOSSIER_TEMPLATE_CONFLICT");
+            throw new ConflictException("Dossier template changed. Reload it and try again.", "DOSSIER_TEMPLATE_CONFLICT");
         }
         catch (DbUpdateException exception) when (exception.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation } postgres &&
             postgres.ConstraintName == "DossierTemplate_template_code_key")

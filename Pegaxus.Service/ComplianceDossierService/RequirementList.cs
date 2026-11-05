@@ -22,7 +22,7 @@ public sealed partial class Service
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
             if (!EnumParser.TryParseDefined<DossierRequirementStatus>(request.Status.Trim(), out var status) || !Enum.IsDefined(status))
-                throw new BadRequestException("Invalid DossierRequirement status filter", "INVALID_REQUIREMENT_STATUS");
+                throw new BadRequestException("Invalid dossier requirement status filter", "INVALID_REQUIREMENT_STATUS");
             query = query.Where(item => item.Status == status);
         }
         if (request.HorseId.HasValue)

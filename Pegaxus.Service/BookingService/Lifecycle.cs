@@ -29,7 +29,7 @@ public sealed partial class Service
 
         if (!EnumParser.TryParseDefined<BookingStatus>(request.Status.Trim(), out var targetStatus) ||
             targetStatus is not (BookingStatus.DRAFT or BookingStatus.PENDING))
-            throw new BadRequestException("Only DRAFT and PENDING statuses are supported", "INVALID_BOOKING_STATUS");
+            throw new BadRequestException("Only draft and pending statuses are supported", "INVALID_BOOKING_STATUS");
 
         var validTransition = booking.Status == BookingStatus.PENDING && targetStatus == BookingStatus.DRAFT ||
                               booking.Status == BookingStatus.DRAFT && targetStatus == BookingStatus.PENDING;
@@ -374,7 +374,7 @@ public sealed partial class Service
         if (booking is null)
             throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
         if (booking.Status != BookingStatus.DRAFT)
-            throw new ConflictException("The booking must be in DRAFT status to be edited", "INVALID_BOOKING_STATUS");
+            throw new ConflictException("The booking must be in draft status to be edited", "INVALID_BOOKING_STATUS");
         return booking;
     }
 

@@ -22,7 +22,7 @@ public sealed partial class ComplianceDossiersController
     [HttpGet("{dossierId:guid}/requirements/{requirementId:guid}")]
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetRequirement(Guid dossierId, Guid requirementId, CancellationToken cancellationToken) =>
-        Success(await _service.GetRequirementAsync(AccountId, dossierId, requirementId, cancellationToken), "DossierRequirement retrieved successfully.");
+        Success(await _service.GetRequirementAsync(AccountId, dossierId, requirementId, cancellationToken), "Dossier requirement retrieved successfully.");
 
     /// <summary>
     /// Suggest dossier templates for a booking.
@@ -37,7 +37,7 @@ public sealed partial class ComplianceDossiersController
     [HttpGet("/api/v1/bookings/{bookingId:guid}/dossier-templates")]
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> GetTemplateOptions(Guid bookingId, CancellationToken cancellationToken) =>
-        Success(await _service.GetTemplateOptionsAsync(AccountId, bookingId, cancellationToken), "Available DossierTemplates retrieved successfully.");
+        Success(await _service.GetTemplateOptionsAsync(AccountId, bookingId, cancellationToken), "Available dossier templates retrieved successfully.");
 
     /// <summary>
     /// Preview a compliance dossier.
@@ -55,7 +55,7 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> Preview(Guid transportId, [FromBody] ComplianceDossierService.Request.InitializeRequest request,
         CancellationToken cancellationToken) =>
-        Success(await _service.PreviewAsync(AccountId, transportId, request, cancellationToken), "ComplianceDossier preview generated successfully.");
+        Success(await _service.PreviewAsync(AccountId, transportId, request, cancellationToken), "Compliance dossier preview generated successfully.");
 
     /// <summary>
     /// Initialize a compliance dossier.
@@ -73,7 +73,7 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> Initialize(Guid bookingId, [FromBody] ComplianceDossierService.Request.InitializeRequest request,
         CancellationToken cancellationToken) =>
-        SuccessCreated(await _service.InitializeAsync(AccountId, bookingId, request, cancellationToken), "ComplianceDossier initialized successfully. DossierRequirements generated for customer.");
+        SuccessCreated(await _service.InitializeAsync(AccountId, bookingId, request, cancellationToken), "Dossier initialized successfully. Requirements were generated for the customer.");
 
     /// <summary>
     /// Add a dossier requirement manually.
@@ -91,7 +91,7 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> AddRequirement(Guid dossierId, [FromBody] ComplianceDossierService.Request.RequirementRequest request,
         CancellationToken cancellationToken) =>
-        SuccessCreated(await _service.AddRequirementAsync(AccountId, dossierId, request, cancellationToken), "DossierRequirement added successfully");
+        SuccessCreated(await _service.AddRequirementAsync(AccountId, dossierId, request, cancellationToken), "Dossier requirement added successfully");
 
     /// <summary>
     /// Waive a dossier requirement.
@@ -110,7 +110,7 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> WaiveRequirement(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.WaiveRequirementRequest request, CancellationToken cancellationToken) =>
-        Success(await _service.WaiveRequirementAsync(AccountId, dossierId, requirementId, request, cancellationToken), "DossierRequirement waived successfully");
+        Success(await _service.WaiveRequirementAsync(AccountId, dossierId, requirementId, request, cancellationToken), "Dossier requirement waived successfully");
 
     /// <summary>
     /// Update a dossier requirement.
@@ -129,7 +129,7 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> UpdateRequirement(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.UpdateRequirementRequest request, CancellationToken cancellationToken) =>
-        Success(await _service.UpdateRequirementAsync(AccountId, dossierId, requirementId, request, cancellationToken), "DossierRequirement updated successfully.");
+        Success(await _service.UpdateRequirementAsync(AccountId, dossierId, requirementId, request, cancellationToken), "Dossier requirement updated successfully.");
 
     /// <summary>
     /// Remove a dossier requirement.
@@ -148,5 +148,5 @@ public sealed partial class ComplianceDossiersController
     [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
     public async Task<IActionResult> RemoveRequirement(Guid dossierId, Guid requirementId,
         [FromBody] ComplianceDossierService.Request.RemoveRequirementRequest request, CancellationToken cancellationToken) =>
-        Success(await _service.RemoveRequirementAsync(AccountId, dossierId, requirementId, request, cancellationToken), "DossierRequirement removed successfully.");
+        Success(await _service.RemoveRequirementAsync(AccountId, dossierId, requirementId, request, cancellationToken), "Dossier requirement removed successfully.");
 }

@@ -16,7 +16,7 @@ public sealed partial class Service
         if (Crew(actor) && !await CrewAssignedAsync(transportId, actor, cancellationToken))
             throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");
         if (transport.Status is not (TransportStatus.READY or TransportStatus.IN_TRANSIT or TransportStatus.COMPLETED))
-            throw new ConflictException("Emergency contacts are only available for READY, IN_TRANSIT or COMPLETED transports", "INVALID_TRANSPORT_STATUS");
+            throw new ConflictException("Emergency contacts are only available for ready, in transit or completed transports", "INVALID_TRANSPORT_STATUS");
         return new(clock.GetUtcNow(), transportId, await ContactsAsync(transport, cancellationToken));
     }
 

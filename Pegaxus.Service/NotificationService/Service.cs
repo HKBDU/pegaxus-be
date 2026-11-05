@@ -28,6 +28,8 @@ public sealed class Service : INotificationService
 
     public void Queue(NotificationCreateRequest request)
     {
+        var title = UserFacingNotificationText.Title(request.Type, request.Priority, request.Title);
+        var message = UserFacingNotificationText.Message(request.Message);
         var notificationId = Guid.NewGuid();
         var notification = new Notification
         {
@@ -35,8 +37,8 @@ public sealed class Service : INotificationService
             TransportId = request.TransportId,
             NotificationType = request.Type,
             Priority = request.Priority,
-            Title = request.Title,
-            Message = request.Message,
+            Title = title,
+            Message = message,
             ReferenceType = request.ReferenceType,
             ReferenceId = request.ReferenceId,
             ActionUrl = request.ActionUrl,
@@ -56,8 +58,8 @@ public sealed class Service : INotificationService
         {
             Id = notificationId,
             Type = request.Type.ToString(),
-            Title = request.Title,
-            Message = request.Message,
+            Title = title,
+            Message = message,
             Priority = request.Priority.ToString(),
             Status = RecipientStatus.PENDING.ToString(),
             CreatedAt = AsUtc(request.CreatedAt),

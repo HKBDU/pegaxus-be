@@ -34,7 +34,7 @@ public class HorseIncidentTests
         Assert.Equal("HORSE_HEALTH", value.Category); Assert.Equal("REPORTED", value.Status); Assert.Equal(severity, value.Severity);
         Assert.Equal(f.Driver.EmployeeId, value.ReportedBy.EmployeeId); Assert.Equal(f.Transport.TransportId, value.Transport!.TransportId);
         Assert.Equal("Walk the horse", value.ImmediateAction); Assert.True(value.EmergencySettlementRequired);
-        Assert.Contains("[SỰ CỐ Y TẾ]", value.Title); Assert.Equal(2, value.HorseDetails.Count);
+        Assert.Contains("Horse health incident", value.Title); Assert.Equal(2, value.HorseDetails.Count);
         var detail = value.HorseDetails.Single(horse => horse.Horse.HorseId == f.Horse.HorseId);
         Assert.Equal(new[] { "BODY_TEMPERATURE_OUTSIDE_NORMAL", "HEART_RATE_OUTSIDE_NORMAL", "RESPIRATORY_RATE_OUTSIDE_NORMAL" }, detail.VitalWarnings);
         Assert.True(detail.IsolationRequired); Assert.Equal("Electrolytes", detail.MedicationGiven); Assert.Equal("Keep walking", detail.VeterinarianInstruction);

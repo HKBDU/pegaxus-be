@@ -34,7 +34,7 @@ public sealed partial class ComplianceDossiersController : ApiControllerBase
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetByBooking(Guid bookingId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,
         CancellationToken cancellationToken) =>
-        Success(await _service.GetByBookingAsync(AccountId, bookingId, request, cancellationToken), "ComplianceDossier retrieved successfully.");
+        Success(await _service.GetByBookingAsync(AccountId, bookingId, request, cancellationToken), "Compliance dossier retrieved successfully.");
 
     /// <summary>
     /// List compliance dossier requirements.
@@ -48,7 +48,7 @@ public sealed partial class ComplianceDossiersController : ApiControllerBase
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetRequirements(Guid dossierId, [FromQuery] ComplianceDossierService.Request.RequirementListRequest request,
         CancellationToken cancellationToken) =>
-        Success(await _service.GetRequirementsAsync(AccountId, dossierId, request, cancellationToken), "DossierRequirements retrieved successfully");
+        Success(await _service.GetRequirementsAsync(AccountId, dossierId, request, cancellationToken), "Dossier requirements retrieved successfully");
 
     /// <summary>
     /// Get compliance dossier details.
@@ -65,5 +65,5 @@ public sealed partial class ComplianceDossiersController : ApiControllerBase
     [Authorize(Policy = JwtExtensions.ComplianceDossierViewerPolicy)]
     public async Task<IActionResult> GetDossier(Guid dossierId, [FromQuery] ComplianceDossierService.Request.ViewRequest request,
         CancellationToken cancellationToken) =>
-        Success(await _service.GetDossierAsync(AccountId, dossierId, request, cancellationToken), "ComplianceDossier retrieved successfully.");
+        Success(await _service.GetDossierAsync(AccountId, dossierId, request, cancellationToken), "Compliance dossier retrieved successfully.");
 }

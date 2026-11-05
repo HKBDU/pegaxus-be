@@ -142,7 +142,7 @@ public class HandoverDeliveryTests
         Assert.Contains("create the FINAL invoice", manager.Title); Assert.Contains("on-site notes", manager.Message);
 
         var coordinator = await For(f.Coordinator.AccountId);
-        Assert.Equal($"/admin/ongoing-transports/{f.TransportId}", coordinator.ActionUrl); Assert.Contains($"{vehicle.VehicleCode} (MAINTENANCE)", coordinator.Message);
+        Assert.Equal($"/admin/ongoing-transports/{f.TransportId}", coordinator.ActionUrl); Assert.Contains($"{vehicle.VehicleCode} (maintenance)", coordinator.Message);
 
         var legal = await For(specialist.AccountId);
         Assert.Equal(NotificationType.TRANSPORT, legal.NotificationType); Assert.Equal($"/admin/transports/{f.TransportId}", legal.ActionUrl); Assert.Contains("legal dossier", legal.Title);

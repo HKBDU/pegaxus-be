@@ -84,7 +84,7 @@ public sealed partial class Service
                 {
                     case Request.ResolveRequest resolve:
                         if (transport.Status is not (TransportStatus.IN_TRANSIT or TransportStatus.COMPLETED))
-                            throw new ConflictException("The transport must be IN_TRANSIT or COMPLETED to close an incident", "INVALID_TRANSPORT_STATUS");
+                            throw new ConflictException("The transport must be in transit or completed to close an incident", "INVALID_TRANSPORT_STATUS");
                         var pending = costs.Where(cost => cost.Status == EmergencyCostStatus.PENDING).ToArray();
                         if (pending.Length > 0)
                             throw new UnprocessableEntityException($"Cannot close the incident while emergency cost request {pending[0].RequestCode} has not been approved or rejected. Please finish the approval first",
@@ -110,7 +110,7 @@ public sealed partial class Service
                         break;
                     case Request.SelfResolveRequest self:
                         if (transport.Status != TransportStatus.IN_TRANSIT)
-                            throw new ConflictException("The transport must be IN_TRANSIT", "INVALID_TRANSPORT_STATUS");
+                            throw new ConflictException("The transport must be in transit", "INVALID_TRANSPORT_STATUS");
                         var open = costs.Where(cost => cost.Status is EmergencyCostStatus.PENDING or EmergencyCostStatus.APPROVED).ToArray();
                         if (open.Length > 0)
                             throw new UnprocessableEntityException("Incident has an emergency cost request that is pending or approved. The logistics manager must close it.", "HAS_OPEN_EMERGENCY_COSTS",

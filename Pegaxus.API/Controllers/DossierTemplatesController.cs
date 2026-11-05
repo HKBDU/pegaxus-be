@@ -29,7 +29,7 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
     {
         var error = await ValidateRequestAsync(request, validator, cancellationToken, traceId: HttpContext.TraceIdentifier);
         if (error is not null) return error;
-        return Success(await service.GetListAsync(request, cancellationToken), "DossierTemplates retrieved successfully.");
+        return Success(await service.GetListAsync(request, cancellationToken), "Dossier templates retrieved successfully.");
     }
 
     /// <summary>
@@ -42,7 +42,7 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
     /// <exception cref="NotFoundException">The requested resource does not exist or is not visible to the caller.</exception>
     [HttpGet("{templateId:guid}")]
     public async Task<IActionResult> Get(Guid templateId, CancellationToken cancellationToken) =>
-        Success(await service.GetAsync(templateId, cancellationToken), "DossierTemplate retrieved successfully.");
+        Success(await service.GetAsync(templateId, cancellationToken), "Dossier template retrieved successfully.");
 
     /// <summary>
     /// Create a dossier template.
@@ -62,7 +62,7 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
         if (error is not null) return error;
         var response = await service.CreateAsync(request, cancellationToken);
         return CreatedAtAction(nameof(Get), new { templateId = response.DossierTemplateId },
-            ResponseBuilder.SuccessResponse(response, "DossierTemplate saved successfully.",
+            ResponseBuilder.SuccessResponse(response, "Dossier template saved successfully.",
                 StatusCodes.Status201Created, HttpContext.TraceIdentifier));
     }
 
@@ -84,7 +84,7 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
     {
         var error = await ValidateRequestAsync(request, validator, cancellationToken, traceId: HttpContext.TraceIdentifier);
         if (error is not null) return error;
-        return Success(await service.UpdateAsync(templateId, request, cancellationToken), "DossierTemplate saved successfully.");
+        return Success(await service.UpdateAsync(templateId, request, cancellationToken), "Dossier template saved successfully.");
     }
 
     /// <summary>
@@ -104,7 +104,7 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
     {
         var error = await ValidateRequestAsync(request, validator, cancellationToken, traceId: HttpContext.TraceIdentifier);
         if (error is not null) return error;
-        return Success(await service.ChangeStatusAsync(templateId, request, cancellationToken), "DossierTemplate status updated successfully.");
+        return Success(await service.ChangeStatusAsync(templateId, request, cancellationToken), "Dossier template status updated successfully.");
     }
 
     /// <summary>
@@ -122,6 +122,6 @@ public sealed class DossierTemplatesController(DossierTemplateService.IDossierTe
     {
         var accountId = AccountId;
         await service.DeleteAsync(templateId, accountId, cancellationToken);
-        return Success(null, "DossierTemplate deleted successfully.");
+        return Success(null, "Dossier template deleted successfully.");
     }
 }

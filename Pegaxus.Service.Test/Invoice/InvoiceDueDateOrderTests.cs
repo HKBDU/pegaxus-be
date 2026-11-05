@@ -38,7 +38,7 @@ public class InvoiceDueDateOrderTests
         db.Invoices.Add(quotation);
         await db.SaveChangesAsync();
 
-        Assert.Contains($"after the QUOTATION invoice due date ({quotation.InvoiceCode}, {Stored(5):yyyy-MM-dd})", await RejectedAsync(f, "DEPOSIT", 5));
+        Assert.Contains($"after the quotation invoice due date ({quotation.InvoiceCode}, {Stored(5):yyyy-MM-dd})", await RejectedAsync(f, "DEPOSIT", 5));
         await RejectedAsync(f, "DEPOSIT", 2);
         Assert.Empty(await db.Invoices.Where(item => item.Type == InvoiceType.DEPOSIT).ToListAsync());
         await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Create("DEPOSIT", 6));
@@ -52,8 +52,8 @@ public class InvoiceDueDateOrderTests
         db.Invoices.AddRange(Existing(f, InvoiceType.QUOTATION, InvoiceStatus.ISSUED, 5), Existing(f, InvoiceType.DEPOSIT, InvoiceStatus.ISSUED, 10));
         await db.SaveChangesAsync();
 
-        Assert.Contains("after the DEPOSIT invoice due date", await RejectedAsync(f, "FINAL", 10));
-        Assert.Contains("after the DEPOSIT invoice due date", await RejectedAsync(f, "FINAL", 7));
+        Assert.Contains("after the deposit invoice due date", await RejectedAsync(f, "FINAL", 10));
+        Assert.Contains("after the deposit invoice due date", await RejectedAsync(f, "FINAL", 7));
         await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Create("FINAL", 11));
     }
 
@@ -65,7 +65,7 @@ public class InvoiceDueDateOrderTests
         db.Invoices.AddRange(Existing(f, InvoiceType.QUOTATION, InvoiceStatus.ISSUED, 5), Existing(f, InvoiceType.DEPOSIT, InvoiceStatus.PAID, 8));
         await db.SaveChangesAsync();
 
-        Assert.Contains("after the DEPOSIT invoice due date", await RejectedAsync(f, "SUPPLEMENTARY", 8));
+        Assert.Contains("after the deposit invoice due date", await RejectedAsync(f, "SUPPLEMENTARY", 8));
         await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Create("SUPPLEMENTARY", 9));
     }
 
@@ -77,7 +77,7 @@ public class InvoiceDueDateOrderTests
         db.Invoices.Add(Existing(f, InvoiceType.FINAL, InvoiceStatus.PAID, 3));
         await db.SaveChangesAsync();
 
-        Assert.Contains("after the FINAL invoice due date", await RejectedAsync(f, "CREDIT_NOTE", 3));
+        Assert.Contains("after the final invoice due date", await RejectedAsync(f, "CREDIT_NOTE", 3));
         await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Create("CREDIT_NOTE", 4));
     }
 
@@ -89,7 +89,7 @@ public class InvoiceDueDateOrderTests
         db.Invoices.Add(Existing(f, InvoiceType.DEPOSIT, InvoiceStatus.ISSUED, 5));
         await db.SaveChangesAsync();
 
-        Assert.Contains("before the DEPOSIT invoice due date", await RejectedAsync(f, "QUOTATION", 5));
+        Assert.Contains("before the deposit invoice due date", await RejectedAsync(f, "QUOTATION", 5));
         await f.Service.CreateAsync(f.Account.AccountId, f.Booking.BookingId, Create("QUOTATION", 4));
     }
 
@@ -119,6 +119,6 @@ public class InvoiceDueDateOrderTests
         var error = await Assert.ThrowsAsync<FieldValidationException>(() => f.Service.UpdateAsync(f.Account.AccountId, supplementary.InvoiceId,
             new() { LastUpdatedAt = supplementary.UpdatedAt, DueDate = Clock.AddDays(7), Items = [] }));
 
-        Assert.Contains(error.Errors, item => item.Field == "dueDate" && item.Message.Contains("after the DEPOSIT invoice due date"));
+        Assert.Contains(error.Errors, item => item.Field == "dueDate" && item.Message.Contains("after the deposit invoice due date"));
     }
 }

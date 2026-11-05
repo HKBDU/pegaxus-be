@@ -354,7 +354,7 @@ public sealed class Service : IEmployeeService
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
         if (!EnumParser.TryParseDefined<AccountStatus>(value.Trim(), out var status) || status == AccountStatus.SUSPENDED)
-            throw new BadRequestException("Account status must be ACTIVE or INACTIVE", "INVALID_ACCOUNT_STATUS");
+            throw new BadRequestException("Account status must be active or inactive", "INVALID_ACCOUNT_STATUS");
         return status;
     }
 
@@ -364,7 +364,7 @@ public sealed class Service : IEmployeeService
             ? true
             : value.Trim().Equals("INACTIVE", StringComparison.OrdinalIgnoreCase)
                 ? false
-                : throw new BadRequestException("Working status must be ACTIVE or INACTIVE", "INVALID_WORKING_STATUS");
+                : throw new BadRequestException("Working status must be active or inactive", "INVALID_WORKING_STATUS");
 
     private static bool ParseRequiredWorkingStatus(string value) => ParseWorkingStatus(value) ?? throw new BadRequestException("Working status is required", "INVALID_WORKING_STATUS");
 

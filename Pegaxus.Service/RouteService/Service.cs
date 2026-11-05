@@ -162,7 +162,7 @@ public sealed class Service(AppDbContext db, IHttpClientFactory httpClientFactor
         ?? throw new ForbiddenException("Only Fleet Route Coordinators can manage Routes");
 
     private static TransportMode ParseMode(string? value) => !string.IsNullOrWhiteSpace(value) && EnumParser.TryParseDefined<TransportMode>(value.Trim(), out var mode)
-        ? mode : throw new BadRequestException("transportMode must be ROAD, SEA or AIR", "VALIDATION_ERROR");
+        ? mode : throw new BadRequestException("The transport mode must be road, sea, or air.", "VALIDATION_ERROR");
     private static void ValidateIds(Guid from, Guid to) { if (from == Guid.Empty || to == Guid.Empty || from == to) throw new BadRequestException("fromLocationId and toLocationId are required and must differ", "VALIDATION_ERROR"); }
     private async Task<string> GenerateCodeAsync(CancellationToken token) { for (var i = 1; ; i++) { var code = $"RT-{DateTime.UtcNow:yyyyMMdd}-{i:0000}"; if (!await db.Routes.AnyAsync(item => item.RouteCode == code, token)) return code; } }
     private static Response.DetailResponse Map(Route item) => new() { RouteId = item.RouteId, RouteCode = item.RouteCode, RouteName = item.RouteName, TransportMode = item.TransportMode.ToString(), FromLocation = MapLocation(item.FromLocation), ToLocation = MapLocation(item.ToLocation), DistanceKm = item.DistanceKm, EstimatedDurationMinutes = item.EstimatedDurationMinutes, RouteNote = item.RouteNote, UpdatedAt = AsUtc(item.UpdatedAt) };
