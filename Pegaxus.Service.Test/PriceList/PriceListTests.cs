@@ -245,41 +245,28 @@ public class PriceListServiceTests
     }
 
     [Fact]
-    public async Task ActiveList_LocksAddAndDelete_ButAllowsRepricingARegularLine()
+    public async Task ActiveList_LocksAddUpdateAndDelete()
     {
         await using var db = TestSupport.CreateDb();
         var list = await PriceListSupport.AddListAsync(db, active: true);
         var service = PriceListSupport.CreateService(db);
         var feeding = await db.PriceListItems.SingleAsync(item => item.PriceListId == list.PriceListId && item.ItemCode == "FEEDING");
+        var unitPrice = feeding.UnitPrice;
+        var version = feeding.UpdatedAt;
 
         Assert.Equal("ACTIVE_PRICELIST_LOCKED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.AddItemAsync(list.PriceListId, PriceListSupport.NewItem(), Guid.NewGuid()))).ErrorCode);
         Assert.Equal("ACTIVE_PRICELIST_LOCKED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.DeleteItemAsync(list.PriceListId, feeding.PriceListItemId, Guid.NewGuid()))).ErrorCode);
 
+        // Not even a new name or price is allowed, and the line stays exactly as it was.
         var request = new PriceListRequest.UpdateItemRequest
         {
-            ItemName = "Feed (new)", ItemType = "HORSE_SERVICE_FEE", Unit = "HORSE_DAY", UnitPrice = 40, SortOrder = feeding.SortOrder,
-            LastUpdatedAt = PriceListSupport.Version(feeding.UpdatedAt)
+            ItemName = "Feed (new)", ItemType = "HORSE_SERVICE_FEE", Unit = "HORSE_DAY", UnitPrice = unitPrice + 1, SortOrder = feeding.SortOrder,
+            LastUpdatedAt = PriceListSupport.Version(version)
         };
-        var updated = await service.UpdateItemAsync(list.PriceListId, feeding.PriceListItemId, request, Guid.NewGuid());
-        Assert.Equal((40L, "Feed (new)"), (updated.UnitPrice, updated.ItemName));
-
-        request.LastUpdatedAt = PriceListSupport.Version(updated.UpdatedAt.UtcDateTime);
-        request.Unit = "HORSE";
         Assert.Equal("ACTIVE_PRICELIST_LOCKED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.UpdateItemAsync(list.PriceListId, feeding.PriceListItemId, request, Guid.NewGuid()))).ErrorCode);
-    }
-
-    [Fact]
-    public async Task ActiveList_CannotLoseATierThroughAnEdit()
-    {
-        await using var db = TestSupport.CreateDb();
-        var list = await PriceListSupport.AddListAsync(db, active: true);
-        var truckL = await db.PriceListItems.SingleAsync(item => item.PriceListId == list.PriceListId && item.ItemCode == "TRUCK_L");
-        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() => PriceListSupport.CreateService(db).UpdateItemAsync(list.PriceListId, truckL.PriceListItemId, new()
-        {
-            ItemName = truckL.ItemName, ItemType = "TRANSPORT_FEE", Unit = "TRIP", UnitPrice = 3_400, VehicleTier = null, SortOrder = truckL.SortOrder,
-            LastUpdatedAt = PriceListSupport.Version(truckL.UpdatedAt)
-        }, Guid.NewGuid()));
-        Assert.Equal("PRICE_LIST_TIER_MISSING", error.ErrorCode);
+        var stored = await db.PriceListItems.AsNoTracking().SingleAsync(item => item.PriceListItemId == feeding.PriceListItemId);
+        Assert.Equal((unitPrice, version), (stored.UnitPrice, stored.UpdatedAt));
+        Assert.NotEqual("Feed (new)", stored.ItemName);
     }
 
     [Fact]
