@@ -1301,7 +1301,7 @@
 16. `AuditDossier` là append-only: không update/delete qua API; `target_entity + target_id` phải được validate vì đây là polymorphic reference.
 17. Các file trong `DocumentAttachment` thuộc đúng một `DocumentVersion`; các file phản hồi Authority thuộc `AuthoritySubmissionEvidenceFile`, không gộp vào hồ sơ Customer.
 18. `PriceList` chỉ có một dòng `is_active = true`. Kích hoạt bảng mới phải vô hiệu hóa bảng cũ trong cùng một transaction; chỉ kích hoạt bảng VND có ít nhất một dòng và có dòng cho cả ba `vehicle_tier` S, M, L.
-19. `PriceList` đang active bị khóa: không sửa header, không thêm/xóa `PriceListItem`. Dòng giá của bảng active chỉ được đổi `item_name`, `unit_price`, `vehicle_tier` (và bảng vẫn phải đủ ba tier). Muốn thay đổi lớn thì clone sang bảng mới.
+19. `PriceList` đang active bị khóa: không sửa header, không thêm/sửa/xóa `PriceListItem`. Muốn thay đổi thì clone sang bảng mới, sửa bản sao rồi kích hoạt.
 20. `Invoice.tax_rate` là VAT % dùng để tính `tax_amount` lần dựng gần nhất (0 với `CREDIT_NOTE`); `InvoiceItem.price_list_item_id` chỉ để truy vết và không có FK. Đổi `PriceList` không sửa hóa đơn đã lưu.
 
 # Appendix B — Phân biệt nhanh nhóm Compliance
