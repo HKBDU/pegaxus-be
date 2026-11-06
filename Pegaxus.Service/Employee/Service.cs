@@ -33,7 +33,7 @@ public sealed class Service : IEmployeeService
         var totalItems = await query.CountAsync(cancellationToken);
         var ordered = ApplySort(query, request.SortBy);
         var items = await ordered
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .Select(employee => new Response.EmployeeItemResponse
             {
@@ -117,10 +117,13 @@ public sealed class Service : IEmployeeService
         Guid managerAccountId,
         CancellationToken cancellationToken = default)
     {
+        Emails.EnsureValid(request.Email?.Trim());
         var email = request.Email.Trim().ToLowerInvariant();
-        ValidateText(request.FullName, 150, "FullName", true);
+        ValidateText(Text.NormalizeName(request.FullName), 150, "FullName", true);
         ValidateText(request.Phone, 30, "Phone", true);
-        if (!Enum.TryParse<EmployeeRole>(request.Role.Trim(), true, out var role))
+        Phones.EnsureValid(request.Phone);
+        CountryCodes.EnsureValid(request.Country);
+        if (!EnumParser.TryParseDefined<EmployeeRole>(request.Role.Trim(), out var role))
             throw new BadRequestException("Role is invalid", "INVALID_EMPLOYEE_ROLE");
         if (await _db.Accounts.AnyAsync(account => !account.IsDeleted && account.Email.ToLower() == email, cancellationToken))
             throw new ConflictException("The email address is already in use", "EMAIL_ALREADY_EXISTS");
@@ -142,8 +145,9 @@ public sealed class Service : IEmployeeService
             AccountId = account.AccountId,
             EmployeeCode = await GenerateEmployeeCodeAsync(cancellationToken),
             Role = role,
-            FullName = request.FullName.Trim(),
+            FullName = Text.NormalizeName(request.FullName),
             Phone = request.Phone.Trim(),
+            Country = CountryCodes.Normalize(request.Country),
             IsActive = true,
             CreatedAt = now,
             UpdatedAt = now
@@ -154,6 +158,11 @@ public sealed class Service : IEmployeeService
         {
             _db.Accounts.Add(account);
             _db.Employees.Add(employee);
+            OutboxService.OutboxQueue.AddEmail(_db, new MailService.MailContent
+            {
+                To = email, Subject = $"Welcome to Pegaxus — {employee.EmployeeCode}",
+                Body = MailService.EmailBodies.EmployeeWelcomeBody(employee.FullName, RoleLabel.Of(role), email, "/login")
+            }, now);
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
         }
@@ -183,16 +192,19 @@ public sealed class Service : IEmployeeService
     {
         var employee = await GetVisibleEmployeeAsync(employeeId, cancellationToken);
         EnsureNotSelf(employee, managerAccountId);
-        if (request.Role is null && request.WorkingStatus is null)
+        if (request.Role is null && request.WorkingStatus is null && request.Country is null)
             throw new BadRequestException("At least one field must be provided");
+        CountryCodes.EnsureValid(request.Country);
         if (request.Role is not null)
         {
-            if (!Enum.TryParse<EmployeeRole>(request.Role.Trim(), true, out var role))
+            if (!EnumParser.TryParseDefined<EmployeeRole>(request.Role.Trim(), out var role))
                 throw new BadRequestException("Role is invalid", "INVALID_EMPLOYEE_ROLE");
             employee.Role = role;
         }
         if (request.WorkingStatus is not null)
             employee.IsActive = ParseRequiredWorkingStatus(request.WorkingStatus);
+        if (request.Country is not null)
+            employee.Country = CountryCodes.Normalize(request.Country);
 
         var now = UtcNow();
         employee.UpdatedAt = now;
@@ -209,7 +221,7 @@ public sealed class Service : IEmployeeService
     {
         var employee = await GetVisibleEmployeeAsync(employeeId, cancellationToken);
         EnsureNotSelf(employee, managerAccountId);
-        if (!Enum.TryParse<AccountStatus>(request.Status.Trim(), true, out var status))
+        if (!EnumParser.TryParseDefined<AccountStatus>(request.Status.Trim(), out var status))
             throw new BadRequestException("Status is invalid", "INVALID_ACCOUNT_STATUS");
 
         var now = UtcNow();
@@ -311,6 +323,7 @@ public sealed class Service : IEmployeeService
         FullName = employee.FullName,
         Phone = employee.Phone,
         DateOfBirth = employee.DateOfBirth,
+        Country = employee.Country,
         AvatarUrl = employee.Account.AvatarUrl,
         LastLoginAt = employee.Account.LastLoginAt.HasValue ? AsUtc(employee.Account.LastLoginAt.Value) : null,
         CreatedAt = AsUtc(employee.CreatedAt),
@@ -333,15 +346,15 @@ public sealed class Service : IEmployeeService
 
     private static EmployeeRole? ParseOptionalRole(string? value) => string.IsNullOrWhiteSpace(value)
         ? null
-        : Enum.TryParse<EmployeeRole>(value.Trim(), true, out var role)
+        : EnumParser.TryParseDefined<EmployeeRole>(value.Trim(), out var role)
             ? role
             : throw new BadRequestException("Role is invalid", "INVALID_EMPLOYEE_ROLE");
 
     private static AccountStatus? ParseAccountStatusFilter(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)) return null;
-        if (!Enum.TryParse<AccountStatus>(value.Trim(), true, out var status) || status == AccountStatus.SUSPENDED)
-            throw new BadRequestException("Account status must be ACTIVE or INACTIVE", "INVALID_ACCOUNT_STATUS");
+        if (!EnumParser.TryParseDefined<AccountStatus>(value.Trim(), out var status) || status == AccountStatus.SUSPENDED)
+            throw new BadRequestException("Account status must be active or inactive", "INVALID_ACCOUNT_STATUS");
         return status;
     }
 
@@ -351,7 +364,7 @@ public sealed class Service : IEmployeeService
             ? true
             : value.Trim().Equals("INACTIVE", StringComparison.OrdinalIgnoreCase)
                 ? false
-                : throw new BadRequestException("Working status must be ACTIVE or INACTIVE", "INVALID_WORKING_STATUS");
+                : throw new BadRequestException("Working status must be active or inactive", "INVALID_WORKING_STATUS");
 
     private static bool ParseRequiredWorkingStatus(string value) => ParseWorkingStatus(value) ?? throw new BadRequestException("Working status is required", "INVALID_WORKING_STATUS");
 

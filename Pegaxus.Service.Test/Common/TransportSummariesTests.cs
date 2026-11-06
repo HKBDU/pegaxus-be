@@ -89,9 +89,9 @@ public class TransportSummariesTests
         Assert.Equal(expected, HandoverRules.MayCreate(role, assigned));
 
     [Theory]
-    [InlineData(HandoverStatus.PLANNED, true, true, "START,COMPLETE,CANCEL")]
+    [InlineData(HandoverStatus.PLANNED, true, true, "START,CANCEL")]
     [InlineData(HandoverStatus.IN_PROGRESS, true, true, "COMPLETE,CANCEL")]
-    [InlineData(HandoverStatus.PLANNED, true, false, "START,COMPLETE")]
+    [InlineData(HandoverStatus.PLANNED, true, false, "START")]
     [InlineData(HandoverStatus.IN_PROGRESS, false, false, "")]
     [InlineData(HandoverStatus.COMPLETED, true, true, "")]
     [InlineData(HandoverStatus.CANCELLED, true, true, "")]

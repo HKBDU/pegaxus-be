@@ -37,7 +37,7 @@ public sealed partial class BookingController
     /// <summary>
     /// Create a draft invoice.
     /// </summary>
-    /// <remarks>Only active Logistics Managers may create invoices for APPROVED bookings. The server validates transport status and duplicate invoices, calculates fixed 20 percent tax without discounts, adds paid deposit deductions for FINAL, and records CREATE history atomically. Amounts are whole VND (the currency is always VND and is not sent). Empty draft items are allowed. Payment and itemDate fields are ignored until their database fields are available.</remarks>
+    /// <remarks>Only active Logistics Managers may create invoices for APPROVED bookings. The server validates transport status and duplicate invoices, calculates tax at the taxRate of the active price list (none for credit notes) without discounts, adds paid deposit deductions for FINAL, and records CREATE history atomically. Amounts are whole VND (the currency is always VND and is not sent). Empty draft items are allowed. Payment and itemDate fields are ignored until their database fields are available.</remarks>
     /// <param name="bookingId">The booking identifier (UUID).</param>
     /// <param name="request">The invoice type, due date and manually entered fee items with whole-VND prices and whole quantities.</param>
     /// <param name="invoiceService">The injected invoice service.</param>

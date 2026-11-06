@@ -40,6 +40,7 @@ public static class Request
         public DateTimeOffset NewEstimatedArrivalAt { get; set; }
         public decimal? EstimatedExtraCost { get; set; }
         public string? Note { get; set; }
+        public Guid? IncidentReportId { get; set; }
     }
 
     public sealed class DecisionRequest
@@ -47,6 +48,7 @@ public static class Request
         public DateTimeOffset LastUpdatedAt { get; set; }
         public string Decision { get; set; } = "";
         public string? Note { get; set; }
+        public Guid? IncidentReportId { get; set; }
     }
 
     public sealed class ActivationRequest

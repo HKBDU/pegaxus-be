@@ -1,10 +1,12 @@
 using System.Reflection;
+using System.Text.Json;
 using System.Xml.Linq;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Mvc.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.OpenApi.Models;
+using Microsoft.OpenApi.Writers;
 using Pegaxus.API.Controllers;
 using Pegaxus.API.Extensions;
 using Swashbuckle.AspNetCore.Swagger;
@@ -13,6 +15,34 @@ namespace Pegaxus.Service.Test;
 
 public class SwaggerDocumentationTests
 {
+    [Theory]
+    [InlineData("/api/v1/transports/{transportId}/horse-health-logs")]
+    [InlineData("/api/v1/transports/{transportId}/horse-health-logs/mark-all-normal")]
+    [InlineData("/api/v1/transports/{transportId}/horse-health-logs/{horseHealthLogId}/photos")]
+    [InlineData("/api/v1/compliance-dossiers/{dossierId}/quarantine-proofs")]
+    [InlineData("/api/v1/compliance-dossiers/{dossierId}/customs-clearance-proofs")]
+    public void EvidenceSubmission_SerializedSwaggerAcceptsJsonPublicIds(string path)
+    {
+        using var app = CreateApp();
+        var document = app.Services.GetRequiredService<ISwaggerProvider>().GetSwagger("v1");
+        using var output = new StringWriter();
+        document.SerializeAsV3(new OpenApiJsonWriter(output));
+        using var json = JsonDocument.Parse(output.ToString());
+        var content = json.RootElement.GetProperty("paths").GetProperty(path).GetProperty("post")
+            .GetProperty("requestBody").GetProperty("content");
+        Assert.Equal("application/json", Assert.Single(content.EnumerateObject()).Name);
+        var schemas = json.RootElement.GetProperty("components").GetProperty("schemas");
+        var requestReference = content.GetProperty("application/json").GetProperty("schema").GetProperty("$ref").GetString();
+        Assert.NotNull(requestReference);
+        var requestSchema = requestReference.Split('/').Last();
+        var files = schemas.GetProperty(requestSchema).GetProperty("properties").GetProperty("files");
+        Assert.Equal("array", files.GetProperty("type").GetString());
+        var assetReference = files.GetProperty("items").GetProperty("$ref").GetString();
+        Assert.NotNull(assetReference);
+        var assetSchema = assetReference.Split('/').Last();
+        Assert.Equal("string", schemas.GetProperty(assetSchema).GetProperty("properties").GetProperty("publicId").GetProperty("type").GetString());
+    }
+
     [Theory]
     [InlineData("UploadDocument")]
     [InlineData("SubmitDocumentVersion")]

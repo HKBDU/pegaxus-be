@@ -1,5 +1,3 @@
-using System.Collections.Generic;
-using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using Pegaxus.Repository.Entities;
@@ -12,7 +10,8 @@ public sealed class HorseHealthLogConfiguration : IEntityTypeConfiguration<Horse
     {
         entity.HasKey(e => e.HorseHealthLogId).HasName("HorseHealthLog_pkey");
 
-        entity.ToTable("HorseHealthLog");
+        entity.ToTable("HorseHealthLog", table => table.HasCheckConstraint("HorseHealthLog_photos_check",
+            "cardinality(photo_urls) <= 5 AND array_position(photo_urls, NULL) IS NULL"));
 
         entity.HasIndex(e => e.CheckedAt, "HorseHealthLog_checked_at_idx");
 
@@ -43,9 +42,10 @@ public sealed class HorseHealthLogConfiguration : IEntityTypeConfiguration<Horse
             .HasMaxLength(500)
             .HasColumnName("location_description");
         entity.Property(e => e.MedicationGiven).HasColumnName("medication_given");
-        entity.Property(e => e.PhotoUrl)
-            .HasMaxLength(500)
-            .HasColumnName("photo_url");
+        entity.Property(e => e.PhotoUrls)
+            .HasColumnType("character varying(500)[]")
+            .HasDefaultValueSql("ARRAY[]::character varying(500)[]")
+            .HasColumnName("photo_urls");
         entity.Property(e => e.RespiratoryRateBpm).HasColumnName("respiratory_rate_bpm");
         entity.Property(e => e.SymptomNote).HasColumnName("symptom_note");
         entity.Property(e => e.TemperatureCelsius)

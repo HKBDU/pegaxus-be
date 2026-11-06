@@ -2,8 +2,9 @@ namespace Pegaxus.Service.Common;
 
 public static class Coordinates
 {
+    /// <summary>In range, at most <see cref="Limits.CoordinateScale"/> decimals, and not the (0, 0) placeholder point.</summary>
     public static bool IsValid(decimal latitude, decimal longitude) =>
-        latitude is >= -90 and <= 90 && longitude is >= -180 and <= 180;
+        InputRules.IsValid(latitude, Limits.Latitude) && InputRules.IsValid(longitude, Limits.Longitude) && !(latitude == 0 && longitude == 0);
 
     /// <summary>Great-circle distance in meters.</summary>
     public static double DistanceMeters(decimal latitude1, decimal longitude1, decimal latitude2, decimal longitude2)

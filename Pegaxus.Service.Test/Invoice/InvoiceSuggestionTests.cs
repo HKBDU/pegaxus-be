@@ -35,6 +35,7 @@ public class InvoiceSuggestionTests
     {
         await using var db = TestSupport.CreateDb();
         var (account, employee, booking, transport) = await SeedAsync(db);
+        AddQuotation(db, booking, employee, 100_000_000);
         AddInvoice(db, booking, employee, InvoiceType.DEPOSIT, InvoiceStatus.PAID, 30_000_000, "INV-DEPOSIT-1");
         AddInvoice(db, booking, employee, InvoiceType.DEPOSIT, InvoiceStatus.PAID, 1_000_000, "INV-DEPOSIT-2");
         AddInvoice(db, booking, employee, InvoiceType.DEPOSIT, InvoiceStatus.ISSUED, 99_000_000, "INV-UNPAID");
@@ -54,8 +55,13 @@ public class InvoiceSuggestionTests
         Assert.Equal("FINAL", result.Type);
         Assert.Equal("VND", result.Currency);
         Assert.True(result.IsPaymentRequired);
-        Assert.Equal(new[] { -30_000_000L, -1_000_000L }, result.Items.Select(item => item.Total));
-        Assert.All(result.Items, item =>
+        Assert.Equal(new[] { 100_000_000L, -30_000_000L, -1_000_000L }, result.Items.Select(item => item.Total));
+        Assert.True(result.IsLocked);
+        Assert.Equal(new InvoiceService.Response.PricingResponse("QUOTATION_V1", 0, null, null, 40, 20), result.Pricing);
+        var quoted = result.Items[0];
+        Assert.False(quoted.IsDepositDeduction);
+        Assert.Equal("TRANSPORT_FEE", quoted.ItemType);
+        Assert.All(result.Items.Skip(1), item =>
         {
             Assert.Equal("OTHER", item.ItemType);
             Assert.Equal(1m, item.Quantity);
@@ -67,11 +73,11 @@ public class InvoiceSuggestionTests
             Assert.Null(item.EmergencyCostRequestId);
             Assert.Contains("not refunded in cash", item.Note);
         });
-        Assert.Contains("INV-DEPOSIT-1", result.Items[0].Description);
-        Assert.Contains("INV-DEPOSIT-2", result.Items[1].Description);
+        Assert.Contains("INV-DEPOSIT-1", result.Items[1].Description);
+        Assert.Contains("INV-DEPOSIT-2", result.Items[2].Description);
         Assert.Empty(db.ChangeTracker.Entries());
-        Assert.Equal(4, await db.Invoices.CountAsync());
-        Assert.Empty(await db.InvoiceItems.ToListAsync());
+        Assert.Equal(5, await db.Invoices.CountAsync());
+        Assert.Single(await db.InvoiceItems.ToListAsync());
         Assert.Empty(await db.InvoiceStatusHistories.ToListAsync());
         Assert.Empty(await db.Notifications.ToListAsync());
         Assert.Empty(await db.OutboxMessages.ToListAsync());
@@ -169,6 +175,7 @@ public class InvoiceSuggestionTests
         transport.Status = status;
         if (type == "CREDIT_NOTE")
             AddInvoice(db, booking, employee, InvoiceType.FINAL, InvoiceStatus.PAID);
+        if (type is "DEPOSIT" or "FINAL") AddQuotation(db, booking, employee);
         await db.SaveChangesAsync();
         if (!allowed)
         {
@@ -178,7 +185,7 @@ public class InvoiceSuggestionTests
             return;
         }
         var result = await Service(db).GetSuggestionAsync(account.AccountId, booking.BookingId, new() { Type = type });
-        Assert.Empty(result.Items);
+        Assert.Equal(type is "DEPOSIT" or "FINAL" ? 1 : 0, result.Items.Count);
         Assert.Equal("VND", result.Currency);
         Assert.Equal(type != "QUOTATION", result.IsPaymentRequired);
     }
@@ -226,9 +233,10 @@ public class InvoiceSuggestionTests
         await using var db = TestSupport.CreateDb();
         var (account, employee, booking, _) = await SeedAsync(db);
         AddInvoice(db, booking, employee, InvoiceType.FINAL, status);
+        AddQuotation(db, booking, employee);
         await db.SaveChangesAsync();
         if (allowed)
-            Assert.Empty((await Service(db).GetSuggestionAsync(account.AccountId, booking.BookingId, new() { Type = "FINAL" })).Items);
+            Assert.Single((await Service(db).GetSuggestionAsync(account.AccountId, booking.BookingId, new() { Type = "FINAL" })).Items);
         else
             Assert.Equal("FINAL_INVOICE_ALREADY_EXISTS", (await Assert.ThrowsAsync<ConflictException>(() => Service(db)
                 .GetSuggestionAsync(account.AccountId, booking.BookingId, new() { Type = "FINAL" }))).ErrorCode);
@@ -257,6 +265,7 @@ public class InvoiceSuggestionTests
         const string secret = "invoice-tests-only-secret-key-with-more-than-32-characters";
         await using var db = TestSupport.CreateDb();
         var (account, employee, booking, _) = await SeedAsync(db);
+        AddQuotation(db, booking, employee);
         AddInvoice(db, booking, employee, InvoiceType.DEPOSIT, InvoiceStatus.PAID);
         await db.SaveChangesAsync();
         var builder = WebApplication.CreateBuilder(new WebApplicationOptions
@@ -322,8 +331,11 @@ public class InvoiceSuggestionTests
         var value = body.GetProperty("value");
         Assert.Equal(booking.BookingId, value.GetProperty("bookingId").GetGuid());
         Assert.Equal("FINAL", value.GetProperty("type").GetString());
-        Assert.True(value.GetProperty("items")[0].GetProperty("isDepositDeduction").GetBoolean());
-        Assert.Equal(JsonValueKind.Null, value.GetProperty("items")[0].GetProperty("itemDate").ValueKind);
+        Assert.True(value.GetProperty("isLocked").GetBoolean());
+        Assert.Equal("QUOTATION_V1", value.GetProperty("pricing").GetProperty("version").GetString());
+        Assert.False(value.GetProperty("items")[0].GetProperty("isDepositDeduction").GetBoolean());
+        Assert.True(value.GetProperty("items")[1].GetProperty("isDepositDeduction").GetBoolean());
+        Assert.Equal(JsonValueKind.Null, value.GetProperty("items")[1].GetProperty("itemDate").ValueKind);
         employee.Role = EmployeeRole.DRIVER;
         await db.SaveChangesAsync();
         Assert.Equal(HttpStatusCode.Forbidden, (await client.GetAsync(path + "?type=FINAL")).StatusCode);
@@ -359,6 +371,23 @@ public class InvoiceSuggestionTests
         db.Transports.Add(transport);
         await db.SaveChangesAsync();
         return (account, employee, booking, transport);
+    }
+
+    private static void AddQuotation(AppDbContext db, Booking booking, Employee employee, decimal subtotal = 1_000)
+    {
+        var quotation = new Invoice
+        {
+            InvoiceId = Guid.NewGuid(), InvoiceCode = "INV-QUOTATION", Booking = booking, BookingId = booking.BookingId,
+            Employee = employee, EmployeeId = employee.EmployeeId, Type = InvoiceType.QUOTATION, Status = InvoiceStatus.ISSUED,
+            Currency = "VND", Subtotal = subtotal, TaxAmount = subtotal * 0.2m, TotalAmount = subtotal * 1.2m,
+            IssuedAt = booking.CreatedAt, CreatedAt = booking.CreatedAt, UpdatedAt = booking.UpdatedAt
+        };
+        quotation.InvoiceItems.Add(new InvoiceItem
+        {
+            InvoiceItemId = Guid.NewGuid(), ItemType = InvoiceItemType.TRANSPORT_FEE, Description = "Quoted transport", Quantity = 1,
+            UnitPrice = subtotal, LineAmount = subtotal, CreatedAt = booking.CreatedAt, UpdatedAt = booking.CreatedAt
+        });
+        db.Invoices.Add(quotation);
     }
 
     private static void AddInvoice(AppDbContext db, Booking booking, Employee employee, InvoiceType type,

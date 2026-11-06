@@ -105,17 +105,8 @@ public class VehiclePostgresTests
             await using (var second = new AppDbContext(options))
             {
                 var outcomes = await Task.WhenAll(
-                    Attempt(() => VehicleServiceTests.CreateService(first).CreateAsync(VehicleServiceTests.ValidRequest("RACE", "RACE-1"), actor)),
-                    Attempt(() => VehicleServiceTests.CreateService(second).CreateAsync(VehicleServiceTests.ValidRequest("RACE", "RACE-2"), actor)));
-                Assert.Single(outcomes, x => x is null);
-                Assert.Equal("VEHICLE_CODE_DUPLICATED", Assert.IsType<ConflictException>(Assert.Single(outcomes, x => x is not null)).ErrorCode);
-            }
-            await using (var first = new AppDbContext(options))
-            await using (var second = new AppDbContext(options))
-            {
-                var outcomes = await Task.WhenAll(
-                    Attempt(() => VehicleServiceTests.CreateService(first).CreateAsync(VehicleServiceTests.ValidRequest("PLATE-RACE1", "RACE-PLATE"), actor)),
-                    Attempt(() => VehicleServiceTests.CreateService(second).CreateAsync(VehicleServiceTests.ValidRequest("PLATE-RACE2", "RACE-PLATE"), actor)));
+                    Attempt(() => VehicleServiceTests.CreateService(first).CreateAsync(VehicleServiceTests.ValidRequest("RACE-PLATE"), actor)),
+                    Attempt(() => VehicleServiceTests.CreateService(second).CreateAsync(VehicleServiceTests.ValidRequest("RACE-PLATE"), actor)));
                 Assert.Single(outcomes, x => x is null);
                 Assert.Equal("LICENSE_PLATE_DUPLICATED", Assert.IsType<ConflictException>(Assert.Single(outcomes, x => x is not null)).ErrorCode);
             }
@@ -123,12 +114,14 @@ public class VehiclePostgresTests
             await using (var db = new AppDbContext(options))
             {
                 var service = VehicleServiceTests.CreateService(db);
-                var old = await db.Vehicles.SingleAsync(x => x.VehicleCode == "RACE");
+                var old = await db.Vehicles.SingleAsync(x => x.LicensePlate == "RACE-PLATE");
                 old.IsDeleted = true; await db.SaveChangesAsync();
-                await service.CreateAsync(VehicleServiceTests.ValidRequest("RACE", old.LicensePlate!), actor);
-                Assert.Equal(2, await db.Vehicles.CountAsync(x => x.VehicleCode == "RACE"));
+                var recreated = await service.CreateAsync(VehicleServiceTests.ValidRequest(old.LicensePlate!), actor);
+                Assert.NotEqual(old.VehicleCode, recreated.VehicleCode); // a deleted vehicle's code is never handed out again
+                Assert.Equal(2, await db.Vehicles.CountAsync(x => x.LicensePlate == "RACE-PLATE"));
                 // A direct database write must still obey the unique index.
-                db.Vehicles.Add(new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = "VEH-ROAD-005", LicensePlate = "DIRECT", TransportMode = TransportMode.ROAD });
+                var usedCode = (await db.Vehicles.SingleAsync(x => x.VehicleId == vehicle.VehicleId)).VehicleCode;
+                db.Vehicles.Add(new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = usedCode, LicensePlate = "DIRECT", TransportMode = TransportMode.ROAD });
                 var unique = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
                 Assert.Equal(PostgresErrorCodes.UniqueViolation, Assert.IsType<PostgresException>(unique.InnerException).SqlState);
             }
@@ -176,7 +169,7 @@ public class VehiclePostgresTests
     private static async Task CheckVehicleAssignmentRaceAsync(DbContextOptions<AppDbContext> options, Guid actor)
     {
         await using var seed = new AppDbContext(options);
-        var vehicle = await VehicleServiceTests.CreateService(seed).CreateAsync(VehicleServiceTests.ValidRequest("ASSIGN-RACE", "ASSIGN-RACE"), actor);
+        var vehicle = await VehicleServiceTests.CreateService(seed).CreateAsync(VehicleServiceTests.ValidRequest("ASSIGN-RACE"), actor);
         var segment = await VehicleServiceTests.AddAssignmentAsync(seed, await seed.Vehicles.SingleAsync(item => item.VehicleId == vehicle.VehicleId));
         seed.RoutePlanRouteVehicles.Remove(await seed.RoutePlanRouteVehicles.SingleAsync(item => item.VehicleId == vehicle.VehicleId));
         await seed.SaveChangesAsync();

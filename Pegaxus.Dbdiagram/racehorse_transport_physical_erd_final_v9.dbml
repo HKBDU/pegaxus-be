@@ -1040,6 +1040,9 @@ Table Vehicle {
 
   special_equipment text
 
+  // Mã quốc gia ISO-2 nơi phương tiện hoạt động; dùng để lọc phương tiện theo nước xuất phát của chặng
+  country varchar(100)
+
   // Soft delete
   is_deleted boolean [not null, default: false]
   deleted_at timestamp

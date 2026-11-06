@@ -28,7 +28,7 @@ public class BookingCoordinatesTests
         DestinationCountry = "Germany",
         DestinationLatitude = 52.5200m,
         DestinationLongitude = 13.4050m,
-        RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(21),
+        RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(2),
         Horses = [new BookingRequest.BookingHorseRequest { HorseId = horse.HorseId }]
     };
 
@@ -167,7 +167,7 @@ public class BookingCoordinatesTests
 
     private static TransportPlanRequest.CreateRequest PlanRequest() => new()
     {
-        PlannedStartAt = DateTimeOffset.UtcNow.AddDays(21), PlannedEndAt = DateTimeOffset.UtcNow.AddDays(23)
+        PlannedStartAt = DateTimeOffset.UtcNow.AddMonths(3), PlannedEndAt = DateTimeOffset.UtcNow.AddMonths(3).AddDays(2)
     };
 
     private static Location NewLocation(string name, decimal? latitude, decimal? longitude, bool deleted = false) => new()
@@ -263,6 +263,8 @@ public class BookingCoordinatesTests
         Assert.Equal(("RP-1", "BACKUP", "CONFIRMED"), (route.RoutePlanCode, route.RouteType, route.Status));
         Assert.Equal((49.1943m, 2.4716m, 52.2455m, 0.4062m),
             (detail.Booking.OriginLatitude, detail.Booking.OriginLongitude, detail.Booking.DestinationLatitude, detail.Booking.DestinationLongitude));
+        Assert.Equal(new DateTimeOffset(DateTime.SpecifyKind(a.Booking.CreatedAt, DateTimeKind.Utc)), detail.Booking.CreatedAt);
+        Assert.NotEqual(default, detail.CreatedAt);
         Assert.Equal(detail.OriginLocationId, detail.OriginLocation!.LocationId);
         Assert.Equal(49.1943m, detail.OriginLocation.Latitude);
     }

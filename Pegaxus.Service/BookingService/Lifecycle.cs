@@ -27,9 +27,9 @@ public sealed partial class Service
         if (booking is null)
             throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
 
-        if (!Enum.TryParse<BookingStatus>(request.Status.Trim(), true, out var targetStatus) ||
+        if (!EnumParser.TryParseDefined<BookingStatus>(request.Status.Trim(), out var targetStatus) ||
             targetStatus is not (BookingStatus.DRAFT or BookingStatus.PENDING))
-            throw new BadRequestException("Only DRAFT and PENDING statuses are supported", "INVALID_BOOKING_STATUS");
+            throw new BadRequestException("Only draft and pending statuses are supported", "INVALID_BOOKING_STATUS");
 
         var validTransition = booking.Status == BookingStatus.PENDING && targetStatus == BookingStatus.DRAFT ||
                               booking.Status == BookingStatus.DRAFT && targetStatus == BookingStatus.PENDING;
@@ -69,7 +69,7 @@ public sealed partial class Service
         Request.CreateBookingRequest request,
         CancellationToken cancellationToken = default)
     {
-        ValidateDates(request.RequestedDepartureDate, request.RequestedArrivalDate);
+        ValidateDates(request.RequestedDepartureDate, request.RequestedArrivalDate, request.OriginCountry, request.DestinationCountry);
         ValidateCoordinates(request.OriginLatitude, request.OriginLongitude, request.DestinationLatitude, request.DestinationLongitude, required: true);
         if (request.Horses is null || request.Horses.Count == 0)
             throw new BadRequestException("At least one horse is required", "BOOKING_HAS_NO_HORSE");
@@ -158,10 +158,10 @@ public sealed partial class Service
         ValidateCoordinates(request.OriginLatitude, request.OriginLongitude, request.DestinationLatitude, request.DestinationLongitude, required: false);
         var departureDate = request.RequestedDepartureDate ?? booking.RequestedDepartureDate;
         var arrivalDate = request.RequestedArrivalDate ?? booking.RequestedArrivalDate;
-        ValidateDates(departureDate, arrivalDate);
-
         var targetOrigin = request.OriginCountry?.Trim() ?? booking.OriginCountry;
         var targetDestination = request.DestinationCountry?.Trim() ?? booking.DestinationCountry;
+        ValidateDates(departureDate, arrivalDate, targetOrigin, targetDestination);
+
         var (isUpdatedRouteValid, updatedRouteErrorMessage) = CountryUtils.ValidateRoute(targetOrigin, targetDestination);
         if (!isUpdatedRouteValid)
             throw new BadRequestException(updatedRouteErrorMessage);
@@ -229,7 +229,7 @@ public sealed partial class Service
         booking.CancellationReason = reason;
         booking.UpdatedAt = now;
         AddHistory(bookingId, accountId, BookingHistoryType.CANCEL, BookingStatus.PENDING, BookingStatus.CANCELLED, reason, now);
-        await NotifyManagersAsync(booking, "Booking cancelled by customer", "cancelled", $" Reason: {reason}.", now, cancellationToken);
+        await NotifyManagersAsync(booking, "Booking cancelled by customer", "cancelled", $" Reason: {reason}.", now, cancellationToken, reason);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -281,7 +281,7 @@ public sealed partial class Service
                 bookingCode: booking.BookingCode,
                 transportCode: transport.TransportCode,
                 departureDate: booking.RequestedDepartureDate,
-                actionUrl: null)
+                actionUrl: NotificationLinks.Booking(null, booking.BookingId))
         };
         if (OutboxQueue.IsEnabled(_db))
             OutboxQueue.AddEmail(_db, approvalMail, now);
@@ -337,7 +337,7 @@ public sealed partial class Service
                 customerName: booking.Customer.FullName,
                 bookingCode: booking.BookingCode,
                 reason: reason,
-                actionUrl: null)
+                actionUrl: NotificationLinks.Booking(null, booking.BookingId))
         };
         if (OutboxQueue.IsEnabled(_db))
             OutboxQueue.AddEmail(_db, rejectionMail, now);
@@ -374,7 +374,7 @@ public sealed partial class Service
         if (booking is null)
             throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
         if (booking.Status != BookingStatus.DRAFT)
-            throw new ConflictException("The booking must be in DRAFT status to be edited", "INVALID_BOOKING_STATUS");
+            throw new ConflictException("The booking must be in draft status to be edited", "INVALID_BOOKING_STATUS");
         return booking;
     }
 
@@ -392,12 +392,15 @@ public sealed partial class Service
     private Task<string> GenerateTransportCodeAsync(CancellationToken cancellationToken) =>
         CodeGeneration.NextAsync("TR", DateTime.UtcNow, code => _db.Transports.AnyAsync(transport => transport.TransportCode == code, cancellationToken));
 
-    private static void ValidateDates(DateOnly departureDate, DateOnly? arrivalDate)
+    /// <summary>A booking must be made early enough to prepare its documents: 3 weeks for a domestic trip, 2 months across a border. There is no latest date.</summary>
+    private static void ValidateDates(DateOnly departureDate, DateOnly? arrivalDate, string? originCountry, string? destinationCountry)
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
-        if (departureDate < today.AddDays(21) || departureDate > today.AddMonths(2))
+        var domestic = string.Equals(originCountry?.Trim(), destinationCountry?.Trim(), StringComparison.OrdinalIgnoreCase);
+        if (departureDate < DepartureLeadTime.Earliest(today, domestic))
             throw new BadRequestException(
-                "The departure date must be between 3 weeks and 2 months from today",
+                domestic ? "A domestic booking needs a departure date at least 3 weeks from today"
+                    : "An international booking needs a departure date at least 2 months from today",
                 "DEPARTURE_DATE_OUT_OF_RANGE");
         if (arrivalDate.HasValue && arrivalDate.Value < departureDate)
             throw new BadRequestException(

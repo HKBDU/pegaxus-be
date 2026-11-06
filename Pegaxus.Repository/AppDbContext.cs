@@ -74,6 +74,10 @@ public partial class AppDbContext : DbContext
 
     public virtual DbSet<FinancialReport> FinancialReports { get; set; }
 
+    public virtual DbSet<PriceList> PriceLists { get; set; }
+
+    public virtual DbSet<PriceListItem> PriceListItems { get; set; }
+
     public virtual DbSet<HandoverRecord> HandoverRecords { get; set; }
 
     public virtual DbSet<Horse> Horses { get; set; }
@@ -83,6 +87,8 @@ public partial class AppDbContext : DbContext
     public virtual DbSet<HorseHealthLog> HorseHealthLogs { get; set; }
 
     public virtual DbSet<IncidentReport> IncidentReports { get; set; }
+
+    public virtual DbSet<IncidentPhoto> IncidentPhotos { get; set; }
 
     public virtual DbSet<Invoice> Invoices { get; set; }
 

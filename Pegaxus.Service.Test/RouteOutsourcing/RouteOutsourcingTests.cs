@@ -130,6 +130,9 @@ public class RouteOutsourcingTests
         await db.SaveChangesAsync();
         var result = await Service(db).SetAsync(actor, segment.RoutePlanId, segment.RoutePlanRouteId, Assign(segment, provider));
         Assert.Equal(expected.ToString(), result.RoutePlanStatus);
+        // Changing outsourcing neither requests nor withdraws a legal review; the answer reports the plan's current state.
+        Assert.Equal(segment.RoutePlan.SubmittedForReviewAt.HasValue, result.LegalReviewRequested);
+        Assert.Equal(segment.RoutePlan.SubmittedForReviewAt.HasValue, result.LegalReviewRequestedAt.HasValue);
         segment.RoutePlan.Status = initial;
         await db.SaveChangesAsync();
         result = await Service(db).SetAsync(actor, segment.RoutePlanId, segment.RoutePlanRouteId,

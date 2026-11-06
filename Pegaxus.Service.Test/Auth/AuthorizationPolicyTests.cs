@@ -120,6 +120,10 @@ public class AuthorizationPolicyTests
         var authorization = provider.GetRequiredService<IAuthorizationService>();
         var allowedRoles = new Dictionary<string, string[]>
         {
+            [JwtExtensions.IncidentListViewerPolicy] = ["LogisticsManager", "FleetRouteCoordinator", "TransportSpecialist", "Driver", "Escort"],
+            [JwtExtensions.IncidentViewerPolicy] = ["Customer", "LogisticsManager", "FleetRouteCoordinator", "TransportSpecialist", "Driver", "Escort"],
+            [JwtExtensions.TransportProgressViewerPolicy] =
+                ["Customer", "LogisticsManager", "TransportSpecialist", "FleetRouteCoordinator", "Driver", "Escort"],
             [JwtExtensions.CustomerPolicy] = ["Customer"],
             [JwtExtensions.EmployeePolicy] = ["Employee"],
             [JwtExtensions.LogisticsManagerPolicy] = ["LogisticsManager"],

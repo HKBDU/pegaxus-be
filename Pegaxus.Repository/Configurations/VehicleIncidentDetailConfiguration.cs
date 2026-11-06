@@ -26,6 +26,11 @@ public sealed class VehicleIncidentDetailConfiguration : IEntityTypeConfiguratio
         entity.Property(e => e.EstimatedRepairCost)
             .HasPrecision(18, 2)
             .HasColumnName("estimated_repair_cost");
+        entity.Property(e => e.EstimatedRepairHours)
+            .HasPrecision(4, 1)
+            .HasColumnName("estimated_repair_hours");
+        entity.Property(e => e.DriverSafetyStatus).HasColumnName("driver_safety_status");
+        entity.Property(e => e.CargoConditionNote).HasColumnName("cargo_condition_note");
         entity.Property(e => e.IncidentReportId).HasColumnName("incident_report_id");
         entity.Property(e => e.RepairNote).HasColumnName("repair_note");
         entity.Property(e => e.RepairRequired)

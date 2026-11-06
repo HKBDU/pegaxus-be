@@ -26,6 +26,7 @@ public sealed partial class Service
             throw new BadRequestException("estimatedDistanceKm must not be negative");
         if (request.EstimatedDurationMinutes < 0)
             throw new BadRequestException("estimatedDurationMinutes must not be negative");
+        ValidateEstimates(request.EstimatedDistanceKm, request.EstimatedDurationMinutes);
         if (request.PlannedStartAt.HasValue && request.PlannedEndAt.HasValue &&
             request.PlannedEndAt <= request.PlannedStartAt)
             throw new BadRequestException("plannedEndAt must be after plannedStartAt");
@@ -59,6 +60,8 @@ public sealed partial class Service
         var end = request.PlannedEndAt ?? plan.PlannedEndAt;
         if (start.HasValue && end.HasValue && end <= start)
             throw new BadRequestException("plannedEndAt must be after plannedStartAt");
+        if (request.PlannedStartAt.HasValue && Truncate(request.PlannedStartAt.Value.UtcDateTime) != plan.PlannedStartAt)
+            ValidatePlannedStart(request.PlannedStartAt.Value, plan.Transport.Booking);
 
         var now = UtcNowTruncated();
         plan.OriginLocationId = request.OriginLocationId ?? plan.OriginLocationId;
@@ -99,6 +102,10 @@ public sealed partial class Service
                 ActionUrl = recipient.Url,
                 CreatedAt = now
             });
+        await MailService.MailRecipients.QueueAsync(db, [plan.Transport.Booking.Customer.AccountId], now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.TransportPlanTitle(MailService.EmailBodies.TransportPlanMailKind.Updated)} — {plan.PlanCode}",
+            MailService.EmailBodies.TransportPlanBody(recipient.FullName, plan.PlanCode, MailService.EmailBodies.TransportPlanMailKind.Updated, reason,
+                NotificationLinks.Booking(null, plan.Transport.BookingId))), cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
@@ -178,7 +185,8 @@ public sealed partial class Service
                 TotalHorses = booking.BookingHorses.Count,
                 RequestedDepartureDate = booking.RequestedDepartureDate,
                 RequestedArrivalDate = booking.RequestedArrivalDate,
-                SpecialRequirements = booking.SpecialRequirements
+                SpecialRequirements = booking.SpecialRequirements,
+                CreatedAt = AsUtc(booking.CreatedAt)
             },
             Transport = new Response.TransportResponse
             {
@@ -234,7 +242,9 @@ public sealed partial class Service
                     RoutePlanId = item.RoutePlanId,
                     RoutePlanCode = item.RoutePlanCode,
                     RouteType = TransportItinerary.PlanType(item).ToString(),
-                    Status = item.Status.ToString()
+                    Status = item.Status.ToString(),
+                    LegalReviewRequested = item.SubmittedForReviewAt.HasValue,
+                    LegalReviewRequestedAt = AsUtc(item.SubmittedForReviewAt)
                 })
                 .ToList(),
             CreatedAt = AsUtc(plan.CreatedAt),
@@ -269,14 +279,14 @@ public sealed partial class Service
 
         if (!string.IsNullOrWhiteSpace(request.Status))
         {
-            if (!Enum.TryParse<TransportPlanStatus>(request.Status.Trim(), true, out var status))
+            if (!EnumParser.TryParseDefined<TransportPlanStatus>(request.Status.Trim(), out var status))
                 throw new BadRequestException("Transport plan status is invalid", "INVALID_TRANSPORT_PLAN_STATUS");
             query = query.Where(plan => plan.Status == status);
         }
 
         if (!string.IsNullOrWhiteSpace(request.RoutePlanStatus))
         {
-            if (!Enum.TryParse<RoutePlanStatus>(request.RoutePlanStatus.Trim(), true, out var status))
+            if (!EnumParser.TryParseDefined<RoutePlanStatus>(request.RoutePlanStatus.Trim(), out var status))
                 throw new BadRequestException("Route plan status is invalid", "INVALID_ROUTE_PLAN_STATUS");
             query = query.Where(plan => plan.RoutePlans.Any(routePlan =>
                 routePlan.Status == status &&
@@ -295,7 +305,7 @@ public sealed partial class Service
         query = ApplySorting(query, request.SortBy);
         var totalItems = await query.CountAsync(cancellationToken);
         var items = await query
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .Select(plan => new Response.ListItemResponse
             {
@@ -321,6 +331,19 @@ public sealed partial class Service
         };
     }
 
+    /// <summary>The start cannot be in the past or earlier than the booking's own lead time, counted from the day the booking was made.</summary>
+    private static void ValidatePlannedStart(DateTimeOffset plannedStartAt, Booking booking)
+    {
+        if (plannedStartAt.UtcDateTime < UtcNow())
+            throw new BadRequestException("plannedStartAt cannot be in the past", "PLANNED_START_IN_PAST");
+        var domestic = string.Equals(booking.OriginCountry?.Trim(), booking.DestinationCountry?.Trim(), StringComparison.OrdinalIgnoreCase);
+        var earliest = DepartureLeadTime.Earliest(DateOnly.FromDateTime(booking.CreatedAt), domestic);
+        if (DateOnly.FromDateTime(plannedStartAt.UtcDateTime) < earliest)
+            throw new BadRequestException(
+                $"plannedStartAt must be on or after {earliest:yyyy-MM-dd}: a {(domestic ? "domestic booking needs 3 weeks" : "international booking needs 2 months")} from the day it was made",
+                "PLANNED_START_TOO_EARLY");
+    }
+
     public async Task<Response.CreateResponse> CreateAsync(
         Guid accountId,
         Guid bookingId,
@@ -336,6 +359,7 @@ public sealed partial class Service
             throw new BadRequestException("estimatedDistanceKm must not be negative");
         if (request.EstimatedDurationMinutes < 0)
             throw new BadRequestException("estimatedDurationMinutes must not be negative");
+        ValidateEstimates(request.EstimatedDistanceKm, request.EstimatedDurationMinutes);
 
         await using var transaction = await db.Database.BeginSerializableOrNoneAsync(cancellationToken);
 
@@ -354,7 +378,7 @@ public sealed partial class Service
             throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
         if (booking.Status != BookingStatus.APPROVED)
             throw new ConflictException(
-                $"This action cannot be performed while the booking is in {booking.Status} status",
+                $"This action cannot be performed while the booking is in {UserFacingText.Label(booking.Status)} status",
                 "INVALID_BOOKING_STATUS");
         if (booking.Transport is null)
             throw new ConflictException("The approved booking has no Transport", "TRANSPORT_NOT_FOUND");
@@ -362,6 +386,7 @@ public sealed partial class Service
             throw new ConflictException(
                 "Transport Plan already exists for this booking. Please edit the existing plan.",
                 "TRANSPORT_PLAN_EXISTS");
+        ValidatePlannedStart(request.PlannedStartAt, booking);
 
         await ValidateLocationsAsync(request.OriginLocationId, request.DestinationLocationId, cancellationToken);
 
@@ -474,4 +499,11 @@ public sealed partial class Service
         };
     }
 
+
+    private static void ValidateEstimates(decimal? distanceKm, int? durationMinutes)
+    {
+        InputRules.Measurement(distanceKm, Limits.PlanDistanceKm, "estimatedDistanceKm");
+        if (durationMinutes is < 1 or > Limits.PlanDurationMinutesMax)
+            throw new BadRequestException($"estimatedDurationMinutes must be between 1 and {Limits.PlanDurationMinutesMax} (whole number).");
+    }
 }

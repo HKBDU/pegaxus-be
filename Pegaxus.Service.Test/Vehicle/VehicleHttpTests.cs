@@ -60,8 +60,8 @@ public class VehicleHttpTests
         await Error(await client.GetAsync($"/api/v1/vehicles/{Guid.NewGuid()}"), HttpStatusCode.NotFound, "VEHICLE_NOT_FOUND");
         await Error(await client.GetAsync("/api/v1/vehicles?availableFrom=2026-10-10"), HttpStatusCode.BadRequest, "INVALID_DATE_RANGE");
         await Error(await client.GetAsync("/api/v1/vehicles?sortBy=bad"), HttpStatusCode.BadRequest, "INVALID_SORT_PARAMETER");
-        await Error(await client.PostAsJsonAsync("/api/v1/vehicles", VehicleServiceTests.ValidRequest()), HttpStatusCode.Conflict, "VEHICLE_CODE_DUPLICATED");
-        var invalid = VehicleServiceTests.ValidRequest("INVALID", "NEW-01"); invalid.CapacityHorses = 12;
+        await Error(await client.PostAsJsonAsync("/api/v1/vehicles", VehicleServiceTests.ValidRequest()), HttpStatusCode.Conflict, "LICENSE_PLATE_DUPLICATED");
+        var invalid = VehicleServiceTests.ValidRequest("NEW-01"); invalid.CapacityHorses = 12;
         var validation = await Error(await client.PostAsJsonAsync("/api/v1/vehicles", invalid), HttpStatusCode.BadRequest, "VALIDATION_ERROR");
         Assert.Equal("capacityHorses", validation.GetProperty("errors")[0].GetProperty("field").GetString());
         Assert.Contains("BR-BOOKING-02", validation.GetProperty("errors")[0].GetProperty("message").GetString());
@@ -88,7 +88,7 @@ public class VehicleHttpTests
         using var client = Client(host, account.AccountId, role);
         Assert.Equal(expected, (int)(await client.GetAsync("/api/v1/vehicles")).StatusCode);
         Assert.Equal(expected, (int)(await client.GetAsync($"/api/v1/vehicles/{vehicle.VehicleId}")).StatusCode);
-        Assert.Equal(expected == 200 ? 201 : expected, (int)(await client.PostAsJsonAsync("/api/v1/vehicles", VehicleServiceTests.ValidRequest("NEXT", "NEXT-01"))).StatusCode);
+        Assert.Equal(expected == 200 ? 201 : expected, (int)(await client.PostAsJsonAsync("/api/v1/vehicles", VehicleServiceTests.ValidRequest("NEXT-01"))).StatusCode);
         Assert.Equal(expected, (int)(await client.PutAsJsonAsync($"/api/v1/vehicles/{vehicle.VehicleId}", VehicleServiceTests.UpdateRequest(vehicle))).StatusCode);
         var detail = await VehicleServiceTests.CreateService(db).GetAsync(vehicle.VehicleId, allowedAccount.Account.AccountId);
         Assert.Equal(expected, (int)(await client.PatchAsJsonAsync($"/api/v1/vehicles/{vehicle.VehicleId}/status", VehicleServiceTests.StatusRequest(detail.UpdatedAt))).StatusCode);

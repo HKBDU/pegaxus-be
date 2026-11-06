@@ -87,7 +87,7 @@ public class InvoiceCancellationTests
         Assert.Equal(new[] { "CREATE_ANOTHER" }, result.AvailableActions);
         Assert.Equal(issuer, invoice.EmployeeId); Assert.Equal(issuedAt, invoice.IssuedAt); Assert.Null(invoice.PaidAt);
         Assert.Equal((100m, 0m, 20m, 120m, "Keep billing note"), (invoice.Subtotal, invoice.DiscountAmount, invoice.TaxAmount, invoice.TotalAmount, invoice.BillingNote));
-        Assert.Equal(new DateOnly(2026, 11, 15), invoice.DueDate);
+        Assert.Equal(new DateTime(2026, 11, 15), invoice.DueDate);
         var item = Assert.Single(db.InvoiceItems); Assert.Equal(100, item.LineAmount); Assert.Equal(invoice.CreatedAt, item.UpdatedAt);
         Assert.Equal(TransportPlanStatus.PENDING, plan.Status); Assert.Equal(invoice.CreatedAt, plan.UpdatedAt);
         Assert.Equal(TransportStatus.CREATED, plan.Transport.Status); Assert.Equal(invoice.CreatedAt, plan.Transport.UpdatedAt);
@@ -123,7 +123,7 @@ public class InvoiceCancellationTests
     [InlineData("confirmed", 422, "INVOICE_HAS_PAYMENT", "Cannot cancel an invoice that has a confirmed payment. Please contact accounting for the refund process")]
     [InlineData("confirmedAndPending", 422, "INVOICE_HAS_PAYMENT", "Cannot cancel an invoice that has a confirmed payment. Please contact accounting for the refund process")]
     [InlineData("pending", 409, "PAYMENT_IN_PROGRESS", "A payment for this invoice is being processed. Please try again after it completes")]
-    [InlineData("legacyPartial", 409, "INVALID_INVOICE_STATUS", "Cannot cancel an invoice in status PARTIALLY_PAID")]
+    [InlineData("legacyPartial", 409, "INVALID_INVOICE_STATUS", "Cannot cancel an invoice in status partially paid")]
     public async Task Cancel_BlockedInvoices_HaveExactErrorsAndNoSideEffects(string scenario, int status, string code, string message)
     {
         await using var db = TestSupport.CreateDb();

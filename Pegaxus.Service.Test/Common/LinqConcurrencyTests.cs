@@ -13,6 +13,7 @@ using Pegaxus.API.Services;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.ComplianceRequirementService.Validator;
 using Pegaxus.Service.MailService;
 using Pegaxus.Service.OutboxService;
@@ -48,6 +49,7 @@ public class LinqConflictResponseTests
             3 => new InvalidOperationException("private execution details", error),
             _ => error
         };
+        Assert.True(PostgresErrors.IsWriteConflict(failure));
         await middleware.InvokeAsync(context, _ => Task.FromException(failure));
 
         Assert.Equal(409, context.Response.StatusCode);
@@ -106,6 +108,22 @@ public class LinqConcurrencyTests : IAsyncLifetime
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         Assert.Empty(await notifications.GpsSharingDisabledAsync(transportId, now));
         Assert.Empty(await notifications.HandoverCancelledAsync(new() { TransportId = transportId, FromEmployeeId = Guid.NewGuid() }, now));
+    }
+
+    [PostgresFact]
+    public async Task LocationLookup_FiltersGpsCandidatesAndPagesNearbyResultsInPostgres()
+    {
+        await using var db = CreateDb();
+        var close = LocationLookupTests.Point("Z close", 50.6293m, 3.0573m);
+        var north = LocationLookupTests.Point("A north", 50.6328m, 3.0573m);
+        db.Locations.AddRange(close, north, LocationLookupTests.Point("Far", 50.6340m, 3.0573m),
+            LocationLookupTests.Point("No coordinates", null, null));
+        await db.SaveChangesAsync();
+
+        var result = await new Pegaxus.Service.LocationService.Service(db).GetListAsync(new()
+            { Latitude = 50.6292314m, Longitude = 3.0573129m, PageSize = 1 });
+        Assert.Equal(close.LocationId, Assert.Single(result.Items).LocationId);
+        Assert.Equal(2, result.TotalItems); Assert.Equal(2, result.TotalPages);
     }
 
     [PostgresFact]

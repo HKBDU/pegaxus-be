@@ -37,6 +37,10 @@ WORKDIR /app
 # Copy published binaries from build stage
 COPY --from=build /app/publish .
 
+# ASP.NET Data Protection keeps its keys in /app/.keys (Program.cs); the non-root user must be able to write there,
+# otherwise Google sign-in fails with a 500 when it protects the OAuth state.
+RUN mkdir -p /app/.keys && chown $APP_UID /app/.keys
+
 # Run as non-root user for security
 USER $APP_UID
 

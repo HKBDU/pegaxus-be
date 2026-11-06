@@ -100,7 +100,7 @@ public class InvoiceUpdateHttpTests
         Assert.Equal(f.Invoice.InvoiceId, value.GetProperty("invoiceId").GetGuid());
         Assert.Equal(f.Invoice.InvoiceCode, value.GetProperty("invoiceNumber").GetString());
         Assert.Equal("DRAFT", value.GetProperty("status").GetString());
-        Assert.False(value.GetProperty("isPaymentRequired").GetBoolean());
+        Assert.True(value.GetProperty("isPaymentRequired").GetBoolean());
         Assert.Equal(1, value.GetProperty("items").GetArrayLength());
         Assert.Equal(f.Horse.HorseId, value.GetProperty("items")[0].GetProperty("horse").GetProperty("horseId").GetGuid());
         Assert.Equal("6", value.GetProperty("summary").GetProperty("grandTotal").GetRawText());

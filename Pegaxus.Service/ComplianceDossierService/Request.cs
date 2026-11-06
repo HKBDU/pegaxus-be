@@ -1,5 +1,4 @@
 using System.Text.Json.Serialization;
-using Microsoft.AspNetCore.Http;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
@@ -108,6 +107,8 @@ public class Request
         public Guid? DossierTemplateId { get; set; }
         public DateTimeOffset? BookingUpdatedAt { get; set; }
         public List<InitializationItemRequest>? Items { get; set; }
+        /// <summary>The DossierTemplateItems to keep when a template is used; ignored when <see cref="Items"/> is given. Omitted keeps every item of the template.</summary>
+        public List<Guid>? SelectedTemplateItemIds { get; set; }
         public string? Note { get; set; }
     }
 
@@ -131,7 +132,7 @@ public class Request
 
         public bool IsRequired { get; set; } = true;
 
-        public IFormFile? ProofFile { get; set; }
+        public UploadService.Request.UploadedAssetReference? ProofFile { get; set; }
 
         public string? DecisionNote { get; set; }
     }
@@ -146,7 +147,7 @@ public class Request
 
         public DateOnly? PermitExpiryDate { get; set; }
 
-        public IFormFile? DecisionFile { get; set; }
+        public UploadService.Request.UploadedAssetReference? DecisionFile { get; set; }
 
         public string? DecisionNote { get; set; }
 
@@ -167,7 +168,7 @@ public class Request
 
         public string? QuickNote { get; set; }
 
-        public List<IFormFile> Files { get; set; } = [];
+        public List<UploadService.Request.UploadedAssetReference> Files { get; set; } = [];
     }
 
     public class FinalizeQuarantineProofRequest
@@ -201,7 +202,7 @@ public class Request
 
         public string? QuickNote { get; set; }
 
-        public List<IFormFile> Files { get; set; } = [];
+        public List<UploadService.Request.UploadedAssetReference> Files { get; set; } = [];
     }
 
     public class FinalizeCustomsClearanceProofRequest

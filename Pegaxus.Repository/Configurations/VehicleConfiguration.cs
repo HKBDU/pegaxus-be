@@ -22,6 +22,9 @@ public sealed class VehicleConfiguration : IEntityTypeConfiguration<Vehicle>
 
         entity.Property(e => e.VehicleId).HasColumnName("vehicle_id");
         entity.Property(e => e.CapacityHorses).HasColumnName("capacity_horses");
+        entity.Property(e => e.Country)
+            .HasMaxLength(100)
+            .HasColumnName("country");
         entity.Property(e => e.CreatedAt)
             .HasColumnType("timestamp without time zone")
             .HasColumnName("created_at");

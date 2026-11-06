@@ -22,5 +22,6 @@ public static class Request
         public string? MicrochipNumber { get; set; }
         public string? PassportNumber { get; set; }
         public string? IdentificationNotes { get; set; }
+        public UploadService.Request.UploadedAssetReference? Avatar { get; set; }
     }
 }

@@ -3,6 +3,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.MediaService;
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.ComplianceDossierService;
 
@@ -25,7 +26,7 @@ public sealed partial class Service
             {
                 BookingId = bookingId, BookingCode = booking.BookingCode,
                 BookingSummary = await BuildBookingSummaryAsync(bookingId, cancellationToken),
-                Message = "ComplianceDossier has not been initialized. Waiting for transport booking approval."
+                Message = "Compliance dossier has not been initialized. Waiting for transport booking approval."
             };
         return await BuildOverviewAsync(dossier, booking, viewer.Role, request, cancellationToken);
     }
@@ -48,7 +49,7 @@ public sealed partial class Service
             .Include(item => item.ComplianceDocument!).ThenInclude(item => item.DocumentVersions).ThenInclude(item => item.DocumentAttachments)
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId && item.DossierRequirementId == requirementId &&
                 !item.IsDeleted, cancellationToken)
-            ?? throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+            ?? throw new NotFoundException("Dossier requirement not found.", "REQUIREMENT_NOT_FOUND");
         var document = requirement.ComplianceDocument;
         var previewBase = $"/api/v1/compliance-dossiers/{dossierId}/requirements/{requirementId}/versions";
         return new Response.RequirementDetailResponse
@@ -119,14 +120,14 @@ public sealed partial class Service
                 CustomerId = item.AccountType == AccountType.CUSTOMER ? (Guid?)item.CustomerAccount!.CustomerId : null,
                 Role = item.AccountType == AccountType.EMPLOYEE ? (EmployeeRole?)item.EmployeeAccount!.Role : null
             }).SingleOrDefaultAsync(cancellationToken)
-            ?? throw new ForbiddenException("Only Customers, Transport Specialists and Logistics Managers can view ComplianceDossiers.");
+            ?? throw new ForbiddenException("Only Customers, Transport Specialists and Logistics Managers can view compliance dossiers.");
         return (viewer.CustomerId, viewer.Role);
     }
 
     private static void CheckOwnership(Guid? customerId, Guid bookingCustomerId)
     {
         if (customerId.HasValue && customerId != bookingCustomerId)
-            throw new ForbiddenException("You do not have permission to view this ComplianceDossier.");
+            throw new ForbiddenException("You do not have permission to view this compliance dossier.");
     }
 
     private async Task<(ComplianceDossier Dossier, Booking Booking, EmployeeRole? Role)> ViewableDossierAsync(
@@ -135,10 +136,10 @@ public sealed partial class Service
         var viewer = await RequireViewerAsync(accountId, cancellationToken);
         var dossier = await _db.ComplianceDossiers.AsNoTracking().Include(item => item.Transport).ThenInclude(item => item.Booking)
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)
-            ?? throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
+            ?? throw new NotFoundException("Compliance dossier not found.", "DOSSIER_NOT_FOUND");
         CheckOwnership(viewer.CustomerId, dossier.Transport.Booking.CustomerId);
         if (viewer.Role is null && dossier.Status == ComplianceDossierStatus.DRAFT)
-            throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
+            throw new NotFoundException("Compliance dossier not found.", "DOSSIER_NOT_FOUND");
         return (dossier, dossier.Transport.Booking, viewer.Role);
     }
 
@@ -212,7 +213,7 @@ public sealed partial class Service
             throw new BadRequestException("HorseId must not be empty.");
         if (string.IsNullOrWhiteSpace(request.Status))
             return null;
-        if (!Enum.TryParse<DossierRequirementStatus>(request.Status.Trim(), true, out var status) || !Enum.IsDefined(status))
+        if (!EnumParser.TryParseDefined<DossierRequirementStatus>(request.Status.Trim(), out var status) || !Enum.IsDefined(status))
             throw new BadRequestException("Status is invalid.", "INVALID_STATUS_PARAMETER");
         return status;
     }

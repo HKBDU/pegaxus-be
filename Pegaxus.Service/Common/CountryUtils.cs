@@ -42,6 +42,30 @@ public static class CountryUtils
         return EuCountries.Contains(country.Trim());
     }
 
+    private static readonly Dictionary<string, string> IsoByName = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["Austria"] = "AT", ["Belgium"] = "BE", ["Bulgaria"] = "BG", ["Croatia"] = "HR", ["Cyprus"] = "CY", ["Czech Republic"] = "CZ", ["Czechia"] = "CZ",
+        ["Denmark"] = "DK", ["Estonia"] = "EE", ["Finland"] = "FI", ["France"] = "FR", ["Germany"] = "DE", ["Greece"] = "GR", ["Hungary"] = "HU",
+        ["Ireland"] = "IE", ["Italy"] = "IT", ["Latvia"] = "LV", ["Lithuania"] = "LT", ["Luxembourg"] = "LU", ["Malta"] = "MT", ["Netherlands"] = "NL",
+        ["Poland"] = "PL", ["Portugal"] = "PT", ["Romania"] = "RO", ["Slovakia"] = "SK", ["Slovenia"] = "SI", ["Spain"] = "ES", ["Sweden"] = "SE",
+        [UnitedKingdom] = "GB"
+    };
+
+    private static readonly HashSet<string> EuIsoCodes = new(IsoByName.Values.Where(code => code != "GB"), StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The ISO code of an accepted country, from its name or from the code itself; null for any other country.</summary>
+    public static string? IsoCode(string? country)
+    {
+        var value = country?.Trim();
+        if (string.IsNullOrEmpty(value)) return null;
+        if (IsoByName.TryGetValue(value, out var code)) return code;
+        return value.Length == 2 && (EuIsoCodes.Contains(value) || value.Equals("GB", StringComparison.OrdinalIgnoreCase)) ? value.ToUpperInvariant() : null;
+    }
+
+    /// <summary>The codes a requirement country can use to apply to this country: its own ISO code, plus EU for a member state.</summary>
+    public static IReadOnlyList<string> RegulatoryCodes(string? country) =>
+        IsoCode(country) is { } code ? (EuIsoCodes.Contains(code) ? [code, "EU"] : [code]) : [];
+
     public static bool IsUnitedKingdom(string? country)
     {
         if (string.IsNullOrWhiteSpace(country)) return false;
@@ -67,14 +91,15 @@ public static class CountryUtils
             return (true, string.Empty);
         }
 
-        if (!IsEuCountry(origin))
+        // The United Kingdom is served as a route end like an EU country (EU to UK and UK to EU are the EXTRA_EU import and export routes).
+        if (!IsEuCountry(origin) && !IsUnitedKingdom(origin))
         {
-            return (false, $"Origin country '{origin}' is not an accepted EU member country.");
+            return (false, $"Origin country '{origin}' is not an accepted EU member country or United Kingdom.");
         }
 
-        if (!IsEuCountry(destination))
+        if (!IsEuCountry(destination) && !IsUnitedKingdom(destination))
         {
-            return (false, $"Destination country '{destination}' is not an accepted EU member country.");
+            return (false, $"Destination country '{destination}' is not an accepted EU member country or United Kingdom.");
         }
 
         return (true, string.Empty);

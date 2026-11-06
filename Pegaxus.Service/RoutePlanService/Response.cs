@@ -21,6 +21,8 @@ public static class Response
         public int? BranchSequenceNo { get; init; }
         public LocationResponse? BranchLocation { get; init; }
         public string? RouteNote { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }
 
@@ -34,6 +36,18 @@ public static class Response
         public bool IsPersonnelComplete { get; init; }
         public int? BranchSequenceNo { get; init; }
         public LocationResponse? BranchLocation { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
+        public DateTimeOffset UpdatedAt { get; init; }
+    }
+
+    public sealed class VehicleChangeResponse
+    {
+        public Guid RoutePlanId { get; init; }
+        public required string Status { get; init; }
+        public List<Guid> ReleasedVehicleIds { get; init; } = [];
+        public List<Guid> MaintenanceVehicleIds { get; init; } = [];
+        public List<Guid> AppliedSegmentIds { get; init; } = [];
         public DateTimeOffset UpdatedAt { get; init; }
     }
 
@@ -44,6 +58,9 @@ public static class Response
         public DateTimeOffset CancelledAt { get; init; }
         public required string BookingStatus { get; init; }
     }
+
+    /// <summary>The SignalR payload for RoutePlanCancelled: routePlanId refreshes one plan, transportPlanId refreshes the PRIMARY/BACKUP/RETURN list.</summary>
+    public sealed record RoutePlanCancelledEvent(Guid RoutePlanId, Guid TransportPlanId, string RouteType, DateTimeOffset CancelledAt);
 
     public sealed class DetailResponse
     {
@@ -64,6 +81,9 @@ public static class Response
         public int? BranchSequenceNo { get; init; }
         public LocationResponse? BranchLocation { get; init; }
         public LegalReviewResponse? LegalReview { get; init; }
+        public DateTimeOffset? SubmittedForReviewAt { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
         public string? RouteNote { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
@@ -155,6 +175,8 @@ public static class Response
         public required IReadOnlyList<Guid> ConfirmedBackupRoutePlanIds { get; init; }
         public bool CustomerUploadEnabled { get; init; }
         public bool PersonnelAssignmentPhase2Enabled { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }
 

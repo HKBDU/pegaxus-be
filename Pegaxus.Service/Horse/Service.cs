@@ -5,6 +5,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.MediaService;
 
 using static Pegaxus.Service.Common.DbTime;
 using static Pegaxus.Service.Common.Text;
@@ -14,10 +15,12 @@ namespace Pegaxus.Service.HorseService;
 public sealed class Service : IHorseService
 {
     private readonly AppDbContext _appDbContext;
+    private readonly IMediaService _mediaService;
 
-    public Service(AppDbContext appDbContext)
+    public Service(AppDbContext appDbContext, IMediaService mediaService)
     {
         _appDbContext = appDbContext;
+        _mediaService = mediaService;
     }
 
     public async Task<Response.HorseListResponse> GetCustomerHorsesAsync(
@@ -60,7 +63,7 @@ public sealed class Service : IHorseService
         var items = await query
             .OrderBy(horse => horse.HorseName)
             .ThenBy(horse => horse.HorseId)
-            .Skip((request.PageIndex - 1) * request.PageSize)
+            .Skip(Paging.Offset(request.PageIndex, request.PageSize))
             .Take(request.PageSize)
             .Select(horse => new Response.HorseItemResponse
             {
@@ -68,7 +71,8 @@ public sealed class Service : IHorseService
                 HorseName = horse.HorseName,
                 Sex = horse.Sex.HasValue ? horse.Sex.Value.ToString() : null,
                 Breed = horse.Breed,
-                MicrochipNumber = horse.MicrochipNumber
+                MicrochipNumber = horse.MicrochipNumber,
+                AvatarUrl = horse.AvatarUrl
             })
             .ToListAsync(cancellationToken);
 
@@ -98,7 +102,7 @@ public sealed class Service : IHorseService
         if (customerId is null)
             throw new ForbiddenException("Only customer accounts can create horses");
 
-        var horseName = request.HorseName?.Trim() ?? string.Empty;
+        var horseName = Text.NormalizeName(request.HorseName);
         ValidateText(horseName, 150, "HorseName", required: true);
         ValidateText(request.Breed, 100, "Breed", required: true);
         ValidateText(request.Color, 100, "Color", required: true);
@@ -107,23 +111,24 @@ public sealed class Service : IHorseService
         ValidatePassportNumber(request.PassportNumber);
         ValidateText(request.IdentificationNotes, 1000, "IdentificationNotes", required: true);
         ValidateRequiredDateOfBirth(request.DateOfBirth);
-        ValidateRequiredMeasurement(request.WeightKg, "WeightKg");
-        ValidateRequiredMeasurement(request.HeightCm, "HeightCm");
+        ValidateRequiredMeasurement(request.WeightKg, "WeightKg", Limits.HorseWeightKg);
+        ValidateRequiredMeasurement(request.HeightCm, "HeightCm", Limits.HorseHeightCm);
 
         var sex = ParseSex(request.Sex);
+        var avatarUrl = request.Avatar is null ? null : await _mediaService.ConfirmAvatarImageAsync(accountId, request.Avatar.PublicId, cancellationToken);
 
         var microchipNumber = EmptyToNull(request.MicrochipNumber);
         var passportNumber = EmptyToNull(request.PassportNumber);
 
         if (microchipNumber is not null && await _appDbContext.Horses.AnyAsync(
-                horse => horse.MicrochipNumber == microchipNumber,
+                horse => !horse.IsDeleted && horse.MicrochipNumber == microchipNumber,
                 cancellationToken))
             throw new ConflictException(
                 "Microchip number already exists",
                 "DUPLICATE_MICROCHIP");
 
         if (passportNumber is not null && await _appDbContext.Horses.AnyAsync(
-                horse => horse.PassportNumber == passportNumber,
+                horse => !horse.IsDeleted && horse.PassportNumber == passportNumber,
                 cancellationToken))
             throw new ConflictException(
                 "Passport number already exists",
@@ -145,6 +150,7 @@ public sealed class Service : IHorseService
             MicrochipNumber = microchipNumber,
             PassportNumber = passportNumber,
             IdentificationNotes = EmptyToNull(request.IdentificationNotes),
+            AvatarUrl = avatarUrl,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -211,6 +217,7 @@ public sealed class Service : IHorseService
             PassportNumber = horse.PassportNumber,
             MicrochipNumber = horse.MicrochipNumber,
             IdentificationNotes = horse.IdentificationNotes,
+            AvatarUrl = horse.AvatarUrl,
             CreatedAt = AsUtc(horse.CreatedAt),
             UpdatedAt = AsUtc(horse.UpdatedAt)
         };
@@ -243,7 +250,7 @@ public sealed class Service : IHorseService
                 "Horse belongs to an approved request and cannot be updated",
                 "HORSE_IN_APPROVED_BOOKING");
 
-        var horseName = request.HorseName?.Trim() ?? string.Empty;
+        var horseName = Text.NormalizeName(request.HorseName);
         ValidateText(horseName, 150, "HorseName", required: true);
         ValidateText(request.Breed, 100, "Breed", required: true);
         ValidateText(request.Color, 100, "Color", required: true);
@@ -252,22 +259,23 @@ public sealed class Service : IHorseService
         ValidatePassportNumber(request.PassportNumber);
         ValidateText(request.IdentificationNotes, 1000, "IdentificationNotes", required: true);
         ValidateRequiredDateOfBirth(request.DateOfBirth);
-        ValidateRequiredMeasurement(request.WeightKg, "WeightKg");
-        ValidateRequiredMeasurement(request.HeightCm, "HeightCm");
+        ValidateRequiredMeasurement(request.WeightKg, "WeightKg", Limits.HorseWeightKg);
+        ValidateRequiredMeasurement(request.HeightCm, "HeightCm", Limits.HorseHeightCm);
 
         var sex = ParseSex(request.Sex);
+        var avatarUrl = request.Avatar is null ? null : await _mediaService.ConfirmAvatarImageAsync(accountId, request.Avatar.PublicId, cancellationToken);
         var microchipNumber = EmptyToNull(request.MicrochipNumber);
         var passportNumber = EmptyToNull(request.PassportNumber);
 
         if (microchipNumber is not null && await _appDbContext.Horses.AnyAsync(item =>
-                item.HorseId != horseId && item.MicrochipNumber == microchipNumber,
+                !item.IsDeleted && item.HorseId != horseId && item.MicrochipNumber == microchipNumber,
                 cancellationToken))
             throw new ConflictException(
                 "Microchip number already exists",
                 "DUPLICATE_MICROCHIP");
 
         if (passportNumber is not null && await _appDbContext.Horses.AnyAsync(item =>
-                item.HorseId != horseId && item.PassportNumber == passportNumber,
+                !item.IsDeleted && item.HorseId != horseId && item.PassportNumber == passportNumber,
                 cancellationToken))
             throw new ConflictException(
                 "Passport number already exists",
@@ -284,6 +292,9 @@ public sealed class Service : IHorseService
         horse.MicrochipNumber = microchipNumber;
         horse.PassportNumber = passportNumber;
         horse.IdentificationNotes = EmptyToNull(request.IdentificationNotes);
+        // A request without an avatar keeps the current one.
+        if (avatarUrl is not null)
+            horse.AvatarUrl = avatarUrl;
         horse.UpdatedAt = UtcNow();
 
         try
@@ -367,32 +378,36 @@ public sealed class Service : IHorseService
             throw new BadRequestException("Passport Number must be a valid 15-character EU passport/UELN number");
     }
 
-    private static void ValidateMeasurement(decimal? value, string fieldName)
+    private static void ValidateMeasurement(decimal? value, string fieldName, DecimalRange range)
     {
         if (value is <= 0)
             throw new BadRequestException($"{fieldName} must be greater than 0");
+        InputRules.Measurement(value, range, fieldName);
     }
 
-    private static void ValidateRequiredMeasurement(decimal? value, string fieldName)
+    private static void ValidateRequiredMeasurement(decimal? value, string fieldName, DecimalRange range)
     {
         if (value is null)
             throw new BadRequestException($"{fieldName} is required");
-        ValidateMeasurement(value, fieldName);
+        ValidateMeasurement(value, fieldName, range);
     }
 
     private static void ValidateRequiredDateOfBirth(DateOnly? value)
     {
         if (value is null)
             throw new BadRequestException("DateOfBirth is required");
-        if (value > DateOnly.FromDateTime(DateTime.UtcNow))
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        if (value > today)
             throw new BadRequestException("DateOfBirth cannot be in the future");
+        if (value < today.AddYears(-Limits.HorseMaxAgeYears))
+            throw new BadRequestException($"DateOfBirth cannot be more than {Limits.HorseMaxAgeYears} years ago");
     }
 
     private static HorseSex? ParseSex(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
             throw new BadRequestException("Sex is required");
-        if (!Enum.TryParse<HorseSex>(value.Trim(), true, out var sex))
+        if (!EnumParser.TryParseDefined<HorseSex>(value.Trim(), out var sex))
             throw new BadRequestException("Sex is invalid");
         return sex;
     }

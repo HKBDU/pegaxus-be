@@ -88,6 +88,12 @@ public class InvoiceOnlinePaymentHttpTests
         var details = (await client.GetFromJsonAsync<JsonElement>(detailPath)).GetProperty("value");
         Assert.Equal("ISSUED", details.GetProperty("status").GetString());
         Assert.Equal(receipt.GetProperty("receiptId").GetGuid(), Assert.Single(details.GetProperty("receipts").EnumerateArray()).GetProperty("receiptId").GetGuid());
+        var again = await client.PostAsync(path, null); // a second click reuses the pending receipt: 200, same receipt
+        Assert.Equal(HttpStatusCode.OK, again.StatusCode);
+        var repeated = await again.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Equal(200, repeated.GetProperty("code").GetInt32());
+        Assert.Equal(receipt.GetProperty("receiptId").GetGuid(), repeated.GetProperty("value").GetProperty("receipt").GetProperty("receiptId").GetGuid());
+        Assert.False(repeated.GetProperty("value").TryGetProperty("reused", out _));
         Assert.Empty(await db.InvoiceStatusHistories.ToListAsync());
         Assert.Empty(await db.Notifications.ToListAsync()); Assert.Empty(await db.OutboxMessages.ToListAsync());
         var cancelPath = detailPath + "/cancel";

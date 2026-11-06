@@ -13,7 +13,7 @@ public sealed class RoutePlansController(RoutePlanService.IRoutePlanService serv
 {
     /// <summary>Create a route plan.</summary>
     /// <param name="transportPlanId">The transport plan identifier.</param>
-    /// <param name="request">The route plan data.</param>
+    /// <param name="request">The route plan data. RETURN may be created by the assigned RC or any LM and may carry the incident that caused it (incidentReportId).</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>201 Created with the route plan.</returns>
     [HttpPost("/api/v1/transport-plans/{transportPlanId:guid}/route-plans")]
@@ -60,6 +60,20 @@ public sealed class RoutePlansController(RoutePlanService.IRoutePlanService serv
     {
         var response = await service.UpdateAsync(AccountId, routePlanId, request, cancellationToken);
         return Success(response, "Route plan updated successfully");
+    }
+
+    /// <summary>Change the vehicles of a route plan, before departure or after an incident during the trip.</summary>
+    /// <remarks>Only the Route Coordinator can use this. While the PRIMARY route plan is CONFIRMED (legal review passed, PICKUP not yet completed) segments are picked by sequenceNo or routePlanRouteId. While the route plan is ACTIVE and the transport IN_TRANSIT, incidentReportId is required, segments are picked by routePlanRouteId and may belong to any unfinished segment of the transport (the current one, later ones, and the segments of a CONFIRMED BACKUP or RETURN plan); the incident must report each replaced vehicle and have an APPROVED REPLACEMENT_VEHICLE emergency cost. Each listed segment replaces its vehicles; the same replacement is also applied to the other unfinished segments of the transport plan that still hold the replaced vehicle (for example a CONFIRMED BACKUP or RETURN plan), unless the request lists them itself, and the whole call fails if any of them is invalid (AMBIGUOUS_REPLACEMENT when one vehicle gets different replacements and a segment that still uses it is not listed). While ACTIVE, a new vehicle that is IN_USE on another trip is refused. The new vehicles pass the same checks as when planning (status, capacity, documents, schedule). A replaced vehicle that nothing else holds returns to AVAILABLE, or goes to MAINTENANCE when the incident needs repair. Errors include INVALID_ROUTE_PLAN_STATUS, INVALID_ROUTE_PLAN_TYPE, ROUTE_PLAN_MODIFIED, TRANSPORT_NOT_IN_TRANSIT, INCIDENT_REQUIRED, INCIDENT_NOT_FOUND, INVALID_INCIDENT_STATUS, VEHICLE_NOT_IN_INCIDENT, REPLACEMENT_COST_NOT_APPROVED, SEGMENT_ALREADY_COMPLETED, SEGMENT_NOT_IN_ITINERARY, VEHICLE_UNAVAILABLE and VEHICLE_SCHEDULE_CONFLICT.</remarks>
+    /// <param name="routePlanId">The route plan identifier.</param>
+    /// <param name="request">The reason, the concurrency token, the incident (while ACTIVE) and the new vehicles per segment.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the route plan status and the vehicles that went back to the pool.</returns>
+    [HttpPatch("/api/v1/route-plans/{routePlanId:guid}/vehicles")]
+    [Authorize(Policy = JwtExtensions.EmployeePolicy)]
+    public async Task<IActionResult> ChangeVehicles(Guid routePlanId, [FromBody] RoutePlanService.Request.ChangeVehiclesRequest request, CancellationToken cancellationToken)
+    {
+        var response = await service.ChangeVehiclesAsync(AccountId, routePlanId, request, cancellationToken);
+        return Success(response, "Route plan vehicles changed successfully");
     }
 
     /// <summary>Cancel a draft route plan.</summary>

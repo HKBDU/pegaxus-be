@@ -363,6 +363,7 @@
 | `insurance_number` | `varchar(100)` |  | No | Số hợp đồng/chứng nhận bảo hiểm phương tiện. |
 | `insurance_expiry_date` | `date` |  | No | Ngày hết hạn bảo hiểm phương tiện. |
 | `special_equipment` | `text` |  | No | Mô tả thiết bị đặc biệt có trên phương tiện. |
+| `country` | `varchar(100)` |  | No | Mã quốc gia ISO-2 (ví dụ `FR`, `GB`) nơi phương tiện đang hoạt động; dùng để lọc phương tiện theo quốc gia xuất phát của chặng khi phân công. NULL nếu chưa xác định. |
 | `is_deleted` | `boolean` |  | Yes | Cờ soft delete. `false` = record đang hoạt động/tồn tại về mặt logic; `true` = đã bị xóa logic nhưng vẫn giữ trong database để bảo toàn lịch sử và các FK. |
 | `deleted_at` | `timestamp` |  | No | Thời điểm record bị soft delete; NULL nếu record chưa bị xóa logic. |
 | `deleted_by_account_id` | `uuid` | FK | No | Account thực hiện thao tác soft delete; NULL nếu record chưa bị xóa hoặc việc xóa không có actor được ghi nhận. |

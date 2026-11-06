@@ -35,8 +35,10 @@ public class RouteChangePostgresTests
         Assert.Equal(4, await check.RoutePlanRoutes.CountAsync());
         Assert.Null((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Completed.RoutePlanRouteId)).SupersededAt);
         Assert.NotNull((await check.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == f.Current.RoutePlanRouteId)).SupersededAt);
-        Assert.Equal(4, await check.Notifications.CountAsync());
-        Assert.Equal(4, await check.OutboxMessages.CountAsync());
+        // The escort of the current segment is notified as well (notification only, no email).
+        Assert.Equal(5, await check.Notifications.CountAsync());
+        Assert.Equal(5, await check.OutboxMessages.CountAsync(item => item.MessageType == "SIGNALR_ACCOUNT"));
+        Assert.Equal(4, await check.OutboxMessages.CountAsync(item => item.MessageType == "EMAIL"));
         Assert.Empty(await check.IncidentReports.ToListAsync());
         var options = new DbContextOptionsBuilder<AppDbContext>().UseTestNpgsql(scope.Source).Options;
         await CheckOutboxClaimsAsync(options);
@@ -233,6 +235,25 @@ public class RouteChangePostgresTests
     }
 
     [PostgresFact]
+    public async Task EmailRecipients_TranslateOnPostgres_AndSkipInactiveAccounts()
+    {
+        await using var scope = await DatabaseScope.CreateAsync();
+        await using var db = scope.Db();
+        var (customer, _) = await TestSupport.AddCustomerAsync(db);
+        var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var (disabled, disabledEmployee) = await TestSupport.AddLogisticsManagerAsync(db);
+        disabledEmployee.IsActive = false;
+        await db.SaveChangesAsync();
+
+        await Pegaxus.Service.MailService.MailRecipients.QueueAsync(db, [customer.AccountId, manager.AccountId, disabled.AccountId], DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified),
+            recipient => Pegaxus.Service.MailService.MailRecipients.Mail(recipient, "Subject", "Body"));
+        await db.SaveChangesAsync();
+
+        await using var check = scope.Db();
+        Assert.Equal(2, await check.OutboxMessages.CountAsync(item => item.MessageType == "EMAIL"));
+    }
+
+    [PostgresFact]
     public async Task TransportPlan_ResolvesBookingLocationsAndLoadsTheDetailOnPostgres()
     {
         await using var scope = await DatabaseScope.CreateAsync();
@@ -251,7 +272,7 @@ public class RouteChangePostgresTests
 
         var plans = new Pegaxus.Service.TransportPlanService.Service(db, TestSupport.CreateNotifications(db));
         var plan = await plans.CreateAsync(manager.AccountId, booking.BookingId,
-            new() { PlannedStartAt = DateTimeOffset.UtcNow.AddDays(21), PlannedEndAt = DateTimeOffset.UtcNow.AddDays(23) });
+            new() { PlannedStartAt = DateTimeOffset.UtcNow.AddMonths(3), PlannedEndAt = DateTimeOffset.UtcNow.AddMonths(3).AddDays(2) });
 
         Assert.Equal(nearby.LocationId, plan.OriginLocationId);
         Assert.Equal(LocationType.OTHER.ToString(), plan.DestinationLocation!.LocationType);

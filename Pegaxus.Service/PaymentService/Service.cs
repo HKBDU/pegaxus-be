@@ -109,7 +109,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             // The money arrived but the invoice cannot take it (already paid by another receipt, or cancelled).
             LogForAccounting(receipt, payment.Reference);
             await FlagForReconciliationAsync(receipt, invoice, payment.Reference!,
-                $"A payment was received for invoice {invoice.InvoiceCode}, which is already {invoice.Status}", now, cancellationToken);
+                $"A payment was received for invoice {invoice.InvoiceCode}, which is already {UserFacingText.Label(invoice.Status)}", now, cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);
@@ -140,6 +140,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             ChangedByAccountId = null, ChangedAt = now, CreatedAt = now
         });
 
+        var planApproved = false;
         if (invoice.Type == InvoiceType.DEPOSIT)
         {
             var plan = await db.TransportPlans
@@ -153,11 +154,12 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
                 plan.Status = TransportPlanStatus.APPROVED;
                 plan.ApprovedByEmployeeId = null;
                 plan.ApprovedAt = plan.UpdatedAt = now;
+                planApproved = true;
             }
         }
 
         var customer = await db.Bookings.AsNoTracking().Where(x => x.BookingId == invoice.BookingId)
-            .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName, TransportId = (Guid?)x.Transport!.TransportId })
+            .Select(x => new { x.Customer.AccountId, x.Customer.Account.Email, x.Customer.FullName, TransportId = (Guid?)x.Transport!.TransportId, x.AssignedEmployeeId })
             .SingleAsync(cancellationToken);
         var message = $"Online payment for invoice {invoice.InvoiceCode} has been confirmed. Receipt: {receipt.ReceiptCode}. " +
             $"Amount: {Vnd.Format(receipt.Amount, receipt.Currency)}. Invoice status: PAID.";
@@ -172,8 +174,24 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
         {
             To = customer.Email, Subject = $"Payment confirmed — {receipt.ReceiptCode}",
             Body = EmailBodies.PaymentConfirmedBody(customer.FullName, invoice.InvoiceCode, receipt.ReceiptCode,
-                receipt.Amount, receipt.Currency, isPayout: false, actionUrl: null)
+                receipt.Amount, receipt.Currency, isPayout: false,
+                actionUrl: NotificationLinks.Invoice(null, invoice.BookingId, invoice.InvoiceId))
         }, now);
+        // Only the manager who approved the booking hears about the payment, and only in the app; nobody else is told when that manager is no longer active.
+        var manager = await db.Employees.AsNoTracking().Active()
+            .Where(x => x.Role == EmployeeRole.LOGISTICS_MANAGER && x.EmployeeId == customer.AssignedEmployeeId)
+            .Select(x => x.AccountId).SingleOrDefaultAsync(cancellationToken);
+        if (manager != Guid.Empty)
+            notifications.Queue(new NotificationCreateRequest
+            {
+                AccountId = manager, TransportId = customer.TransportId, Type = NotificationType.PAYMENT,
+                Priority = planApproved ? NotificationPriority.HIGH : NotificationPriority.NORMAL, Title = "Payment received",
+                Message = $"{customer.FullName} paid invoice {invoice.InvoiceCode} online. Receipt: {receipt.ReceiptCode}. " +
+                    $"Amount: {Vnd.Format(receipt.Amount, receipt.Currency)}. Invoice status: PAID." +
+                    (planApproved ? " The transport plan was approved automatically." : string.Empty),
+                ReferenceType = "Invoice", ReferenceId = invoice.InvoiceId,
+                ActionUrl = NotificationLinks.Invoice(EmployeeRole.LOGISTICS_MANAGER, invoice.BookingId, invoice.InvoiceId), CreatedAt = now
+            });
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
@@ -197,9 +215,9 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             return;
         }
 
-        var message = $"{reason}. Receipt: {receipt.ReceiptCode} ({receipt.Status}). Gateway reference: {reference}. " +
+        var message = $"{reason}. Receipt: {receipt.ReceiptCode} ({UserFacingText.Label(receipt.Status)}). Gateway reference: {reference}. " +
             $"Amount: {Vnd.Format(receipt.Amount, receipt.Currency)}. " +
-            $"Invoice: {invoice.InvoiceCode} ({invoice.Status}). Check the bank statement and refund or reconcile manually.";
+            $"Invoice: {invoice.InvoiceCode} ({UserFacingText.Label(invoice.Status)}). Check the bank statement and refund or reconcile manually.";
         foreach (var manager in managers)
         {
             notifications.Queue(new NotificationCreateRequest
@@ -212,7 +230,8 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
             {
                 To = manager.Email, Subject = $"{title} — {receipt.ReceiptCode}",
                 Body = EmailBodies.PaymentReconciliationBody(manager.FullName, reason, receipt.ReceiptCode, receipt.Status.ToString(), reference,
-                    receipt.Amount, receipt.Currency, invoice.InvoiceCode, invoice.Status.ToString(), actionUrl: null)
+                    receipt.Amount, receipt.Currency, invoice.InvoiceCode, invoice.Status.ToString(),
+                    actionUrl: NotificationLinks.Invoice(EmployeeRole.LOGISTICS_MANAGER, invoice.BookingId, invoice.InvoiceId))
             }, now);
         }
     }

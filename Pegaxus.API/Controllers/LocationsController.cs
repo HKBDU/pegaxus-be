@@ -13,7 +13,8 @@ namespace Pegaxus.API.Controllers;
 public sealed class LocationsController(Locations.ILocationService service) : ApiControllerBase
 {
     /// <summary>List active master locations.</summary>
-    /// <param name="request">Search, filters, and pagination.</param>
+    /// <remarks>Supply both latitude and longitude to find locations within 500 meters, nearest first. GPS coordinates may have more than four decimal places. No match returns an empty list without creating a location. Without coordinates, locations remain ordered by name.</remarks>
+    /// <param name="request">Search, filters, pagination and an optional GPS coordinate pair.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>A paginated location list.</returns>
     [HttpGet]

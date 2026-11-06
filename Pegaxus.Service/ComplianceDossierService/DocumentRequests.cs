@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.OutboxService;
 
@@ -31,42 +32,42 @@ public sealed partial class Service
                 var dossier = await dossiers.AsTracking().Include(item => item.Transport).ThenInclude(item => item.Booking)
                     .ThenInclude(item => item.Customer).ThenInclude(item => item.Account)
                     .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)
-                    ?? throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
+                    ?? throw new NotFoundException("Compliance dossier not found.", "DOSSIER_NOT_FOUND");
                 await _db.Entry(dossier).ReloadAsync(cancellationToken);
                 if (dossier.Status is not (ComplianceDossierStatus.IN_PREPARATION or ComplianceDossierStatus.READY_FOR_SUBMISSION or ComplianceDossierStatus.REJECTED))
-                    throw new ConflictException("Cannot create DocumentRequests after dossier submission to official authorities.");
+                    throw new ConflictException("Cannot create document requests after dossier submission to official authorities.");
                 await _db.LockRowsAsync(_db.DossierRequirements.Where(item => item.DossierRequirementId == requirementId), item => item.DossierRequirementId, cancellationToken);
                 var requirements = _db.DossierRequirements.AsQueryable();
                 var requirement = await requirements.AsTracking().SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId &&
                     item.ComplianceDossierId == dossierId && !item.IsDeleted, cancellationToken)
-                    ?? throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+                    ?? throw new NotFoundException("Dossier requirement not found.", "REQUIREMENT_NOT_FOUND");
                 await _db.Entry(requirement).ReloadAsync(cancellationToken);
                 if (requirement.IsDeleted)
-                    throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+                    throw new NotFoundException("Dossier requirement not found.", "REQUIREMENT_NOT_FOUND");
                 await _db.LockRowsAsync(_db.ComplianceDocuments.Where(item => item.DossierRequirementId == requirementId), item => item.ComplianceDocumentId, cancellationToken);
                 var documents = _db.ComplianceDocuments.AsQueryable();
                 var document = await documents.AsTracking().SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId, cancellationToken)
-                    ?? throw new NotFoundException("ComplianceDocument not found.", "DOCUMENT_NOT_FOUND");
+                    ?? throw new NotFoundException("Document not found.", "DOCUMENT_NOT_FOUND");
                 await _db.Entry(document).ReloadAsync(cancellationToken);
                 await _db.LockRowsAsync(_db.DocumentVersions.Where(item => item.DocumentVersionId == versionId), item => item.DocumentVersionId, cancellationToken);
                 var versions = _db.DocumentVersions.AsQueryable();
                 var version = await versions.AsTracking().SingleOrDefaultAsync(item => item.DocumentVersionId == versionId &&
                     item.ComplianceDocumentId == document.ComplianceDocumentId, cancellationToken)
-                    ?? throw new NotFoundException("DocumentVersion not found.", "DOCUMENT_VERSION_NOT_FOUND");
+                    ?? throw new NotFoundException("Document version not found.", "DOCUMENT_VERSION_NOT_FOUND");
                 await _db.Entry(version).ReloadAsync(cancellationToken);
                 if (document.Status != ComplianceDocumentStatus.PROVIDED || requirement.Status != DossierRequirementStatus.PROVIDED)
-                    throw new ConflictException("Only PROVIDED ComplianceDocuments and DossierRequirements can be rejected.");
+                    throw new ConflictException("Only provided documents and dossier requirements can be rejected.");
                 if (string.IsNullOrWhiteSpace(version.FileUrl) || await _db.DocumentVersions.AnyAsync(item =>
                     item.ComplianceDocumentId == document.ComplianceDocumentId && item.VersionNo > version.VersionNo, cancellationToken))
-                    throw new ConflictException("Only the latest submitted DocumentVersion can be rejected.");
+                    throw new ConflictException("Only the latest submitted document version can be rejected.");
                 if (RevisionTimestamp(request.VersionUploadedAt) != RevisionTimestamp(version.UploadedAt) ||
                     RevisionTimestamp(request.DocumentUpdatedAt) != RevisionTimestamp(document.UpdatedAt))
-                    throw new ConflictException("The document file or metadata changed. Reload before recording a DocumentReview.", "DOCUMENT_REVIEW_CONFLICT");
+                    throw new ConflictException("The document file or metadata changed. Reload before recording a document review.", "DOCUMENT_REVIEW_CONFLICT");
                 var latestReview = await _db.DocumentReviews.AsNoTracking().Where(item => item.DocumentVersionId == versionId)
                     .OrderByDescending(item => item.ReviewedAt).ThenByDescending(item => item.CreatedAt).ThenByDescending(item => item.DocumentReviewId)
                     .FirstOrDefaultAsync(cancellationToken);
                 if (latestReview?.Result == DocumentReviewResult.APPROVED)
-                    throw new ConflictException("Revoke the current approval before rejecting this DocumentVersion.");
+                    throw new ConflictException("Revoke the current approval before rejecting this document version.");
                 var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
                 var note = request.RejectionNote.Trim();
                 var review = new DocumentReview
@@ -123,7 +124,7 @@ public sealed partial class Service
                             errorCategory: revision.ErrorCategory ?? "",
                             note: note,
                             revisionDeadline: request.RevisionDeadline,
-                            actionUrl: null)
+                            actionUrl: NotificationLinks.Dossier(null, dossierId))
                     }, now);
                 await _db.SaveChangesAsync(cancellationToken);
                 await transaction.CommitAsync(cancellationToken);
@@ -140,7 +141,7 @@ public sealed partial class Service
             }
             catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
             {
-                throw new ConflictException("The document changed. Reload before creating a DocumentRequest.", "DOCUMENT_REVIEW_CONFLICT");
+                throw new ConflictException("The document changed. Reload before creating a document request.", "DOCUMENT_REVIEW_CONFLICT");
             }
         }
         await _notificationService.FlushAsync(CancellationToken.None);
@@ -163,7 +164,7 @@ public sealed partial class Service
                     errorCategory: revision.ErrorCategory ?? "",
                     note: revision.Message,
                     revisionDeadline: revision.DueDate ?? DateOnly.FromDateTime(DateTime.UtcNow),
-                    actionUrl: null)
+                    actionUrl: NotificationLinks.Dossier(null, dossierId))
             }).WaitAsync(TimeSpan.FromSeconds(2));
             response.EmailSent = true;
         }
@@ -181,7 +182,7 @@ public sealed partial class Service
     {
         var (dossier, booking, role) = await ViewableDossierAsync(accountId, dossierId, cancellationToken);
         if (role is not (null or EmployeeRole.TRANSPORT_SPECIALIST))
-            throw new ForbiddenException("Only the owning Customer and Transport Specialists can discuss DocumentRequests.");
+            throw new ForbiddenException("Only the owning Customer and Transport Specialists can discuss document requests.");
         if (string.IsNullOrWhiteSpace(request.Message) || request.Message.Trim().Length > 2000)
             throw new BadRequestException("Comment must contain 1 to 2000 characters.");
         await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
@@ -190,7 +191,7 @@ public sealed partial class Service
             var revision = await FindDocumentRequestAsync(dossierId, requirementId, requestId, true, cancellationToken);
             await _db.Entry(revision).ReloadAsync(cancellationToken);
             if (revision.Status != DocumentRequestStatus.OPEN)
-                throw new ConflictException("Only OPEN DocumentRequests accept comments.");
+                throw new ConflictException("Only open document requests accept comments.");
             var customerAccountId = await _db.Customers.Where(item => item.CustomerId == booking.CustomerId)
                 .Select(item => item.AccountId).SingleAsync(cancellationToken);
             var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -206,6 +207,9 @@ public sealed partial class Service
             if (recipientId != accountId)
                 AddNotification(recipientId, role is null ? EmployeeRole.TRANSPORT_SPECIALIST : null, dossier, "New comment on a document request",
                     $"New comment on {revision.RequestCode} (dossier {dossier.DossierCode}): {comment.Message}", now);
+            if (recipientId != accountId && role is not null)
+                await QueueDossierUpdateMailAsync(recipientId, dossier, MailService.EmailBodies.DossierUpdateKind.RequestComment,
+                    revision.RequestCode, comment.Message, now, cancellationToken);
             await _db.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await _notificationService.FlushAsync(CancellationToken.None);
@@ -213,7 +217,7 @@ public sealed partial class Service
         }
         catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
         {
-            throw new ConflictException("The DocumentRequest changed. Reload before commenting.", "DOCUMENT_REQUEST_CONFLICT");
+            throw new ConflictException("The document request changed. Reload before commenting.", "DOCUMENT_REQUEST_CONFLICT");
         }
     }
 
@@ -222,7 +226,7 @@ public sealed partial class Service
     {
         var (_, _, role) = await ViewableDossierAsync(accountId, dossierId, cancellationToken);
         if (role is not (null or EmployeeRole.TRANSPORT_SPECIALIST))
-            throw new ForbiddenException("Only the owning Customer and Transport Specialists can discuss DocumentRequests.");
+            throw new ForbiddenException("Only the owning Customer and Transport Specialists can discuss document requests.");
         await FindDocumentRequestAsync(dossierId, requirementId, requestId, false, cancellationToken);
         var comments = await _db.DocumentRequestComments.AsNoTracking().Where(item => item.DocumentRequestId == requestId)
             .OrderBy(item => item.CreatedAt).ThenBy(item => item.DocumentRequestCommentId).ToListAsync(cancellationToken);
@@ -237,13 +241,13 @@ public sealed partial class Service
         var requests = _db.DocumentRequests.AsQueryable();
         return await requests.SingleOrDefaultAsync(item => item.DocumentRequestId == requestId && item.DossierRequirementId == requirementId &&
             item.DossierRequirement.ComplianceDossierId == dossierId && !item.DossierRequirement.IsDeleted, cancellationToken)
-            ?? throw new NotFoundException("DocumentRequest not found.", "DOCUMENT_REQUEST_NOT_FOUND");
+            ?? throw new NotFoundException("Document request not found.", "DOCUMENT_REQUEST_NOT_FOUND");
     }
 
     private static void ValidateRejection(Request.RejectDocumentRequest request)
     {
         if (string.IsNullOrWhiteSpace(request.RejectionNote) || request.RejectionNote.Trim().Length < 15)
-            throw new BadRequestException("Please provide detailed instructions in the DocumentRequest (minimum 15 characters) so the customer knows what to re-upload.");
+            throw new BadRequestException("Please provide detailed instructions (minimum 15 characters) so the customer knows what to re-upload.");
         if (request.RejectionNote.Trim().Length > 2000)
             throw new BadRequestException("RejectionNote must not exceed 2000 characters.");
         if (!Enum.IsDefined(request.ErrorCategory))
@@ -252,7 +256,7 @@ public sealed partial class Service
             throw new BadRequestException("RevisionDeadline is required and cannot be in the past.");
         if (request.RequirementStatus is not (DossierRequirementStatus.REJECTED or DossierRequirementStatus.REQUESTED) ||
             request.DossierStatus is not (ComplianceDossierStatus.IN_PREPARATION or ComplianceDossierStatus.REJECTED))
-            throw new BadRequestException("Choose REJECTED or REQUESTED for the requirement and IN_PREPARATION or REJECTED for the dossier.");
+            throw new BadRequestException("Choose rejected or requested for the requirement and in preparation or rejected for the dossier.");
         if (request.VersionUploadedAt == default || request.DocumentUpdatedAt == default)
             throw new BadRequestException("Provide VersionUploadedAt and DocumentUpdatedAt from the requirement detail.");
     }

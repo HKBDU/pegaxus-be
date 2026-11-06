@@ -61,7 +61,7 @@ public class InvoiceOnlinePaymentPostgresTests
                 {
                     OnCreate = async token =>
                     {
-                        Assert.Equal(ReceiptStatus.FAILED, (await db.Receipts.SingleAsync(x => x.ReceiptId == old.ReceiptId, token)).Status);
+                        Assert.Equal(ReceiptStatus.PENDING, (await db.Receipts.SingleAsync(x => x.ReceiptId == old.ReceiptId, token)).Status);
                         Assert.Equal(1, await db.Receipts.CountAsync(x => x.Status == ReceiptStatus.PENDING, token));
                         throw new HttpRequestException("Upstream unavailable");
                     }
@@ -111,7 +111,7 @@ public class InvoiceOnlinePaymentPostgresTests
                     var competitor = InvoiceOnlinePaymentTests.CreateService(second, competingGateway).InitiateOnlinePaymentAsync(invoice.InvoiceId, customer.AccountId);
                     await locking.Task.WaitAsync(TimeSpan.FromSeconds(10)); release.SetResult();
                     var result = await winner;
-                    Assert.Equal(invoice.TotalAmount, result.Receipt.Amount);
+                    Assert.Equal(invoice.TotalAmount, result.Receipt.Amount); Assert.True(result.Reused);
                     var failure = await Record.ExceptionAsync(() => competitor);
                     var error = Assert.IsType<ConflictException>(failure);
                     Assert.Equal("CONCURRENT_UPDATE", error.ErrorCode);
@@ -121,9 +121,8 @@ public class InvoiceOnlinePaymentPostgresTests
             }
             await using (var verify = new AppDbContext(options))
             {
-                Assert.Equal(2, await verify.Receipts.CountAsync());
-                Assert.Equal(1, await verify.Receipts.CountAsync(x => x.Status == ReceiptStatus.PENDING));
-                Assert.Equal(ReceiptStatus.FAILED, (await verify.Receipts.SingleAsync(x => x.ReceiptId == old.ReceiptId)).Status);
+                Assert.Equal(1, await verify.Receipts.CountAsync());
+                Assert.Equal(ReceiptStatus.PENDING, (await verify.Receipts.SingleAsync(x => x.ReceiptId == old.ReceiptId)).Status);
                 var unchanged = await verify.Invoices.SingleAsync();
                 Assert.Equal(InvoiceStatus.ISSUED, unchanged.Status); Assert.Equal(invoice.UpdatedAt, unchanged.UpdatedAt);
                 Assert.Null(unchanged.PaidAt); Assert.Empty(await verify.InvoiceStatusHistories.ToListAsync());
@@ -172,8 +171,8 @@ public class InvoiceOnlinePaymentPostgresTests
             }
             await using (var verify = new AppDbContext(options))
             {
-                Assert.Equal(0, await verify.Receipts.CountAsync(x => x.Status == ReceiptStatus.PENDING));
-                Assert.Equal(2, await verify.Receipts.CountAsync(x => x.Status == ReceiptStatus.FAILED));
+                Assert.Equal(1, await verify.Receipts.CountAsync(x => x.Status == ReceiptStatus.PENDING));
+                Assert.Equal(0, await verify.Receipts.CountAsync(x => x.Status == ReceiptStatus.FAILED));
                 var details = await InvoicePaymentTests.CreateService(verify).GetAsync(customer.AccountId, invoice.InvoiceId);
                 Assert.Equal("PAID", details.Status);
                 Assert.Equal(manager.AccountId, Assert.Single(details.Receipts, x => x.Status == "CONFIRMED").RecordedBy!.AccountId);

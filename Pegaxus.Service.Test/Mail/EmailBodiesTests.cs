@@ -14,14 +14,17 @@ public class EmailBodiesTests
     [
         ("otp-verify", Mail.OtpBody(true, "Ada", "123456", 5)),
         ("otp-reset", Mail.OtpBody(false, "Ada", "123456", 5)),
+        ("incident", Mail.IncidentReportedBody("Ada", "INC-1", "CRITICAL", "Horse incident", "Vet required", Link)),
         ("booking-approved", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", new DateOnly(2026, 12, 1), Link)),
         ("booking-rejected", Mail.BookingRejectedBody("Ada", "REQ-1", "No capacity", Link)),
+        ("delivered", Mail.TransportDeliveredBody("Ada", "TR-1", new DateTime(2026, 10, 16, 12, 0, 0), Link)),
         ("reupload", Mail.DocumentReuploadBody("DRQ-1", "Passport", "Storm", "EXPIRED", "Please retake", new DateOnly(2026, 12, 1), Link)),
         ("missing", Mail.MissingDocumentsBody("CDOS-1", "REQ-1", new DateOnly(2026, 12, 1), "Soon", Link,
             [new Mail.MissingItem("Passport", "Storm", null)])),
         ("route", Mail.RouteAssignmentBody("Ada", "RP-1", true, "Driver sick", Link,
             [new Mail.RouteSegment(1, new DateTime(2026, 11, 28, 6, 0, 0), new DateTime(2026, 11, 28, 10, 0, 0), "EMP-4", "EMP-5", null)])),
-        ("invoice-issued", Mail.InvoiceIssuedBody("Ada", "INV-1", "DEPOSIT", "REQ-1", Mail.InvoiceMailKind.Invoice, 120m, "EUR", new DateOnly(2026, 11, 15), Link)),
+        ("incident", Mail.IncidentReportedBody("Ada", "INC-1", "HIGH", "Engine failure", "The engine stopped", Link)),
+        ("invoice-issued", Mail.InvoiceIssuedBody("Ada", "INV-1", "DEPOSIT", "REQ-1", Mail.InvoiceMailKind.Invoice, 120m, "EUR", new DateTime(2026, 11, 15, 9, 30, 0), Link)),
         ("invoice-cancelled", Mail.InvoiceCancelledBody("Ada", "INV-1", "DEPOSIT", "Wrong amount", Link)),
         ("payment-confirmed", Mail.PaymentConfirmedBody("Ada", "INV-1", "RCP-1", 120m, "EUR", false, Link)),
         ("reconciliation", Mail.PaymentReconciliationBody("Max", "A payment was received", "RCP-1", "PENDING", "TX-1", 120m, "VND", "INV-1", "PAID", Link)),
@@ -50,8 +53,10 @@ public class EmailBodiesTests
         var html = new[]
         {
             Mail.OtpBody(true, Evil, "123456", 5),
+            Mail.IncidentReportedBody(Evil, Evil, Evil, Evil, Evil, null),
             Mail.BookingApprovedBody(Evil, Evil, Evil, null, null),
             Mail.BookingRejectedBody(Evil, Evil, Evil, null),
+            Mail.TransportDeliveredBody(Evil, Evil, new DateTime(2026, 10, 16, 12, 0, 0), null),
             Mail.DocumentReuploadBody(Evil, Evil, Evil, Evil, Evil, new DateOnly(2026, 12, 1), null),
             Mail.MissingDocumentsBody(Evil, Evil, new DateOnly(2026, 12, 1), Evil, null, [new Mail.MissingItem(Evil, Evil, null)]),
             Mail.RouteAssignmentBody(Evil, Evil, true, Evil, null, [new Mail.RouteSegment(1, null, null, Evil, Evil, Evil)]),
@@ -68,10 +73,11 @@ public class EmailBodiesTests
     }
 
     [Fact]
-    public void Button_IsRenderedOnlyForAbsoluteHttpsUrls()
+    public void Button_IsRenderedOnlyForAbsoluteHttpsUrls_OrAnAppPathTheMailServiceResolves()
     {
         Assert.Contains($"<a href=\"{Link}\"", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, Link));
-        foreach (var unsafeUrl in new[] { null, "", "#", "/bookings/1", "http://app.pegaxus.example/x", "javascript:alert(1)" })
+        Assert.Contains("<a href=\"{{PX_FRONTEND_URL}}/bookings/1\"", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, "/bookings/1"));
+        foreach (var unsafeUrl in new[] { null, "", "#", "//evil.example", "http://app.pegaxus.example/x", "javascript:alert(1)" })
         {
             var html = Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, unsafeUrl);
             Assert.DoesNotContain("<a ", html);
@@ -136,7 +142,7 @@ public class EmailBodiesTests
     [InlineData(Mail.InvoiceMailKind.CreditNote, "Credit note issued", "Payout or credit amount", "Credit note", false)]
     public void InvoiceIssued_AdaptsToTheInvoiceKind(Mail.InvoiceMailKind kind, string title, string amountLabel, string pill, bool payable)
     {
-        var html = Mail.InvoiceIssuedBody("Ada", "INV-1", "DEPOSIT", "REQ-1", kind, 1234.5m, "EUR", new DateOnly(2026, 11, 15), Link);
+        var html = Mail.InvoiceIssuedBody("Ada", "INV-1", "DEPOSIT", "REQ-1", kind, 1234.5m, "EUR", new DateTime(2026, 11, 15, 9, 30, 0), Link);
         Assert.Contains(title, html); Assert.Contains(amountLabel, html); Assert.Contains(pill, html);
         Assert.Contains("1,234.50 EUR", html);
         Assert.Equal(payable, html.Contains("Due date:") && html.Contains("15/11/2026"));
@@ -157,6 +163,14 @@ public class EmailBodiesTests
         Assert.Contains("Payout confirmed", payout); Assert.DoesNotContain("Payment confirmed", payout);
         var payment = Mail.PaymentConfirmedBody("Ada", "INV-1", "RCP-1", 120m, "EUR", false, null);
         Assert.Contains("Payment confirmed", payment); Assert.Contains("RCP-1", payment);
+    }
+
+    [Fact]
+    public void UrgentIncident_EncodesUntrustedFieldsAndKeepsIncidentLink()
+    {
+        var body = Mail.IncidentReportedBody("<staff>", "<code>", "<severity>", "<title>", Evil, "/admin/incidents/test");
+        Assert.DoesNotContain(Evil, body); Assert.Contains("&lt;title&gt;", body); Assert.Contains(EncodedEvil, body);
+        Assert.Contains("/admin/incidents/test", body); Assert.Contains("&lt;staff&gt;", body);
     }
 
     [Fact]

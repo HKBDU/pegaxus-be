@@ -13,17 +13,17 @@ namespace Pegaxus.API.Controllers;
 public sealed class InvoicesController(InvoiceService.IInvoiceService service) : ApiControllerBase
 {
     /// <summary>Initiate a full online payment for an invoice.</summary>
-    /// <remarks>Customers can pay only their own issued DEPOSIT, FINAL or SUPPLEMENTARY invoices in ISSUED or OVERDUE status. Creates a PENDING receipt and replaces older pending receipts. SePay supports whole VND amounts: submit checkoutFields in their returned order as a browser POST to paymentUrl; a GET redirect alone cannot start checkout. Configuration and signing failures roll back receipt changes. Payment confirmation belongs to the webhook.</remarks>
+    /// <remarks>Customers can pay only their own issued DEPOSIT, FINAL or SUPPLEMENTARY invoices in ISSUED or OVERDUE status. Creates a PENDING receipt, or reuses the invoice's existing PENDING receipt (same receiptCode, never marked FAILED here) and asks the gateway for a new payment URL. SePay supports whole VND amounts: submit checkoutFields in their returned order as a browser POST to paymentUrl; a GET redirect alone cannot start checkout. Configuration and signing failures roll back receipt changes. Payment confirmation belongs to the webhook.</remarks>
     /// <param name="invoiceId">The invoice identifier (UUID).</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
-    /// <returns>201 with the pending receipt, payment URL and signed checkoutFields; 401 for an invalid session, 403 for a disallowed role, 404 for an unavailable invoice, 409 for an invalid status or concurrent changes, 422 for an unpayable type, a non-VND or fractional amount, or 502 when checkout preparation fails.</returns>
+    /// <returns>201 with a new pending receipt (200 when an existing pending receipt is reused), payment URL and signed checkoutFields; 401 for an invalid session, 403 for a disallowed role, 404 for an unavailable invoice, 409 for an invalid status or concurrent changes, 422 for an unpayable type, a non-VND or fractional amount, or 502 when checkout preparation fails.</returns>
     [HttpPost("{invoiceId:guid}/online-payments")]
     [Authorize(Policy = JwtExtensions.CustomerPolicy)]
     public async Task<IActionResult> InitiateOnlinePayment(Guid invoiceId, CancellationToken cancellationToken)
     {
         var accountId = AccountId;
         var response = await service.InitiateOnlinePaymentAsync(invoiceId, accountId, cancellationToken);
-        return SuccessCreated(response, "Online payment initiated successfully");
+        return response.Reused ? Success(response, "Online payment initiated successfully") : SuccessCreated(response, "Online payment initiated successfully");
     }
 
     /// <summary>Get an invoice's status history.</summary>
@@ -117,7 +117,7 @@ public sealed class InvoicesController(InvoiceService.IInvoiceService service) :
     /// <summary>
     /// Update a draft invoice.
     /// </summary>
-    /// <remarks>Only active Logistics Managers may edit DRAFT invoices. Supply the latest lastUpdatedAt; type is immutable. Items replace the complete list: existing identifiers keep their rows, missing rows are deleted and rows without identifiers are added. The server recalculates fixed 20 percent tax and regenerates FINAL paid-deposit deductions atomically. Empty drafts are allowed. Payment and itemDate are ignored pending database support. No status history or notifications are created.</remarks>
+    /// <remarks>Only active Logistics Managers may edit DRAFT invoices. Supply the latest lastUpdatedAt; type is immutable. Items replace the complete list: existing identifiers keep their rows, missing rows are deleted and rows without identifiers are added. The server recalculates tax at the taxRate of the active price list (none for credit notes) and regenerates FINAL paid-deposit deductions atomically. Empty drafts are allowed. Payment and itemDate are ignored pending database support. No status history or notifications are created.</remarks>
     /// <param name="invoiceId">The invoice identifier (UUID).</param>
     /// <param name="request">The latest invoice timestamp, due date, note and replacement items with whole-VND prices and whole quantities.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>

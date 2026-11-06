@@ -89,12 +89,11 @@ public class InvoicePostgresTests : IAsyncLifetime
         await using var seed = CreateDb();
         var f = await InvoiceTests.Fixture.CreateAsync(seed);
         var existing = f.Invoice(InvoiceType.DEPOSIT, InvoiceStatus.PAID);
-        seed.Invoices.Add(existing);
+        seed.Invoices.AddRange(existing, f.IssuedQuotation(100));
         await seed.SaveChangesAsync();
         var collision = new CodeCollision(existing.InvoiceCode);
         await using var db = CreateDb(collision);
         var request = InvoiceTests.Fixture.Request("FINAL");
-        request.Items = [InvoiceTests.Fixture.Item(1, 100)];
         var result = await Service(db).CreateAsync(f.Account.AccountId, f.Booking.BookingId, request);
         Assert.Equal(2, collision.Attempts);
         Assert.NotEqual(existing.InvoiceCode, result.InvoiceNumber);

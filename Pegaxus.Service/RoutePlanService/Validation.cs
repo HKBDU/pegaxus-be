@@ -4,6 +4,7 @@ using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
 using QuestPDF.Infrastructure;
+using Pegaxus.Service.Common;
 
 using static Pegaxus.Service.Common.DbTime;
 
@@ -16,9 +17,11 @@ public sealed partial class Service
         if (request.Segments.Count == 0)
             throw new BadRequestException("At least one route segment is required");
         if (request.Action is not ("SAVE_DRAFT" or "SUBMIT_FOR_LEGAL_REVIEW"))
-            throw new BadRequestException("action must be SAVE_DRAFT or SUBMIT_FOR_LEGAL_REVIEW");
+            throw new BadRequestException("Please choose Save draft or submit for legal review.");
+        if (request.IncidentReportId.HasValue && routeType != RouteType.RETURN)
+            throw new BadRequestException("An incident report can only be linked to a return route plan.", "VALIDATION_ERROR");
         if (routeType == RouteType.RETURN && !updating && request.Action != "SAVE_DRAFT")
-            throw new BadRequestException("RETURN route plans only support SAVE_DRAFT");
+            throw new BadRequestException("A returned route plan can only be saved as a draft.");
         if (routeType is RouteType.BACKUP or RouteType.RETURN && string.IsNullOrWhiteSpace(request.RouteNote) || routeType is RouteType.BACKUP or RouteType.RETURN && request.RouteNote!.Trim().Length < 10)
             throw new BadRequestException("routeNote is required and must contain at least 10 characters");
         var expected = 1;
@@ -98,13 +101,13 @@ public sealed partial class Service
                     route.EstimatedDurationMinutes = metrics.DurationMinutes;
                 }
             }
-            await ValidateVehicleAndProviderAsync(request, route, plan, excludedRoutePlanId, routeType, cancellationToken);
+            await ValidateVehicleAndProviderAsync(request, route, plan, excludedRoutePlanId, cancellationToken);
             result.Add(new MaterializedSegment(request, route, typeOf(request)));
         }
         return result;
     }
 
-    private async Task ValidateVehicleAndProviderAsync(Request.SegmentRequest request, Route route, TransportPlan plan, Guid? excludedRoutePlanId, RouteType routeType, CancellationToken cancellationToken)
+    private async Task ValidateVehicleAndProviderAsync(Request.SegmentRequest request, Route route, TransportPlan plan, Guid? excludedRoutePlanId, CancellationToken cancellationToken)
     {
         if (request.Outsourcing is not null)
         {
@@ -121,7 +124,8 @@ public sealed partial class Service
             throw new NotFoundException("Vehicle not found", "VEHICLE_NOT_FOUND");
         if (vehicles.Any(item => item.TransportMode != route.TransportMode))
             throw new UnprocessableEntityException("The vehicle transport mode does not match the segment", "VEHICLE_MODE_MISMATCH");
-        if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED)))
+        // An IN_USE vehicle is mid-trip: whether it is free for this plan is decided by the schedule check below, not by its flag.
+        if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED or VehicleStatus.IN_USE)))
             throw new UnprocessableEntityException("The vehicle is not available", "VEHICLE_UNAVAILABLE");
         if (vehicles.Sum(item => item.CapacityHorses ?? 0) < plan.Transport.Booking.BookingHorses.Count)
             throw new UnprocessableEntityException("Total vehicle capacity is lower than the number of horses in the booking", "VEHICLE_CAPACITY_EXCEEDED");
@@ -132,19 +136,19 @@ public sealed partial class Service
             throw new UnprocessableEntityException("The vehicle registration or insurance is expired for this segment", "VEHICLE_DOCUMENT_EXPIRED");
 
         var vehicleIds = vehicles.Select(item => item.VehicleId).ToList();
-        var alternativesAreExclusive = routeType is RouteType.PRIMARY or RouteType.BACKUP;
         var departureAt = Truncate(request.PlannedDepartureAt);
         var arrivalAt = Truncate(request.PlannedArrivalAt);
+        var now = UtcNowTruncated();
         var overlappingAssignment = await db.RoutePlanRouteVehicles
             .Include(item => item.RoutePlanRoute)
                 .ThenInclude(item => item.RoutePlan)
             .Where(item => vehicleIds.Contains(item.VehicleId) &&
-                item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED &&
+                item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                 (!excludedRoutePlanId.HasValue || item.RoutePlanRoute.RoutePlanId != excludedRoutePlanId.Value) &&
-                (!alternativesAreExclusive || item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId ||
-                    item.RoutePlanRoute.RoutePlan.RoutePlanRoutes.Any(route => route.RouteType == RouteType.RETURN)) &&
-                item.RoutePlanRoute.PlannedDepartureAt < arrivalAt &&
-                item.RoutePlanRoute.PlannedArrivalAt > departureAt)
+                item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId &&
+                (item.RoutePlanRoute.PlannedDepartureAt < arrivalAt && item.RoutePlanRoute.PlannedArrivalAt > departureAt ||
+                 // A segment that left but has not arrived keeps its vehicle past the planned arrival.
+                 item.RoutePlanRoute.ActualDepartureAt != null && item.RoutePlanRoute.ActualArrivalAt == null && item.RoutePlanRoute.PlannedArrivalAt < now))
             .Select(item => item.VehicleId)
             .FirstOrDefaultAsync(cancellationToken);
         if (overlappingAssignment != Guid.Empty)
@@ -164,26 +168,11 @@ public sealed partial class Service
                 item.Route.FromLocation.LocationType is LocationType.BORDER_GATE or LocationType.AIRPORT or LocationType.SEAPORT ||
                 item.Route.ToLocation.LocationType is LocationType.BORDER_GATE or LocationType.AIRPORT or LocationType.SEAPORT))
             throw new UnprocessableEntityException("A cross-border transport requires at least one border control point", "BCP_REQUIRED");
-        if (segments.Any(item => item.Route.TransportMode == TransportMode.ROAD && item.Request.PlannedArrivalAt - item.Request.PlannedDepartureAt > TimeSpan.FromHours(8)))
-            throw new UnprocessableEntityException("Maximum continuous driving time is 8 hours", "REST_RULE_VIOLATION");
-        for (var index = 0; index < segments.Count; index++)
-        {
-            var segment = segments[index];
-            if (segment.Route.TransportMode != TransportMode.ROAD || segment.Request.PlannedArrivalAt - segment.Request.PlannedDepartureAt <= TimeSpan.FromMinutes(270))
-                continue;
-            var restAfter = index < segments.Count - 1
-                ? segments[index + 1].Request.PlannedDepartureAt - segment.Request.PlannedArrivalAt
-                : TimeSpan.Zero;
-            if (restAfter < TimeSpan.FromMinutes(45))
-                throw new UnprocessableEntityException("Road segments exceeding 4.5 hours require a rest stop of at least 45 minutes", "REST_RULE_VIOLATION");
-        }
-        if (segments.Count > 0 && segments[^1].Request.PlannedArrivalAt - segments[0].Request.PlannedDepartureAt > TimeSpan.FromHours(24) &&
-            !segments.Zip(segments.Skip(1), (first, second) => new
-            {
-                Gap = second.Request.PlannedDepartureAt - first.Request.PlannedArrivalAt,
-                IsRestStop = first.Route.ToLocation.LocationType == LocationType.REST_STOP || second.Route.FromLocation.LocationType == LocationType.REST_STOP
-            }).Any(item => item.Gap >= TimeSpan.FromHours(24) && item.IsRestStop))
-            throw new UnprocessableEntityException("Trips over 24 hours require a mandatory 24 hour rest", "REST_RULE_VIOLATION");
+        var restFailure = RouteRestRules.Evaluate(segments.Select(item => new RouteRestRules.Leg(
+            item.Request.PlannedDepartureAt.UtcDateTime, item.Request.PlannedArrivalAt.UtcDateTime, item.Route.TransportMode,
+            item.Route.FromLocation.LocationType, item.Route.ToLocation.LocationType)).ToArray()).FirstOrDefault(check => !check.Passed);
+        if (restFailure is not null)
+            throw new UnprocessableEntityException(restFailure.Message, "REST_RULE_VIOLATION");
         if (routeType == RouteType.BACKUP && primary is not null)
         {
             var primarySegments = primary.RoutePlanRoutes.OrderBy(item => item.SequenceNo).ToList();
@@ -203,7 +192,7 @@ public sealed partial class Service
     {
         if (role == EmployeeRole.FLEET_ROUTE_COORDINATOR)
             return;
-        if (role == EmployeeRole.LOGISTICS_MANAGER && type == RouteType.BACKUP)
+        if (role == EmployeeRole.LOGISTICS_MANAGER && type is RouteType.BACKUP or RouteType.RETURN)
             return;
         throw new ForbiddenException("The current role cannot manage this route plan type");
     }
@@ -211,7 +200,7 @@ public sealed partial class Service
     private static void EnsureReadRole(EmployeeRole role, TransportPlan plan, Guid employeeId)
     {
         if (role is not (EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.TRANSPORT_SPECIALIST or EmployeeRole.FLEET_ROUTE_COORDINATOR))
-            throw new ForbiddenException("Only RC, LM and TS can access Route Plans");
+            throw new ForbiddenException("Only Fleet Route Coordinators, Logistics Managers, and Transport Specialists can access route plans.");
         if (role == EmployeeRole.TRANSPORT_SPECIALIST && !plan.EmployeeTransportPlans.Any(item => item.EmployeeId == employeeId))
             throw new ForbiddenException("You are not assigned to this Transport Plan");
     }
@@ -219,17 +208,17 @@ public sealed partial class Service
     private static async Task EnsurePlanCanBeUsedAsync(TransportPlan plan, CancellationToken cancellationToken)
     {
         if (plan.Transport.Booking.Status != BookingStatus.APPROVED)
-            throw new ConflictException($"This action cannot be performed while the booking is in {plan.Transport.Booking.Status} status", "INVALID_BOOKING_STATUS");
+            throw new ConflictException($"This action cannot be performed while the booking is in {UserFacingText.Label(plan.Transport.Booking.Status)} status", "INVALID_BOOKING_STATUS");
         if (plan.Status != TransportPlanStatus.APPROVED)
             throw new ConflictException("Route Plan requires an approved Transport Plan", "INVALID_TRANSPORT_PLAN_STATUS");
         await Task.CompletedTask;
     }
 
-    private static RouteType ParseRouteType(string value) => Enum.TryParse<RouteType>(value, true, out var result) && result is RouteType.PRIMARY or RouteType.BACKUP or RouteType.RETURN
+    private static RouteType ParseRouteType(string value) => EnumParser.TryParseDefined<RouteType>(value, out var result) && result is RouteType.PRIMARY or RouteType.BACKUP or RouteType.RETURN
         ? result
-        : throw new BadRequestException("routeType must be PRIMARY, BACKUP or RETURN");
+        : throw new BadRequestException("The route type must be primary, backup, or return.");
 
-    private static TransportMode ParseTransportMode(string value) => Enum.TryParse<TransportMode>(value, true, out var result)
+    private static TransportMode ParseTransportMode(string value) => EnumParser.TryParseDefined<TransportMode>(value, out var result)
         ? result
         : throw new BadRequestException("transportMode is invalid");
 

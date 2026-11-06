@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Service.Exceptions;
+using Pegaxus.Service.Common;
 
 using static Pegaxus.Service.Common.DbTime;
 
@@ -58,9 +59,9 @@ public partial class Service
         CancellationToken cancellationToken = default)
     {
         await GetLogisticsManagerAsync(accountId, cancellationToken);
-        if (!Enum.TryParse<EmployeeRole>(request.Role.Trim(), true, out var role) ||
+        if (!EnumParser.TryParseDefined<EmployeeRole>(request.Role.Trim(), out var role) ||
             role is not (EmployeeRole.TRANSPORT_SPECIALIST or EmployeeRole.FLEET_ROUTE_COORDINATOR))
-            throw new BadRequestException("Role must be TRANSPORT_SPECIALIST or FLEET_ROUTE_COORDINATOR", "INVALID_ASSIGNMENT_ROLE");
+            throw new BadRequestException("Role must be Transport Specialist or Fleet Route Coordinator", "INVALID_ASSIGNMENT_ROLE");
 
         var booking = await _db.Bookings
             .Include(item => item.Transport)

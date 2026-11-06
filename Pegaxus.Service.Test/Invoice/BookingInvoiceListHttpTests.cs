@@ -49,7 +49,7 @@ public class BookingInvoiceListHttpTests
             item.EnumerateObject().Select(property => property.Name).Order());
         Assert.Equal(f.Invoices[4].InvoiceId, item.GetProperty("invoiceId").GetGuid());
         Assert.Equal("CANCELLED", item.GetProperty("status").GetString());
-        Assert.Equal("2026-10-10", item.GetProperty("dueDate").GetString());
+        Assert.Equal(new DateTimeOffset(2026, 10, 10, 0, 0, 0, TimeSpan.Zero), item.GetProperty("dueDate").GetDateTimeOffset());
         Assert.Equal(TimeSpan.Zero, item.GetProperty("issuedAt").GetDateTimeOffset().Offset);
         Assert.Equal(JsonValueKind.Null, item.GetProperty("paidAt").ValueKind);
         Assert.Equal(f.LatestPlan.TransportPlanId, item.GetProperty("transportPlanId").GetGuid());

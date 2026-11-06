@@ -20,12 +20,14 @@ public static class Request
         public string Email { get; set; } = string.Empty;
         public string Phone { get; set; } = string.Empty;
         public string FullName { get; set; } = string.Empty;
+        public string? Country { get; set; }
     }
 
     public sealed class UpdateEmployeeRequest
     {
         public string? Role { get; set; }
         public string? WorkingStatus { get; set; }
+        public string? Country { get; set; }
     }
 
     public sealed class UpdateEmployeeStatusRequest

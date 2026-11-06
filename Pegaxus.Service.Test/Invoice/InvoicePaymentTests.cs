@@ -90,7 +90,7 @@ public class InvoicePaymentTests
         Assert.Equal(issuer, invoice.EmployeeId);
         Assert.Equal((100m, 0m, 20m, 120m, "Preserve note"), (invoice.Subtotal, invoice.DiscountAmount, invoice.TaxAmount, invoice.TotalAmount, invoice.BillingNote));
         Assert.Equal(100, Assert.Single(db.InvoiceItems).LineAmount);
-        Assert.All(pending, x => { Assert.Equal(ReceiptStatus.FAILED, x.Status); Assert.Equal(receipt.ConfirmedAt, x.UpdatedAt); Assert.Equal("Keep reference", x.TransactionReference); });
+        Assert.All(pending, x => { Assert.Equal(ReceiptStatus.PENDING, x.Status); Assert.NotEqual(receipt.ConfirmedAt, x.UpdatedAt); Assert.Equal("Keep reference", x.TransactionReference); });
         Assert.Equal(invoice.CreatedAt, failed.UpdatedAt);
         var history = Assert.Single(db.InvoiceStatusHistories);
         Assert.Equal(InvoiceHistoryType.RECORD_PAYMENT, history.Type); Assert.Equal(status, history.PreviousStatus);
@@ -126,7 +126,7 @@ public class InvoicePaymentTests
         var (actor, _, invoice, _) = await SeedAsync(db); invoice.Status = status; await db.SaveChangesAsync();
         var service = CreateService(db);
         var invalid = await Assert.ThrowsAsync<ConflictException>(() => service.RecordPaymentAsync(invoice.InvoiceId, ValidRequest(), actor.AccountId));
-        Assert.Equal("INVALID_INVOICE_STATUS", invalid.ErrorCode); Assert.Equal($"Cannot pay an invoice in status {status}", invalid.Message);
+        Assert.Equal("INVALID_INVOICE_STATUS", invalid.ErrorCode); Assert.Equal($"Cannot pay an invoice in status {status.ToString().ToLowerInvariant().Replace('_', ' ')}", invalid.Message);
         invoice.Type = InvoiceType.QUOTATION; await db.SaveChangesAsync();
         var quotation = await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.RecordPaymentAsync(invoice.InvoiceId, ValidRequest(), actor.AccountId));
         Assert.Equal("UNPAYABLE_INVOICE_TYPE", quotation.ErrorCode); Assert.Equal("This invoice type cannot be paid", quotation.Message);
@@ -137,7 +137,7 @@ public class InvoicePaymentTests
     [InlineData("missing", 404, "INVOICE_NOT_FOUND", "Invoice not found")]
     [InlineData("partial", 422, "PARTIAL_PAYMENT_NOT_SUPPORTED", "Only full payment of the invoice total is accepted")]
     [InlineData("excess", 422, "PARTIAL_PAYMENT_NOT_SUPPORTED", "Only full payment of the invoice total is accepted")]
-    [InlineData("confirmed", 409, "INVALID_INVOICE_STATUS", "Cannot pay an invoice in status ISSUED")]
+    [InlineData("confirmed", 409, "INVALID_INVOICE_STATUS", "Cannot pay an invoice in status issued")]
     public async Task InvalidPayment_IsRejectedWithoutChangingPendingReceipts(string scenario, int status, string code, string message)
     {
         await using var db = TestSupport.CreateDb();

@@ -42,7 +42,7 @@ public class BookingServiceTests
             DestinationCountry = "Germany",
             DestinationLatitude = 52.5200m,
             DestinationLongitude = 13.4050m,
-            RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(21),
+            RequestedDepartureDate = DateOnly.FromDateTime(DateTime.UtcNow).AddMonths(2),
             Horses = [new BookingRequest.BookingHorseRequest { HorseId = horse.HorseId }]
         });
 
@@ -271,6 +271,7 @@ public class BookingServiceTests
 
         Assert.Equal(booking.BookingId, result.BookingId);
         Assert.Equal(BookingStatus.APPROVED.ToString(), result.Status);
+        Assert.Equal(new DateTimeOffset(DateTime.SpecifyKind(booking.CreatedAt, DateTimeKind.Utc)), result.CreatedAt);
         Assert.Equal(customer.FullName, result.Customer.FullName);
         Assert.Equal(horse!.HorseId, Assert.Single(result.Horses).HorseId);
         Assert.Null(result.TransportPlan);
@@ -383,7 +384,7 @@ public class BookingServiceTests
         await service.ApproveAsync(managerAccount.AccountId, booking.BookingId);
         var transportPlanService = CreateTransportPlanService(db);
 
-        var start = DateTimeOffset.UtcNow.AddDays(1);
+        var start = DateTimeOffset.UtcNow.AddMonths(3);
         var result = await transportPlanService.CreateAsync(
             managerAccount.AccountId,
             booking.BookingId,
@@ -414,7 +415,7 @@ public class BookingServiceTests
         await service.ApproveAsync(managerAccount.AccountId, booking.BookingId);
         var transportPlanService = CreateTransportPlanService(db);
 
-        var start = DateTimeOffset.UtcNow.AddDays(1);
+        var start = DateTimeOffset.UtcNow.AddMonths(3);
         var request = new TransportPlanRequest.CreateRequest
         {
             PlannedStartAt = start,
@@ -476,6 +477,11 @@ public class BookingServiceTests
         Assert.Contains(customer.FullName, notification.Message);
         Assert.Contains(booking.BookingCode, notification.Message);
         Assert.Contains($"{booking.OriginCountry} to {booking.DestinationCountry}", notification.Message);
+        var mail = Assert.Single(await EmailOutboxWiringTests.EmailsAsync(db));
+        Assert.Equal(manager.Email, mail.To);
+        Assert.Equal($"New booking to review — {booking.BookingCode}", mail.Subject);
+        Assert.Contains(customer.FullName, mail.Body);
+        Assert.Contains($"{{{{PX_FRONTEND_URL}}}}/admin/transport-requests/{booking.BookingId}", mail.Body);
     }
 
     [Fact]

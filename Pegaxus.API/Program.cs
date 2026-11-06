@@ -23,9 +23,14 @@ while (envDirectory is not null)
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Every endpoint takes small JSON bodies (files go straight to Cloudinary), so a low cap only stops oversized payloads.
+builder.WebHost.ConfigureKestrel(options => options.Limits.MaxRequestBodySize = 1024 * 1024);
+
 builder.Services.AddDataProtection()
     .PersistKeysToFileSystem(new DirectoryInfo(Path.Combine(builder.Environment.ContentRootPath, ".keys")))
     .SetApplicationName("Pegaxus");
+
+builder.Services.AddProxyForwardedHeaders();
 
 // Keep issued access tokens at the 15-minute API contract lifetime in every environment.
 builder.Configuration["JwtOptions:ExpirationMinutes"] = "15";
@@ -48,10 +53,15 @@ builder.Services.AddAuthModule();
 builder.Services.AddAccountsModule();
 builder.Services.AddBookingModule();
 builder.Services.AddInvoicingModule(builder.Configuration);
+builder.Services.AddPriceListRateLimiting();
+builder.Services.AddClaimsModule();
+builder.Services.AddReportsModule();
+builder.Services.AddAuditModule();
 builder.Services.AddTransportPlanningModule();
 builder.Services.AddFleetModule();
 builder.Services.AddComplianceModule();
 builder.Services.AddMessagingModule();
+builder.Services.AddHostedService<Pegaxus.API.Services.IncidentHoldExpiryWorker>();
 
 var app = builder.Build();
 
@@ -62,6 +72,7 @@ using (var scope = app.Services.CreateScope())
     await Pegaxus.API.AppDbContextSeedData.SeedAsync(db);
 }
 
+app.UseForwardedHeaders();
 app.UseSwaggerAPI();
 
 app.UseMiddleware<GlobalExceptionHandlerMiddleware>();
@@ -85,6 +96,7 @@ app.Use(async (context, next) =>
 });
 app.UseAuthentication();
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
     .WithSummary("Check deployment health.")
@@ -92,6 +104,8 @@ app.MapGet("/health", () => Results.Ok(new { status = "healthy" }))
 app.MapControllers();
 app.MapHub<NotificationHub>("/hubs/notifications");
 app.MapHub<ComplianceDossierHub>("/hubs/compliance-dossiers",
+    options => options.CloseOnAuthenticationExpiration = true);
+app.MapHub<TransportTrackingHub>("/hubs/transport-tracking",
     options => options.CloseOnAuthenticationExpiration = true);
 
 app.Run();

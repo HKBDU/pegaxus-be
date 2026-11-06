@@ -8,7 +8,7 @@ public class LegalReviewPreparationTests
 {
     [Theory]
     [InlineData(ComplianceDossierStatus.DRAFT, true)]
-    [InlineData(ComplianceDossierStatus.IN_PREPARATION, true)]
+    [InlineData(ComplianceDossierStatus.IN_PREPARATION, false)]
     [InlineData(ComplianceDossierStatus.APPROVED, false)]
     [InlineData(ComplianceDossierStatus.CLOSED, false)]
     public async Task PrimaryLegalReview_AcceptsInitializedDossierWithoutReopeningAdvancedStates(ComplianceDossierStatus status, bool allowed)

@@ -63,7 +63,7 @@ public class VndTests
         var clock = TimeProvider.System;
         var create = new CreateRequestValidator(clock).Validate(new InvoiceRequest.CreateRequest
         {
-            Type = "QUOTATION", DueDate = DateOnly.FromDateTime(DateTime.UtcNow), Items = [Item(Number(quantity), Number(price))]
+            Type = "QUOTATION", DueDate = DateTimeOffset.UtcNow.AddDays(1), Items = [Item(Number(quantity), Number(price))]
         });
         Assert.Equal(valid, create.IsValid);
     }
@@ -74,12 +74,12 @@ public class VndTests
         var clock = TimeProvider.System;
         var result = new CreateRequestValidator(clock).Validate(new InvoiceRequest.CreateRequest
         {
-            Type = "QUOTATION", DueDate = DateOnly.FromDateTime(DateTime.UtcNow), Items = [Item(1, 1000.50m)]
+            Type = "QUOTATION", DueDate = DateTimeOffset.UtcNow.AddDays(1), Items = [Item(1, 1000.50m)]
         });
         Assert.Contains(result.Errors, error => error.ErrorMessage == "Amount must be a whole number of VND");
         var update = new UpdateRequestValidator(clock).Validate(new InvoiceRequest.UpdateRequest
         {
-            LastUpdatedAt = DateTimeOffset.UtcNow, DueDate = DateOnly.FromDateTime(DateTime.UtcNow), Items = [Item(1.5m, 1000)]
+            LastUpdatedAt = DateTimeOffset.UtcNow, DueDate = DateTimeOffset.UtcNow.AddDays(1), Items = [Item(1.5m, 1000)]
         });
         Assert.Contains(update.Errors, error => error.ErrorMessage == "Quantity must be a whole number");
     }

@@ -65,6 +65,8 @@ public static class Response
         public required string RoutePlanCode { get; init; }
         public required string RouteType { get; init; }
         public required string Status { get; init; }
+        public bool LegalReviewRequested { get; init; }
+        public DateTimeOffset? LegalReviewRequestedAt { get; init; }
     }
 
     public sealed class BookingResponse
@@ -86,6 +88,7 @@ public static class Response
         public DateOnly RequestedDepartureDate { get; init; }
         public DateOnly? RequestedArrivalDate { get; init; }
         public string? SpecialRequirements { get; init; }
+        public DateTimeOffset CreatedAt { get; init; }
     }
 
     public sealed class TransportResponse

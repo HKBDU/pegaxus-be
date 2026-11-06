@@ -41,20 +41,28 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
             context.Response.Clear();
             context.Response.StatusCode = statusCode;
             await context.Response.WriteAsJsonAsync(ResponseBuilder.ErrorResponse(
-                (ex as FieldValidationException)?.Errors,
-                GetErrorMessage(ex, statusCode),
+                FieldErrors((ex as FieldValidationException)?.Errors),
+                // Only text written by our own code may reach the user; framework and database exceptions use the safe fallback.
+                (ex as Exceptions)?.Message ?? string.Empty,
                 errorCode: GetErrorCode(ex, statusCode),
                 code: statusCode,
                 traceId: context.TraceIdentifier,
-                value: (ex as ConflictException)?.Value));
+                value: ex switch { ConflictException conflict => conflict.Value, UnprocessableEntityException rule => rule.Value, _ => null }));
         }
     }
+
+    private static object? FieldErrors(IReadOnlyList<FieldError>? errors) => errors?.Select(error => new FieldError(
+        error.Field,
+        UserFacingMessages.FieldError(error.Field, error.Message))).ToArray();
 
     private static int MapStatusCode(Exception ex)
     {
         return ex switch
         {
             Exceptions appEx => appEx.StatusCode,
+            BadHttpRequestException { StatusCode: StatusCodes.Status413PayloadTooLarge } => StatusCodes.Status413PayloadTooLarge,
+            _ when ColumnOverflow(ex) == PostgresErrorCodes.NumericValueOutOfRange => StatusCodes.Status422UnprocessableEntity,
+            _ when ColumnOverflow(ex) == PostgresErrorCodes.StringDataRightTruncation => StatusCodes.Status400BadRequest,
             DbUpdateConcurrencyException => StatusCodes.Status409Conflict,
             PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } => StatusCodes.Status409Conflict,
             DbUpdateException { InnerException: PostgresException { SqlState: PostgresErrorCodes.SerializationFailure or PostgresErrorCodes.DeadlockDetected } } => StatusCodes.Status409Conflict,
@@ -71,26 +79,33 @@ public class GlobalExceptionHandlerMiddleware : IMiddleware
         };
     }
 
-    private static string GetErrorMessage(Exception ex, int statusCode)
+    /// <summary>
+    /// Safety net for values that fit the validators but not the column. Validators must still reject them first;
+    /// this only turns the leftover 500 into a 4xx without leaking database details.
+    /// </summary>
+    private static string? ColumnOverflow(Exception ex)
     {
-        if (ex is Exceptions { StatusCode: 503, ErrorCode: "PAYMENT_GATEWAY_NOT_CONFIGURED" or "PAYMENT_GATEWAY_UNAVAILABLE" })
-            return "Payment gateway is not configured";
-        if (statusCode == StatusCodes.Status409Conflict && ex is not Exceptions)
-            return "The record changed. Reload it and try again.";
-        return statusCode >= StatusCodes.Status500InternalServerError
-            ? "A system error occurred. Please try again later"
-            : ex.Message;
+        for (var inner = ex; inner is not null; inner = inner.InnerException)
+            if (inner is PostgresException { SqlState: PostgresErrorCodes.NumericValueOutOfRange or PostgresErrorCodes.StringDataRightTruncation } pg)
+                return pg.SqlState;
+        return null;
     }
 
     private static string GetErrorCode(Exception ex, int statusCode)
     {
         if (ex is Exceptions appException)
             return appException.ErrorCode;
+        switch (ColumnOverflow(ex))
+        {
+            case PostgresErrorCodes.NumericValueOutOfRange: return "VALUE_OUT_OF_RANGE";
+            case PostgresErrorCodes.StringDataRightTruncation: return "VALUE_TOO_LONG";
+        }
 
         return statusCode switch
         {
             StatusCodes.Status400BadRequest => "VALIDATION_ERROR",
             StatusCodes.Status401Unauthorized => "UNAUTHORIZED",
+            StatusCodes.Status413PayloadTooLarge => "PAYLOAD_TOO_LARGE",
             StatusCodes.Status404NotFound => "NOT_FOUND",
             StatusCodes.Status409Conflict => "CONCURRENT_UPDATE",
             _ => "SYSTEM_ERROR"

@@ -30,11 +30,14 @@ public partial class Invoice
 
     public decimal TaxAmount { get; set; }
 
+    /// <summary>VAT percentage used to compute <see cref="TaxAmount"/>, copied from the active price list when the invoice was last built.</summary>
+    public decimal TaxRate { get; set; } = 20m;
+
     public decimal TotalAmount { get; set; }
 
     public DateTime? IssuedAt { get; set; }
 
-    public DateOnly? DueDate { get; set; }
+    public DateTime? DueDate { get; set; }
 
     public DateTime? PaidAt { get; set; }
 

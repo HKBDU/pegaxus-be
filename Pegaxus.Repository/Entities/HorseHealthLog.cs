@@ -51,7 +51,7 @@ public partial class HorseHealthLog
 
     public string? LocationDescription { get; set; }
 
-    public string? PhotoUrl { get; set; }
+    public string[] PhotoUrls { get; set; } = [];
 
     public string? GeneralNote { get; set; }
 

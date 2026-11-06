@@ -37,6 +37,7 @@ public static class Response
         public required string FullName { get; init; }
         public string? Phone { get; init; }
         public DateOnly? DateOfBirth { get; init; }
+        public string? Country { get; init; }
         public string? AvatarUrl { get; init; }
         public DateTimeOffset? LastLoginAt { get; init; }
         public DateTimeOffset CreatedAt { get; init; }

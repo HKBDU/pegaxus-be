@@ -32,6 +32,15 @@ public static class JwtExtensions
     public const string DriverOrEscortPolicy = "DriverOrEscortPolicy";
     public const string ComplianceDossierViewerPolicy = "ComplianceDossierViewerPolicy";
     public const string TransportProviderViewerPolicy = "TransportProviderViewerPolicy";
+    public const string HandoverViewerPolicy = nameof(HandoverViewerPolicy);
+    public const string HandoverOperatorPolicy = nameof(HandoverOperatorPolicy);
+    public const string TransportTrackingViewerPolicy = nameof(TransportTrackingViewerPolicy);
+    public const string TransportProgressViewerPolicy = nameof(TransportProgressViewerPolicy);
+    public const string IncidentOperatorPolicy = nameof(IncidentOperatorPolicy);
+    public const string EmergencyCostProposerPolicy = nameof(EmergencyCostProposerPolicy);
+    public const string IncidentListViewerPolicy = nameof(IncidentListViewerPolicy);
+    public const string IncidentViewerPolicy = nameof(IncidentViewerPolicy);
+    public const string VehicleIncidentOperatorPolicy = nameof(VehicleIncidentOperatorPolicy);
 
     public static void AddJwtServices(
         this IServiceCollection services,
@@ -85,7 +94,7 @@ public static class JwtExtensions
                         var accessToken = context.Request.Query["access_token"];
                         var path = context.HttpContext.Request.Path;
                         if (!string.IsNullOrWhiteSpace(accessToken) &&
-                            (path.StartsWithSegments("/hubs/notifications") ||
+                            (path.StartsWithSegments("/hubs/transport-tracking") || path.StartsWithSegments("/hubs/notifications") ||
                              path.StartsWithSegments("/hubs/compliance-dossiers")))
                         {
                             context.Token = accessToken;
@@ -146,6 +155,40 @@ public static class JwtExtensions
 
         services.AddAuthorization(options =>
         {
+            options.AddPolicy(EmergencyCostProposerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR), JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
+            options.AddPolicy(IncidentListViewerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
+            options.AddPolicy(IncidentViewerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.DRIVER),
+                JwtServices.GetRoleName(EmployeeRole.ESCORT), JwtServices.GetRoleName(AccountType.CUSTOMER)));
+            options.AddPolicy(VehicleIncidentOperatorPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
+            options.AddPolicy(IncidentOperatorPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
+            options.AddPolicy(HandoverViewerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.DRIVER),
+                JwtServices.GetRoleName(EmployeeRole.ESCORT), JwtServices.GetRoleName(AccountType.CUSTOMER)));
+            // Specialists pass this policy only to schedule a handover; the service refuses them on start and complete.
+            options.AddPolicy(HandoverOperatorPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST),
+                JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
+            // Crew pass this policy only to read their own transport; the service refuses a driver or escort who is not assigned to it.
+            options.AddPolicy(TransportTrackingViewerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(AccountType.CUSTOMER),
+                JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
+            options.AddPolicy(TransportProgressViewerPolicy, policy => policy.RequireAuthenticatedUser().RequireRole(
+                JwtServices.GetRoleName(AccountType.CUSTOMER), JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER),
+                JwtServices.GetRoleName(EmployeeRole.TRANSPORT_SPECIALIST), JwtServices.GetRoleName(EmployeeRole.FLEET_ROUTE_COORDINATOR),
+                JwtServices.GetRoleName(EmployeeRole.DRIVER), JwtServices.GetRoleName(EmployeeRole.ESCORT)));
+
             options.AddPolicy(CustomerOrLogisticsManagerPolicy, policy =>
                 policy.RequireAuthenticatedUser().RequireRole(JwtServices.GetRoleName(AccountType.CUSTOMER),
                     JwtServices.GetRoleName(EmployeeRole.LOGISTICS_MANAGER)));

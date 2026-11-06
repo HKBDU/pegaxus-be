@@ -46,8 +46,8 @@ public class InvoicePaymentPostgresTests
                 var paid = await verify.Invoices.SingleAsync(x => x.InvoiceId == invoice.InvoiceId);
                 Assert.Equal(InvoiceStatus.PAID, paid.Status); Assert.NotNull(paid.PaidAt);
                 var receipts = await verify.Receipts.ToListAsync();
-                Assert.Single(receipts, x => x.Status == ReceiptStatus.CONFIRMED); Assert.Equal(2, receipts.Count(x => x.Status == ReceiptStatus.FAILED));
-                Assert.Empty(receipts.Where(x => x.Status == ReceiptStatus.PENDING));
+                Assert.Single(receipts, x => x.Status == ReceiptStatus.CONFIRMED); Assert.Empty(receipts.Where(x => x.Status == ReceiptStatus.FAILED));
+                Assert.Equal(2, receipts.Count(x => x.Status == ReceiptStatus.PENDING));
                 Assert.Single(await verify.InvoiceStatusHistories.ToListAsync()); Assert.Single(await verify.Notifications.ToListAsync());
                 Assert.Equal(customer.AccountId, (await verify.AccountNotifications.SingleAsync()).AccountId);
                 var outbox = await verify.OutboxMessages.ToListAsync(); Assert.Equal(2, outbox.Count);

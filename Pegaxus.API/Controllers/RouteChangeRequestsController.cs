@@ -12,7 +12,7 @@ public sealed class RouteChangeRequestsController(IRouteChangeService service) :
 {
     /// <summary>Request activation of a confirmed BACKUP route.</summary>
     /// <param name="routePlanId">The BACKUP route plan UUID.</param>
-    /// <param name="request">Reason, new ETA and optional estimated cost.</param>
+    /// <param name="request">Reason, new ETA, optional estimated cost and optional incidentReportId (an open incident on the same transport moves to PENDING).</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the requested route.</returns>
     [HttpPost("/api/v1/route-plans/{routePlanId:guid}/change-request")]
@@ -22,7 +22,7 @@ public sealed class RouteChangeRequestsController(IRouteChangeService service) :
 
     /// <summary>Approve or reject a BACKUP or RETURN route.</summary>
     /// <param name="routePlanId">The route plan UUID.</param>
-    /// <param name="request">Decision, route version and optional note.</param>
+    /// <param name="request">Decision, route version, optional note and optional incidentReportId (an open incident on the same transport moves to PENDING).</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the route and dossier status.</returns>
     [HttpPost("/api/v1/route-plans/{routePlanId:guid}/change-decision")]
@@ -41,12 +41,12 @@ public sealed class RouteChangeRequestsController(IRouteChangeService service) :
         Success(await service.ActivateReturnAsync(routePlanId, AccountId, request, cancellationToken), "Return route activated successfully");
 
     /// <summary>Notify PRIMARY drivers about a confirmed or active RETURN route.</summary>
+    /// <remarks>The RC assigned to the transport plan, or any LM when the RC is absent.</remarks>
     /// <param name="routePlanId">The RETURN route plan UUID.</param>
     /// <param name="request">Optional driver message.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with notified drivers.</returns>
     [HttpPost("/api/v1/route-plans/{routePlanId:guid}/driver-notice")]
-    [Authorize(Policy = JwtExtensions.FleetRouteCoordinatorPolicy)]
     public async Task<IActionResult> NotifyDrivers(Guid routePlanId, [FromBody] Request.DriverNoticeRequest request, CancellationToken cancellationToken) =>
         Success(await service.NotifyDriversAsync(routePlanId, AccountId, request, cancellationToken), "Driver notified successfully");
 

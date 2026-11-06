@@ -17,3 +17,11 @@ public enum EmergencyCostStatus {
     REJECTED,
     CANCELLED
 }
+
+public enum EmergencyReceiptStatus {
+    NOT_REQUIRED = 1,
+    PENDING,
+    SUBMITTED,
+    APPROVED,
+    REJECTED
+}

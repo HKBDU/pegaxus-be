@@ -1,7 +1,9 @@
 using FluentValidation;
 using Microsoft.AspNetCore.Authentication.Google;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -18,6 +20,7 @@ using BookingService = Pegaxus.Service.BookingService;
 using TransportPlanService = Pegaxus.Service.TransportPlanService;
 using RoutePlanService = Pegaxus.Service.RoutePlanService;
 using LocationService = Pegaxus.Service.LocationService;
+using LocationTrackingService = Pegaxus.Service.LocationTrackingService;
 using RouteService = Pegaxus.Service.RouteService;
 using JwtService = Pegaxus.Service.JwtService;
 using MediaService = Pegaxus.Service.MediaService;
@@ -25,6 +28,7 @@ using CloudinaryService = Pegaxus.Service.CloudinaryService;
 using MailService = Pegaxus.Service.MailService;
 using AccountService = Pegaxus.Service.AccountService;
 using HorseService = Pegaxus.Service.HorseService;
+using HorseHealthLogService = Pegaxus.Service.HorseHealthLogService;
 using EmployeeService = Pegaxus.Service.EmployeeService;
 using ComplianceDossierService = Pegaxus.Service.ComplianceDossierService;
 using NotificationService = Pegaxus.Service.NotificationService;
@@ -36,10 +40,31 @@ namespace Pegaxus.API.Extensions;
 /// <summary>Composition-root registrations, grouped by feature module.</summary>
 public static class ServiceCollectionExtensions
 {
+    /// <summary>
+    /// The API runs behind a TLS-terminating proxy (Render). Without this the request looks like plain http, so the Google
+    /// redirect_uri is built as http://... and Google rejects it with redirect_uri_mismatch. The proxy is the only way in,
+    /// so any sender of forwarded headers is trusted.
+    /// </summary>
+    public static IServiceCollection AddProxyForwardedHeaders(this IServiceCollection services) =>
+        services.Configure<ForwardedHeadersOptions>(options =>
+        {
+            options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+            options.KnownNetworks.Clear();
+            options.KnownProxies.Clear();
+        });
+
     public static IServiceCollection AddApiControllers(this IServiceCollection services)
     {
         services
             .AddControllers()
+            .AddJsonOptions(options => options.JsonSerializerOptions.Converters.Add(new UtcDateTimeJsonConverter()))
+            .AddMvcOptions(options =>
+            {
+                var factories = options.ValueProviderFactories;
+                for (var index = 0; index < factories.Count; index++)
+                    if (factories[index] is FormValueProviderFactory)
+                        factories[index] = new InvariantFormValueProviderFactory();
+            })
             .ConfigureApiBehaviorOptions(options =>
             {
                 options.InvalidModelStateResponseFactory = context =>
@@ -51,7 +76,7 @@ public static class ServiceCollectionExtensions
                             field = string.IsNullOrEmpty(entry.Key)
                                 ? "$"
                                 : char.ToLowerInvariant(entry.Key[0]) + entry.Key[1..],
-                            message = error.ErrorMessage
+                            message = UserFacingMessages.FieldError(entry.Key, error.ErrorMessage)
                         }))
                         .ToArray();
 
@@ -87,6 +112,8 @@ public static class ServiceCollectionExtensions
     {
         services.AddSignalR();
         services.AddSingleton<IUserIdProvider, AccountUserIdProvider>();
+        services.AddSingleton<LocationTrackingService.TrackingState>();
+        services.AddScoped<LocationTrackingService.ILocationTrackingRealtimeService, SignalRLocationTrackingService>();
         return services;
     }
 
@@ -222,10 +249,39 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>Customer claims about a delivery and how the logistics manager handles them.</summary>
+    public static IServiceCollection AddClaimsModule(this IServiceCollection services)
+    {
+        services.AddScoped<Pegaxus.Service.ClaimService.IClaimService, Pegaxus.Service.ClaimService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.SubmitRequest>, Pegaxus.Service.ClaimService.Validator.SubmitRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.ListRequest>, Pegaxus.Service.ClaimService.Validator.ListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.ResolveRequest>, Pegaxus.Service.ClaimService.Validator.ResolveRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.CancelRequest>, Pegaxus.Service.ClaimService.Validator.CancelRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.ClaimService.Request.CompleteRequest>, Pegaxus.Service.ClaimService.Validator.CompleteRequestValidator>();
+        return services;
+    }
+
+    /// <summary>The transport archive, the audit view and the audit package export (with its background worker).</summary>
+    public static IServiceCollection AddAuditModule(this IServiceCollection services)
+    {
+        services.AddSingleton<Pegaxus.Service.AuditService.AuditExportQueue>();
+        services.AddScoped<Pegaxus.Service.AuditService.IAuditService, Pegaxus.Service.AuditService.Service>();
+        services.AddHostedService<Pegaxus.API.Services.AuditExportWorker>();
+        return services;
+    }
+
+    /// <summary>Read-only management reports for the logistics manager.</summary>
+    public static IServiceCollection AddReportsModule(this IServiceCollection services)
+    {
+        services.AddScoped<Pegaxus.Service.ReportService.IReportService, Pegaxus.Service.ReportService.Service>();
+        return services;
+    }
+
     /// <summary>Invoices, online payment checkout and the payment webhook.</summary>
     public static IServiceCollection AddInvoicingModule(this IServiceCollection services, IConfiguration configuration)
     {
         services.AddScoped<Pegaxus.Service.InvoiceService.IInvoiceService, Pegaxus.Service.InvoiceService.Service>();
+        services.AddHostedService<Pegaxus.API.Services.InvoiceOverdueWorker>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.BookingListRequest>, Pegaxus.Service.InvoiceService.Validator.BookingListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.ListRequest>, Pegaxus.Service.InvoiceService.Validator.ListRequestValidator>();
         services.AddScoped<IValidator<Pegaxus.Service.InvoiceService.Request.UpdateRequest>, Pegaxus.Service.InvoiceService.Validator.UpdateRequestValidator>();
@@ -244,8 +300,53 @@ public static class ServiceCollectionExtensions
     /// <summary>Transport plans, route plans, locations, routes, emergency route changes, outsourcing and personnel assignment.</summary>
     public static IServiceCollection AddTransportPlanningModule(this IServiceCollection services)
     {
+        services.AddScoped<Pegaxus.Service.IncidentService.IIncidentService, Pegaxus.Service.IncidentService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CreateCostRequest>, Pegaxus.Service.IncidentService.Validator.CreateCostRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CostListRequest>, Pegaxus.Service.IncidentService.Validator.CostListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CostDecisionRequest>, Pegaxus.Service.IncidentService.Validator.CostDecisionRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.RerouteEscalationRequest>, Pegaxus.Service.IncidentService.Validator.RerouteEscalationRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.RouteHoldRequest>, Pegaxus.Service.IncidentService.Validator.RouteHoldRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ListRequest>, Pegaxus.Service.IncidentService.Validator.ListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ResolveRequest>, Pegaxus.Service.IncidentService.Validator.ResolveRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.CancelRequest>, Pegaxus.Service.IncidentService.Validator.CancelRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.SelfResolveRequest>, Pegaxus.Service.IncidentService.Validator.SelfResolveRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.RaiseSeverityRequest>, Pegaxus.Service.IncidentService.Validator.RaiseSeverityRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.HorseDetail>, Pegaxus.Service.IncidentService.Validator.HorseDetailValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.AddHorseDetailsRequest>, Pegaxus.Service.IncidentService.Validator.AddHorseDetailsRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ReportHorseHealthRequest>, Pegaxus.Service.IncidentService.Validator.ReportHorseHealthRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.FollowUpHorseRequest>, Pegaxus.Service.IncidentService.Validator.FollowUpHorseRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.VehicleFields>, Pegaxus.Service.IncidentService.Validator.VehicleFieldsValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.ReportVehicleRequest>, Pegaxus.Service.IncidentService.Validator.ReportVehicleRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.IncidentService.Request.UpdateVehicleRequest>, Pegaxus.Service.IncidentService.Validator.UpdateVehicleRequestValidator>();
+        services.AddScoped<Pegaxus.Service.FinancialReportService.IFinancialReportService, Pegaxus.Service.FinancialReportService.Service>();
+        services.AddScoped<Pegaxus.Service.HandoverService.IHandoverService, Pegaxus.Service.HandoverService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CreateRequest>, Pegaxus.Service.HandoverService.Validator.CreateRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.ListRequest>, Pegaxus.Service.HandoverService.Validator.ListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CancelRequest>, Pegaxus.Service.HandoverService.Validator.CancelRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.HandoverService.Request.CompleteRequest>, Pegaxus.Service.HandoverService.Validator.CompleteRequestValidator>();
+        services.AddScoped<LocationTrackingService.ILocationTrackingService, LocationTrackingService.Service>();
+        services.AddScoped<IValidator<LocationTrackingService.Request.LocationRequest>, LocationTrackingService.Validator.LocationRequestValidator>();
+        services.AddOptions<LocationTrackingService.TrackingOptions>().BindConfiguration("Tracking")
+            .Validate(options => double.IsFinite(options.GeofenceRadiusMeters) && options.GeofenceRadiusMeters > 0,
+                "Tracking:GeofenceRadiusMeters must be a positive finite number.").ValidateOnStart();
+        services.AddScoped<Pegaxus.Service.PriceListService.IPriceListService, Pegaxus.Service.PriceListService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.PriceListService.Request.ListRequest>, Pegaxus.Service.PriceListService.Validator.ListRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.PriceListService.Request.CreateRequest>, Pegaxus.Service.PriceListService.Validator.CreateRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.PriceListService.Request.UpdateRequest>, Pegaxus.Service.PriceListService.Validator.UpdateRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.PriceListService.Request.CreateItemRequest>, Pegaxus.Service.PriceListService.Validator.CreateItemRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.PriceListService.Request.UpdateItemRequest>, Pegaxus.Service.PriceListService.Validator.UpdateItemRequestValidator>();
+        services.AddScoped<HorseHealthLogService.IHorseHealthLogService, HorseHealthLogService.Service>();
+        services.AddScoped<IValidator<HorseHealthLogService.Request.RecordRequest>, HorseHealthLogService.Validator.RecordRequestValidator>();
+        services.AddScoped<IValidator<HorseHealthLogService.Request.CreateRequest>, HorseHealthLogService.Validator.CreateRequestValidator>();
+        services.AddScoped<IValidator<HorseHealthLogService.Request.AddPhotosRequest>, HorseHealthLogService.Validator.AddPhotosRequestValidator>();
+        services.AddScoped<Pegaxus.Service.HorseHealthService.IHorseHealthService, Pegaxus.Service.HorseHealthService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.HorseHealthService.Request.ListRequest>, Pegaxus.Service.HorseHealthService.Validator.ListRequestValidator>();
+        services.AddScoped<Pegaxus.Service.TransportService.ITransportService, Pegaxus.Service.TransportService.Service>();
+        services.AddScoped<IValidator<Pegaxus.Service.TransportService.Request.AssignedRequest>, Pegaxus.Service.TransportService.Validator.AssignedRequestValidator>();
+        services.AddScoped<IValidator<Pegaxus.Service.TransportService.Request.ListRequest>, Pegaxus.Service.TransportService.Validator.ListRequestValidator>();
         services.AddScoped<TransportPlanService.ITransportPlanService, TransportPlanService.Service>();
         services.AddScoped<RoutePlanService.IRoutePlanService, RoutePlanService.Service>();
+        services.AddScoped<RoutePlanService.IRoutePlanRealtimeService, SignalRRoutePlanRealtimeService>();
         services.AddScoped<Pegaxus.Service.NotificationService.TransportNotifications>();
         services.AddScoped<LocationService.ILocationService, LocationService.Service>();
         services.AddScoped<RouteService.IRouteService, RouteService.Service>();

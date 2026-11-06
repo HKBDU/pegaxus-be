@@ -71,7 +71,7 @@ public class InvoiceOnlinePaymentTests
     [InlineData(InvoiceType.FINAL, InvoiceStatus.OVERDUE, "VND")]
     [InlineData(InvoiceType.SUPPLEMENTARY, InvoiceStatus.ISSUED, "VND")]
     [InlineData(InvoiceType.SUPPLEMENTARY, InvoiceStatus.OVERDUE, "EUR")]
-    public async Task Initiation_UsesFullInvoiceAmount_ReplacesPending_WithoutConfirmingPayment(
+    public async Task Initiation_UsesFullInvoiceAmount_ReusesPending_WithoutConfirmingPayment(
         InvoiceType type, InvoiceStatus status, string currency)
     {
         await using var db = TestSupport.CreateDb();
@@ -82,12 +82,13 @@ public class InvoiceOnlinePaymentTests
         db.Receipts.AddRange(previous, failed); await db.SaveChangesAsync();
         var gateway = new Gateway();
         var result = await CreateService(db, gateway).InitiateOnlinePaymentAsync(invoice.InvoiceId, customer.AccountId);
-        Assert.Equal(ReceiptStatus.FAILED, previous.Status); Assert.Equal(Now, previous.UpdatedAt);
+        Assert.True(result.Reused); Assert.Equal(2, await db.Receipts.CountAsync());
+        Assert.Equal(ReceiptStatus.PENDING, previous.Status); Assert.Equal(Now.AddDays(-1), previous.UpdatedAt);
         Assert.Equal(Now.AddDays(-1), failed.UpdatedAt);
         var receipt = await db.Receipts.SingleAsync(x => x.ReceiptId == result.Receipt.ReceiptId);
-        Assert.Equal(ReceiptStatus.PENDING, receipt.Status); Assert.Equal(PaymentMethod.BANK_TRANSFER, receipt.PaymentMethod);
+        Assert.Equal(previous.ReceiptId, receipt.ReceiptId); Assert.Equal(PaymentMethod.BANK_TRANSFER, receipt.PaymentMethod);
         Assert.Equal(12345, result.Receipt.Amount); Assert.Equal(currency, result.Receipt.Currency);
-        Assert.Matches("^RCP-20261110-[0-9]{4}$", result.Receipt.ReceiptCode);
+        Assert.Equal("RCP-20261109-0001", result.Receipt.ReceiptCode);
         Assert.Equal(receipt.ReceiptCode, gateway.ReceiptCode); Assert.Equal(12345m, gateway.Amount); Assert.Equal(currency, gateway.Currency);
         Assert.Equal(gateway.PaymentUrl, result.PaymentUrl); Assert.Equal(1, gateway.Calls);
         Assert.Equal(invoice.BookingId, gateway.BookingId);
@@ -96,6 +97,23 @@ public class InvoiceOnlinePaymentTests
         Assert.Equal(status, invoice.Status); Assert.Null(invoice.PaidAt); Assert.Equal(Now.AddDays(-5), invoice.UpdatedAt);
         Assert.Empty(await db.InvoiceStatusHistories.ToListAsync()); Assert.Empty(await db.Notifications.ToListAsync());
         Assert.Empty(await db.OutboxMessages.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Initiation_CreatesANewReceipt_WhenNoneIsPending_AndLeavesFailedOnesAlone()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (customer, _, invoice) = await SeedAsync(db);
+        invoice.Type = InvoiceType.FINAL; invoice.Status = InvoiceStatus.ISSUED; invoice.TotalAmount = 12345;
+        var failed = Receipt(invoice, ReceiptStatus.FAILED, "RCP-20261109-0002");
+        db.Receipts.Add(failed); await db.SaveChangesAsync();
+        var gateway = new Gateway();
+
+        var result = await CreateService(db, gateway).InitiateOnlinePaymentAsync(invoice.InvoiceId, customer.AccountId);
+
+        Assert.False(result.Reused); Assert.Equal(2, await db.Receipts.CountAsync());
+        Assert.Matches("^RCP-20261110-[0-9]{4}$", result.Receipt.ReceiptCode); Assert.Equal("PENDING", result.Receipt.Status);
+        Assert.Equal(ReceiptStatus.FAILED, failed.Status); Assert.Equal(Now.AddDays(-1), failed.UpdatedAt);
     }
 
     [Theory]

@@ -48,7 +48,108 @@ public static class AppDbContextSeedData
         await db.SaveChangesAsync(cancellationToken);
         await SeedDemoOperationsAsync(db, now, cancellationToken);
         await SeedLocationsAsync(db, cancellationToken);
+        await SeedVehiclesAndProvidersAsync(db, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
+    }
+
+    // Rows still carrying the old placeholder names are upgraded once; an edited row no longer matches and is left alone.
+    private const string LegacyDemoVehiclePrefix = "Pegaxus Demo ";
+    private const string LegacyDemoProviderPrefix = "Pegaxus Demo Provider";
+
+    public static async Task<(int Vehicles, int Providers)> SeedVehiclesAndProvidersAsync(
+        AppDbContext db, CancellationToken cancellationToken = default)
+    {
+        var now = DbTime.UtcNow();
+        var expiryDate = DateOnly.FromDateTime(now).AddYears(2);
+        var vehicles = 0;
+        var providers = 0;
+        foreach (var number in Enumerable.Range(1, 10))
+        {
+            var vehicleProfile = VehicleProfiles[number - 1];
+            var vehicleCode = $"VEH-20261010-{number:0000}";
+            var vehicleId = StableGuid(vehicleCode);
+            var licensePlate = vehicleProfile.LicensePlate;
+            var vehicle = await db.Vehicles.IgnoreQueryFilters().FirstOrDefaultAsync(item => item.VehicleId == vehicleId ||
+                item.VehicleCode == vehicleCode || (licensePlate != null && item.LicensePlate == licensePlate), cancellationToken);
+            if (vehicle is null)
+            {
+                vehicle = new Vehicle
+                {
+                    VehicleId = vehicleId,
+                    VehicleCode = vehicleCode,
+                    Status = VehicleStatus.AVAILABLE,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                ApplyVehicleDetails(vehicle, vehicleProfile, expiryDate);
+                db.Vehicles.Add(vehicle);
+                vehicles++;
+            }
+            else if (vehicle.VehicleId == vehicleId && !vehicle.IsDeleted &&
+                (vehicle.VehicleName?.StartsWith(LegacyDemoVehiclePrefix, StringComparison.Ordinal) == true ||
+                 vehicle.VehicleName == $"Pegaxus {vehicleProfile.Mode} {number:000}"))
+            {
+                ApplyVehicleDetails(vehicle, vehicleProfile, expiryDate);
+                vehicle.UpdatedAt = now;
+            }
+
+            var providerProfile = ProviderProfiles[number - 1];
+            var providerCode = $"PRV-20261010-{number:0000}";
+            var providerId = StableGuid(providerCode);
+            var taxCode = providerProfile.TaxCode;
+            var provider = await db.TransportProviders.IgnoreQueryFilters().FirstOrDefaultAsync(item => item.TransportProviderId == providerId ||
+                item.ProviderCode == providerCode || item.TaxCode == taxCode, cancellationToken);
+            if (provider is null)
+            {
+                provider = new TransportProvider
+                {
+                    TransportProviderId = providerId,
+                    ProviderCode = providerCode,
+                    Status = ProviderStatus.ACTIVE,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                };
+                ApplyProviderDetails(provider, providerProfile);
+                db.TransportProviders.Add(provider);
+                providers++;
+            }
+            else if (provider.TransportProviderId == providerId && !provider.IsDeleted &&
+                (provider.ProviderName?.StartsWith(LegacyDemoProviderPrefix, StringComparison.Ordinal) == true ||
+                 provider.ProviderName == $"Pegaxus Transport {number:000}"))
+            {
+                ApplyProviderDetails(provider, providerProfile);
+                provider.UpdatedAt = now;
+            }
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return (vehicles, providers);
+    }
+
+    private static void ApplyVehicleDetails(Vehicle vehicle, VehicleProfile profile, DateOnly expiryDate)
+    {
+        vehicle.VehicleName = profile.Name;
+        vehicle.TransportMode = profile.Mode;
+        vehicle.LicensePlate = profile.LicensePlate;
+        vehicle.VehicleType = profile.Type;
+        vehicle.CapacityHorses = profile.Capacity;
+        vehicle.RegistrationNumber = profile.RegistrationNumber;
+        vehicle.RegistrationExpiryDate = expiryDate;
+        vehicle.InsuranceNumber = profile.InsuranceNumber;
+        vehicle.InsuranceExpiryDate = expiryDate;
+        vehicle.SpecialEquipment = profile.SpecialEquipment;
+        vehicle.Country = profile.Country;
+    }
+
+    private static void ApplyProviderDetails(TransportProvider provider, ProviderProfile profile)
+    {
+        provider.ProviderName = profile.Name;
+        provider.ContactName = profile.ContactName;
+        provider.Email = profile.Email;
+        provider.Country = profile.Country;
+        provider.TaxCode = profile.TaxCode;
+        provider.SupportedModes = profile.SupportedModes;
+        provider.Note = profile.Note;
     }
 
     public static async Task<int> SeedLocationsAsync(AppDbContext db, CancellationToken cancellationToken = default)
@@ -125,7 +226,7 @@ public static class AppDbContextSeedData
         await db.SaveChangesAsync(cancellationToken);
 
         var bookings = await db.Bookings
-            .Where(item => item.BookingCode.StartsWith("REQ-20261010-DEMO-"))
+            .Where(item => item.BookingCode.StartsWith("REQ-20261010-"))
             .ToDictionaryAsync(item => item.BookingCode, cancellationToken);
         var transports = await SeedDemoTransportsAsync(db, bookings, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
@@ -135,6 +236,9 @@ public static class AppDbContextSeedData
         await SeedDemoDossiersAsync(db, transports, templates, horses, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    // Horses still carrying a placeholder passport (not 15 characters, so the horse could not even be edited) are upgraded once.
+    private const string LegacyDemoPassportPrefix = "PEGAXUS-DEMO-";
 
     private static async Task<Dictionary<string, Horse>> SeedDemoHorsesAsync(
         AppDbContext db,
@@ -150,47 +254,68 @@ public static class AppDbContextSeedData
             "kimvetuan@gmail.com",
             "khuyenvkse200481@fpt.edu.vn"
         };
-        var seeds = orderedCustomerEmails.SelectMany((customerEmail, customerIndex) => Enumerable.Range(1, 4).Select(number =>
-            new HorseSeed(
-                customerEmail,
-                $"DEMO-C{customerIndex + 1}-HORSE-{number:000}",
-                $"Pegaxus Demo Horse {customerIndex + 1}-{number}",
-                number % 3 == 0 ? HorseSex.GELDING : number % 2 == 0 ? HorseSex.FEMALE : HorseSex.MALE,
-                number % 2 == 0 ? "Arabian" : "Thoroughbred",
-                $"98511200{customerIndex + 1:00}{number:000000}")))
+        var seeds = orderedCustomerEmails.SelectMany((customerEmail, customerIndex) =>
+                HorseProfiles[customerIndex].Select((profile, horseIndex) => new HorseSeed(
+                    customerEmail,
+                    $"HRS-20261010-{customerIndex * 4 + horseIndex + 1:0000}",
+                    profile,
+                    $"985112{customerIndex + 1:000}{horseIndex + 1:000000}",
+                    $"250PEG{customerIndex + 1:000}{horseIndex + 1:000000}")))
             .ToArray();
 
         foreach (var seed in seeds)
         {
-            var customer = customers[seed.CustomerEmail];
-            var horse = await db.Horses.SingleOrDefaultAsync(item => item.MicrochipNumber == seed.MicrochipNumber, cancellationToken);
+            var customerId = customers[seed.CustomerEmail].CustomerId;
+            // The seed codes were renamed once, which changed the IDs derived from them. A horse an earlier seed made keeps its old ID
+            // but still carries this seed's microchip, so it is reused instead of inserted again.
+            var horse = await db.Horses.IgnoreQueryFilters()
+                .Where(item => item.HorseId == seed.Id || !item.IsDeleted && item.CustomerId == customerId &&
+                    (item.MicrochipNumber == seed.MicrochipNumber || item.PassportNumber == seed.PassportNumber))
+                .OrderByDescending(item => item.HorseId == seed.Id)
+                .FirstOrDefaultAsync(cancellationToken);
             if (horse is null)
             {
                 horse = new Horse
                 {
                     HorseId = seed.Id,
-                    CustomerId = customer.CustomerId,
-                    HorseName = seed.HorseName,
-                    Sex = seed.Sex,
-                    Breed = seed.Breed,
-                    MicrochipNumber = seed.MicrochipNumber,
-                    PassportNumber = $"PEGAXUS-{seed.Code}",
-                    DateOfBirth = new DateOnly(2021, 1, 1).AddDays(seed.Id.GetHashCode() & 120),
-                    Color = seed.Sex == HorseSex.MALE ? "Bay" : "Chestnut",
-                    CountryOfOrigin = "FR",
-                    WeightKg = 520,
-                    HeightCm = 165,
-                    IdentificationNotes = "Seeded demo horse for Swagger testing.",
+                    CustomerId = customerId,
                     CreatedAt = now,
                     UpdatedAt = now
                 };
+                ApplyHorseDetails(horse, seed);
                 db.Horses.Add(horse);
+            }
+            else if (!horse.IsDeleted &&
+                (horse.PassportNumber?.StartsWith(LegacyDemoPassportPrefix, StringComparison.Ordinal) == true ||
+                 horse.PassportNumber == $"PEGAXUS-{seed.Code}"))
+            {
+                ApplyHorseDetails(horse, seed);
+                horse.UpdatedAt = now;
             }
             result[seed.Code] = horse;
         }
 
         return result;
     }
+
+    private static void ApplyHorseDetails(Horse horse, HorseSeed seed)
+    {
+        var profile = seed.Profile;
+        horse.HorseName = profile.Name;
+        horse.Sex = profile.Sex;
+        horse.Breed = profile.Breed;
+        horse.Color = profile.Color;
+        horse.DateOfBirth = profile.DateOfBirth;
+        horse.CountryOfOrigin = profile.Country;
+        horse.WeightKg = profile.WeightKg;
+        horse.HeightCm = profile.HeightCm;
+        horse.MicrochipNumber = seed.MicrochipNumber;
+        horse.PassportNumber = seed.PassportNumber;
+        horse.IdentificationNotes = profile.Notes;
+    }
+
+    // Bookings still carrying this note were never touched, so they are brought up to date once.
+    private const string LegacyDemoBookingNote = "Seeded demo booking for Swagger testing.";
 
     private static async Task SeedDemoBookingsAsync(
         AppDbContext db,
@@ -200,20 +325,43 @@ public static class AppDbContextSeedData
         DateTime now,
         CancellationToken cancellationToken)
     {
+        // Departures follow the booking rule (domestic 21 days, international 2 months ahead) from the day the seed runs.
+        var today = DateOnly.FromDateTime(now);
         var seeds = new[]
         {
-            new BookingSeed("REQ-20261010-DEMO-0001", "trinhnganquan@gmail.com", BookingStatus.DRAFT, "FR", "FR", new DateOnly(2026, 10, 20), new DateOnly(2026, 10, 22), "Draft booking for edit tests.", new[] { "DEMO-C1-HORSE-001", "DEMO-C1-HORSE-002" }),
-            new BookingSeed("REQ-20261010-DEMO-0002", "batquyquan@gmail.com", BookingStatus.PENDING, "FR", "GB", new DateOnly(2026, 10, 24), new DateOnly(2026, 10, 29), "Temperature monitoring required.", new[] { "DEMO-C2-HORSE-001", "DEMO-C2-HORSE-002" }),
-            new BookingSeed("REQ-20261010-DEMO-0003", "kimvetuan@gmail.com", BookingStatus.APPROVED, "FR", "GB", new DateOnly(2026, 10, 27), new DateOnly(2026, 11, 1), "International approved booking without plan.", new[] { "DEMO-C3-HORSE-001", "DEMO-C3-HORSE-002", "DEMO-C3-HORSE-003" }),
-            new BookingSeed("REQ-20261010-DEMO-0004", "khuyenvkse200481@fpt.edu.vn", BookingStatus.APPROVED, "DE", "FR", new DateOnly(2026, 11, 5), new DateOnly(2026, 11, 7), "Approved booking with draft plan.", new[] { "DEMO-C4-HORSE-001", "DEMO-C4-HORSE-002" }),
-            new BookingSeed("REQ-20261010-DEMO-0005", "trinhnganquan@gmail.com", BookingStatus.APPROVED, "FR", "GB", new DateOnly(2026, 12, 1), new DateOnly(2026, 12, 6), "Approved booking ready for assignment and compliance.", new[] { "DEMO-C1-HORSE-003", "DEMO-C1-HORSE-004" }),
-            new BookingSeed("REQ-20261010-DEMO-0006", "batquyquan@gmail.com", BookingStatus.REJECTED, "GB", "FR", new DateOnly(2026, 12, 10), new DateOnly(2026, 12, 15), "Rejected booking for negative-path tests.", new[] { "DEMO-C2-HORSE-003" })
+            new BookingSeed("REQ-20261010-0001", "trinhnganquan@gmail.com", BookingStatus.DRAFT, Chantilly, Deauville, 30, 1,
+                "Hay net and water stop every four hours.", "Both horses are moving to the summer meeting at Deauville.", null,
+                new[] { "HRS-20261010-0001", "HRS-20261010-0002" }),
+            new BookingSeed("REQ-20261010-0002", "batquyquan@gmail.com", BookingStatus.PENDING, Grosbois, NationalStud, 90, 4,
+                "Temperature monitoring required throughout the journey.", "Two horses are going to a training yard for the autumn season.", null,
+                new[] { "HRS-20261010-0005", "HRS-20261010-0006" }),
+            new BookingSeed("REQ-20261010-0003", "kimvetuan@gmail.com", BookingStatus.APPROVED, Longchamp, DalhamHall, 100, 5,
+                "Border control post inspection required on arrival in the United Kingdom.", "Three horses are travelling to the Newmarket sales.", null,
+                new[] { "HRS-20261010-0009", "HRS-20261010-0010", "HRS-20261010-0011" }),
+            new BookingSeed("REQ-20261010-0004", "khuyenvkse200481@fpt.edu.vn", BookingStatus.APPROVED, Curragh, Chantilly, 110, 4,
+                "Overnight stabling needed before the sea crossing.", "Two horses are joining a stable in Chantilly.", null,
+                new[] { "HRS-20261010-0013", "HRS-20261010-0014" }),
+            new BookingSeed("REQ-20261010-0005", "trinhnganquan@gmail.com", BookingStatus.APPROVED, Chantilly, Ascot, 120, 5,
+                "Collection at 06:00; vet check before loading.", "Entries confirmed for the Ascot meeting.", null,
+                new[] { "HRS-20261010-0003", "HRS-20261010-0004" }),
+            new BookingSeed("REQ-20261010-0006", "batquyquan@gmail.com", BookingStatus.REJECTED, Newbury, Quesnay, 130, 5,
+                "Return after the autumn sales.", "One horse is coming back to its home stud.", "The passport of the horse expires before the departure date.",
+                new[] { "HRS-20261010-0007" })
         };
 
         foreach (var seed in seeds)
         {
-            if (await db.Bookings.AnyAsync(item => item.BookingCode == seed.BookingCode, cancellationToken))
+            var existing = await db.Bookings.SingleOrDefaultAsync(item => item.BookingCode == seed.BookingCode, cancellationToken);
+            if (existing is not null)
+            {
+                if (existing.Status == seed.Status &&
+                    (existing.CustomerNote == LegacyDemoBookingNote || existing.CustomerNote == "Please confirm transport arrangements before departure."))
+                {
+                    ApplyBookingDetails(existing, seed, today);
+                    existing.UpdatedAt = now;
+                }
                 continue;
+            }
 
             var customer = customers[seed.CustomerEmail];
             var booking = new Booking
@@ -223,21 +371,13 @@ public static class AppDbContextSeedData
                 CustomerId = customer.CustomerId,
                 AssignedEmployeeId = employees["diechahien@gmail.com"].EmployeeId,
                 Status = seed.Status,
-                OriginAddress = seed.OriginCountry == "FR" ? "Haras de Chantilly, Paris" : "Newmarket Stables, London",
-                OriginCountry = seed.OriginCountry,
-                DestinationAddress = seed.DestinationCountry == "GB" ? "Newmarket Stables, London" : "Haras de Chantilly, Paris",
-                DestinationCountry = seed.DestinationCountry,
-                RequestedDepartureDate = seed.DepartureDate,
-                RequestedArrivalDate = seed.ArrivalDate,
-                SpecialRequirements = seed.SpecialRequirements,
-                CustomerNote = "Seeded demo booking for Swagger testing.",
                 SubmittedAt = seed.Status == BookingStatus.DRAFT ? null : now.AddDays(-5),
                 ApprovedAt = seed.Status == BookingStatus.APPROVED ? now.AddDays(-3) : null,
                 RejectedAt = seed.Status == BookingStatus.REJECTED ? now.AddDays(-3) : null,
-                RejectionReason = seed.Status == BookingStatus.REJECTED ? "Demo rejection for negative-path testing." : null,
                 CreatedAt = now,
                 UpdatedAt = now
             };
+            ApplyBookingDetails(booking, seed, today);
             db.Bookings.Add(booking);
             foreach (var horseCode in seed.HorseCodes)
                 db.BookingHorses.Add(new BookingHorse
@@ -275,6 +415,23 @@ public static class AppDbContextSeedData
         }
     }
 
+    private static void ApplyBookingDetails(Booking booking, BookingSeed seed, DateOnly today)
+    {
+        booking.OriginAddress = seed.Origin.Address;
+        booking.OriginCountry = seed.Origin.Country;
+        booking.OriginLatitude = seed.Origin.Latitude;
+        booking.OriginLongitude = seed.Origin.Longitude;
+        booking.DestinationAddress = seed.Destination.Address;
+        booking.DestinationCountry = seed.Destination.Country;
+        booking.DestinationLatitude = seed.Destination.Latitude;
+        booking.DestinationLongitude = seed.Destination.Longitude;
+        booking.RequestedDepartureDate = today.AddDays(seed.DepartureInDays);
+        booking.RequestedArrivalDate = today.AddDays(seed.DepartureInDays + seed.TripDays);
+        booking.SpecialRequirements = seed.SpecialRequirements;
+        booking.CustomerNote = seed.CustomerNote;
+        booking.RejectionReason = seed.RejectionReason;
+    }
+
     private static async Task<Dictionary<string, Transport>> SeedDemoTransportsAsync(
         AppDbContext db,
         IReadOnlyDictionary<string, Booking> bookings,
@@ -283,9 +440,9 @@ public static class AppDbContextSeedData
     {
         var seeds = new[]
         {
-            new TransportSeed("TR-20261010-DEMO-0003", "REQ-20261010-DEMO-0003", TransportStatus.CREATED),
-            new TransportSeed("TR-20261010-DEMO-0004", "REQ-20261010-DEMO-0004", TransportStatus.PLANNING),
-            new TransportSeed("TR-20261010-DEMO-0005", "REQ-20261010-DEMO-0005", TransportStatus.READY)
+            new TransportSeed("TR-20261010-0003", "REQ-20261010-0003", TransportStatus.CREATED),
+            new TransportSeed("TR-20261010-0004", "REQ-20261010-0004", TransportStatus.PLANNING),
+            new TransportSeed("TR-20261010-0005", "REQ-20261010-0005", TransportStatus.READY)
         };
         var result = new Dictionary<string, Transport>(StringComparer.OrdinalIgnoreCase);
         foreach (var seed in seeds)
@@ -314,8 +471,8 @@ public static class AppDbContextSeedData
         var requirementIds = await db.ComplianceRequirements.ToDictionaryAsync(item => item.RequirementCode, item => item.ComplianceRequirementId, cancellationToken);
         var seeds = new[]
         {
-            new TemplateSeed("TPL-DEMO-EU-GB", "EU to GB Equine Transport", DossierTemplateStatus.ACTIVE, new[] { "EQUINE_PASSPORT", "EHC_EU_TO_GB", "IPAFFS_PRE_NOTIF", "ATA_CARNET_EXPORT" }),
-            new TemplateSeed("TPL-DEMO-DRAFT", "Draft Demo Template", DossierTemplateStatus.DRAFT, new[] { "EQUINE_PASSPORT", "JOURNEY_LOG_EC1_2005" })
+            new TemplateSeed("TPL-EU-GB", "EU to GB Equine Transport", DossierTemplateStatus.ACTIVE, new[] { "EQUINE_PASSPORT", "EHC_EU_TO_GB", "IPAFFS_PRE_NOTIF", "ATA_CARNET_EXPORT" }),
+            new TemplateSeed("TPL-EQUINE-IDENTITY", "Equine Identity and Journey Log", DossierTemplateStatus.DRAFT, new[] { "EQUINE_PASSPORT", "JOURNEY_LOG_EC1_2005" })
         };
         var result = new Dictionary<string, DossierTemplate>(StringComparer.OrdinalIgnoreCase);
         foreach (var seed in seeds)
@@ -329,7 +486,7 @@ public static class AppDbContextSeedData
                     TemplateCode = seed.Code,
                     TemplateName = seed.Name,
                     Status = seed.Status,
-                    Description = "Seeded demo dossier template for Swagger testing.",
+                    Description = "Document requirements for equine transport.",
                     VersionNo = 1,
                     EffectiveFrom = new DateOnly(2026, 1, 1),
                     CreatedAt = now,
@@ -357,8 +514,8 @@ public static class AppDbContextSeedData
 
     private static async Task SeedDemoDossiersAsync(AppDbContext db, IReadOnlyDictionary<string, Transport> transports, IReadOnlyDictionary<string, DossierTemplate> templates, IReadOnlyDictionary<string, Horse> horses, DateTime now, CancellationToken cancellationToken)
     {
-        var transport = transports["REQ-20261010-DEMO-0005"];
-        if (await db.ComplianceDossiers.AnyAsync(item => item.DossierCode == "CD-20261010-DEMO-0001", cancellationToken))
+        var transport = transports["REQ-20261010-0005"];
+        if (await db.ComplianceDossiers.AnyAsync(item => item.DossierCode == "CD-20261010-0001", cancellationToken))
             return;
 
         var requirements = await db.ComplianceRequirements
@@ -366,13 +523,13 @@ public static class AppDbContextSeedData
             .ToDictionaryAsync(item => item.RequirementCode, cancellationToken);
         var dossier = new ComplianceDossier
         {
-            ComplianceDossierId = StableGuid("CD-20261010-DEMO-0001"),
-            DossierCode = "CD-20261010-DEMO-0001",
+            ComplianceDossierId = StableGuid("CD-20261010-0001"),
+            DossierCode = "CD-20261010-0001",
             TransportId = transport.TransportId,
-            DossierTemplateId = templates["TPL-DEMO-EU-GB"].DossierTemplateId,
+            DossierTemplateId = templates["TPL-EU-GB"].DossierTemplateId,
             Status = ComplianceDossierStatus.IN_PREPARATION,
             OpenedAt = now.AddDays(-1),
-            Note = "Seeded demo dossier for Swagger testing.",
+            Note = "Prepare passport, health certificate and import pre-notification.",
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -380,35 +537,35 @@ public static class AppDbContextSeedData
         db.DossierRequirements.AddRange(
             new DossierRequirement
             {
-                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:EQUINE_PASSPORT"),
+                DossierRequirementId = StableGuid("CD-20261010-0001:EQUINE_PASSPORT"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["EQUINE_PASSPORT"].ComplianceRequirementId,
-                HorseId = horses["DEMO-C1-HORSE-003"].HorseId,
+                HorseId = horses["HRS-20261010-0003"].HorseId,
                 Status = DossierRequirementStatus.PROVIDED,
                 IsMandatory = true,
-                DueDate = new DateOnly(2026, 11, 20),
+                DueDate = DateOnly.FromDateTime(now).AddDays(70),
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new DossierRequirement
             {
-                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:EHC_EU_TO_GB"),
+                DossierRequirementId = StableGuid("CD-20261010-0001:EHC_EU_TO_GB"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["EHC_EU_TO_GB"].ComplianceRequirementId,
                 Status = DossierRequirementStatus.PENDING,
                 IsMandatory = true,
-                DueDate = new DateOnly(2026, 11, 25),
+                DueDate = DateOnly.FromDateTime(now).AddDays(75),
                 CreatedAt = now,
                 UpdatedAt = now
             },
             new DossierRequirement
             {
-                DossierRequirementId = StableGuid("CD-20261010-DEMO-0001:IPAFFS_PRE_NOTIF"),
+                DossierRequirementId = StableGuid("CD-20261010-0001:IPAFFS_PRE_NOTIF"),
                 ComplianceDossierId = dossier.ComplianceDossierId,
                 ComplianceRequirementId = requirements["IPAFFS_PRE_NOTIF"].ComplianceRequirementId,
                 Status = DossierRequirementStatus.REQUESTED,
                 IsMandatory = true,
-                DueDate = new DateOnly(2026, 11, 28),
+                DueDate = DateOnly.FromDateTime(now).AddDays(80),
                 CreatedAt = now,
                 UpdatedAt = now
             });
@@ -559,16 +716,16 @@ public static class AppDbContextSeedData
 
     private static readonly ComplianceRequirementSeed[] ComplianceRequirementSeeds =
     [
-        new("EQUINE_PASSPORT", "Equine Passport", "Hộ chiếu định danh ngựa, dùng để đối chiếu tên ngựa, số hộ chiếu và microchip.", "EU", ComplianceRequirementCategory.HorseIdentity, "Weatherbys / France Galop / Approved Passport Issuing Organisation", null, "Equine identification and passport control requirements.", true, 365, ComplianceRequirementStatus.ACTIVE),
-        new("EHC_GB_TO_EU_8438", "Export Health Certificate GB to EU — Form 8438", "Chứng thư kiểm dịch thú y xuất khẩu từ GB sang EU.", "GB", ComplianceRequirementCategory.HorseHealth, "APHA / Official Veterinarian", null, "Export health certification for equidae transported from GB to EU.", true, 10, ComplianceRequirementStatus.ACTIVE),
-        new("EHC_EU_TO_GB", "Export Health Certificate EU to GB", "Chứng thư kiểm dịch thú y xuất khẩu từ EU vào GB.", "EU", ComplianceRequirementCategory.HorseHealth, "EU Official Veterinarian / TRACES-NT", null, "Export health certification for equidae transported from EU to GB.", true, 10, ComplianceRequirementStatus.ACTIVE),
-        new("LAB_TEST_EIA_COGGINS", "Laboratory Test Report — EIA Coggins Test", "Kết quả xét nghiệm Coggins/EIA của ngựa, dùng để chứng minh kết quả âm tính khi tuyến yêu cầu.", null, ComplianceRequirementCategory.HorseHealth, "Approved Veterinary Laboratory", null, "Equine infectious anaemia testing requirement for applicable routes.", true, 90, ComplianceRequirementStatus.ACTIVE),
-        new("CHED_A_DOCUMENT", "CHED-A Animal Entry Document", "Tờ khai y tế nhập cảnh động vật trên hệ thống TRACES-NT cho tuyến có kiểm soát BCP.", "EU", ComplianceRequirementCategory.Quarantine, "TRACES-NT / EU Border Control Post", "FRCAL1", "Common Health Entry Document for Animals.", true, 1, ComplianceRequirementStatus.ACTIVE),
-        new("IPAFFS_PRE_NOTIF", "IPAFFS Import Pre-notification", "Khai báo trước khi đưa ngựa vào GB qua hệ thống IPAFFS.", "GB", ComplianceRequirementCategory.Quarantine, "UK Defra IPAFFS", "GBHOL1", "Pre-notification requirement for applicable imports into GB.", true, 1, ComplianceRequirementStatus.ACTIVE),
-        new("ATA_CARNET_EXPORT", "ATA Carnet — Export Voucher", "Sổ ATA Carnet phục vụ thủ tục tạm xuất ngựa và tài sản liên quan.", "GB", ComplianceRequirementCategory.Customs, "Chamber of Commerce / Customs Authority", null, "Temporary admission and re-export customs procedure.", true, 365, ComplianceRequirementStatus.ACTIVE),
-        new("ATA_CARNET_IMPORT", "ATA Carnet — Import Voucher", "Phần chứng từ ATA Carnet phục vụ thủ tục tạm nhập tại nước đến.", "EU", ComplianceRequirementCategory.Customs, "Chamber of Commerce / Customs Authority", null, "Temporary admission customs procedure at destination country.", true, 365, ComplianceRequirementStatus.ACTIVE),
-        new("JOURNEY_LOG_EC1_2005", "EU Animal Transport Journey Log", "Nhật ký hành trình ghi nhận kế hoạch, thời gian di chuyển, thời gian nghỉ và các bất thường.", "EU", ComplianceRequirementCategory.Transport, "Transport Operator / Competent Authority", null, "Animal welfare and journey log requirements for transported equidae.", false, null, ComplianceRequirementStatus.ACTIVE),
-        new("DRIVER_COMPETENCE_CERT", "Driver Competence Certificate", "Chứng chỉ năng lực của tài xế vận chuyển động vật sống.", null, ComplianceRequirementCategory.Transport, "Competent Transport Authority / Approved Training Body", null, "Driver competence requirement for transport of live animals.", true, 365, ComplianceRequirementStatus.INACTIVE)
+        new("EQUINE_PASSPORT", "Equine Passport", "Used to verify the horse's identity, passport number, and microchip.", "EU", ComplianceRequirementCategory.HorseIdentity, "Weatherbys / France Galop / Approved Passport Issuing Organisation", null, "Equine identification and passport control requirements.", true, 365, ComplianceRequirementStatus.ACTIVE),
+        new("EHC_GB_TO_EU_8438", "Export Health Certificate GB to EU — Form 8438", "Veterinary export health certificate for horses travelling from Great Britain to the European Union.", "GB", ComplianceRequirementCategory.HorseHealth, "APHA / Official Veterinarian", null, "Export health certification for equidae transported from GB to EU.", true, 10, ComplianceRequirementStatus.ACTIVE),
+        new("EHC_EU_TO_GB", "Export Health Certificate EU to GB", "Veterinary export health certificate for horses travelling from the European Union to Great Britain.", "EU", ComplianceRequirementCategory.HorseHealth, "EU Official Veterinarian / TRACES-NT", null, "Export health certification for equidae transported from EU to GB.", true, 10, ComplianceRequirementStatus.ACTIVE),
+        new("LAB_TEST_EIA_COGGINS", "Laboratory Test Report — EIA Coggins Test", "Laboratory result confirming the horse's Coggins or EIA test result when required for the route.", null, ComplianceRequirementCategory.HorseHealth, "Approved Veterinary Laboratory", null, "Equine infectious anaemia testing requirement for applicable routes.", true, 90, ComplianceRequirementStatus.ACTIVE),
+        new("CHED_A_DOCUMENT", "CHED-A Animal Entry Document", "Animal entry health declaration required for controlled routes through an EU border control post.", "EU", ComplianceRequirementCategory.Quarantine, "TRACES-NT / EU Border Control Post", "FRCAL1", "Common Health Entry Document for Animals.", true, 1, ComplianceRequirementStatus.ACTIVE),
+        new("IPAFFS_PRE_NOTIF", "IPAFFS Import Pre-notification", "Advance notification required before horses enter Great Britain through IPAFFS.", "GB", ComplianceRequirementCategory.Quarantine, "UK Defra IPAFFS", "GBHOL1", "Pre-notification requirement for applicable imports into GB.", true, 1, ComplianceRequirementStatus.ACTIVE),
+        new("ATA_CARNET_EXPORT", "ATA Carnet — Export Voucher", "Temporary export document for horses and related equipment.", "GB", ComplianceRequirementCategory.Customs, "Chamber of Commerce / Customs Authority", null, "Temporary admission and re-export customs procedure.", true, 365, ComplianceRequirementStatus.ACTIVE),
+        new("ATA_CARNET_IMPORT", "ATA Carnet — Import Voucher", "Temporary import document for the destination country.", "EU", ComplianceRequirementCategory.Customs, "Chamber of Commerce / Customs Authority", null, "Temporary admission customs procedure at destination country.", true, 365, ComplianceRequirementStatus.ACTIVE),
+        new("JOURNEY_LOG_EC1_2005", "EU Animal Transport Journey Log", "Records the travel plan, driving time, rest time, and any exceptions during the journey.", "EU", ComplianceRequirementCategory.Transport, "Transport Operator / Competent Authority", null, "Animal welfare and journey log requirements for transported equidae.", false, null, ComplianceRequirementStatus.ACTIVE),
+        new("DRIVER_COMPETENCE_CERT", "Driver Competence Certificate", "Certificate confirming a driver's competence to transport live animals.", null, ComplianceRequirementCategory.Transport, "Competent Transport Authority / Approved Training Body", null, "Driver competence requirement for transport of live animals.", true, 365, ComplianceRequirementStatus.INACTIVE)
     ];
 
     private sealed record EmployeeSeed(
@@ -580,31 +737,135 @@ public static class AppDbContextSeedData
 
     private sealed record CustomerSeed(string FullName, string Email);
 
+    private sealed record HorseProfile(
+        string Name,
+        HorseSex Sex,
+        string Breed,
+        string Color,
+        DateOnly DateOfBirth,
+        decimal WeightKg,
+        decimal HeightCm,
+        string Country,
+        string Notes);
+
     private sealed record HorseSeed(
         string CustomerEmail,
         string Code,
-        string HorseName,
-        HorseSex Sex,
-        string Breed,
-        string MicrochipNumber)
+        HorseProfile Profile,
+        string MicrochipNumber,
+        string PassportNumber)
     {
         public Guid Id => StableGuid(Code);
     }
+
+    private sealed record Place(string Address, string Country, decimal Latitude, decimal Longitude);
 
     private sealed record BookingSeed(
         string BookingCode,
         string CustomerEmail,
         BookingStatus Status,
-        string OriginCountry,
-        string DestinationCountry,
-        DateOnly DepartureDate,
-        DateOnly ArrivalDate,
+        Place Origin,
+        Place Destination,
+        int DepartureInDays,
+        int TripDays,
         string SpecialRequirements,
+        string CustomerNote,
+        string? RejectionReason,
         string[] HorseCodes)
     {
         public Guid Id => StableGuid(BookingCode);
-        public string? RejectionReason => Status == BookingStatus.REJECTED ? SpecialRequirements : null;
     }
+
+    private sealed record VehicleProfile(
+        string Name,
+        TransportMode Mode,
+        string? LicensePlate,
+        string Type,
+        int Capacity,
+        string RegistrationNumber,
+        string InsuranceNumber,
+        string SpecialEquipment,
+        string Country);
+
+    private sealed record ProviderProfile(
+        string Name,
+        string ContactName,
+        string Email,
+        string Country,
+        string TaxCode,
+        string SupportedModes,
+        string Note);
+
+    // Real venues from the location catalogue, so the demo bookings point at places that exist on the map.
+    private static readonly Place Chantilly = new("Centre d'Entraînement de Chantilly (France Galop), Avenue de la Plaine des Aigles, 60500 Chantilly", "FR", 49.1931m, 2.4722m);
+    private static readonly Place Deauville = new("Hippodrome de Deauville-La Touques Écuries, 45 Boulevard Mauger, 14800 Deauville", "FR", 49.3567m, 0.0767m);
+    private static readonly Place Grosbois = new("Centre d'Entraînement de Grosbois, Domaine de Grosbois, 94440 Marolles-en-Brie", "FR", 48.7369m, 2.5422m);
+    private static readonly Place Longchamp = new("Hippodrome de ParisLongchamp Écuries, 2 Route des Tribunes, 75016 Paris", "FR", 48.8578m, 2.2345m);
+    private static readonly Place Quesnay = new("Haras du Quesnay, Route du Quesnay, 14800 Vauville", "FR", 49.3145m, 0.0512m);
+    private static readonly Place NationalStud = new("The National Stud Newmarket, July Racecourse, Newmarket, Suffolk CB8 0XE", "GB", 52.2281m, 0.3845m);
+    private static readonly Place DalhamHall = new("Godolphin Dalham Hall Stud, Duchess Drive, Newmarket, Suffolk CB8 9HE", "GB", 52.2198m, 0.4485m);
+    private static readonly Place Ascot = new("Ascot Racecourse Stables Complex, High Street, Ascot, Berkshire SL5 7JX", "GB", 51.4162m, -0.6763m);
+    private static readonly Place Newbury = new("Newbury Racecourse Equine Facility, Racecourse Road, Newbury, Berkshire RG14 7NZ", "GB", 51.3934m, -1.3061m);
+    private static readonly Place Curragh = new("The Curragh Racecourse & Training Grounds, The Curragh, Co. Kildare, R56 VX61", "IE", 53.1589m, -6.8289m);
+
+    // Four horses per demo customer, in the order of the customer list in SeedDemoHorsesAsync.
+    private static readonly HorseProfile[][] HorseProfiles =
+    [
+        [
+            new("Eclipse Valor", HorseSex.MALE, "Thoroughbred", "Bay", new DateOnly(2019, 4, 12), 512, 165.5m, "France", "White star and snip; white sock on the near hind."),
+            new("Desert Mirage", HorseSex.FEMALE, "Arabian", "Grey", new DateOnly(2020, 3, 8), 432, 150, "France", "Dished profile; dark skin around the eyes."),
+            new("Northern Lights", HorseSex.GELDING, "Selle Français", "Chestnut", new DateOnly(2018, 5, 21), 565, 168, "France", "Broad blaze; two white socks behind."),
+            new("Golden Sovereign", HorseSex.MALE, "Anglo-Arabian", "Bay", new DateOnly(2021, 2, 17), 478, 160, "France", "Small white star; calm in the box but anxious when loading.")
+        ],
+        [
+            new("Storm Chaser", HorseSex.MALE, "Irish Sport Horse", "Dark Bay", new DateOnly(2017, 6, 2), 592, 170, "Ireland", "No white markings; scar on the near shoulder."),
+            new("Velvet Whisper", HorseSex.FEMALE, "Hanoverian", "Black", new DateOnly(2019, 9, 14), 541, 166, "Germany", "Small white star; brand on the left hindquarter."),
+            new("Copper Ridge", HorseSex.GELDING, "Irish Draught", "Chestnut", new DateOnly(2016, 4, 30), 618, 168, "Ireland", "Wide blaze; white off-fore sock."),
+            new("Starlit Meadow", HorseSex.FEMALE, "Connemara", "Grey", new DateOnly(2020, 7, 19), 392, 142, "Ireland", "Dappled coat; dark mane and tail.")
+        ],
+        [
+            new("Argent Fortune", HorseSex.MALE, "Thoroughbred", "Bay", new DateOnly(2018, 3, 25), 524, 163, "United Kingdom", "Narrow stripe; white coronet on the near fore."),
+            new("Lady Marmalade", HorseSex.FEMALE, "Cleveland Bay", "Bay", new DateOnly(2019, 5, 11), 558, 162, "United Kingdom", "Black points; no white markings."),
+            new("Highland Ember", HorseSex.GELDING, "Welsh Cob", "Chestnut", new DateOnly(2017, 10, 3), 482, 150, "United Kingdom", "Flaxen mane; white snip."),
+            new("Silverbrook Jet", HorseSex.MALE, "Dutch Warmblood", "Dark Bay", new DateOnly(2020, 1, 28), 571, 172, "Netherlands", "Small star; whorl on the forehead.")
+        ],
+        [
+            new("Étoile du Matin", HorseSex.FEMALE, "Selle Français", "Bay", new DateOnly(2019, 8, 9), 531, 165, "France", "Faint star; white off-hind pastern."),
+            new("Baron von Rhein", HorseSex.MALE, "Oldenburg", "Black", new DateOnly(2018, 11, 15), 602, 174, "Germany", "Large star; white off-hind pastern."),
+            new("Midnight Frisian", HorseSex.GELDING, "Friesian", "Black", new DateOnly(2016, 5, 23), 641, 165, "Netherlands", "Feathering on all four legs."),
+            new("Honey Bay Dancer", HorseSex.FEMALE, "Lusitano", "Bay", new DateOnly(2021, 6, 1), 468, 157, "Portugal", "Faint star; one white sock off-fore.")
+        ]
+    ];
+
+    // Ten vehicles in code order: six road, two air, two sea.
+    private static readonly VehicleProfile[] VehicleProfiles =
+    [
+        new("Mercedes-Benz Actros Horse Lorry", TransportMode.ROAD, "GH-482-PL", "Horse truck", 6, "FR-REG-2021-48213", "INS-FR-775201", "Air suspension; automatic watering; CCTV; temperature monitoring", "FR"),
+        new("Volvo FH Equine Transporter", TransportMode.ROAD, "HK-207-TR", "Horse truck", 8, "FR-REG-2022-10457", "INS-FR-775344", "Air suspension; hydraulic ramp; CCTV; ventilation control", "FR"),
+        new("DAF XF Horse Lorry", TransportMode.ROAD, "EJ21 FXT", "Horse truck", 4, "GB-REG-2021-33910", "INS-GB-208117", "Ventilation fans; rubber flooring; temperature monitoring", "GB"),
+        new("Iveco Eurocargo Horse Box", TransportMode.ROAD, "KL19 RBN", "Horse truck", 3, "GB-REG-2019-27764", "INS-GB-208452", "Padded partitions; rubber flooring; ventilation", "GB"),
+        new("Scania R450 Horse Transporter", TransportMode.ROAD, "D-PX 4821", "Horse truck", 9, "DE-REG-2020-71203", "INS-DE-640918", "Air suspension; automatic watering; CCTV; temperature monitoring", "DE"),
+        new("Renault Midlum Horse Box", TransportMode.ROAD, "TR-558-ME", "Horse truck", 2, "FR-REG-2018-56628", "INS-FR-775590", "Padded partitions; ventilation", "FR"),
+        new("Boeing 747-400F Equine Cargo", TransportMode.AIR, null, "Cargo aircraft", 9, "NL-REG-2016-00418", "INS-NL-310072", "Air stalls; temperature and pressure monitoring; groom seating", "NL"),
+        new("Boeing 737-800 Freighter, Horse Stalls", TransportMode.AIR, null, "Cargo aircraft", 4, "GB-REG-2017-00931", "INS-GB-208733", "Air stalls; temperature monitoring", "GB"),
+        new("MV Channel Stallion", TransportMode.SEA, null, "Livestock vessel", 9, "GB-IMO-2015-91827", "INS-GB-209105", "Ventilated horse deck; fresh-water supply; CCTV", "GB"),
+        new("MV Celtic Horse Carrier", TransportMode.SEA, null, "Livestock vessel", 7, "IE-IMO-2014-80364", "INS-IE-455219", "Ventilated horse deck; veterinary pen; temperature monitoring", "IE")
+    ];
+
+    // The addresses use the reserved .example domain so no demo provider can mail a real company.
+    private static readonly ProviderProfile[] ProviderProfiles =
+    [
+        new("Equitrans Europeenne SAS", "Camille Laurent", "contact@equitrans-europeenne.example", "FR", "FR-VAT-100001", "ROAD", "Specialist in road transport of sport horses between France and the United Kingdom."),
+        new("Channel Equine Logistics Ltd", "Oliver Hughes", "dispatch@channel-equine.example", "GB", "GB-VAT-100002", "ROAD,SEA", "Crosses the Channel daily via Dover and Eurotunnel with fully equipped horse lorries."),
+        new("Emerald Horse Transport Ltd", "Aoife Brennan", "bookings@emerald-horse.example", "IE", "IE-VAT-100003", "ROAD,SEA", "Ireland to Great Britain and France, including ferry crossings from Rosslare."),
+        new("Rhein Pferdetransport GmbH", "Jonas Keller", "info@rhein-pferdetransport.example", "DE", "DE-VAT-100004", "ROAD", "Long-distance road transport of warmbloods across Germany, the Netherlands and France."),
+        new("Hollandse Paardenvervoer BV", "Daan de Vries", "planning@hollandse-paardenvervoer.example", "NL", "NL-VAT-100005", "ROAD,AIR", "Road transport to Schiphol and Liège for onward air freight of horses."),
+        new("Flandres Equine Express BV", "Lotte Peeters", "office@flandres-equine.example", "BE", "BE-VAT-100006", "ROAD,SEA", "Belgian provider covering the Benelux and the Channel ports."),
+        new("Skyline Equine Air Cargo", "Marcus Bell", "ops@skyline-equine-air.example", "GB", "GB-VAT-100007", "AIR", "Charter and scheduled air freight of horses from London Heathrow and East Midlands."),
+        new("Atlantic Bloodstock Shipping", "Niamh Doyle", "shipping@atlantic-bloodstock.example", "IE", "IE-VAT-100008", "AIR,SEA", "Handles bloodstock shipments from Shannon and Dublin to Europe."),
+        new("Normandie Haras Transport", "Julien Moreau", "contact@normandie-haras.example", "FR", "FR-VAT-100009", "ROAD,SEA", "Collections from Normandy studs with ferry connections through Calais and Caen-Ouistreham."),
+        new("Iberia Horse Logistics SL", "Lucia Fernandez", "hola@iberia-horse-logistics.example", "ES", "ES-VAT-100010", "ROAD,AIR", "Moves horses between Spain, Portugal and the rest of Europe.")
+    ];
 
     private sealed record TransportSeed(
         string TransportCode,

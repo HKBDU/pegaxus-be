@@ -62,9 +62,9 @@ public sealed partial class Service
             throw new UnprocessableEntityException("Selected employee is inactive.", "INVALID_ROLE_ASSIGNMENT");
         }
         if (specialist.Role != EmployeeRole.TRANSPORT_SPECIALIST)
-            throw new UnprocessableEntityException("transportSpecialistId must reference an active TRANSPORT_SPECIALIST", "INVALID_ROLE_ASSIGNMENT");
+            throw new UnprocessableEntityException("Select an active Transport Specialist.", "INVALID_ROLE_ASSIGNMENT");
         if (coordinator.Role != EmployeeRole.FLEET_ROUTE_COORDINATOR)
-            throw new UnprocessableEntityException("routeCoordinatorId must reference an active FLEET_ROUTE_COORDINATOR", "INVALID_ROLE_ASSIGNMENT");
+            throw new UnprocessableEntityException("Select an active Fleet Route Coordinator.", "INVALID_ROLE_ASSIGNMENT");
 
         var now = UtcNowTruncated();
         var assignments = new[]
@@ -103,6 +103,10 @@ public sealed partial class Service
                 ActionUrl = NotificationLinks.TransportPlan(employee.Role, plan.TransportPlanId),
                 CreatedAt = now
             });
+        await MailService.MailRecipients.QueueAsync(db, [specialist.AccountId, coordinator.AccountId], now, recipient => MailService.MailRecipients.Mail(recipient,
+            $"{MailService.EmailBodies.TransportPlanTitle(MailService.EmailBodies.TransportPlanMailKind.Assigned)} — {plan.PlanCode}",
+            MailService.EmailBodies.TransportPlanBody(recipient.FullName, plan.PlanCode, MailService.EmailBodies.TransportPlanMailKind.Assigned,
+                recipient.Role is { } role ? RoleLabel.Of(role) : null, NotificationLinks.TransportPlan(recipient.Role, plan.TransportPlanId))), cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
@@ -209,7 +213,7 @@ public sealed partial class Service
                 throw new UnprocessableEntityException("Selected employee is inactive.", "INVALID_ROLE_ASSIGNMENT");
             }
             if (replacementSpecialist.Role != EmployeeRole.TRANSPORT_SPECIALIST)
-                throw new UnprocessableEntityException("transportSpecialistId must reference an active TRANSPORT_SPECIALIST", "INVALID_ROLE_ASSIGNMENT");
+                throw new UnprocessableEntityException("Select an active Transport Specialist.", "INVALID_ROLE_ASSIGNMENT");
         }
         if (request.RouteCoordinatorId.HasValue)
         {
@@ -221,7 +225,7 @@ public sealed partial class Service
                 throw new UnprocessableEntityException("Selected employee is inactive.", "INVALID_ROLE_ASSIGNMENT");
             }
             if (replacementCoordinator.Role != EmployeeRole.FLEET_ROUTE_COORDINATOR)
-                throw new UnprocessableEntityException("routeCoordinatorId must reference an active FLEET_ROUTE_COORDINATOR", "INVALID_ROLE_ASSIGNMENT");
+                throw new UnprocessableEntityException("Select an active Fleet Route Coordinator.", "INVALID_ROLE_ASSIGNMENT");
         }
 
         var replacedAssignments = new List<(Employee OldEmployee, Employee NewEmployee, string Responsibility)>();
@@ -251,6 +255,12 @@ public sealed partial class Service
                     ActionUrl = NotificationLinks.TransportPlan(recipient.Role, plan.TransportPlanId),
                     CreatedAt = now
                 });
+            if (change.NewEmployee.AccountId != accountId)
+                await MailService.MailRecipients.QueueAsync(db, [change.NewEmployee.AccountId], now, recipient => MailService.MailRecipients.Mail(recipient,
+                    $"{MailService.EmailBodies.TransportPlanTitle(MailService.EmailBodies.TransportPlanMailKind.PersonnelChanged)} — {plan.PlanCode}",
+                    MailService.EmailBodies.TransportPlanBody(recipient.FullName, plan.PlanCode, MailService.EmailBodies.TransportPlanMailKind.PersonnelChanged,
+                        $"The {RoleLabel.Of(change.NewEmployee.Role)} changed from {change.OldEmployee.FullName} to {change.NewEmployee.FullName}. Reason: {request.Reason.Trim()}",
+                        NotificationLinks.TransportPlan(recipient.Role, plan.TransportPlanId))), cancellationToken);
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -323,7 +333,7 @@ public sealed partial class Service
         var coordinator = plan.EmployeeTransportPlans.SingleOrDefault(item =>
             item.IsPrimary && item.Responsibility == EmployeeRole.FLEET_ROUTE_COORDINATOR.ToString());
         var primary = plan.RoutePlans
-            .Where(item => item.Status != RoutePlanStatus.CANCELLED && item.RoutePlanRoutes.Count > 0 &&
+            .Where(item => item.Status is not (RoutePlanStatus.CANCELLED or RoutePlanStatus.REJECTED_BY_MANAGER) && item.RoutePlanRoutes.Count > 0 &&
                 item.RoutePlanRoutes.All(route => route.RouteType == RouteType.PRIMARY))
             .OrderByDescending(item => item.UpdatedAt)
             .FirstOrDefault();

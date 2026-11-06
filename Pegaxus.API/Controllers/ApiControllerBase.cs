@@ -28,7 +28,7 @@ public abstract class ApiControllerBase : ControllerBase
             field = string.IsNullOrEmpty(error.PropertyName)
                 ? "$"
                 : char.ToLowerInvariant(error.PropertyName[0]) + error.PropertyName[1..],
-            message = error.ErrorMessage
+            message = UserFacingMessages.FieldError(error.PropertyName, error.ErrorMessage)
         })
         .ToArray();
 

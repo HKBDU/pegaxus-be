@@ -8,6 +8,7 @@ public static class Request
         public int PageSize { get; set; } = 20;
         public string? Status { get; set; }
         public string? SupportedMode { get; set; }
+        public string? Country { get; set; }
         public string? Search { get; set; }
         public string SortBy { get; set; } = "providerName:asc";
     }
@@ -25,14 +26,10 @@ public static class Request
         public string? Note { get; set; }
     }
 
-    public sealed class CreateRequest : SaveRequest
-    {
-        public string ProviderCode { get; set; } = string.Empty;
-    }
+    public sealed class CreateRequest : SaveRequest;
 
     public sealed class UpdateRequest : SaveRequest
     {
-        public string? ProviderCode { get; set; }
         public DateTimeOffset LastUpdatedAt { get; set; }
     }
 

@@ -54,7 +54,7 @@ public class MissingDocumentReminderTests
         await db.SaveChangesAsync();
         var error = await Assert.ThrowsAsync<ConflictException>(() => CreateService(db, new RecordingMail())
             .RequestMissingDocumentsAsync(seed.Specialist, seed.Dossier.ComplianceDossierId, RequestFor(seed)));
-        Assert.Equal("Không thể gửi nhắc nhở khi hồ sơ đã hoàn tất hoặc đã đóng.", error.Message);
+        Assert.Equal("A reminder cannot be sent because this dossier is no longer active.", error.Message);
         Assert.Empty(await db.MissingDocumentReminders.ToListAsync());
     }
 
@@ -74,7 +74,7 @@ public class MissingDocumentReminderTests
         Assert.Empty(await service.GetMissingRequirementsAsync(seed.Specialist, seed.Dossier.ComplianceDossierId));
         var error = await Assert.ThrowsAsync<ConflictException>(() => service.RequestMissingDocumentsAsync(seed.Specialist,
             seed.Dossier.ComplianceDossierId, RequestFor(seed)));
-        Assert.Equal("Tất cả các mục giấy tờ đã được tải lên hoặc đã được duyệt. Không có giấy tờ nào cần nhắc nộp.", error.Message);
+        Assert.Equal("All required documents have already been provided or approved. No reminder is needed.", error.Message);
     }
 
     [Theory]

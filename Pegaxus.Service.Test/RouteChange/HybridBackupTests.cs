@@ -301,6 +301,10 @@ public class HybridBackupTests
 
         Assert.Equal(("BACKUP", "CONFIRMED"), (created.RouteType, created.Status));
         Assert.Contains("Emergency backup route needs approval", (await db.Notifications.ToListAsync()).Select(x => x.Title));
+        var mail = Assert.Single(await EmailOutboxWiringTests.EmailsAsync(db));
+        Assert.StartsWith("Emergency backup route needs approval — ", mail.Subject);
+        Assert.Contains("{{PX_FRONTEND_URL}}/admin/route-plans/", mail.Body);
+        Assert.Contains("/change-decision", mail.Body);
     }
 
     [Fact]

@@ -71,7 +71,8 @@ public class RouteChangeTests
         var configuration = new Microsoft.Extensions.Configuration.ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?> { ["Geoapify:ApiKey"] = "test-key" }).Build();
         var routes = new Pegaxus.Service.RoutePlanService.Service(db, TestSupport.CreateNotifications(db),
-            new Pegaxus.Service.RouteService.Service(db, new RoutingClientFactory(), configuration));
+            new Pegaxus.Service.RouteService.Service(db, new RoutingClientFactory(), configuration),
+            new Pegaxus.Service.RoutePlanService.NoopRoutePlanRealtimeService());
         var result = await routes.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, new()
         {
             RouteType = "RETURN", Action = "SAVE_DRAFT", RouteNote = "Return to origin after road closure",
@@ -196,7 +197,7 @@ public class RouteChangeTests
         Assert.Equal(205m, detail.TotalDistanceKm); Assert.Equal(420, detail.EstimatedDurationMinutes);
         Assert.Equal("SEGMENT_LOCKED", (await Assert.ThrowsAsync<ConflictException>(() =>
             f.Service.DecideAsync(overlap.RoutePlanId, f.Manager.AccountId, new() { Decision = "APPROVE", LastUpdatedAt = Fixture.Version(overlap) }))).ErrorCode);
-        Assert.Equal(3, await db.Notifications.CountAsync());
+        Assert.Equal(4, await db.Notifications.CountAsync());
         Assert.DoesNotContain(await db.AccountNotifications.ToListAsync(), x => x.AccountId ==
             db.Employees.Single(e => e.Role == EmployeeRole.TRANSPORT_SPECIALIST).AccountId);
         Assert.Empty(db.IncidentReports); Assert.Empty(db.EmergencyCostRequests);
@@ -211,7 +212,7 @@ public class RouteChangeTests
         var f = await Fixture.CreateAsync(db); var plan = await f.AlternateAsync(type);
         var result = await f.Service.DecideAsync(plan.RoutePlanId, f.Manager.AccountId, new() {
             Decision = "REJECT", LastUpdatedAt = Fixture.Version(plan), Note = "Choose a safer itinerary" });
-        Assert.Equal(type == RouteType.BACKUP ? "CONFIRMED" : "CANCELLED", result.Status);
+        Assert.Equal(type == RouteType.BACKUP ? "CONFIRMED" : "REJECTED_BY_MANAGER", result.Status);
         Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
         if (type == RouteType.RETURN) Assert.Equal("Choose a safer itinerary", plan.RouteNote);
         Assert.Equal(f.Coordinator.AccountId, Assert.Single(db.AccountNotifications).AccountId);
@@ -233,6 +234,7 @@ public class RouteChangeTests
         Assert.Equal(0, decision.ComplianceDossier.InheritedRequirementCount);
         Assert.Equal(ComplianceDossierStatus.APPROVED, f.Transport.MainDossier!.Status);
         Assert.Single(db.AuditDossiers); Assert.Equal(2, await db.Notifications.CountAsync());
+        Assert.Contains(await EmailOutboxWiringTests.EmailsAsync(db), mail => mail.Subject.StartsWith("Extra dossier ready for the return route — "));
         var specialist = await db.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST);
         var reviewed = await TestSupport.CreateRoutePlans(db).ReviewLegalAsync(specialist.AccountId, plan.RoutePlanId,
             new() { LastUpdatedAt = decision.UpdatedAt, IsFeasible = true });
@@ -261,6 +263,26 @@ public class RouteChangeTests
         var detail = await TestSupport.CreateRoutePlans(db).GetByIdAsync(f.Manager.AccountId, f.Plan.RoutePlanId);
         Assert.Equal(new[] { f.Completed.RouteId, row.RouteId }, detail.Segments.Select(x => x.Route.RouteId));
         Assert.Empty(db.EmergencyCostRequests);
+    }
+
+    [Fact]
+    public async Task Return_DriverNotice_ManagerCoversForAbsentCoordinator_ButUnassignedCoordinatorAndOtherRolesCannot()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db); var plan = await f.AlternateAsync(RouteType.RETURN, RoutePlanStatus.CONFIRMED);
+        await f.AddExtraAsync();
+        var (_, unassigned) = await TestSupport.AddLogisticsManagerAsync(db); unassigned.Role = EmployeeRole.FLEET_ROUTE_COORDINATOR;
+        var (_, specialist) = await TestSupport.AddLogisticsManagerAsync(db); specialist.Role = EmployeeRole.TRANSPORT_SPECIALIST;
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.NotifyDriversAsync(plan.RoutePlanId, unassigned.AccountId, new()));
+        await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.NotifyDriversAsync(plan.RoutePlanId, specialist.AccountId, new()));
+        Assert.Empty(db.Notifications);
+
+        var notice = await f.Service.NotifyDriversAsync(plan.RoutePlanId, f.Manager.AccountId, new() { Message = "Coordinator absent, return now" });
+
+        Assert.Equal(f.Driver.EmployeeId, Assert.Single(notice.NotifiedDrivers).EmployeeId);
+        Assert.Contains(await db.Notifications.ToListAsync(), x => x.Title == "Begin return journey");
     }
 
     [Fact]
@@ -358,7 +380,9 @@ public class RouteChangeTests
         if (invalid == "unavailable") vehicle.Status = VehicleStatus.MAINTENANCE;
         if (invalid == "conflict")
         {
-            var other = new RoutePlan { RoutePlanId = Guid.NewGuid(), TransportPlanId = f.Plan.TransportPlanId,
+            var otherTransportPlan = new TransportPlan { TransportPlanId = Guid.NewGuid(), TransportId = f.Transport.TransportId, PlanCode = "TP2", Status = TransportPlanStatus.APPROVED };
+            db.Add(otherTransportPlan);
+            var other = new RoutePlan { RoutePlanId = Guid.NewGuid(), TransportPlanId = otherTransportPlan.TransportPlanId,
                 RoutePlanCode = "OTHER", Status = RoutePlanStatus.CONFIRMED };
             var busy = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = other, RouteId = f.Current.RouteId,
                 PlannedDepartureAt = f.Current.PlannedDepartureAt, PlannedArrivalAt = f.Current.PlannedArrivalAt };
@@ -369,6 +393,195 @@ public class RouteChangeTests
             new() { LastUpdatedAt = Fixture.Version(plan), Segments = [change] }));
         Assert.Equal(code, Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(error).ErrorCode);
         Assert.Equal(RoutePlanStatus.CONFIRMED, plan.Status); Assert.Null(f.Current.SupersededAt); Assert.Empty(db.Notifications);
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, "VEHICLE_SCHEDULE_CONFLICT")]
+    public async Task Return_Rp1_VehicleConflictOnlyAcrossTransportPlans_AndOwnInUseVehicleAllowed(bool otherPlan, string? code)
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        f.Transport.Booking.OriginCountry = f.Transport.Booking.DestinationCountry = "FR";
+        var back = f.NewRoute(f.Start, f.Origin, 70);
+        var vehicle = await db.Vehicles.SingleAsync(); vehicle.Status = VehicleStatus.IN_USE;
+        var planId = f.Plan.TransportPlanId;
+        if (otherPlan)
+        {
+            var other = new TransportPlan { TransportPlanId = Guid.NewGuid(), TransportId = f.Transport.TransportId, PlanCode = "TP2", Status = TransportPlanStatus.APPROVED };
+            db.Add(other); planId = other.TransportPlanId;
+        }
+        var busy = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = new() { RoutePlanId = Guid.NewGuid(), TransportPlanId = planId, RoutePlanCode = "BUSY", Status = RoutePlanStatus.CONFIRMED },
+            RouteId = back.RouteId, PlannedDepartureAt = DateTime.SpecifyKind(Fixture.StartAt.UtcDateTime, DateTimeKind.Unspecified), PlannedArrivalAt = DateTime.SpecifyKind(Fixture.StartAt.AddHours(2).UtcDateTime, DateTimeKind.Unspecified) };
+        db.Add(busy); db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = busy.RoutePlanRouteId, VehicleId = vehicle.VehicleId });
+        await db.SaveChangesAsync();
+
+        var create = () => TestSupport.CreateRoutePlans(db).CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, new() {
+            RouteType = "RETURN", Action = "SAVE_DRAFT", RouteNote = "Road closed, return to origin",
+            Segments = [new() { SequenceNo = 1, RouteId = back.RouteId, VehicleIds = [vehicle.VehicleId],
+                PlannedDepartureAt = Fixture.StartAt, PlannedArrivalAt = Fixture.StartAt.AddHours(2) }] });
+
+        if (code is null) Assert.Equal("DRAFT", (await create()).Status);
+        else Assert.Equal(code, (await Assert.ThrowsAsync<ConflictException>(create)).ErrorCode);
+    }
+
+    [Theory]
+    [InlineData(false, null)]
+    [InlineData(true, "VEHICLE_SCHEDULE_CONFLICT")]
+    public async Task Return_Rp1_InUseVehicleOnAnotherTransportPlan_IsDecidedByTheScheduleNotTheFlag(bool overran, string? code)
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        f.Transport.Booking.OriginCountry = f.Transport.Booking.DestinationCountry = "FR";
+        var back = f.NewRoute(f.Start, f.Origin, 70);
+        var vehicle = await db.Vehicles.SingleAsync(); vehicle.Status = VehicleStatus.IN_USE;
+        var other = new TransportPlan { TransportPlanId = Guid.NewGuid(), TransportId = f.Transport.TransportId, PlanCode = "TP2", Status = TransportPlanStatus.APPROVED };
+        var earlier = new DateTime(2020, 1, 1, 8, 0, 0, DateTimeKind.Unspecified);
+        var running = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = new() { RoutePlanId = Guid.NewGuid(), TransportPlan = other, RoutePlanCode = "RUN", Status = RoutePlanStatus.ACTIVE },
+            RouteId = back.RouteId, PlannedDepartureAt = earlier, PlannedArrivalAt = earlier.AddHours(2), ActualDepartureAt = overran ? earlier : null };
+        db.Add(running); db.RoutePlanRouteVehicles.Add(new() { RoutePlanRoute = running, VehicleId = vehicle.VehicleId });
+        await db.SaveChangesAsync();
+
+        var create = () => TestSupport.CreateRoutePlans(db).CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, new() {
+            RouteType = "RETURN", Action = "SAVE_DRAFT", RouteNote = "Road closed, return to origin",
+            Segments = [new() { SequenceNo = 1, RouteId = back.RouteId, VehicleIds = [vehicle.VehicleId],
+                PlannedDepartureAt = Fixture.StartAt, PlannedArrivalAt = Fixture.StartAt.AddHours(2) }] });
+
+        if (code is null) Assert.Equal("DRAFT", (await create()).Status);
+        else Assert.Equal(code, (await Assert.ThrowsAsync<ConflictException>(create)).ErrorCode);
+    }
+
+    private static IncidentReport AddIncident(AppDbContext db, Guid? transportId, IncidentStatus status = IncidentStatus.REPORTED)
+    {
+        var incident = new IncidentReport { IncidentReportId = Guid.NewGuid(), TransportId = transportId, IncidentCode = "INC-" + Guid.NewGuid().ToString("N")[..6],
+            EmployeeId = Guid.NewGuid(), LocationId = Guid.NewGuid(), Category = IncidentCategory.VEHICLE, Severity = IncidentSeverity.HIGH, Status = status,
+            Title = "Flat tyre", Description = "Flat tyre on the motorway" };
+        db.Add(incident);
+        return incident;
+    }
+
+    [Fact]
+    public async Task Incident_Ec1MovesReportedToPendingAndMentionsItToTheManager()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db); var backup = await f.AlternateAsync();
+        var incident = AddIncident(db, f.Transport.TransportId); await db.SaveChangesAsync();
+        var request = f.Proposal(); request.IncidentReportId = incident.IncidentReportId;
+
+        await f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, request);
+
+        Assert.Equal(IncidentStatus.PENDING, incident.Status);
+        Assert.Contains(await db.Notifications.ToListAsync(), x => x.Message.Contains(incident.IncidentCode));
+        Assert.Equal(RoutePlanStatus.CONFIRMED, backup.Status);
+    }
+
+    [Theory]
+    [InlineData("resolved", "INVALID_INCIDENT_STATUS")]
+    [InlineData("foreign", "INVALID_INCIDENT_STATUS")]
+    [InlineData("missing", "INCIDENT_NOT_FOUND")]
+    public async Task Incident_Ec1AndEc2RejectClosedForeignAndUnknownIncidentsWithoutChanges(string kind, string code)
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db); var backup = await f.AlternateAsync();
+        var incident = AddIncident(db, kind == "foreign" ? Guid.NewGuid() : f.Transport.TransportId, kind == "resolved" ? IncidentStatus.RESOLVED : IncidentStatus.REPORTED);
+        await db.SaveChangesAsync();
+        var id = kind == "missing" ? Guid.NewGuid() : incident.IncidentReportId;
+        var request = f.Proposal(); request.IncidentReportId = id;
+
+        var create = await Record.ExceptionAsync(() => f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, request));
+        var decide = await Record.ExceptionAsync(() => f.Service.DecideAsync(backup.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = Fixture.Version(backup), IncidentReportId = id }));
+        Assert.Equal(code, Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(create).ErrorCode);
+        Assert.Equal(code, Assert.IsAssignableFrom<Pegaxus.Service.Exceptions.Exceptions>(decide).ErrorCode);
+
+        Assert.Equal(kind == "resolved" ? IncidentStatus.RESOLVED : IncidentStatus.REPORTED, incident.Status);
+        Assert.Equal(RoutePlanStatus.CONFIRMED, backup.Status);
+    }
+
+    [Fact]
+    public async Task Incident_Ec2ApproveNotifiesEscortsAndMovesTheIncidentToPending()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db); var backup = await f.AlternateAsync();
+        var incident = AddIncident(db, f.Transport.TransportId); await db.SaveChangesAsync();
+
+        // The manager decides directly: no EC1 was sent first.
+        var result = await f.Service.DecideAsync(backup.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = Fixture.Version(backup), IncidentReportId = incident.IncidentReportId });
+
+        Assert.Equal("ACTIVE", result.Status); Assert.Equal(IncidentStatus.PENDING, incident.Status);
+        var recipients = await db.AccountNotifications.Where(x => x.Notification.Title == "Backup route activated").Select(x => x.AccountId).ToListAsync();
+        Assert.Contains(f.Escort.AccountId, recipients); Assert.Contains(f.Driver.AccountId, recipients);
+    }
+
+    [Fact]
+    public async Task Return_Rp1_ManagerCanCreateAndEditWithoutApprovalNoticeToSelf_IncidentOnlyForReturn()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        f.Transport.Booking.OriginCountry = f.Transport.Booking.DestinationCountry = "FR";
+        var back = f.NewRoute(f.Start, f.Origin, 70);
+        var incident = AddIncident(db, f.Transport.TransportId); await db.SaveChangesAsync();
+        var routes = TestSupport.CreateRoutePlans(db);
+        Pegaxus.Service.RoutePlanService.Request.SaveRequest Save(string type, Guid? incidentId) => new() {
+            RouteType = type, Action = "SAVE_DRAFT", RouteNote = "Road closed, return to origin", IncidentReportId = incidentId,
+            Segments = [new() { SequenceNo = 1, RouteId = back.RouteId, PlannedDepartureAt = Fixture.StartAt, PlannedArrivalAt = Fixture.StartAt.AddHours(2) }] };
+
+        var bad = await Assert.ThrowsAsync<BadRequestException>(() => routes.CreateAsync(f.Manager.AccountId, f.Plan.TransportPlanId, Save("BACKUP", incident.IncidentReportId)));
+        Assert.Equal("VALIDATION_ERROR", bad.ErrorCode); Assert.Equal(IncidentStatus.REPORTED, incident.Status);
+
+        var draft = await routes.CreateAsync(f.Manager.AccountId, f.Plan.TransportPlanId, Save("RETURN", incident.IncidentReportId));
+
+        Assert.Equal("DRAFT", draft.Status); Assert.Equal(IncidentStatus.PENDING, incident.Status);
+        Assert.DoesNotContain(await db.AccountNotifications.ToListAsync(), x => x.AccountId == f.Manager.AccountId);
+        var approved = await f.Service.DecideAsync(draft.RoutePlanId, f.Manager.AccountId, new() { Decision = "APPROVE", LastUpdatedAt = draft.UpdatedAt });
+        var update = await routes.UpdateAsync(f.Manager.AccountId, draft.RoutePlanId, new() { LastUpdatedAt = approved.UpdatedAt, UpdateReason = "Adjust return", Action = "SAVE_DRAFT",
+            RouteNote = "Road closed, return to origin", Segments = Save("RETURN", null).Segments });
+        Assert.Equal("DRAFT", update.Status);
+    }
+
+    [Fact]
+    public async Task Return_SameTransportPlanVehicleOverlapIsNotAConflict()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db); var plan = await f.AlternateAsync(RouteType.RETURN, RoutePlanStatus.CONFIRMED);
+        await f.AddExtraAsync();
+        var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanId == plan.RoutePlanId);
+        var vehicle = await db.Vehicles.SingleAsync();
+        var sibling = new RoutePlan { RoutePlanId = Guid.NewGuid(), TransportPlanId = f.Plan.TransportPlanId, RoutePlanCode = "SIBLING", Status = RoutePlanStatus.CONFIRMED };
+        var busy = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = sibling, RouteId = f.Current.RouteId,
+            PlannedDepartureAt = f.Current.PlannedDepartureAt, PlannedArrivalAt = f.Current.PlannedArrivalAt };
+        db.Add(busy); db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = busy.RoutePlanRouteId, VehicleId = vehicle.VehicleId });
+        await db.SaveChangesAsync();
+
+        var result = await f.Service.ActivateReturnAsync(plan.RoutePlanId, f.Manager.AccountId,
+            new() { LastUpdatedAt = Fixture.Version(plan), Segments = [new() { RoutePlanRouteId = row.RoutePlanRouteId, VehicleIds = [vehicle.VehicleId] }] });
+
+        Assert.Equal(vehicle.VehicleId, Assert.Single(Assert.Single(result.Segments).Vehicles).VehicleId);
+    }
+
+    [Theory]
+    [InlineData(false, VehicleStatus.AVAILABLE)]
+    [InlineData(true, VehicleStatus.ASSIGNED)]
+    public async Task Return_ReplacedVehicleGoesBackToThePoolUnlessAnotherPlanHoldsIt(bool heldByPrimary, VehicleStatus expected)
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db); var plan = await f.AlternateAsync(RouteType.RETURN, RoutePlanStatus.CONFIRMED);
+        await f.AddExtraAsync();
+        var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanId == plan.RoutePlanId);
+        var replaced = heldByPrimary ? await db.Vehicles.SingleAsync() : new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = "V0", CapacityHorses = 5, TransportMode = TransportMode.ROAD,
+            RegistrationExpiryDate = new(2031, 1, 1), InsuranceExpiryDate = new(2031, 1, 1) };
+        var replacement = new Vehicle { VehicleId = Guid.NewGuid(), VehicleCode = "V2", CapacityHorses = 5, TransportMode = TransportMode.ROAD, Status = VehicleStatus.AVAILABLE,
+            RegistrationExpiryDate = new(2031, 1, 1), InsuranceExpiryDate = new(2031, 1, 1) };
+        replaced.Status = VehicleStatus.ASSIGNED;
+        if (!heldByPrimary) db.Add(replaced);
+        db.Add(replacement); db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = row.RoutePlanRouteId, VehicleId = replaced.VehicleId });
+        await db.SaveChangesAsync();
+
+        await f.Service.ActivateReturnAsync(plan.RoutePlanId, f.Manager.AccountId,
+            new() { LastUpdatedAt = Fixture.Version(plan), Segments = [new() { RoutePlanRouteId = row.RoutePlanRouteId, VehicleIds = [replacement.VehicleId] }] });
+
+        Assert.Equal(expected, replaced.Status); Assert.Equal(VehicleStatus.ASSIGNED, replacement.Status);
     }
 
     [Fact]
@@ -437,7 +650,7 @@ public class RouteChangeTests
             f.Transport = new() { TransportId = Guid.NewGuid(), TransportCode = "TR1", BookingId = booking.BookingId, Status = TransportStatus.IN_TRANSIT };
             booking.Status = BookingStatus.APPROVED;
             var transportPlan = new TransportPlan { TransportPlanId = Guid.NewGuid(), TransportId = f.Transport.TransportId, PlanCode = "TP1", Status = TransportPlanStatus.APPROVED, PlannedEndAt = DbTime(StartAt.AddHours(2)) };
-            f.Plan = new() { RoutePlanId = Guid.NewGuid(), TransportPlanId = transportPlan.TransportPlanId, RoutePlanCode = "RP1", Status = RoutePlanStatus.ACTIVE, CreatedAt = DbTime(StartAt), UpdatedAt = DbTime(StartAt) };
+            f.Plan = new() { RoutePlanId = Guid.NewGuid(), TransportPlanId = transportPlan.TransportPlanId, RoutePlanCode = "RP1", Status = RoutePlanStatus.ACTIVE, SubmittedForReviewAt = DbTime(StartAt), CreatedAt = DbTime(StartAt), UpdatedAt = DbTime(StartAt) };
             f.Completed = new() { RoutePlanRouteId = Guid.NewGuid(), RoutePlanId = f.Plan.RoutePlanId, RouteId = completedRoute.RouteId, SequenceNo = 1,
                 PlannedDepartureAt = DbTime(StartAt.AddHours(-3)), PlannedArrivalAt = DbTime(StartAt.AddHours(-1)),
                 ActualDepartureAt = DbTime(StartAt.AddHours(-3)), ActualArrivalAt = DbTime(StartAt.AddHours(-1)) };
@@ -467,7 +680,7 @@ public class RouteChangeTests
             var plan = new RoutePlan { RoutePlanId = Guid.NewGuid(), TransportPlanId = Plan.TransportPlanId,
                 PrimaryRoutePlanId = Plan.RoutePlanId, RoutePlanCode = type + "-" + Guid.NewGuid().ToString("N"),
                 Status = status ?? (type == RouteType.RETURN ? RoutePlanStatus.DRAFT : RoutePlanStatus.CONFIRMED),
-                CreatedAt = DbTime(StartAt), UpdatedAt = DbTime(StartAt), RouteNote = "Emergency route planning" };
+                SubmittedForReviewAt = DbTime(StartAt), CreatedAt = DbTime(StartAt), UpdatedAt = DbTime(StartAt), RouteNote = "Emergency route planning" };
             if (type == RouteType.RETURN)
             {
                 db.Add(new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = plan, Route = NewRoute(Start, Origin, 70), SequenceNo = 1,

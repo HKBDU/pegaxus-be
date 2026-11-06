@@ -23,6 +23,7 @@ public static class Request
         public List<SegmentRequest> Segments { get; set; } = [];
         public string? RouteNote { get; set; }
         public string Action { get; set; } = string.Empty;
+        public Guid? IncidentReportId { get; set; }
     }
 
     public sealed class UpdateRequest
@@ -38,6 +39,21 @@ public static class Request
     {
         public DateTimeOffset LastUpdatedAt { get; set; }
         public string Reason { get; set; } = string.Empty;
+    }
+
+    public sealed class ChangeVehiclesRequest
+    {
+        public DateTimeOffset LastUpdatedAt { get; set; }
+        public string Reason { get; set; } = string.Empty;
+        public Guid? IncidentReportId { get; set; }
+        public List<SegmentVehiclesRequest> Segments { get; set; } = [];
+    }
+
+    public sealed class SegmentVehiclesRequest
+    {
+        public int? SequenceNo { get; set; }
+        public Guid? RoutePlanRouteId { get; set; }
+        public List<Guid> VehicleIds { get; set; } = [];
     }
 
     public sealed class SegmentRequest

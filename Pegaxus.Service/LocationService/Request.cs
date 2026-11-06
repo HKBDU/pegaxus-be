@@ -10,6 +10,8 @@ public static class Request
         public string? Search { get; set; }
         public string? Country { get; set; }
         public string? LocationType { get; set; }
+        public decimal? Latitude { get; set; }
+        public decimal? Longitude { get; set; }
     }
 
     public class CreateRequest

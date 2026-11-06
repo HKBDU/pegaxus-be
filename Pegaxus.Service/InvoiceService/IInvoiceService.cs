@@ -33,4 +33,7 @@ public interface IInvoiceService
 
     Task<Response.DraftResponse> UpdateAsync(Guid accountId, Guid invoiceId,
         Request.UpdateRequest request, CancellationToken cancellationToken = default);
+
+    /// <summary>Marks issued invoices whose due moment has passed as OVERDUE and notifies the people involved; meant to run on a timer.</summary>
+    Task<int> MarkOverdueAsync(CancellationToken cancellationToken = default);
 }

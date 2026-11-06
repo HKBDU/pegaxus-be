@@ -24,15 +24,15 @@ public sealed partial class Service
             var dossier = await ReviewDossierAsync(dossierId, cancellationToken);
             var (requirement, document, version) = await ReviewContextAsync(dossierId, requirementId, versionId, cancellationToken);
             if (requirement.Status != DossierRequirementStatus.PROVIDED || document.Status != ComplianceDocumentStatus.PROVIDED)
-                throw new ConflictException("Only PROVIDED ComplianceDocuments and DossierRequirements can be approved.");
+                throw new ConflictException("Only provided documents and dossier requirements can be approved.");
             if (ReviewTimestamp(request.VersionUploadedAt) != ReviewTimestamp(version.UploadedAt) ||
                 ReviewTimestamp(request.DocumentUpdatedAt) != ReviewTimestamp(document.UpdatedAt))
                 throw new ConflictException("The document file or metadata changed. Reload and verify the latest document before approving.", "DOCUMENT_REVIEW_CONFLICT");
             var latestReview = await LatestReviewAsync(versionId, cancellationToken);
             if (latestReview?.Result == DocumentReviewResult.APPROVED)
-                throw new ConflictException("This DocumentVersion already has an active approval.");
+                throw new ConflictException("This document version already has an active approval.");
             if (document.ExpiryDate < dossier.Transport.Booking.RequestedDepartureDate && string.IsNullOrWhiteSpace(request.ExpiryExceptionReason))
-                throw new ConflictException("Warning: Expiry date of this DocumentVersion is before the transport departure date. Are you sure you want to approve?", "EXPIRY_EXCEPTION_REQUIRED");
+                throw new ConflictException("Warning: Expiry date of this document version is before the transport departure date. Are you sure you want to approve?", "EXPIRY_EXCEPTION_REQUIRED");
             var response = await AppendReviewAsync(accountId, dossier, requirement, document, version, DocumentReviewResult.APPROVED,
                 DossierRequirementStatus.SATISFIED, request.ReviewNote?.Trim(), new
                 {
@@ -45,7 +45,7 @@ public sealed partial class Service
         }
         catch (Exception error) when (PostgresErrors.IsWriteConflict(error))
         {
-            throw new ConflictException("The document changed. Reload before recording a DocumentReview.", "DOCUMENT_REVIEW_CONFLICT");
+            throw new ConflictException("The document changed. Reload before recording a document review.", "DOCUMENT_REVIEW_CONFLICT");
         }
     }
 
@@ -58,13 +58,13 @@ public sealed partial class Service
             await RequireSpecialistAsync(accountId, cancellationToken, "Only Transport Specialists can perform DocumentReview.");
             ValidateReason(request.Reason);
             if (request.Status is not (DossierRequirementStatus.PROVIDED or DossierRequirementStatus.REJECTED))
-                throw new BadRequestException("Status must be PROVIDED or REJECTED when revoking approval.");
+                throw new BadRequestException("Status must be provided or rejected when revoking approval.");
             var dossier = await ReviewDossierAsync(dossierId, cancellationToken);
             var (requirement, document, version) = await ReviewContextAsync(dossierId, requirementId, versionId, cancellationToken);
             var approved = await LatestReviewAsync(versionId, cancellationToken);
             if (approved is null || approved.DocumentReviewId != reviewId || approved.Result != DocumentReviewResult.APPROVED ||
                 requirement.Status != DossierRequirementStatus.SATISFIED || document.Status != ComplianceDocumentStatus.APPROVED)
-                throw new ConflictException("Only the current APPROVED DocumentReview can be revoked.");
+                throw new ConflictException("Only the current approved document review can be revoked.");
             var response = await AppendReviewAsync(accountId, dossier, requirement, document, version, DocumentReviewResult.REVOKED,
                 request.Status, request.Reason.Trim(), new { ApprovalReviewId = reviewId, Reason = request.Reason.Trim() }, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -86,7 +86,7 @@ public sealed partial class Service
             var dossier = await ReviewDossierAsync(dossierId, cancellationToken);
             if (await _db.DossierRequirements.AnyAsync(item => item.ComplianceDossierId == dossierId && !item.IsDeleted && item.IsMandatory &&
                 item.Status != DossierRequirementStatus.SATISFIED && item.Status != DossierRequirementStatus.WAIVED, cancellationToken))
-                throw new ConflictException("All mandatory DossierRequirements must be SATISFIED or WAIVED before marking the dossier READY_FOR_SUBMISSION.");
+                throw new ConflictException("All mandatory dossier requirements must be satisfied or waived before marking the dossier ready for submission.");
             var previousStatus = dossier.Status;
             var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
             dossier.Status = ComplianceDossierStatus.READY_FOR_SUBMISSION;
@@ -119,13 +119,13 @@ public sealed partial class Service
         var dossiers = _db.ComplianceDossiers.AsQueryable();
         var dossier = await dossiers.AsTracking().Include(item => item.Transport).ThenInclude(item => item.Booking)
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken)
-            ?? throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
+            ?? throw new NotFoundException("Compliance dossier not found.", "DOSSIER_NOT_FOUND");
         await _db.Entry(dossier).ReloadAsync(cancellationToken);
         if (_db.Entry(dossier).State == EntityState.Detached)
-            throw new NotFoundException("ComplianceDossier not found.", "DOSSIER_NOT_FOUND");
+            throw new NotFoundException("Compliance dossier not found.", "DOSSIER_NOT_FOUND");
         await _db.Entry(dossier.Transport.Booking).ReloadAsync(cancellationToken);
         if (dossier.Status is not (ComplianceDossierStatus.IN_PREPARATION or ComplianceDossierStatus.REJECTED or ComplianceDossierStatus.READY_FOR_SUBMISSION))
-            throw new ConflictException("Cannot perform DocumentReview or change readiness after dossier submission to official authorities.");
+            throw new ConflictException("Cannot perform document review or change readiness after dossier submission to official authorities.");
         return dossier;
     }
 
@@ -136,25 +136,25 @@ public sealed partial class Service
         var requirements = _db.DossierRequirements.AsQueryable();
         var requirement = await requirements.AsTracking().SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId &&
             item.ComplianceDossierId == dossierId && !item.IsDeleted, cancellationToken)
-            ?? throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+            ?? throw new NotFoundException("Dossier requirement not found.", "REQUIREMENT_NOT_FOUND");
         await _db.Entry(requirement).ReloadAsync(cancellationToken);
         if (requirement.IsDeleted || _db.Entry(requirement).State == EntityState.Detached)
-            throw new NotFoundException("DossierRequirement not found.", "REQUIREMENT_NOT_FOUND");
+            throw new NotFoundException("Dossier requirement not found.", "REQUIREMENT_NOT_FOUND");
         await _db.LockRowsAsync(_db.ComplianceDocuments.Where(item => item.DossierRequirementId == requirementId), item => item.ComplianceDocumentId, cancellationToken);
         var documents = _db.ComplianceDocuments.AsQueryable();
         var document = await documents.AsTracking().SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId, cancellationToken)
-            ?? throw new NotFoundException("ComplianceDocument not found.", "DOCUMENT_NOT_FOUND");
+            ?? throw new NotFoundException("Document not found.", "DOCUMENT_NOT_FOUND");
         await _db.Entry(document).ReloadAsync(cancellationToken);
         await _db.LockRowsAsync(_db.DocumentVersions.Where(item => item.DocumentVersionId == versionId), item => item.DocumentVersionId, cancellationToken);
         var versions = _db.DocumentVersions.AsQueryable();
         var version = await versions.AsTracking().SingleOrDefaultAsync(item => item.DocumentVersionId == versionId &&
             item.ComplianceDocumentId == document.ComplianceDocumentId, cancellationToken)
-            ?? throw new NotFoundException("DocumentVersion not found.", "DOCUMENT_VERSION_NOT_FOUND");
+            ?? throw new NotFoundException("Document version not found.", "DOCUMENT_VERSION_NOT_FOUND");
         await _db.Entry(version).ReloadAsync(cancellationToken);
         if (await _db.DocumentVersions.AnyAsync(item => item.ComplianceDocumentId == document.ComplianceDocumentId && item.VersionNo > version.VersionNo, cancellationToken))
-            throw new ConflictException("Only the latest DocumentVersion can be reviewed.");
+            throw new ConflictException("Only the latest document version can be reviewed.");
         if (string.IsNullOrWhiteSpace(version.FileUrl))
-            throw new ConflictException("DocumentVersion has no submitted file to review.");
+            throw new ConflictException("Document version has no submitted file to review.");
         return (requirement, document, version);
     }
 
@@ -206,6 +206,8 @@ public sealed partial class Service
                 .Select(customer => customer.AccountId).SingleAsync(cancellationToken);
             AddNotification(ownerAccountId, null, dossier, "Document approved",
                 $"{document.DocumentName} was approved for dossier {dossier.DossierCode}.", now);
+            await QueueDossierUpdateMailAsync(ownerAccountId, dossier, MailService.EmailBodies.DossierUpdateKind.DocumentApproved,
+                document.DocumentName, null, now, cancellationToken);
         }
         await _db.SaveChangesAsync(cancellationToken);
         return new Response.DocumentReviewResultResponse

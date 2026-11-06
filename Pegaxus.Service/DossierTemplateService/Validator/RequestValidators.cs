@@ -10,6 +10,10 @@ public sealed class ListRequestValidator : AbstractValidator<Request.ListRequest
         RuleFor(request => request.PageSize).InclusiveBetween(1, 100);
         RuleFor(request => request.PageIndex).Must((request, index) => ((long)index - 1) * request.PageSize <= int.MaxValue)
             .WithMessage("The requested page is too large.");
+        RuleFor(request => request.BookingId).Must(id => id != Guid.Empty).When(request => request.BookingId is not null)
+            .WithMessage("BookingId must be a valid identifier.");
+        RuleFor(request => request.BookingId).NotNull().When(request => string.Equals(request.SortBy?.Trim(), "recommendation:desc", StringComparison.OrdinalIgnoreCase))
+            .WithMessage("BookingId is required when sortBy is recommendation:desc.");
         RuleFor(request => request.Status).Must(ChangeStatusRequestValidator.IsValidStatus)
             .When(request => request.Status is not null)
             .WithMessage("Status must be DRAFT, ACTIVE or INACTIVE.");
@@ -26,6 +30,7 @@ public sealed class SaveRequestValidator : AbstractValidator<Request.SaveRequest
         RuleFor(request => request.TemplateName).NotEmpty()
             .Must(value => value is null || value.Trim().Length <= 200)
             .WithMessage("TemplateName must not exceed 200 characters.");
+        RuleFor(request => request.Description).MaximumLength(500);
         RuleFor(request => request.Status).Must(ChangeStatusRequestValidator.IsValidStatus)
             .WithMessage("Status must be DRAFT, ACTIVE or INACTIVE.");
         RuleFor(request => request.EffectiveTo).Must((request, value) => !(request.EffectiveFrom > value))
@@ -36,6 +41,7 @@ public sealed class SaveRequestValidator : AbstractValidator<Request.SaveRequest
         {
             item.RuleFor(value => value.ComplianceRequirementId).NotEmpty();
             item.RuleFor(value => value.SequenceNo).GreaterThan(0);
+            item.RuleFor(value => value.Instruction).MaximumLength(1000);
         });
         RuleFor(request => request.Items)
             .Must(items => items.Select(item => item.ComplianceRequirementId).Distinct().Count() == items.Count &&

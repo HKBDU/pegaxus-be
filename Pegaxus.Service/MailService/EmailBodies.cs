@@ -144,9 +144,62 @@ public static partial class EmailBodies
     /// </summary>
     private static string Button(string? actionUrl, string label)
     {
-        if (!Uri.TryCreate(actionUrl, UriKind.Absolute, out var uri) || uri.Scheme != Uri.UriSchemeHttps)
+        string href;
+        var relative = false;
+        if (Uri.TryCreate(actionUrl, UriKind.Absolute, out var uri) && uri.Scheme == Uri.UriSchemeHttps)
+            href = uri.AbsoluteUri;
+        else if (actionUrl is { Length: > 1 } && actionUrl[0] == '/' && actionUrl[1] != '/' && !actionUrl.Contains('\\'))
+        {
+            // An app path such as /bookings/{id}: MailService.EmailLinks adds the front-end origin when the mail is sent.
+            href = FrontendToken + actionUrl;
+            relative = true;
+        }
+        else
             return "";
-        return $"""<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 32px;"><tr><td bgcolor="#F39200" style="border-radius:999px;"><a href="{Encode(uri.AbsoluteUri)}" target="_blank" style="display:inline-block;padding:14px 28px;border-radius:999px;font-family:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.2;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#181818;text-decoration:none;">{Encode(label)}</a></td></tr></table>""";
+        var button = $"""<table role="presentation" cellspacing="0" cellpadding="0" border="0" style="margin:0 0 32px;"><tr><td bgcolor="#F39200" style="border-radius:999px;"><a href="{Encode(href)}" target="_blank" style="display:inline-block;padding:14px 28px;border-radius:999px;font-family:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Arial,Helvetica,sans-serif;font-size:14px;line-height:1.2;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:#181818;text-decoration:none;">{Encode(label)}</a></td></tr></table>""";
+        return relative ? ButtonStart + button + ButtonEnd : button;
+    }
+
+    private static string Strong(string? text) =>
+        $"""<strong class="px-strong" style="color:#000000;">{Encode(text)}</strong>""";
+
+    internal const string FrontendToken = "{{PX_FRONTEND_URL}}";
+    internal const string ButtonStart = "<!--px-button-->";
+    internal const string ButtonEnd = "<!--/px-button-->";
+
+    private enum Tone { Success, Warning, Error, Info }
+
+    private static string StatusPill(Tone tone, string text) => tone switch
+    {
+        Tone.Success => SuccessPill(text),
+        Tone.Warning => WarningPill(text),
+        Tone.Error => ErrorPill(text),
+        _ => InfoPill(text)
+    };
+
+    /// <summary>
+    /// The common shape of a notice email: title with code, greeting, one message, a status pill, bullet rows, an optional
+    /// note and button. Titles, messages and labels are fixed text written in this assembly; callers HTML-encode any
+    /// user supplied text they put in <paramref name="messageHtml"/> and rows.
+    /// </summary>
+    private static string Notice(
+        string title, string preheader, string? code, string? name, string messageHtml, Tone tone, string pill,
+        IEnumerable<string?> rows, string? note = null, string noteLabel = "Note",
+        string? actionUrl = null, string buttonLabel = "View details", string? muted = null)
+    {
+        var rowList = rows.ToArray();
+        return Header(title, preheader) +
+            $"""
+                  {Title(title, code)}
+                  {Greeting(name)}
+                  {Paragraph(messageHtml)}
+                  {StatusPill(tone, pill)}
+                  {(rowList.Any(row => row is not null) ? Rows(rowList) : "")}
+                  {LabeledParagraph(noteLabel, note)}
+                  {Button(actionUrl, buttonLabel)}
+                  {(muted is null ? "" : Muted(muted))}
+            """ +
+            Footer();
     }
 
     private static string FmtDate(DateOnly? value) =>

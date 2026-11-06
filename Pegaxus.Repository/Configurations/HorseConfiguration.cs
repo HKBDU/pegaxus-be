@@ -20,9 +20,10 @@ public sealed class HorseConfiguration : IEntityTypeConfiguration<Horse>
 
         entity.HasIndex(e => e.IsDeleted, "Horse_is_deleted_idx");
 
-        entity.HasIndex(e => e.MicrochipNumber, "Horse_microchip_number_key").IsUnique();
+        // A soft-deleted horse keeps its numbers for history, so only live horses compete for them.
+        entity.HasIndex(e => e.MicrochipNumber, "Horse_microchip_number_key").IsUnique().HasFilter("is_deleted = false");
 
-        entity.HasIndex(e => e.PassportNumber, "Horse_passport_number_key").IsUnique();
+        entity.HasIndex(e => e.PassportNumber, "Horse_passport_number_key").IsUnique().HasFilter("is_deleted = false");
 
         entity.Property(e => e.HorseId).HasColumnName("horse_id");
         entity.Property(e => e.Breed)
@@ -34,6 +35,9 @@ public sealed class HorseConfiguration : IEntityTypeConfiguration<Horse>
         entity.Property(e => e.CountryOfOrigin)
             .HasMaxLength(100)
             .HasColumnName("country_of_origin");
+        entity.Property(e => e.AvatarUrl)
+            .HasMaxLength(500)
+            .HasColumnName("avatar_url");
         entity.Property(e => e.CreatedAt)
             .HasColumnType("timestamp without time zone")
             .HasColumnName("created_at");

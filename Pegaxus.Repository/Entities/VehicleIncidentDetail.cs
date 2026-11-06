@@ -32,6 +32,12 @@ public partial class VehicleIncidentDetail
 
     public decimal? EstimatedRepairCost { get; set; }
 
+    public decimal? EstimatedRepairHours { get; set; }
+
+    public string? DriverSafetyStatus { get; set; }
+
+    public string? CargoConditionNote { get; set; }
+
     public string? RepairNote { get; set; }
 
     public DateTime CreatedAt { get; set; }
@@ -39,6 +45,8 @@ public partial class VehicleIncidentDetail
     public DateTime UpdatedAt { get; set; }
 
     public virtual IncidentReport IncidentReport { get; set; } = null!;
+
+    public virtual ICollection<IncidentPhoto> IncidentPhotos { get; set; } = new List<IncidentPhoto>();
 
     public virtual Vehicle Vehicle { get; set; } = null!;
 }

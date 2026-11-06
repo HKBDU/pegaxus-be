@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
 using Pegaxus.Repository.Extensions;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -22,6 +23,10 @@ public sealed partial class Service
     {
         ValidateCustomsProofRequest(request);
 
+        await using var transaction = await _db.Database.BeginSerializableAsync(cancellationToken);
+        await _db.LockRowsAsync(_db.ComplianceDossiers.Where(item => item.ComplianceDossierId == dossierId),
+            item => item.ComplianceDossierId, cancellationToken);
+
         var dossier = await _db.ComplianceDossiers
             .Include(item => item.Transport)
                 .ThenInclude(item => item.Booking)
@@ -29,11 +34,12 @@ public sealed partial class Service
             .SingleOrDefaultAsync(item => item.ComplianceDossierId == dossierId, cancellationToken);
 
         if (dossier is null)
-            throw new NotFoundException("ComplianceDossier not found", "DOSSIER_NOT_FOUND");
+            throw new NotFoundException("Compliance dossier not found", "DOSSIER_NOT_FOUND");
 
+        await _db.Entry(dossier).ReloadAsync(cancellationToken);
         if (dossier.Status != ComplianceDossierStatus.APPROVED)
             throw new ConflictException(
-                "Customs proof can only be submitted when the ComplianceDossier is APPROVED",
+                "Customs proof can only be submitted when the compliance dossier is approved",
                 "DOSSIER_NOT_APPROVED");
 
         var latestQuarantineStatus = await _db.QuarantineProofs
@@ -78,16 +84,15 @@ public sealed partial class Service
 
         for (var index = 0; index < request.Files.Count; index++)
         {
-            var file = request.Files[index];
-            var (fileUrl, _) = await _mediaService.UploadFileAsync(file);
+            var file = await ConfirmProofImageAsync(accountId, request.Files[index].PublicId, cancellationToken);
             proof.Attachments.Add(new ProofAttachment
             {
                 ProofAttachmentId = Guid.NewGuid(),
                 CustomsClearanceProofId = proof.CustomsClearanceProofId,
                 FileName = file.FileName,
-                FileUrl = fileUrl,
-                MimeType = file.ContentType,
-                FileSizeBytes = file.Length,
+                FileUrl = file.FileUrl,
+                MimeType = file.MimeType,
+                FileSizeBytes = file.SizeBytes,
                 SortOrder = index + 1,
                 CreatedAt = now
             });
@@ -119,8 +124,12 @@ public sealed partial class Service
 
         foreach (var recipient in recipients)
             AddNotification(recipient.AccountId, recipient.Role, dossier, title, message, now, priority);
+        if (request.IsHeld)
+            await QueueClearanceMailAsync(recipients.Select(item => item.AccountId), dossier, MailService.EmailBodies.ClearanceKind.Customs,
+                proof.CustomsPortName, MailService.EmailBodies.ClearanceOutcome.Held, null, now, cancellationToken);
 
         await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
         return proof.CustomsClearanceProofId;
     }
@@ -162,6 +171,17 @@ public sealed partial class Service
             .Select(item => item.ComplianceDocument!)
             .FirstOrDefault();
 
+        var files = new List<Response.ProofFileResponse>();
+        foreach (var attachment in proof.Attachments.OrderBy(item => item.SortOrder))
+        {
+            var readUrl = await _mediaService.CreateReadUrlAsync(attachment.FileUrl, cancellationToken);
+            files.Add(new Response.ProofFileResponse
+            {
+                FileName = attachment.FileName, FileUrl = readUrl.Url, MimeType = attachment.MimeType,
+                FileSizeBytes = attachment.FileSizeBytes, SortOrder = attachment.SortOrder
+            });
+        }
+
         return new Response.CustomsClearanceProofResponse
         {
             CustomsClearanceProofId = proof.CustomsClearanceProofId,
@@ -196,14 +216,7 @@ public sealed partial class Service
             RejectionReason = proof.RejectionReason,
             IsFinalized = proof.IsFinalized,
             FinalizedAt = AsUtc(proof.FinalizedAt),
-            Files = proof.Attachments.OrderBy(item => item.SortOrder).Select(item => new Response.ProofFileResponse
-            {
-                FileName = item.FileName,
-                FileUrl = item.FileUrl,
-                MimeType = item.MimeType,
-                FileSizeBytes = item.FileSizeBytes,
-                SortOrder = item.SortOrder
-            }).ToList()
+            Files = files
         };
     }
 
@@ -215,7 +228,7 @@ public sealed partial class Service
     {
         var action = request.Action.Trim().ToUpperInvariant();
         if (action is not ("FINALIZE" or "REJECT_PROOF"))
-            throw new BadRequestException("Action must be FINALIZE or REJECT_PROOF");
+            throw new BadRequestException("Choose either finalize or reject for the proof.");
 
         var employee = await _db.Employees
             .Active()
@@ -249,8 +262,9 @@ public sealed partial class Service
         {
             if (string.IsNullOrWhiteSpace(request.RejectionReason))
                 throw new BadRequestException(
-                    "rejectionReason is required for REJECT_PROOF",
+                    "A rejection reason is required when rejecting a proof.",
                     "FIELD_REQUIRED_FOR_ACTION");
+            InputRules.MaxLength(request.RejectionReason, Limits.NoteMaxLength, "rejectionReason");
 
             proof.Status = CustomsClearanceProofStatus.Rejected;
             proof.RejectionReason = request.RejectionReason.Trim();
@@ -270,6 +284,8 @@ public sealed partial class Service
                 $"Your customs clearance proof for dossier {dossier.DossierCode} ({proof.CustomsPortName}) was rejected. Reason: {proof.RejectionReason}. Please submit a new proof.",
                 now,
                 NotificationPriority.HIGH);
+            await QueueClearanceMailAsync([proof.SubmittedByEmployee.AccountId], dossier, MailService.EmailBodies.ClearanceKind.Customs,
+                proof.CustomsPortName, MailService.EmailBodies.ClearanceOutcome.ProofRejected, proof.RejectionReason, now, cancellationToken);
 
             await _db.SaveChangesAsync(cancellationToken);
             await _notificationService.FlushAsync(cancellationToken);
@@ -285,13 +301,22 @@ public sealed partial class Service
             string.IsNullOrWhiteSpace(request.CustomsLane) ||
             string.IsNullOrWhiteSpace(request.Status))
             throw new BadRequestException(
-                "mrnNumber, customsLane, and status are required for FINALIZE",
+                "The MRN number, customs lane, and status are required to finalize the proof.",
                 "FIELD_REQUIRED_FOR_ACTION");
+
+        InputRules.MaxLength(request.MrnNumber, 100, "mrnNumber");
+        InputRules.MaxLength(request.VerificationNote, Limits.NoteMaxLength, "verificationNote");
+        if (request.AtaCarnetExpiryDate is { } carnetExpiry)
+        {
+            var today = DateOnly.FromDateTime(DateTime.UtcNow);
+            if (carnetExpiry < today.AddYears(-Limits.DateWindowYears) || carnetExpiry > today.AddYears(Limits.DateWindowYears))
+                throw new BadRequestException($"ataCarnetExpiryDate must be within {Limits.DateWindowYears} years of today");
+        }
 
         var customsLane = ParseCustomsLane(request.CustomsLane);
         if (customsLane is null)
             throw new BadRequestException(
-                "mrnNumber, customsLane, and status are required for FINALIZE",
+                "The MRN number, customs lane, and status are required to finalize the proof.",
                 "FIELD_REQUIRED_FOR_ACTION");
 
         var status = request.Status.Trim().ToUpperInvariant() switch
@@ -303,12 +328,12 @@ public sealed partial class Service
         };
 
         if (status is null)
-            throw new BadRequestException("Status must be CLEARED, HELD, or REJECTED");
+            throw new BadRequestException("Status must be cleared, held, or rejected");
 
         if (status == CustomsClearanceProofStatus.Rejected &&
             string.IsNullOrWhiteSpace(request.RejectionReason))
             throw new BadRequestException(
-                "rejectionReason is required when status is REJECTED",
+                "A rejection reason is required when the status is rejected.",
                 "FIELD_REQUIRED_FOR_ACTION");
 
         proof.MrnNumber = request.MrnNumber.Trim();
@@ -379,6 +404,16 @@ public sealed partial class Service
                 now,
                 NotificationPriority.URGENT);
         }
+        if (status is CustomsClearanceProofStatus.Rejected or CustomsClearanceProofStatus.Held)
+        {
+            var outcome = status == CustomsClearanceProofStatus.Rejected
+                ? MailService.EmailBodies.ClearanceOutcome.Rejected : MailService.EmailBodies.ClearanceOutcome.Held;
+            var mailRecipients = recipients.Select(item => item.AccountId);
+            if (status == CustomsClearanceProofStatus.Rejected)
+                mailRecipients = mailRecipients.Append(dossier.Transport.Booking.Customer.AccountId);
+            await QueueClearanceMailAsync(mailRecipients, dossier, MailService.EmailBodies.ClearanceKind.Customs, proof.CustomsPortName,
+                outcome, proof.RejectionReason, now, cancellationToken);
+        }
 
         await _db.SaveChangesAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
@@ -417,35 +452,21 @@ public sealed partial class Service
     {
         if (string.IsNullOrWhiteSpace(request.CustomsPortName))
             throw new BadRequestException("Customs port name is required");
+        InputRules.MaxLength(request.CustomsPortName, 200, "Customs port name");
+        InputRules.MaxLength(request.MrnNumber, 100, "mrnNumber");
+        InputRules.MaxLength(request.QuickNote, Limits.NoteMaxLength, "quickNote");
 
         if (request.IsHeld && string.IsNullOrWhiteSpace(request.QuickNote))
             throw new BadRequestException(
                 "quickNote is required when isHeld is true",
                 "QUICK_NOTE_REQUIRED");
 
-        if (request.Files.Count == 0)
+        if (request.Files is null || request.Files.Count == 0)
             throw new BadRequestException(
                 "Image unclear or missing customs stamp. Please retake photo",
                 "EVIDENCE_UNCLEAR");
 
-        const long maxFileSize = 5 * 1024 * 1024;
-        foreach (var file in request.Files)
-        {
-            var extension = Path.GetExtension(file.FileName).ToLowerInvariant();
-            var validExtension = extension is ".jpg" or ".jpeg" or ".png";
-            var validContentType = file.ContentType is "image/jpeg" or "image/png";
-
-            if (file.Length > maxFileSize)
-                throw new Pegaxus.Service.Exceptions.Exceptions(
-                    "Proof image must not exceed 5 MB",
-                    413,
-                    "FILE_TOO_LARGE");
-
-            if (!validExtension || !validContentType)
-                throw new BadRequestException(
-                    "Proof file must be JPG, JPEG, or PNG",
-                    "INVALID_FILE_TYPE");
-        }
+        ValidateProofReferences(request.Files);
     }
 
     private static CustomsLane? ParseCustomsLane(string? value)
@@ -459,7 +480,7 @@ public sealed partial class Service
             "ORANGE_LANE" => CustomsLane.OrangeLane,
             "RED_LANE" => CustomsLane.RedLane,
             _ => throw new BadRequestException(
-                "Customs lane must be GREEN_LANE, ORANGE_LANE, or RED_LANE")
+                "The customs lane must be green, orange, or red.")
         };
     }
 

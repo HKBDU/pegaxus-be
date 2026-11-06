@@ -38,7 +38,9 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         entity.Property(e => e.DiscountAmount)
             .HasPrecision(18, 2)
             .HasColumnName("discount_amount");
-        entity.Property(e => e.DueDate).HasColumnName("due_date");
+        entity.Property(e => e.DueDate)
+            .HasColumnType("timestamp without time zone")
+            .HasColumnName("due_date");
         entity.Property(e => e.EmployeeId).HasColumnName("employee_id");
         entity.Property(e => e.InvoiceCode)
             .HasMaxLength(50)
@@ -58,6 +60,12 @@ public sealed class InvoiceConfiguration : IEntityTypeConfiguration<Invoice>
         entity.Property(e => e.TaxAmount)
             .HasPrecision(18, 2)
             .HasColumnName("tax_amount");
+        entity.Property(e => e.TaxRate)
+            .HasPrecision(5, 2)
+            .HasDefaultValue(20m)
+            // 0 is a real rate (credit notes), so only -1 may mean "not set" to EF.
+            .HasSentinel(-1m)
+            .HasColumnName("tax_rate");
         entity.Property(e => e.TotalAmount)
             .HasPrecision(18, 2)
             .HasColumnName("total_amount");

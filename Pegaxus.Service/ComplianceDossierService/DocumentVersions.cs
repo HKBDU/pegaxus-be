@@ -52,7 +52,7 @@ public sealed partial class Service
         await UploadContextAsync(accountId, dossierId, requirementId, false, cancellationToken, true, true);
         var documentId = await _db.ComplianceDocuments.AsNoTracking().Where(item => item.DossierRequirementId == requirementId)
             .Select(item => (Guid?)item.ComplianceDocumentId).SingleOrDefaultAsync(cancellationToken)
-            ?? throw new NotFoundException("ComplianceDocument not found.", "DOCUMENT_NOT_FOUND");
+            ?? throw new NotFoundException("Document not found.", "DOCUMENT_NOT_FOUND");
         var versions = await _db.DocumentVersions.AsNoTracking().Include(item => item.DocumentAttachments).Include(item => item.DocumentReviews)
             .Where(item => item.ComplianceDocumentId == documentId).OrderByDescending(item => item.VersionNo).ToListAsync(cancellationToken);
         var result = new List<Response.DocumentVersionResponse>();
@@ -98,7 +98,7 @@ public sealed partial class Service
         var documents = _db.ComplianceDocuments.AsQueryable();
         var document = await (tracking ? documents.AsTracking() : documents.AsNoTracking())
             .SingleOrDefaultAsync(item => item.DossierRequirementId == requirementId, cancellationToken)
-            ?? throw new NotFoundException("ComplianceDocument not found.", "DOCUMENT_NOT_FOUND");
+            ?? throw new NotFoundException("Document not found.", "DOCUMENT_NOT_FOUND");
         if (tracking) await _db.Entry(document).ReloadAsync(cancellationToken);
         if (tracking && _db.Database.IsRelational())
             await _db.LockRowsAsync(_db.DocumentVersions.Where(item => item.ComplianceDocumentId == document.ComplianceDocumentId)
@@ -108,13 +108,13 @@ public sealed partial class Service
             .Include(item => item.DocumentAttachments).Include(item => item.DocumentReviews)
             .Where(item => item.ComplianceDocumentId == document.ComplianceDocumentId).OrderByDescending(item => item.VersionNo)
             .FirstOrDefaultAsync(cancellationToken)
-            ?? throw new ConflictException("ComplianceDocument has no existing DocumentVersion.");
+            ?? throw new ConflictException("Document has no existing document version.");
         if (tracking) await _db.Entry(latest).ReloadAsync(cancellationToken);
         if (document.Status == ComplianceDocumentStatus.APPROVED ||
             (await LatestReviewAsync(latest.DocumentVersionId, cancellationToken))?.Result == DocumentReviewResult.APPROVED)
             throw SatisfiedDocument();
         if (document.Status is not (ComplianceDocumentStatus.PROVIDED or ComplianceDocumentStatus.REJECTED))
-            throw new ConflictException("Only PROVIDED or REJECTED ComplianceDocuments can be edited.");
+            throw new ConflictException("Only provided or rejected documents can be edited.");
         return (document, latest);
     }
 

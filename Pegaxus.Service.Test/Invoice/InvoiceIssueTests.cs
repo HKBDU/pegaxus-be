@@ -41,9 +41,21 @@ public class InvoiceIssueTests
             PlanCode = "TP-" + Guid.NewGuid().ToString("N"), Status = TransportPlanStatus.PENDING, CreatedAt = time, UpdatedAt = time };
         var invoice = new Invoice { InvoiceId = Guid.NewGuid(), InvoiceCode = "INV-" + Guid.NewGuid().ToString("N"),
             BookingId = booking.BookingId, EmployeeId = creator.EmployeeId, Type = type, Currency = "VND",
-            Subtotal = 100, TaxAmount = 20, TotalAmount = 120, DueDate = type == InvoiceType.CREDIT_NOTE ? null : new DateOnly(2026, 11, 15),
+            Subtotal = 100, TaxAmount = 20, TotalAmount = 120, DueDate = type == InvoiceType.CREDIT_NOTE ? null : new DateTime(2026, 11, 15),
             BillingNote = "Keep this note", CreatedAt = time, UpdatedAt = time };
         db.AddRange(transport, plan, invoice);
+        if (type is InvoiceType.DEPOSIT or InvoiceType.FINAL)
+        {
+            // Issuing re-derives the lines from the booking's issued quotation: 40% of 250 is the 100 deposit, a FINAL repeats the 100 line.
+            var subtotal = type == InvoiceType.DEPOSIT ? 250m : 100m;
+            var quotation = new Invoice { InvoiceId = Guid.NewGuid(), InvoiceCode = "INV-" + Guid.NewGuid().ToString("N"),
+                BookingId = booking.BookingId, EmployeeId = creator.EmployeeId, Type = InvoiceType.QUOTATION, Status = InvoiceStatus.ISSUED,
+                Currency = "VND", Subtotal = subtotal, TaxAmount = subtotal * 0.2m, TotalAmount = subtotal * 1.2m,
+                IssuedAt = time, CreatedAt = time, UpdatedAt = time };
+            quotation.InvoiceItems.Add(new InvoiceItem { InvoiceItemId = Guid.NewGuid(), ItemType = InvoiceItemType.TRANSPORT_FEE,
+                Description = "Quoted transport", Quantity = 1, UnitPrice = subtotal, LineAmount = subtotal, CreatedAt = time, UpdatedAt = time });
+            db.Invoices.Add(quotation);
+        }
         db.InvoiceItems.Add(new InvoiceItem { InvoiceItemId = Guid.NewGuid(), InvoiceId = invoice.InvoiceId,
             ItemType = InvoiceItemType.TRANSPORT_FEE, Description = "Transport fee", Quantity = 1, UnitPrice = 100,
             LineAmount = 100, CreatedAt = time, UpdatedAt = time });
@@ -87,7 +99,7 @@ public class InvoiceIssueTests
         Assert.Equal(result.IssuedAt, result.UpdatedAt);
         Assert.Equal(120, result.GrandTotal);
         Assert.Equal("VND", result.Currency);
-        Assert.Equal(invoice.DueDate, result.DueDate);
+        Assert.Equal(Pegaxus.Service.Common.DbTime.AsUtc(invoice.DueDate), result.DueDate);
         Assert.Equal(type == InvoiceType.QUOTATION ? ["CANCEL", "CREATE_ANOTHER"] : new[] { "RECORD_PAYMENT", "CANCEL", "CREATE_ANOTHER" }, result.AvailableActions);
         Assert.Equal((await db.Employees.SingleAsync(x => x.AccountId == actor.AccountId)).EmployeeId, invoice.EmployeeId);
         Assert.Equal((100m, 0m, 20m, 120m, "Keep this note"), (invoice.Subtotal, invoice.DiscountAmount, invoice.TaxAmount, invoice.TotalAmount, invoice.BillingNote));
@@ -123,7 +135,7 @@ public class InvoiceIssueTests
 
     [Theory]
     [InlineData("missing", 404, "INVOICE_NOT_FOUND", "Invoice not found")]
-    [InlineData("status", 409, "INVALID_INVOICE_STATUS", "Invoice must be in DRAFT status to be issued")]
+    [InlineData("status", 409, "INVALID_INVOICE_STATUS", "Invoice must be in draft status to be issued")]
     [InlineData("version", 409, "INVOICE_MODIFIED", "The invoice was just modified. Please reload the page")]
     [InlineData("empty", 422, "EMPTY_INVOICE_ITEMS", "The invoice must have at least one fee line before it can be issued")]
     [InlineData("deductionOnly", 422, "EMPTY_INVOICE_ITEMS", "The invoice must have at least one fee line before it can be issued")]

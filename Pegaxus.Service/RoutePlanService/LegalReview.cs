@@ -53,11 +53,14 @@ public sealed partial class Service
         if (GetRouteType(routePlan) == RouteType.RETURN && routePlan.TransportPlan.Transport.Status != TransportStatus.IN_TRANSIT)
             throw new ConflictException("The transport is not in transit", "TRANSPORT_NOT_IN_TRANSIT");
         if (routePlan.Status != RoutePlanStatus.DRAFT)
-            throw new ConflictException($"This action cannot be performed while the route plan is in {routePlan.Status} status", "INVALID_ROUTE_PLAN_STATUS");
+            throw new ConflictException($"This action cannot be performed while the route plan is in {UserFacingText.Label(routePlan.Status)} status", "INVALID_ROUTE_PLAN_STATUS");
         if (!routePlan.TransportPlan.EmployeeTransportPlans.Any(item => item.EmployeeId == reviewer.EmployeeId && item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST))
             throw new ForbiddenException("Only the Transport Specialist assigned to this Transport Plan can review it");
         EnsureConcurrency(routePlan.UpdatedAt, request.LastUpdatedAt);
         var routeType = GetRouteType(routePlan);
+        // A RETURN plan reaches the specialist through the Logistics Manager's approval instead of a submit.
+        if (routeType != RouteType.RETURN && routePlan.SubmittedForReviewAt is null)
+            throw new ConflictException("The route plan has not been submitted for legal review", "ROUTE_PLAN_NOT_SUBMITTED");
         var validSequences = routePlan.RoutePlanRoutes.Select(item => item.SequenceNo).ToHashSet();
         if (request.BlockedSegments.Any(sequence => !validSequences.Contains(sequence)))
             throw new BadRequestException("blockedSegments contains an unknown sequenceNo");
@@ -67,9 +70,9 @@ public sealed partial class Service
         if (routeType == RouteType.PRIMARY && dossier is null)
             throw new ConflictException("Compliance Dossier must be initialized before legal review", "DOSSIER_NOT_INITIALIZED");
         if (routeType == RouteType.RETURN && (dossier is null || dossier.Status != ComplianceDossierStatus.DRAFT))
-            throw new ConflictException("Route Plan RETURN has not been approved by the Logistics Manager", "RETURN_NOT_APPROVED");
-        if (routeType == RouteType.PRIMARY && request.IsFeasible && dossier!.Status is not (ComplianceDossierStatus.DRAFT or ComplianceDossierStatus.IN_PREPARATION))
-            throw new ConflictException("Compliance Dossier must be in DRAFT before legal review", "INVALID_DOSSIER_STATUS");
+            throw new ConflictException("Route Plan return has not been approved by the Logistics Manager", "RETURN_NOT_APPROVED");
+        if (routeType == RouteType.PRIMARY && request.IsFeasible && dossier!.Status != ComplianceDossierStatus.DRAFT)
+            throw new ConflictException("Compliance Dossier must be in draft before legal review", "INVALID_DOSSIER_STATUS");
 
         var now = new DateTime(Math.Max(UtcNowTruncated().Ticks, routePlan.UpdatedAt.Ticks + 10), DateTimeKind.Unspecified);
         var auditDossier = dossier ?? transport.MainDossier;
@@ -96,6 +99,7 @@ public sealed partial class Service
             foreach (var backup in confirmedBackups)
             {
                 backup.Status = RoutePlanStatus.CONFIRMED;
+                backup.SubmittedForReviewAt = null;
                 backup.UpdatedAt = now;
             }
             foreach (var vehicle in routePlan.RoutePlanRoutes.Concat(confirmedBackups.SelectMany(item => item.RoutePlanRoutes))
@@ -110,8 +114,10 @@ public sealed partial class Service
         {
             AddDossierAudit(auditDossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW_REJECTED", routePlan, request, now, "Route Plan requires revision.");
         }
+        // The request is answered either way: a confirmed plan is done, a rejected one must be revised and submitted again.
+        routePlan.SubmittedForReviewAt = null;
         routePlan.UpdatedAt = now;
-        QueueLegalReviewNotifications(routePlan, reviewer, routeType, request, now);
+        await QueueLegalReviewNotificationsAsync(routePlan, reviewer, routeType, request, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
@@ -129,6 +135,8 @@ public sealed partial class Service
                 DossierType = dossier.DossierType.ToString(),
                 Status = dossier.Status.ToString()
             },
+            LegalReviewRequested = false,
+            LegalReviewRequestedAt = null,
             ConfirmedBackupRoutePlanIds = confirmedBackups.Select(item => item.RoutePlanId).ToList(),
             CustomerUploadEnabled = request.IsFeasible && routeType != RouteType.BACKUP,
             PersonnelAssignmentPhase2Enabled = request.IsFeasible && routeType == RouteType.PRIMARY,
@@ -215,7 +223,8 @@ public sealed partial class Service
             dossier.ReadyForSubmissionAt = now;
     }
 
-    private void QueueLegalReviewNotifications(RoutePlan routePlan, Employee reviewer, RouteType routeType, Request.LegalReviewRequest request, DateTime now)
+    private async Task QueueLegalReviewNotificationsAsync(RoutePlan routePlan, Employee reviewer, RouteType routeType, Request.LegalReviewRequest request,
+        DateTime now, CancellationToken cancellationToken)
     {
         var staff = new Dictionary<Guid, EmployeeRole>();
         var transport = routePlan.TransportPlan.Transport;
@@ -265,6 +274,23 @@ public sealed partial class Service
             Notify(customer, customerUrl, routeType == RouteType.RETURN
                 ? $"The return route for booking {transport.Booking.BookingCode} has been confirmed. Please upload the additional documents it requires."
                 : $"The route for booking {transport.Booking.BookingCode} has been confirmed. Please upload the required legal documents.");
+
+        if (!request.IsFeasible)
+        {
+            var revisionKind = MailService.EmailBodies.RouteReviewKind.RevisionRequired;
+            await MailService.MailRecipients.QueueAsync(db, staff.Keys.Where(id => id != reviewer.AccountId), now, recipient => MailService.MailRecipients.Mail(recipient,
+                $"{MailService.EmailBodies.RouteReviewTitle(revisionKind)} — {routePlan.RoutePlanCode}",
+                MailService.EmailBodies.RouteReviewBody(recipient.FullName, routePlan.RoutePlanCode, revisionKind, request.Note,
+                    NotificationLinks.RoutePlan(recipient.Role, routePlan.RoutePlanId))), cancellationToken);
+        }
+        else if (notifyCustomer && customer != reviewer.AccountId)
+        {
+            var confirmedKind = routeType == RouteType.RETURN
+                ? MailService.EmailBodies.RouteChangeKind.ReturnConfirmed : MailService.EmailBodies.RouteChangeKind.RouteConfirmed;
+            await MailService.MailRecipients.QueueAsync(db, [customer], now, recipient => MailService.MailRecipients.Mail(recipient,
+                $"{MailService.EmailBodies.RouteChangedTitle(confirmedKind)} — {routePlan.RoutePlanCode}",
+                MailService.EmailBodies.RouteChangedBody(recipient.FullName, routePlan.RoutePlanCode, confirmedKind, null, customerUrl)), cancellationToken);
+        }
     }
 
     private sealed class LegalReviewSnapshot

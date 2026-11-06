@@ -28,7 +28,7 @@ public sealed partial class Service
         var primaryIds = await db.RoutePlans.AsNoTracking().Where(x => x.TransportPlanId == plan.TransportPlanId &&
             x.Status == RoutePlanStatus.ACTIVE && x.RoutePlanRoutes.Any() &&
             x.RoutePlanRoutes.All(s => s.RouteType == RouteType.PRIMARY)).Select(x => x.RoutePlanId).ToArrayAsync(token);
-        if (primaryIds.Length != 1) throw new ConflictException("One active PRIMARY route is required.", "PRIMARY_ROUTE_PLAN_REQUIRED");
+        if (primaryIds.Length != 1) throw new ConflictException("One active primary route is required.", "PRIMARY_ROUTE_PLAN_REQUIRED");
         return await LockPlanAsync(primaryIds[0], token);
     }
 

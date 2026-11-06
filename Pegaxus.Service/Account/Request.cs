@@ -1,5 +1,3 @@
-using Microsoft.AspNetCore.Http;
-
 namespace Pegaxus.Service.AccountService;
 
 public static class Request
@@ -12,7 +10,7 @@ public static class Request
         public string? Address { get; set; }
         public string? Country { get; set; }
         public string? IdentityNumber { get; set; }
-        public IFormFile? Avatar { get; set; }
+        public UploadService.Request.UploadedAssetReference? Avatar { get; set; }
     }
 
     public sealed class ChangePasswordRequest

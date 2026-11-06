@@ -44,10 +44,15 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             .Select(x => x.AccountId).ToArrayAsync(cancellationToken);
         if (managers.Length == 0) throw new ConflictException("No active Logistics Manager can review this request.", "REVIEWER_UNAVAILABLE");
         var now = Now;
-        var message = FormattableString.Invariant($"Backup route plan {plan.RoutePlanCode} is waiting for your decision.\nReason: {request.Reason.Trim()}\nNew ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC\nEstimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}{NoteSuffix(request.Note)}");
+        var incident = request.IncidentReportId is { } incidentId ? await IncidentLinks.AttachAsync(db, incidentId, plan.TransportPlan.TransportId, now, cancellationToken) : null;
+        var incidentLine = incident is null ? "" : $"\nIncident: {incident.IncidentCode}";
+        var message = FormattableString.Invariant($"Backup route plan {plan.RoutePlanCode} is waiting for your decision.{incidentLine}\nReason: {request.Reason.Trim()}\nNew ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC\nEstimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}{NoteSuffix(request.Note)}");
         foreach (var manager in managers)
             Notify(manager, plan, "Emergency backup route needs approval", message, NotificationPriority.URGENT, now,
                 NotificationLinks.RoutePlan(EmployeeRole.LOGISTICS_MANAGER, plan.RoutePlanId, "change-decision"));
+        await MailReviewAsync(plan, managers, MailService.EmailBodies.RouteReviewKind.EmergencyApproval,
+            FormattableString.Invariant($"{(incident is null ? "" : $"Incident {incident.IncidentCode}. ")}{request.Reason.Trim()} New ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC. Estimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}.{NoteSuffix(request.Note)}"),
+            now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
@@ -73,6 +78,8 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         if (type == "RETURN" && request.Decision == "APPROVE" && transport.ExtraDossier is not null)
             throw new ConflictException("An extra compliance dossier already exists for this transport", "EXTRA_DOSSIER_ALREADY_EXISTS");
         var now = NextVersion(plan);
+        if (request.IncidentReportId is { } incidentId)
+            await IncidentLinks.AttachAsync(db, incidentId, transport.TransportId, now, cancellationToken);
         Response.DossierBrief? extraBrief = null;
         if (request.Decision == "APPROVE")
         {
@@ -81,9 +88,10 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
                 var extra = await CreateExtraDossierAsync(plan, dossier!, accountId, request.Note, now, cancellationToken);
                 extraBrief = new(extra.Dossier.ComplianceDossierId, extra.Dossier.DossierCode, extra.Dossier.DossierType.ToString(),
                     extra.Dossier.Status.ToString(), extra.InheritedRequirementCount);
-                await NotifyAssignedAsync(plan, EmployeeRole.TRANSPORT_SPECIALIST, "Extra dossier ready for the return route",
+                var specialists = await NotifyAssignedAsync(plan, EmployeeRole.TRANSPORT_SPECIALIST, "Extra dossier ready for the return route",
                     $"A supplementary dossier was created for return route plan {plan.RoutePlanCode}. Add the necessary requirements and review the route plan.",
                     NotificationPriority.URGENT, now, cancellationToken);
+                await MailReviewAsync(plan, specialists, MailService.EmailBodies.RouteReviewKind.ExtraDossierReady, request.Note, now, cancellationToken);
             }
             else
             {
@@ -93,7 +101,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
                 var tail = BackupTail(segments);
                 CheckConnections(tail);
                 tail = InheritPersonnel(tail, range);
-                await ValidateResourcesAsync(tail, plan, active, true, cancellationToken);
+                await ValidateResourcesAsync(tail, plan, true, cancellationToken);
                 foreach (var segment in tail)
                 {
                     var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == segment.RoutePlanRouteId, cancellationToken);
@@ -106,20 +114,29 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
                 Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Backup route activated",
                     $"Your transport is now following a backup route (route plan {plan.RoutePlanCode}) because of an incident on the way.{NoteSuffix(request.Note)}",
                     NotificationPriority.URGENT, now, NotificationLinks.Booking(null, plan.TransportPlan.Transport.BookingId));
-                await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Backup route activated",
+                var backupDrivers = await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Backup route activated",
                     $"Follow backup route plan {plan.RoutePlanCode} from the branch point. Check your updated segments.{NoteSuffix(request.Note)}", now, cancellationToken);
+                await NotifyPrimaryEscortsAsync(plan, primary.RoutePlanId, "Backup route activated",
+                    $"The convoy now follows backup route plan {plan.RoutePlanCode} from the branch point. Check your updated segments.{NoteSuffix(request.Note)}", now, cancellationToken);
+                await MailChangedAsync(plan, [plan.TransportPlan.Transport.Booking.Customer.AccountId], MailService.EmailBodies.RouteChangeKind.BackupActivated,
+                    request.Note, now, cancellationToken);
+                await MailChangedAsync(plan, backupDrivers.Select(item => item.AccountId), MailService.EmailBodies.RouteChangeKind.DriverBackup,
+                    request.Note, now, cancellationToken);
             }
         }
         else if (type == "RETURN")
         {
-            plan.Status = RoutePlanStatus.CANCELLED;
+            plan.Status = RoutePlanStatus.REJECTED_BY_MANAGER;
             plan.RouteNote = request.Note!.Trim();
+            await NotifyCurrentCrewAsync(plan, request.Note, now, cancellationToken);
         }
         plan.UpdatedAt = now;
         var decided = request.Decision == "APPROVE" ? "approved" : "rejected";
-        await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR, $"Route change {decided}",
+        var coordinators = await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR, $"Route change {decided}",
             $"The {type.ToLowerInvariant()} route change for route plan {plan.RoutePlanCode} was {decided} by the Logistics Manager.{NoteSuffix(request.Note)}",
             NotificationPriority.HIGH, now, cancellationToken);
+        await MailReviewAsync(plan, coordinators, request.Decision == "APPROVE"
+            ? MailService.EmailBodies.RouteReviewKind.ChangeApproved : MailService.EmailBodies.RouteReviewKind.ChangeRejected, request.Note, now, cancellationToken);
         Audit(plan, accountId, "ROUTE_CHANGE_" + request.Decision, request.Note, now);
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -127,6 +144,29 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         var branch = type == "BACKUP" ? segments.FirstOrDefault(x => x.RouteType == "BACKUP") : null;
         return new(routePlanId, type, request.Decision, plan.Status.ToString(), extraBrief,
             branch?.SequenceNo, branch?.FromLocation, AsUtc(now));
+    }
+
+    private async Task NotifyCurrentCrewAsync(RoutePlan plan, string? note,
+        DateTime now, CancellationToken cancellationToken)
+    {
+        var current = await db.RoutePlanRoutes.AsNoTracking()
+            .Where(segment => segment.RoutePlan.TransportPlanId == plan.TransportPlanId &&
+                segment.RoutePlan.Status == RoutePlanStatus.ACTIVE && segment.ActualDepartureAt.HasValue &&
+                segment.ActualArrivalAt == null)
+            .OrderBy(segment => segment.SequenceNo)
+            .Select(segment => new { segment.DriverEmployeeId, segment.EscortEmployeeId })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (current is null) return;
+        var employeeIds = new[] { current.DriverEmployeeId, current.EscortEmployeeId }
+            .OfType<Guid>().Distinct().ToArray();
+        var recipients = await db.Employees.AsNoTracking().Active()
+            .Where(employee => employeeIds.Contains(employee.EmployeeId))
+            .Select(employee => employee.AccountId)
+            .ToArrayAsync(cancellationToken);
+        foreach (var recipient in recipients)
+            Notify(recipient, plan, "Return route rejected",
+                $"The return route was rejected by the Logistics Manager. Note: {note!.Trim()}",
+                NotificationPriority.URGENT, now, null);
     }
 
     public async Task<Response.ActivationResult> ActivateReturnAsync(Guid routePlanId, Guid accountId, Request.ActivationRequest request, CancellationToken cancellationToken = default)
@@ -176,8 +216,9 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             proposed[index] = segment;
         }
         proposed = InheritPersonnel(proposed, active);
-        await ValidateResourcesAsync(proposed, plan, remaining, true, cancellationToken);
+        await ValidateResourcesAsync(proposed, plan, true, cancellationToken);
         var now = NextVersion(plan);
+        var removedVehicleIds = new List<Guid>();
         foreach (var segment in proposed)
         {
             var row = await db.RoutePlanRoutes.Include(x => x.RoutePlanRouteVehicles).SingleAsync(x => x.RoutePlanRouteId == segment.RoutePlanRouteId, cancellationToken);
@@ -185,7 +226,9 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             row.DriverEmployeeId = segment.Driver?.EmployeeId; row.EscortEmployeeId = segment.Escort?.EmployeeId;
             row.Note = segment.Note; row.UpdatedAt = now;
             var desired = segment.Vehicles.Select(x => x.VehicleId).ToArray();
-            db.RoutePlanRouteVehicles.RemoveRange(row.RoutePlanRouteVehicles.Where(x => !desired.Contains(x.VehicleId)));
+            var dropped = row.RoutePlanRouteVehicles.Where(x => !desired.Contains(x.VehicleId)).ToList();
+            removedVehicleIds.AddRange(dropped.Select(x => x.VehicleId));
+            db.RoutePlanRouteVehicles.RemoveRange(dropped);
             foreach (var id in desired.Where(id => !row.RoutePlanRouteVehicles.Any(x => x.VehicleId == id)))
                 db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = row.RoutePlanRouteId, VehicleId = id, AssignedAt = now });
             if (row.TransportProviderId is Guid providerId && !await db.TransportPlanProviders.AnyAsync(x =>
@@ -199,14 +242,30 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             if (db.Database.IsRelational()) await db.Entry(vehicle).ReloadAsync(cancellationToken);
             if (vehicle.Status == VehicleStatus.AVAILABLE) { vehicle.Status = VehicleStatus.ASSIGNED; vehicle.UpdatedAt = now; }
         }
+        // A vehicle dropped from the return route goes back to the pool unless this plan still uses it or another confirmed or active plan holds it.
+        var kept = proposed.SelectMany(x => x.Vehicles).Select(x => x.VehicleId).ToHashSet();
+        var droppedIds = removedVehicleIds.Where(id => !kept.Contains(id)).Distinct().ToList();
+        var heldElsewhere = await db.RoutePlanRouteVehicles.AsNoTracking()
+            .Where(x => droppedIds.Contains(x.VehicleId) && x.RoutePlanRoute.RoutePlanId != plan.RoutePlanId && x.RoutePlanRoute.ActualArrivalAt == null &&
+                (x.RoutePlanRoute.RoutePlan.Status == RoutePlanStatus.CONFIRMED || x.RoutePlanRoute.RoutePlan.Status == RoutePlanStatus.ACTIVE))
+            .Select(x => x.VehicleId).Distinct().ToListAsync(cancellationToken);
+        foreach (var id in droppedIds.Except(heldElsewhere))
+        {
+            var vehicle = await db.Vehicles.SingleAsync(x => x.VehicleId == id, cancellationToken);
+            if (db.Database.IsRelational()) await db.Entry(vehicle).ReloadAsync(cancellationToken);
+            if (vehicle.Status == VehicleStatus.ASSIGNED) { vehicle.Status = VehicleStatus.AVAILABLE; vehicle.UpdatedAt = now; }
+        }
         await SupersedeAsync(remaining, now, cancellationToken);
         plan.Status = RoutePlanStatus.ACTIVE; plan.UpdatedAt = now;
         Audit(plan, accountId, "RETURN_ROUTE_ACTIVATED", request.Note, now);
         Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Return route activated",
             $"Your transport is heading back on return route plan {plan.RoutePlanCode}.{NoteSuffix(request.Note)}",
             NotificationPriority.URGENT, now, NotificationLinks.Booking(null, plan.TransportPlan.Transport.BookingId));
-        await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR, "Return route activated",
+        var activeCoordinators = await NotifyAssignedAsync(plan, EmployeeRole.FLEET_ROUTE_COORDINATOR, "Return route activated",
             $"Return route plan {plan.RoutePlanCode} is now active.{NoteSuffix(request.Note)}", NotificationPriority.HIGH, now, cancellationToken);
+        await MailChangedAsync(plan, [plan.TransportPlan.Transport.Booking.Customer.AccountId], MailService.EmailBodies.RouteChangeKind.ReturnActivated,
+            request.Note, now, cancellationToken);
+        await MailReviewAsync(plan, activeCoordinators, MailService.EmailBodies.RouteReviewKind.ReturnActive, request.Note, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         var detail = await routePlans.GetByIdAsync(accountId, routePlanId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -276,7 +335,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         segments.Any(x => x.RouteType == "BACKUP") ? "BACKUP" : segments.Count > 0 && segments.All(x => x.RouteType == "RETURN") ? "RETURN" : "PRIMARY";
 
     private static ConflictException InvalidStatus(RoutePlan plan) =>
-        new($"This action cannot be performed while the route plan is in {plan.Status} status", "INVALID_ROUTE_PLAN_STATUS");
+        new($"This action cannot be performed while the route plan is in {UserFacingText.Label(plan.Status)} status", "INVALID_ROUTE_PLAN_STATUS");
 
     private static void CheckVersion(RoutePlan plan, DateTimeOffset version)
     {

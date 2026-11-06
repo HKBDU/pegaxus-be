@@ -66,7 +66,7 @@ public class InvoicePaymentHttpTests
         Assert.Equal(JsonValueKind.Null, value.GetProperty("effects").GetProperty("transportPlanStatus").ValueKind);
         Assert.True(value.GetProperty("effects").GetProperty("creditNoteUnlocked").GetBoolean());
         var repeat = await Error(await client.PostAsJsonAsync(url, request), 409, "INVALID_INVOICE_STATUS");
-        Assert.Equal("Cannot pay an invoice in status PAID", repeat.GetProperty("message").GetString());
+        Assert.Equal("Cannot pay an invoice in status paid", repeat.GetProperty("message").GetString());
         await Error(await client.PostAsJsonAsync($"/api/v1/invoices/{invoice.InvoiceId}/cancel",
             InvoiceCancellationTests.ValidRequest()), 422, "INVOICE_HAS_PAYMENT");
         var details = (await client.GetFromJsonAsync<JsonElement>($"/api/v1/invoices/{invoice.InvoiceId}")).GetProperty("value");

@@ -240,7 +240,7 @@ public class DossierViewingTests
         var result = await service.GetByBookingAsync(account.AccountId, booking.BookingId, new());
         Assert.False(result.IsInitialized);
         Assert.Null(result.ComplianceDossierId);
-        Assert.Equal("ComplianceDossier has not been initialized. Waiting for transport booking approval.", result.Message);
+        Assert.Equal("Compliance dossier has not been initialized. Waiting for transport booking approval.", result.Message);
         Assert.False(result.Actions.CanUpload);
         await Assert.ThrowsAsync<ForbiddenException>(() => service.GetByBookingAsync(foreign.AccountId, booking.BookingId, new()));
     }
@@ -462,6 +462,8 @@ public class DossierViewingTests
         public Task<Pegaxus.Service.DocumentStorageService.StoredDocumentFile> UploadAsync(Guid versionId, int sortOrder, Microsoft.AspNetCore.Http.IFormFile file, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Pegaxus.Service.DocumentStorageService.SignedDocumentUrl> CreateReadUrlAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task DeleteAsync(string storageUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.DocumentStorageService.StoredDocumentFile> UploadExportAsync(string fileName, string contentType, Stream content, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.DocumentStorageService.SignedDocumentUrl> CreateExportUrlAsync(string storageUrl, string fileName, DateTimeOffset expiresAt, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     private sealed class RecordingMediaService : Pegaxus.Service.MediaService.IMediaService
@@ -472,9 +474,9 @@ public class DossierViewingTests
             DownloadedUrls.Add(fileUrl);
             return Task.FromResult(new PreviewFile("%PDF-1.7"u8.ToArray(), "application/pdf"));
         }
-        public Task<string> UploadImageAsync(Microsoft.AspNetCore.Http.IFormFile file) => throw new NotSupportedException();
-        public Task<(string FileUrl, string PublicId)> UploadFileAsync(Microsoft.AspNetCore.Http.IFormFile file) => throw new NotSupportedException();
-        public Task DeleteFileAsync(string publicId) => throw new NotSupportedException();
+        public Task<ConfirmedUploadResult> ConfirmAvatarAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> UploadPrivateImageAsync(Guid imageId, PreviewFile image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task DeletePrivateImageAsync(Guid imageId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<SignedUploadResult> CreateSignedUploadAsync(Guid accountId, string entity, string contentType, long sizeBytes) => throw new NotSupportedException();
         public Task<ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Pegaxus.Service.DocumentStorageService.SignedDocumentUrl> CreateReadUrlAsync(string fileUrl, CancellationToken cancellationToken = default) => throw new NotSupportedException();

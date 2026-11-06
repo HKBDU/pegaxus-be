@@ -39,6 +39,7 @@ public class DocumentUploadTests
             requirement.DossierRequirementId, ValidRequest(dossier));
 
         Assert.Equal(assigned.AccountId, (await db.AccountNotifications.SingleAsync()).AccountId);
+        Assert.Empty(await EmailOutboxWiringTests.EmailsAsync(db));
     }
 
     [Fact]
@@ -267,7 +268,7 @@ public class DocumentUploadTests
         var request = ValidRequest(dossier);
         request.Files = invalid switch
         {
-            "large" => [File("passport.pdf", "application/pdf", 5 * 1024 * 1024 + 1)],
+            "large" => [File("passport.pdf", "application/pdf", 10 * 1024 * 1024 + 1)],
             "mime" => [File("passport.pdf", "application/zip")],
             "extension" => [File("passport.exe", "application/pdf")],
             "empty" => [File("passport.pdf", "application/pdf", 0)],
@@ -277,7 +278,7 @@ public class DocumentUploadTests
         var storage = new RecordingStorage();
         var error = await Assert.ThrowsAnyAsync<Pegaxus.Service.Exceptions.Exceptions>(() => CreateService(db, storage).UploadDocumentAsync(account.AccountId,
             dossier.ComplianceDossierId, requirement.DossierRequirementId, request));
-        if (invalid == "large") Assert.Equal("File size exceeds the maximum limit of 5MB. Please compress your file.", error.Message);
+        if (invalid == "large") Assert.Equal("File size exceeds the maximum limit of 10MB. Please compress your file.", error.Message);
         if (invalid is "mime" or "extension") Assert.Equal("Invalid file format. Only PDF, JPG, JPEG, and PNG files are accepted for DocumentVersion.", error.Message);
         Assert.Empty(storage.Uploaded);
         Assert.Empty(await db.ComplianceDocuments.ToListAsync());
@@ -452,9 +453,9 @@ public class DocumentUploadTests
         public int? FailAtFile { get; init; }
         public Func<Task>? AfterUpload { get; init; }
         public Task<StoredDocumentFile> UploadAsync(Guid versionId, int sortOrder, IFormFile file, CancellationToken cancellationToken = default) => throw new NotSupportedException("UC21/UC22 must not upload binary files again.");
-        public Task<string> UploadImageAsync(IFormFile file) => throw new NotSupportedException();
-        public Task<(string FileUrl, string PublicId)> UploadFileAsync(IFormFile file) => throw new NotSupportedException();
-        public Task DeleteFileAsync(string publicId) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.MediaService.ConfirmedUploadResult> ConfirmAvatarAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<string> UploadPrivateImageAsync(Guid imageId, Pegaxus.Service.MediaService.PreviewFile image, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task DeletePrivateImageAsync(Guid imageId, CancellationToken cancellationToken = default) => throw new NotSupportedException();
         public Task<Pegaxus.Service.MediaService.SignedUploadResult> CreateSignedUploadAsync(Guid accountId, string entity, string contentType, long sizeBytes) => throw new NotSupportedException();
         public Task<Pegaxus.Service.MediaService.ConfirmedUploadResult> ConfirmUploadAsync(Guid accountId, string publicId, CancellationToken cancellationToken = default)
         {
@@ -477,6 +478,8 @@ public class DocumentUploadTests
             Deleted.Add(storageUrl);
             return Task.CompletedTask;
         }
+        public Task<Pegaxus.Service.DocumentStorageService.StoredDocumentFile> UploadExportAsync(string fileName, string contentType, Stream content, CancellationToken cancellationToken = default) => throw new NotSupportedException();
+        public Task<Pegaxus.Service.DocumentStorageService.SignedDocumentUrl> CreateExportUrlAsync(string storageUrl, string fileName, DateTimeOffset expiresAt, CancellationToken cancellationToken = default) => throw new NotSupportedException();
     }
 
     internal sealed class LostCommitTransactionManager : IDbContextTransactionManager

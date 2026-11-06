@@ -39,6 +39,8 @@ public partial class HorseHealthIncidentDetail
 
     public bool? HorseTransportable { get; set; }
 
+    public bool IsolationRequired { get; set; }
+
     public string? OutcomeNote { get; set; }
 
     public DateTime CreatedAt { get; set; }
@@ -48,4 +50,6 @@ public partial class HorseHealthIncidentDetail
     public virtual Horse Horse { get; set; } = null!;
 
     public virtual IncidentReport IncidentReport { get; set; } = null!;
+
+    public virtual ICollection<IncidentPhoto> IncidentPhotos { get; set; } = new List<IncidentPhoto>();
 }
