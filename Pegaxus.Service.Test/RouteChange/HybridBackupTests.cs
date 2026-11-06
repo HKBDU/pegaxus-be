@@ -54,6 +54,49 @@ public class HybridBackupTests
     }
 
     [Fact]
+    public async Task Rp1_SeaOrAirSegment_CannotUseACompanyVehicle_ButCanBeOutsourced()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await CreateFixtureAsync(db);
+        var (completed, _) = await PrimaryRoutesAsync(db, f);
+        var vehicle = await db.Vehicles.SingleAsync();
+        f.Alternative.TransportMode = TransportMode.SEA;
+        var provider = new TransportProvider { TransportProviderId = Guid.NewGuid(), ProviderCode = "FERRY", ProviderName = "Ferry line",
+            SupportedModes = "SEA", Status = ProviderStatus.ACTIVE };
+        db.Add(provider);
+        await db.SaveChangesAsync();
+        var service = TestSupport.CreateRoutePlans(db);
+
+        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, Backup(
+            Segment(1, "PRIMARY", completed, -3, -1),
+            Segment(2, "BACKUP", f.Alternative, 0, 2, vehicle.VehicleId))));
+        Assert.Equal("SEGMENT_REQUIRES_OUTSOURCING", error.ErrorCode);
+
+        var outsourced = Segment(2, "BACKUP", f.Alternative, 0, 2);
+        outsourced.Outsourcing = new() { TransportProviderId = provider.TransportProviderId };
+        var result = await service.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, Backup(Segment(1, "PRIMARY", completed, -3, -1), outsourced));
+        Assert.True(result.Segments[1].IsOutsourced);
+    }
+
+    [Fact]
+    public async Task Rp1_CrossBorderBackup_NeedsNeitherABorderPointNorARestStop()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await CreateFixtureAsync(db);
+        f.Transport.Booking.DestinationCountry = "GB";
+        await db.SaveChangesAsync();
+        var (completed, _) = await PrimaryRoutesAsync(db, f);
+
+        // A long road leg with no rest and no border point used to fail with REST_RULE_VIOLATION or BCP_REQUIRED.
+        var result = await TestSupport.CreateRoutePlans(db).CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, Backup(
+            Segment(1, "PRIMARY", completed, -3, -1),
+            Segment(2, "BACKUP", f.Alternative, 0, 30)));
+
+        Assert.Equal("DRAFT", result.Status);
+        Assert.Equal(2, result.Segments.Count);
+    }
+
+    [Fact]
     public async Task Rp1_OmittedSegmentTypes_FallBackToThePlanType()
     {
         await using var db = TestSupport.CreateDb();
