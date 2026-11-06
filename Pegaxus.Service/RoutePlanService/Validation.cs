@@ -119,11 +119,12 @@ public sealed partial class Service
         }
         if (request.VehicleIds.Count == 0)
             return;
+        // The company fleet only has road vehicles, so a sea or air segment is always carried by a transport provider.
+        if (route.TransportMode != TransportMode.ROAD)
+            throw new UnprocessableEntityException("Sea and air segments must be outsourced to a transport provider.", "SEGMENT_REQUIRES_OUTSOURCING");
         var vehicles = db.Vehicles.Where(item => request.VehicleIds.Contains(item.VehicleId) && !item.IsDeleted).ToList();
         if (vehicles.Count != request.VehicleIds.Distinct().Count())
             throw new NotFoundException("Vehicle not found", "VEHICLE_NOT_FOUND");
-        if (vehicles.Any(item => item.TransportMode != route.TransportMode))
-            throw new UnprocessableEntityException("The vehicle transport mode does not match the segment", "VEHICLE_MODE_MISMATCH");
         // An IN_USE vehicle is mid-trip: whether it is free for this plan is decided by the schedule check below, not by its flag.
         if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED or VehicleStatus.IN_USE)))
             throw new UnprocessableEntityException("The vehicle is not available", "VEHICLE_UNAVAILABLE");
@@ -164,15 +165,6 @@ public sealed partial class Service
             if (segments[index].Request.PlannedDepartureAt < segments[index - 1].Request.PlannedArrivalAt)
                 throw new UnprocessableEntityException("A segment cannot depart before the previous segment arrives", "SEGMENT_TIME_OVERLAP");
         }
-        if (plan.Transport.Booking.OriginCountry != plan.Transport.Booking.DestinationCountry && !segments.Any(item =>
-                item.Route.FromLocation.LocationType is LocationType.BORDER_GATE or LocationType.AIRPORT or LocationType.SEAPORT ||
-                item.Route.ToLocation.LocationType is LocationType.BORDER_GATE or LocationType.AIRPORT or LocationType.SEAPORT))
-            throw new UnprocessableEntityException("A cross-border transport requires at least one border control point", "BCP_REQUIRED");
-        var restFailure = RouteRestRules.Evaluate(segments.Select(item => new RouteRestRules.Leg(
-            item.Request.PlannedDepartureAt.UtcDateTime, item.Request.PlannedArrivalAt.UtcDateTime, item.Route.TransportMode,
-            item.Route.FromLocation.LocationType, item.Route.ToLocation.LocationType)).ToArray()).FirstOrDefault(check => !check.Passed);
-        if (restFailure is not null)
-            throw new UnprocessableEntityException(restFailure.Message, "REST_RULE_VIOLATION");
         if (routeType == RouteType.BACKUP && primary is not null)
         {
             var primarySegments = primary.RoutePlanRoutes.OrderBy(item => item.SequenceNo).ToList();
