@@ -51,6 +51,8 @@ public sealed partial class Service
         ValidateFields(request, updateItemValidator);
         await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
         var list = await LockListAsync(priceListId, cancellationToken);
+        // An active list is what quotations are built from, so no line of it changes: clone the list, edit the copy and activate it.
+        if (list.IsActive) throw Locked();
         var item = await db.PriceListItems.SingleOrDefaultAsync(entry => entry.PriceListId == priceListId && entry.PriceListItemId == priceListItemId, cancellationToken)
             ?? throw ItemNotFound();
         await db.Entry(item).ReloadAsync(cancellationToken);
@@ -60,8 +62,6 @@ public sealed partial class Service
         var type = PriceListService.Validator.PriceListRules.ParseType(request.ItemType)!.Value;
         var unit = request.Unit.Trim().ToUpperInvariant();
         var sortOrder = request.SortOrder ?? item.SortOrder;
-        // An active list may change what a line is called and costs, but not what the line is (unit, type, order).
-        if (list.IsActive && (type != item.ItemType || unit != item.Unit || sortOrder != item.SortOrder)) throw Locked();
 
         var before = Snapshot(item);
         item.ItemName = request.ItemName.Trim();
@@ -73,9 +73,6 @@ public sealed partial class Service
         var after = Snapshot(item);
         if (before.RootElement.GetRawText() != after.RootElement.GetRawText())
         {
-            if (list.IsActive)
-                EnsureTiers((await db.PriceListItems.AsNoTracking().Where(entry => entry.PriceListId == priceListId && entry.PriceListItemId != priceListItemId)
-                    .ToListAsync(cancellationToken)).Append(item));
             item.UpdatedAt = NextVersion(item.UpdatedAt);
             Audit(nameof(PriceListItem), item.PriceListItemId, "UPDATE", actorAccountId, $"Changed {item.ItemCode} in price list {priceListId}", before, after, item.UpdatedAt);
             await SaveItemsAsync(cancellationToken);

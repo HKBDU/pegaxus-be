@@ -2482,7 +2482,7 @@ Table CatalogAuditLog {
 //////////////////////////////////////////////////////////////
 
 Table PriceList {
-  Note: 'PriceList: Bảng giá định mức dùng để sinh dòng phí cho hóa đơn QUOTATION, DEPOSIT, FINAL. Tại mỗi thời điểm chỉ có đúng một bảng is_active = true (partial unique index). Bảng đang active bị khóa: không sửa header, không thêm/xóa dòng giá; muốn đổi thì clone, sửa bản sao rồi kích hoạt. Mỗi thay đổi được ghi vào CatalogAuditLog.'
+  Note: 'PriceList: Bảng giá định mức dùng để sinh dòng phí cho hóa đơn QUOTATION, DEPOSIT, FINAL. Tại mỗi thời điểm chỉ có đúng một bảng is_active = true (partial unique index). Bảng đang active bị khóa: không sửa header, không thêm/sửa/xóa dòng giá; muốn đổi thì clone, sửa bản sao rồi kích hoạt. Mỗi thay đổi được ghi vào CatalogAuditLog.'
 
   price_list_id uuid [pk]
 

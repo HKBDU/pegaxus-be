@@ -150,8 +150,8 @@ public sealed class PriceListsController(PriceLists.IPriceListService service) :
     /// Update a line of a price list.
     /// </summary>
     /// <remarks>
-    /// itemCode cannot change. On an active list only itemName, unitPrice and vehicleTier may change (itemType, unit and sortOrder return 422 ACTIVE_PRICELIST_LOCKED),
-    /// and the list must still have a line for each tier. Invoices already created keep their prices. A stale lastUpdatedAt returns 409 PRICE_LIST_ITEM_MODIFIED.
+    /// itemCode cannot change. Only inactive price lists can be edited: a line of an active list returns 422 ACTIVE_PRICELIST_LOCKED, so clone the list,
+    /// edit the copy and activate it. Invoices already created keep their prices. A stale lastUpdatedAt returns 409 PRICE_LIST_ITEM_MODIFIED.
     /// </remarks>
     /// <param name="priceListId">The price list identifier (UUID).</param>
     /// <param name="priceListItemId">The line identifier (UUID).</param>
@@ -161,7 +161,7 @@ public sealed class PriceListsController(PriceLists.IPriceListService service) :
     /// <exception cref="BadRequestException">The request fields are invalid.</exception>
     /// <exception cref="NotFoundException">The price list or line does not exist.</exception>
     /// <exception cref="ConflictException">The line was changed since it was read.</exception>
-    /// <exception cref="UnprocessableEntityException">ACTIVE_PRICELIST_LOCKED or PRICE_LIST_TIER_MISSING.</exception>
+    /// <exception cref="UnprocessableEntityException">ACTIVE_PRICELIST_LOCKED.</exception>
     [HttpPut("{priceListId:guid}/items/{priceListItemId:guid}")]
     [EnableRateLimiting(RateLimitingExtensions.PriceListItemPolicy)]
     public async Task<IActionResult> UpdateItem(Guid priceListId, Guid priceListItemId, [FromBody] PriceLists.Request.UpdateItemRequest request,
