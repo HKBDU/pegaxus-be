@@ -281,7 +281,8 @@ public sealed partial class Service
                 bookingCode: booking.BookingCode,
                 transportCode: transport.TransportCode,
                 departureDate: booking.RequestedDepartureDate,
-                actionUrl: NotificationLinks.Booking(null, booking.BookingId))
+                actionUrl: NotificationLinks.Booking(null, booking.BookingId),
+                contactName: employee.FullName)
         };
         if (OutboxQueue.IsEnabled(_db))
             OutboxQueue.AddEmail(_db, approvalMail, now);
@@ -337,7 +338,8 @@ public sealed partial class Service
                 customerName: booking.Customer.FullName,
                 bookingCode: booking.BookingCode,
                 reason: reason,
-                actionUrl: NotificationLinks.Booking(null, booking.BookingId))
+                actionUrl: NotificationLinks.Booking(null, booking.BookingId),
+                contactName: employee.FullName)
         };
         if (OutboxQueue.IsEnabled(_db))
             OutboxQueue.AddEmail(_db, rejectionMail, now);

@@ -11,9 +11,13 @@ public static partial class EmailBodies
         _ => "Transport plan updated"
     };
 
-    /// <summary>Transport plan emails: a staff member was assigned, personnel changed, or the plan was updated.</summary>
+    /// <summary>
+    /// Transport plan emails: a staff member was assigned, personnel changed, or the plan was updated. For a customer pass
+    /// <paramref name="bookingCode"/>: the email then names the booking instead of the internal plan code.
+    /// </summary>
     public static string TransportPlanBody(
-        string recipientName, string planCode, TransportPlanMailKind kind, string? detail, string? actionUrl)
+        string recipientName, string planCode, TransportPlanMailKind kind, string? detail, string? actionUrl,
+        string? bookingCode = null, string? contactName = null)
     {
         var (message, tone, pill, noteLabel) = kind switch
         {
@@ -22,7 +26,10 @@ public static partial class EmailBodies
             _ => ("This transport plan was updated.", Tone.Info, "Updated", "Reason")
         };
         var title = TransportPlanTitle(kind);
-        return Notice(title, title, planCode, recipientName, Encode(message), tone, pill,
-            [Row("Plan code", Accent(planCode))], detail, noteLabel, actionUrl, "View transport plan");
+        return bookingCode is null
+            ? Notice(title, title, planCode, recipientName, Encode(message), tone, pill,
+                [Row("Plan code", Accent(planCode))], detail, noteLabel, actionUrl, "View transport plan")
+            : Notice(title, title, bookingCode, recipientName, Encode(message), tone, pill,
+                [Row("Booking code", Accent(bookingCode))], detail, noteLabel, actionUrl, "View booking", contactName: contactName);
     }
 }

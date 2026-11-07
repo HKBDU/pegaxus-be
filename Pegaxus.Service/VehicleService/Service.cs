@@ -78,6 +78,9 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             "vehiclecode:desc" => query.OrderByDescending(x => x.VehicleCode),
             "capacityhorses:asc" => query.OrderBy(x => x.CapacityHorses),
             "capacityhorses:desc" => query.OrderByDescending(x => x.CapacityHorses),
+            // Smallest truck first (pair it with minCapacity = horse count), an idle truck before one already assigned, so a small booking does not take a big truck.
+            "bestfit" => query.OrderBy(x => x.CapacityHorses == null).ThenBy(x => x.CapacityHorses)
+                .ThenBy(x => x.Status != VehicleStatus.AVAILABLE).ThenBy(x => x.VehicleCode),
             "updatedat:asc" => query.OrderBy(x => x.UpdatedAt),
             "updatedat:desc" => query.OrderByDescending(x => x.UpdatedAt),
             _ => query.OrderBy(x => x.VehicleCode)

@@ -58,6 +58,9 @@ public static partial class EmailBodies
 
     private const string BodyStyle = "font-size:15.5px;line-height:1.65;";
 
+    /// <summary>The system hotline shown in every email footer. Customers call it instead of using an in-app support request.</summary>
+    public const string SupportPhone = "0961556885";
+
     // ── layout ───────────────────────────────────────────────────────────────
 
     private static string Header(string title, string preheader) => $"""
@@ -90,6 +93,7 @@ public static partial class EmailBodies
     private static string Footer() => $"""
                     </td>
                   </tr>
+                  <tr><td class="px-sub" align="center" style="padding-top:20px;font-size:13px;line-height:1.5;color:#6B726D;">Need help? Call our hotline <strong class="px-strong" style="color:#F39200;">{SupportPhone}</strong></td></tr>
                   <tr><td align="center" style="padding-top:28px;font-size:11.5px;line-height:1.5;letter-spacing:.08em;font-weight:500;text-transform:uppercase;color:#939B95;">&copy; {DateTime.UtcNow.Year} PEGAXUS LOGISTICS GROUP. ALL RIGHTS RESERVED.</td></tr>
                 </table>
               </td>
@@ -122,6 +126,14 @@ public static partial class EmailBodies
 
     private static string Muted(string text) =>
         $"""<p class="px-sub" style="margin:0px 0 0;font-size:13.5px;line-height:1.6;color:#6B726D;">{Encode(text)}</p>""";
+
+    /// <summary>
+    /// "Your Pegaxus contact: name" for customer emails, so a customer knows who looks after the booking. Empty when no
+    /// employee is assigned yet. Only the name is shown, never the employee's phone number.
+    /// </summary>
+    private static string ContactLine(string? contactName) => string.IsNullOrWhiteSpace(contactName)
+        ? ""
+        : $"""<p class="px-sub" style="margin:0 0 24px;font-size:13.5px;line-height:1.6;color:#6B726D;">Your Pegaxus contact: <strong class="px-strong" style="color:#000000;">{Encode(contactName)}</strong></p>""";
 
     private static string Pill(string cssClass, string background, string color, string text) =>
         $"""<div style="margin:0 0 24px;"><span class="{cssClass}" style="display:inline-block;padding:7px 14px;border-radius:999px;background:{background};color:{color};font-size:12px;line-height:1;font-weight:700;letter-spacing:.08em;text-transform:uppercase;">{Encode(text)}</span></div>""";
@@ -185,7 +197,7 @@ public static partial class EmailBodies
     private static string Notice(
         string title, string preheader, string? code, string? name, string messageHtml, Tone tone, string pill,
         IEnumerable<string?> rows, string? note = null, string noteLabel = "Note",
-        string? actionUrl = null, string buttonLabel = "View details", string? muted = null)
+        string? actionUrl = null, string buttonLabel = "View details", string? muted = null, string? contactName = null)
     {
         var rowList = rows.ToArray();
         return Header(title, preheader) +
@@ -196,6 +208,7 @@ public static partial class EmailBodies
                   {StatusPill(tone, pill)}
                   {(rowList.Any(row => row is not null) ? Rows(rowList) : "")}
                   {LabeledParagraph(noteLabel, note)}
+                  {ContactLine(contactName)}
                   {Button(actionUrl, buttonLabel)}
                   {(muted is null ? "" : Muted(muted))}
             """ +
