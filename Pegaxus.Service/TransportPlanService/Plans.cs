@@ -38,6 +38,9 @@ public sealed partial class Service
             .Include(item => item.Transport)
                 .ThenInclude(item => item.Booking)
                     .ThenInclude(item => item.Customer)
+            .Include(item => item.Transport)
+                .ThenInclude(item => item.Booking)
+                    .ThenInclude(item => item.AssignedEmployee)
             .Include(item => item.EmployeeTransportPlans)
                 .ThenInclude(item => item.Employee)
             .SingleOrDefaultAsync(item => item.TransportPlanId == transportPlanId, cancellationToken);
@@ -64,6 +67,7 @@ public sealed partial class Service
             ValidatePlannedStart(request.PlannedStartAt.Value, plan.Transport.Booking);
 
         var now = UtcNowTruncated();
+        var previous = (plan.OriginLocationId, plan.DestinationLocationId, plan.PlannedStartAt, plan.PlannedEndAt);
         plan.OriginLocationId = request.OriginLocationId ?? plan.OriginLocationId;
         plan.DestinationLocationId = request.DestinationLocationId ?? plan.DestinationLocationId;
         plan.PlannedStartAt = request.PlannedStartAt.HasValue
@@ -102,10 +106,14 @@ public sealed partial class Service
                 ActionUrl = recipient.Url,
                 CreatedAt = now
             });
-        await MailService.MailRecipients.QueueAsync(db, [plan.Transport.Booking.Customer.AccountId], now, recipient => MailService.MailRecipients.Mail(recipient,
-            $"{MailService.EmailBodies.TransportPlanTitle(MailService.EmailBodies.TransportPlanMailKind.Updated)} — {plan.PlanCode}",
-            MailService.EmailBodies.TransportPlanBody(recipient.FullName, plan.PlanCode, MailService.EmailBodies.TransportPlanMailKind.Updated, reason,
-                NotificationLinks.Booking(null, plan.Transport.BookingId))), cancellationToken);
+        // The customer is emailed only when the trip itself moved (dates, origin or destination); an internal note change stays in-app.
+        // The email names the booking, not the internal plan code.
+        var tripChanged = previous != (plan.OriginLocationId, plan.DestinationLocationId, plan.PlannedStartAt, plan.PlannedEndAt);
+        if (tripChanged)
+            await MailService.MailRecipients.QueueAsync(db, [plan.Transport.Booking.Customer.AccountId], now, recipient => MailService.MailRecipients.Mail(recipient,
+                $"{MailService.EmailBodies.TransportPlanTitle(MailService.EmailBodies.TransportPlanMailKind.Updated)} — {plan.Transport.Booking.BookingCode}",
+                MailService.EmailBodies.TransportPlanBody(recipient.FullName, plan.PlanCode, MailService.EmailBodies.TransportPlanMailKind.Updated, reason,
+                    NotificationLinks.Booking(null, plan.Transport.BookingId), plan.Transport.Booking.BookingCode, plan.Transport.Booking.AssignedEmployee?.FullName)), cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)

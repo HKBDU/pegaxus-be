@@ -71,7 +71,7 @@ public class HorseHealthLogHttpTests
         Assert.Equal("CRITICAL", replayValue.GetProperty("healthStatus").GetString());
         Assert.False(replayValue.GetProperty("effects").GetProperty("emergencyNotified").GetBoolean());
         Assert.False(replayValue.GetProperty("effects").GetProperty("canReportIncident").GetBoolean());
-        Assert.Single(f.Storage.Confirmations); Assert.Equal(2, await db.Notifications.CountAsync()); Assert.Empty(db.IncidentReports);
+        Assert.Single(f.Storage.Confirmations); Assert.Equal(3, await db.Notifications.CountAsync()); Assert.Empty(db.IncidentReports);
     }
 
     [Fact]
