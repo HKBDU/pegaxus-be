@@ -26,7 +26,7 @@ public sealed class ListRequestValidator : AbstractValidator<Request.ListRequest
             .WithMessage("availableTo must not be earlier than availableFrom, and both are required together.")
             .WithErrorCode("INVALID_DATE_RANGE").OverridePropertyName("availableFrom");
         RuleFor(x => x.SortBy).Must(x => new[] { "vehiclecode:asc", "vehiclecode:desc", "capacityhorses:asc",
-            "capacityhorses:desc", "updatedat:asc", "updatedat:desc" }.Contains(x?.Trim().ToLowerInvariant()))
+            "capacityhorses:desc", "updatedat:asc", "updatedat:desc", "bestfit" }.Contains(x?.Trim().ToLowerInvariant()))
             .WithMessage("The sort parameter is invalid.").WithErrorCode("INVALID_SORT_PARAMETER");
     }
 }

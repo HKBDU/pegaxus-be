@@ -34,7 +34,7 @@ public class HorseHealthLogPostgresTests
                 var result = await CreateService(writer, f.Storage, TestSupport.CreateNotifications(writer)).CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId);
                 Assert.True(result.Created); Assert.True(result.Value.Effects.EmergencyNotified);
                 Assert.Equal(38.2m, result.Value.TemperatureCelsius); Assert.Equal(Storage.SignedUrl, Assert.Single(result.Value.Photos).PhotoUrl);
-                Assert.Equal(1, audit.Calls); Assert.Equal((1, 2, 2), audit.Added);
+                Assert.Equal(1, audit.Calls); Assert.Equal((1, 3, 4), audit.Added);
             }
             await using (var writer = new AppDbContext(options))
             {
@@ -55,8 +55,8 @@ public class HorseHealthLogPostgresTests
                 var logs = await verify.HorseHealthLogs.ToArrayAsync(); Assert.Equal(4, logs.Length);
                 Assert.All(logs, log => { Assert.Equal(DateTimeKind.Unspecified, log.CheckedAt.Kind); Assert.Equal(0, log.CheckedAt.Ticks % 10); });
                 Assert.Single(logs.Where(log => log.LogType == HorseHealthLogType.OTHER).SelectMany(log => log.PhotoUrls).Distinct());
-                Assert.Equal(2, await verify.Notifications.CountAsync()); Assert.Equal(2, await verify.AccountNotifications.CountAsync());
-                Assert.Equal(2, await verify.OutboxMessages.CountAsync()); Assert.Empty(await verify.IncidentReports.ToListAsync());
+                Assert.Equal(3, await verify.Notifications.CountAsync()); Assert.Equal(3, await verify.AccountNotifications.CountAsync());
+                Assert.Equal(4, await verify.OutboxMessages.CountAsync()); Assert.Empty(await verify.IncidentReports.ToListAsync());
             }
             Assert.Equal(2, f.Storage.Confirmations.Count); Assert.Empty(f.Storage.Deletes);
             foreach (var failure in new[] { "upload", "save", "sign", "batch" })
@@ -71,8 +71,8 @@ public class HorseHealthLogPostgresTests
                 else await Assert.ThrowsAsync<IOException>(() => service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId));
                 Assert.Single(storage.Confirmations); Assert.Empty(storage.Deletes);
                 await using var verify = new AppDbContext(options);
-                Assert.Equal(4, await verify.HorseHealthLogs.CountAsync()); Assert.Equal(2, await verify.Notifications.CountAsync());
-                Assert.Equal(2, await verify.AccountNotifications.CountAsync()); Assert.Equal(2, await verify.OutboxMessages.CountAsync());
+                Assert.Equal(4, await verify.HorseHealthLogs.CountAsync()); Assert.Equal(3, await verify.Notifications.CountAsync());
+                Assert.Equal(3, await verify.AccountNotifications.CountAsync()); Assert.Equal(4, await verify.OutboxMessages.CountAsync());
             }
             var retained = new Storage();
             var uncertainRequest = f.Request(); uncertainRequest.CheckedAt = Fixture.CheckTime.AddHours(-2);
@@ -83,8 +83,8 @@ public class HorseHealthLogPostgresTests
             Assert.Single(retained.Confirmations); Assert.Empty(retained.Deletes);
             await using (var verify = new AppDbContext(options))
             {
-                Assert.Equal(5, await verify.HorseHealthLogs.CountAsync()); Assert.Equal(4, await verify.Notifications.CountAsync());
-                Assert.Equal(4, await verify.OutboxMessages.CountAsync());
+                Assert.Equal(5, await verify.HorseHealthLogs.CountAsync()); Assert.Equal(6, await verify.Notifications.CountAsync());
+                Assert.Equal(8, await verify.OutboxMessages.CountAsync());
                 var replay = await CreateService(verify, retained, TestSupport.CreateNotifications(verify)).CreateAsync(f.Transport.TransportId, uncertainRequest, f.Escort.AccountId);
                 Assert.False(replay.Created); Assert.False(replay.Value.Effects.EmergencyNotified); Assert.Single(retained.Confirmations);
             }
@@ -98,8 +98,8 @@ public class HorseHealthLogPostgresTests
             }
             await using (var verify = new AppDbContext(options))
             {
-                Assert.Equal(6, await verify.HorseHealthLogs.CountAsync()); Assert.Equal(6, await verify.Notifications.CountAsync());
-                Assert.Equal(6, await verify.OutboxMessages.CountAsync());
+                Assert.Equal(6, await verify.HorseHealthLogs.CountAsync()); Assert.Equal(9, await verify.Notifications.CountAsync());
+                Assert.Equal(12, await verify.OutboxMessages.CountAsync());
                 Assert.Contains(await verify.HorseHealthLogs.ToListAsync(), log => log.PhotoUrls.Contains(Storage.Url(retriedStorage.Confirmations[1])));
             }
             await using var stale = new AppDbContext(options);
@@ -150,7 +150,7 @@ public class HorseHealthLogPostgresTests
                 var logs = await verify.HorseHealthLogs.Where(log => log.TransportId == f.Transport.TransportId && log.CheckedAt == checkedAt).ToArrayAsync();
                 Assert.Equal(batch ? 2 : 1, logs.Length); Assert.Equal(logs.Length, logs.Select(log => log.HorseId).Distinct().Count());
                 Assert.Single(logs.SelectMany(log => log.PhotoUrls).Distinct());
-                Assert.Equal(2, await verify.Notifications.CountAsync()); Assert.Equal(2, await verify.OutboxMessages.CountAsync());
+                Assert.Equal(3, await verify.Notifications.CountAsync()); Assert.Equal(4, await verify.OutboxMessages.CountAsync());
             }
         });
     }

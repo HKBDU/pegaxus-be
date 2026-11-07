@@ -2,7 +2,7 @@ namespace Pegaxus.Service.MailService;
 
 public static partial class EmailBodies
 {
-    public static string TransportDeliveredBody(string customerName, string transportCode, DateTime completedAt, string? actionUrl, bool hasDiscrepancy = false) =>
+    public static string TransportDeliveredBody(string customerName, string transportCode, DateTime completedAt, string? actionUrl, bool hasDiscrepancy = false, string? contactName = null) =>
         Header("Transport completed", "Your horses have been delivered") +
         $"""
               {Title("Your horses have been delivered", transportCode)}
@@ -15,6 +15,7 @@ public static partial class EmailBodies
                   ? Paragraph("The handover record contains on-site notes. If anything does not match the condition of your horses, please submit a claim within 24 hours of the completed handover.")
                   : Muted("You may submit a claim within 24 hours of the completed handover."))}
               {Paragraph("The signed handover record (e-POD) can be downloaded from your transport page.")}
+              {ContactLine(contactName)}
               {Button(actionUrl, "View transport and download e-POD")}
         """ + Footer();
 }
