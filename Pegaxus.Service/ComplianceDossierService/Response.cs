@@ -357,6 +357,20 @@ public class Response
     public class AuthoritySubmissionListResponse
     {
         public IReadOnlyList<AuthoritySubmissionItemResponse> Items { get; init; } = [];
+        /// <summary>The countries on the route and the authorities a new submission may go to.</summary>
+        public RouteAuthoritiesResponse RouteAuthorities { get; init; } = new();
+    }
+
+    public sealed class RouteAuthoritiesResponse
+    {
+        public IReadOnlyList<string> RouteCountries { get; init; } = [];
+        public IReadOnlyList<CompetentAuthorityResponse> AllowedAuthorities { get; init; } = [];
+    }
+
+    public sealed class CompetentAuthorityResponse
+    {
+        public string Name { get; init; } = string.Empty;
+        public string CountryCode { get; init; } = string.Empty;
     }
 
     public class AuthoritySubmissionItemResponse

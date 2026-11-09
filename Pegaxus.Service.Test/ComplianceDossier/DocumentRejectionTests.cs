@@ -271,7 +271,7 @@ public class DocumentRejectionTests
             seed.Requirement.DossierRequirementId, seed.Version.DocumentVersionId, RejectRequest(seed.Version));
         var request = new Request.RecordAuthoritySubmissionRequest
         {
-            AuthorityName = "Authority", SubmissionReference = "REF-REJECT", SubmittedAt = DateTimeOffset.UtcNow,
+            AuthorityName = Pegaxus.Service.Common.CompetentAuthorities.All[5].Name, SubmissionReference = "REF-REJECT", SubmittedAt = DateTimeOffset.UtcNow,
             ProofFile = new() { PublicId = "evidence/proof/unused" }
         };
         await Assert.ThrowsAsync<ConflictException>(() => CreateService(db, new CaptureMailService())

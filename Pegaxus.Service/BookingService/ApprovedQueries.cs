@@ -178,6 +178,8 @@ public sealed partial class Service
             query = query.Where(booking => booking.Transport != null &&
                 booking.Transport.TransportPlans.Any(plan =>
                     plan.CreatedAt == booking.Transport.TransportPlans.Max(current => current.CreatedAt) &&
+                    // Same rule as the detail endpoint: staff only open a booking once its transport plan is approved.
+                    plan.Status == TransportPlanStatus.APPROVED &&
                     plan.EmployeeTransportPlans.Any(assignment => assignment.Employee.AccountId == accountId)));
         }
 
