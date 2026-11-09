@@ -183,4 +183,21 @@ public sealed class IncidentsController(Incidents.IIncidentService service) : Ap
     public async Task<IActionResult> FollowUpHorseAsync(Guid incidentReportId, Guid horseHealthIncidentDetailId,
         [FromBody] Incidents.Request.FollowUpHorseRequest request, CancellationToken cancellationToken) =>
         Success(await service.FollowUpHorseAsync(incidentReportId, horseHealthIncidentDetailId, request, AccountId, cancellationToken), "Horse incident follow-up added successfully");
+
+    /// <summary>Leave a horse that cannot continue at a stop of the route; the rest of the transport travels on.</summary>
+    /// <remarks>Logistics Manager only, while the transport is IN_TRANSIT and the horse incident is open. locationId must be one of the
+    /// incident's detachLocations (an end of the leg in transit, or the end of the last completed leg). The horse stays in the care of a
+    /// local veterinary facility; it is dropped from later health logs, the delivery EPOD and vehicle capacity. The customer, the crew of
+    /// every leg still to drive and the internal team are notified; the customer's notification links to a return booking.
+    /// The last travelling horse cannot be left behind.</remarks>
+    /// <param name="incidentReportId">The open horse incident.</param>
+    /// <param name="horseId">A horse that has a detail on this incident.</param>
+    /// <param name="request">Incident lastUpdatedAt, the stop and an optional note.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the incident; 409 for a stale version, a horse already left or a transport not in transit; 422 for a business rule.</returns>
+    [HttpPost("{incidentReportId}/horses/{horseId}/detach")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> DetachHorseAsync(Guid incidentReportId, Guid horseId, [FromBody] Incidents.Request.DetachHorseRequest request,
+        CancellationToken cancellationToken) =>
+        Success(await service.DetachHorseAsync(incidentReportId, horseId, request, AccountId, cancellationToken), "Horse left behind successfully");
 }

@@ -16,7 +16,19 @@ public partial class BookingHorse
 
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>Set when the horse was left behind mid-trip (it could not continue); the rest of the booking travels on.</summary>
+    public DateTime? DetachedAt { get; set; }
+
+    public Guid? DetachedIncidentReportId { get; set; }
+
+    /// <summary>The route-plan stop where the horse was left in the care of a local veterinary facility.</summary>
+    public Guid? DetachedLocationId { get; set; }
+
     public virtual Booking Booking { get; set; } = null!;
 
     public virtual Horse Horse { get; set; } = null!;
+
+    public virtual IncidentReport? DetachedIncidentReport { get; set; }
+
+    public virtual Location? DetachedLocation { get; set; }
 }

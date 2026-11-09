@@ -8,7 +8,8 @@ public static class Response
     public sealed record Escort(Guid EmployeeId, string EmployeeCode, string FullName, string Role, string? Phone);
     public sealed record LatestLog(Guid HorseHealthLogId, string LogType, string HealthStatus, string? HydrationStatus,
         DateTimeOffset CheckedAt, CheckedBy CheckedBy, string? LocationDescription, string? LatestNote, bool VeterinarianRequired);
-    public sealed record HorseOverview(HorseBrief Horse, string? LatestHealthStatus, LatestLog? LatestLog, int LogCount);
+    /// <summary><paramref name="DetachedAt"/> is set when the horse was left behind mid-trip; it is no longer logged.</summary>
+    public sealed record HorseOverview(HorseBrief Horse, string? LatestHealthStatus, LatestLog? LatestLog, int LogCount, DateTimeOffset? DetachedAt = null);
     public sealed record OverviewResponse(DateTimeOffset ServerTime, Guid TransportId, string TransportStatus,
         Escort? CurrentEscort, IReadOnlyList<HorseOverview> Horses);
     public sealed record ListItem(Guid HorseHealthLogId, HorseSummary Horse, DateTimeOffset CheckedAt, string LogType,

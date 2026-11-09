@@ -35,8 +35,12 @@ public sealed partial class Service
                 await db.LockRowsAsync(db.Transports.Where(item => item.TransportId == transportId), item => item.TransportId, cancellationToken);
                 var escortId = await GetEscortAsync(accountId, cancellationToken);
                 var bookingId = await GetTransportBookingAsync(transportId, escortId, cancellationToken);
-                var horseIds = await db.BookingHorses.AsNoTracking().Where(item => item.BookingId == bookingId && (!selectedHorseId.HasValue || item.HorseId == selectedHorseId))
-                    .OrderBy(item => item.HorseId).Select(item => item.HorseId).ToArrayAsync(cancellationToken);
+                var links = await db.BookingHorses.AsNoTracking().Where(item => item.BookingId == bookingId && (!selectedHorseId.HasValue || item.HorseId == selectedHorseId))
+                    .OrderBy(item => item.HorseId).Select(item => new { item.HorseId, item.DetachedAt }).ToArrayAsync(cancellationToken);
+                // A horse left behind mid-trip is no longer checked by this crew.
+                if (selectedHorseId.HasValue && links.Any(item => item.DetachedAt.HasValue))
+                    throw new UnprocessableEntityException("The horse has left this transport", "HORSE_DETACHED");
+                var horseIds = links.Where(item => item.DetachedAt is null).Select(item => item.HorseId).ToArray();
                 if (horseIds.Length == 0)
                     throw new UnprocessableEntityException(single is null ? "There are no horses in this transport" : "The horse does not belong to this transport",
                         single is null ? "NO_HORSES_IN_TRANSPORT" : "HORSE_NOT_IN_TRANSPORT");

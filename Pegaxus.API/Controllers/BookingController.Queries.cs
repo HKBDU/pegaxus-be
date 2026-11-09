@@ -30,6 +30,21 @@ public sealed partial class BookingController
     }
 
     /// <summary>
+    /// Get the pre-filled return booking of a horse that was left behind mid-trip.
+    /// </summary>
+    /// <remarks>Customer only, for their own transport. Origin is the stop where the horse stays; destination is the origin of the
+    /// original booking. Send returnOfTransportId and the one horse when creating the booking. existingReturnBookingId is set when
+    /// a live return booking already exists.</remarks>
+    /// <param name="returnOfTransportId">The transport that left the horse behind.</param>
+    /// <param name="horseId">The horse that was left behind.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the pre-filled values; 404 when no such horse was left behind.</returns>
+    [HttpGet("return-draft")]
+    [Authorize(Policy = JwtExtensions.CustomerPolicy)]
+    public async Task<IActionResult> GetReturnDraft([FromQuery] Guid returnOfTransportId, [FromQuery] Guid horseId, CancellationToken cancellationToken) =>
+        Success(await _service.GetReturnDraftAsync(AccountId, returnOfTransportId, horseId, cancellationToken), "Return booking draft retrieved successfully");
+
+    /// <summary>
     /// List approved bookings for transport planning and compliance work.
     /// </summary>
     /// <remarks>Transport Specialists and Fleet Route Coordinators can search, filter, sort, and paginate bookings. The response includes the latest transport plan route and compliance dossier summaries when available.</remarks>

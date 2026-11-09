@@ -132,6 +132,27 @@ public class Response
         public IReadOnlyList<RequirementResponse> TripRequirements { get; init; } = [];
         public IReadOnlyList<HorseRequirementsResponse> HorseRequirements { get; init; } = [];
         public ActionsResponse Actions { get; init; } = new();
+        /// <summary>Set when the booking is a return booking: the original trip, whose documents can be reused.</summary>
+        public ReturnSourceResponse? ReturnOf { get; init; }
+    }
+
+    public sealed class ReturnSourceResponse
+    {
+        public Guid TransportId { get; init; }
+        public string TransportCode { get; init; } = string.Empty;
+        public Guid BookingId { get; init; }
+        public string BookingCode { get; init; } = string.Empty;
+        public Guid? DossierId { get; init; }
+        public string? DossierCode { get; init; }
+        public string? HorseName { get; init; }
+    }
+
+    public sealed class WaiveForReturnResponse
+    {
+        public Guid ComplianceDossierId { get; init; }
+        public int WaivedCount { get; init; }
+        public int RequirementCount { get; init; }
+        public ReturnSourceResponse ReturnOf { get; init; } = new();
     }
 
     public sealed class DossierSummaryResponse

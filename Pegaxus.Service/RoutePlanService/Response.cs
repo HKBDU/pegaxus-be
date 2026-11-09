@@ -1,3 +1,5 @@
+using Pegaxus.Service.Common;
+
 namespace Pegaxus.Service.RoutePlanService;
 
 public static class Response
@@ -204,4 +206,10 @@ public static class Response
         public required string FullName { get; init; }
         public required string Role { get; init; }
     }
+
+    /// <summary>One reversed leg of the original trip; times, vehicles and staff are left for the coordinator.</summary>
+    public sealed record ReturnTemplateSegment(int SequenceNo, LocationBrief FromLocation, LocationBrief ToLocation, string TransportMode,
+        decimal? DistanceKm, int? EstimatedDurationMinutes);
+
+    public sealed record ReturnTemplateResponse(Guid SourceTransportId, string SourceTransportCode, IReadOnlyList<ReturnTemplateSegment> Segments);
 }
