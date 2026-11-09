@@ -96,7 +96,7 @@ public sealed partial class Service
                 route.ToLocation = to;
                 if (!route.DistanceKm.HasValue || !route.EstimatedDurationMinutes.HasValue)
                 {
-                    var metrics = await routeService.CalculateMetricsAsync(from, to, mode, cancellationToken);
+                    var metrics = await MetricsAsync(from, to, mode, cancellationToken);
                     route.DistanceKm = metrics.DistanceKm;
                     route.EstimatedDurationMinutes = metrics.DurationMinutes;
                 }
