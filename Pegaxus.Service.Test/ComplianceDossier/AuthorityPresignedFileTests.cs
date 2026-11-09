@@ -63,7 +63,7 @@ public class AuthorityPresignedFileTests
 
     private static DossierRequest.RecordAuthoritySubmissionRequest Submission(Pegaxus.Service.UploadService.Request.UploadedAssetReference? proof) => new()
     {
-        AuthorityName = "Authority", SubmissionReference = "REF-" + Guid.NewGuid().ToString("N")[..8], SubmittedAt = DateTimeOffset.UtcNow, ProofFile = proof
+        AuthorityName = Pegaxus.Service.Common.CompetentAuthorities.All[5].Name, SubmissionReference = "REF-" + Guid.NewGuid().ToString("N")[..8], SubmittedAt = DateTimeOffset.UtcNow, ProofFile = proof
     };
 
     internal static async Task<(Guid Specialist, Guid DossierId)> SeedAsync(Pegaxus.Repository.AppDbContext db)
