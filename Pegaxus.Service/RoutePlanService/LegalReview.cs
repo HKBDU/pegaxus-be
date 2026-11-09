@@ -64,6 +64,13 @@ public sealed partial class Service
         var validSequences = routePlan.RoutePlanRoutes.Select(item => item.SequenceNo).ToHashSet();
         if (request.BlockedSegments.Any(sequence => !validSequences.Contains(sequence)))
             throw new BadRequestException("blockedSegments contains an unknown sequenceNo");
+        // The primary and the backups the coordinator submitted with it are one decision: approved together or sent back together.
+        var submittedBackups = routeType == RouteType.PRIMARY ? SubmittedBackups(routePlan) : [];
+        if (request.BlockedBackupSegments.Any(blocked => submittedBackups.SingleOrDefault(item => item.RoutePlanId == blocked.RoutePlanId) is not { } backup ||
+                backup.RoutePlanRoutes.All(item => item.SequenceNo != blocked.SequenceNo)))
+            throw new BadRequestException("blockedBackupSegments must name a segment of a backup submitted with this primary", "UNKNOWN_BACKUP_SEGMENT");
+        if (request.IsFeasible && (request.BlockedSegments.Count > 0 || request.BlockedBackupSegments.Count > 0))
+            throw new BadRequestException("A route plan with blocked segments is not feasible", "BLOCKED_SEGMENTS_REQUIRE_REJECTION");
 
         var transport = routePlan.TransportPlan.Transport;
         var dossier = routeType == RouteType.RETURN ? transport.ExtraDossier : transport.MainDossier;
@@ -91,9 +98,10 @@ public sealed partial class Service
             {
                 SetDossierStatus(dossier!, ComplianceDossierStatus.IN_PREPARATION, now);
                 AddDossierAudit(dossier!, reviewer, "ROUTE_PLAN_LEGAL_REVIEW_APPROVED", routePlan, request, now, "Route Plan is legally feasible.");
-                confirmedBackups = routePlan.TransportPlan.RoutePlans
-                    .Where(item => item.RoutePlanId != routePlan.RoutePlanId && item.Status == RoutePlanStatus.DRAFT && TransportItinerary.IsBackupPlan(item))
-                    .OrderBy(item => item.CreatedAt).ToList();
+                // A backup the coordinator has not submitted yet stays a draft.
+                confirmedBackups = submittedBackups.ToList();
+                foreach (var backup in confirmedBackups)
+                    AddDossierAudit(dossier!, reviewer, "ROUTE_PLAN_LEGAL_REVIEW", backup, ReviewOf(request, []), now, "Legal feasibility review recorded with the primary.");
             }
             routePlan.Status = RoutePlanStatus.CONFIRMED;
             foreach (var backup in confirmedBackups)
@@ -113,11 +121,20 @@ public sealed partial class Service
         else if (auditDossier is not null)
         {
             AddDossierAudit(auditDossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW_REJECTED", routePlan, request, now, "Route Plan requires revision.");
+            // Each backup keeps only its own blocked segments, so the coordinator sees them on the plan they belong to.
+            foreach (var backup in submittedBackups)
+            {
+                var blocked = request.BlockedBackupSegments.Where(item => item.RoutePlanId == backup.RoutePlanId).Select(item => item.SequenceNo).ToList();
+                AddDossierAudit(auditDossier, reviewer, "ROUTE_PLAN_LEGAL_REVIEW", backup, ReviewOf(request, blocked), now, "Legal feasibility review recorded with the primary.");
+                backup.SubmittedForReviewAt = null;
+                backup.UpdatedAt = now;
+            }
         }
+        var rejectedBackups = request.IsFeasible ? [] : submittedBackups;
         // The request is answered either way: a confirmed plan is done, a rejected one must be revised and submitted again.
         routePlan.SubmittedForReviewAt = null;
         routePlan.UpdatedAt = now;
-        await QueueLegalReviewNotificationsAsync(routePlan, reviewer, routeType, request, now, cancellationToken);
+        await QueueLegalReviewNotificationsAsync(routePlan, submittedBackups, reviewer, routeType, request, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
@@ -138,6 +155,7 @@ public sealed partial class Service
             LegalReviewRequested = false,
             LegalReviewRequestedAt = null,
             ConfirmedBackupRoutePlanIds = confirmedBackups.Select(item => item.RoutePlanId).ToList(),
+            RejectedBackupRoutePlanIds = rejectedBackups.Select(item => item.RoutePlanId).ToList(),
             CustomerUploadEnabled = request.IsFeasible && routeType != RouteType.BACKUP,
             PersonnelAssignmentPhase2Enabled = request.IsFeasible && routeType == RouteType.PRIMARY,
             UpdatedAt = AsUtc(routePlan.UpdatedAt)
@@ -223,9 +241,11 @@ public sealed partial class Service
             dossier.ReadyForSubmissionAt = now;
     }
 
-    private async Task QueueLegalReviewNotificationsAsync(RoutePlan routePlan, Employee reviewer, RouteType routeType, Request.LegalReviewRequest request,
-        DateTime now, CancellationToken cancellationToken)
+    private async Task QueueLegalReviewNotificationsAsync(RoutePlan routePlan, IReadOnlyList<RoutePlan> backups, Employee reviewer, RouteType routeType,
+        Request.LegalReviewRequest request, DateTime now, CancellationToken cancellationToken)
     {
+        var codes = backups.Count == 0 ? routePlan.RoutePlanCode
+            : $"{routePlan.RoutePlanCode} (with backup {string.Join(", ", backups.Select(item => item.RoutePlanCode))})";
         var staff = new Dictionary<Guid, EmployeeRole>();
         var transport = routePlan.TransportPlan.Transport;
         var customer = transport.Booking.Customer.AccountId;
@@ -266,8 +286,8 @@ public sealed partial class Service
             });
 
         var staffMessage = request.IsFeasible
-            ? $"Route plan {routePlan.RoutePlanCode} passed legal review and is confirmed."
-            : $"Route plan {routePlan.RoutePlanCode} needs revision after legal review. Reviewer note: {request.Note}";
+            ? $"Route plan {codes} passed legal review and is confirmed."
+            : $"Route plan {codes} needs revision after legal review. Revise and submit them again together. Reviewer note: {request.Note}";
         foreach (var recipient in staff.Where(item => item.Key != reviewer.AccountId && !(notifyCustomer && item.Key == customer)))
             Notify(recipient.Key, NotificationLinks.RoutePlan(recipient.Value, routePlan.RoutePlanId), staffMessage);
         if (notifyCustomer && customer != reviewer.AccountId)
@@ -280,7 +300,7 @@ public sealed partial class Service
             var revisionKind = MailService.EmailBodies.RouteReviewKind.RevisionRequired;
             await MailService.MailRecipients.QueueAsync(db, staff.Keys.Where(id => id != reviewer.AccountId), now, recipient => MailService.MailRecipients.Mail(recipient,
                 $"{MailService.EmailBodies.RouteReviewTitle(revisionKind)} — {routePlan.RoutePlanCode}",
-                MailService.EmailBodies.RouteReviewBody(recipient.FullName, routePlan.RoutePlanCode, revisionKind, request.Note,
+                MailService.EmailBodies.RouteReviewBody(recipient.FullName, codes, revisionKind, request.Note,
                     NotificationLinks.RoutePlan(recipient.Role, routePlan.RoutePlanId))), cancellationToken);
         }
         else if (notifyCustomer && customer != reviewer.AccountId)
@@ -301,4 +321,15 @@ public sealed partial class Service
         public List<int>? BlockedSegments { get; set; }
         public DateTime ReviewedAt { get; set; }
     }
+
+    /// <summary>The backups the coordinator submitted for legal review together with this primary.</summary>
+    private static List<RoutePlan> SubmittedBackups(RoutePlan primary) => primary.TransportPlan.RoutePlans
+        .Where(item => item.RoutePlanId != primary.RoutePlanId && item.Status == RoutePlanStatus.DRAFT && item.SubmittedForReviewAt != null &&
+            TransportItinerary.IsBackupPlan(item))
+        .OrderBy(item => item.CreatedAt).ThenBy(item => item.RoutePlanId).ToList();
+
+    private static Request.LegalReviewRequest ReviewOf(Request.LegalReviewRequest request, List<int> blocked) => new()
+    {
+        LastUpdatedAt = request.LastUpdatedAt, IsFeasible = request.IsFeasible, Note = request.Note, BlockedSegments = blocked
+    };
 }
