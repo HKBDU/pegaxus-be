@@ -69,8 +69,10 @@ public sealed partial class Service
         Request.CreateBookingRequest request,
         CancellationToken cancellationToken = default)
     {
-        ValidateDates(request.RequestedDepartureDate, request.RequestedArrivalDate, request.OriginCountry, request.DestinationCountry);
-        ValidateCoordinates(request.OriginLatitude, request.OriginLongitude, request.DestinationLatitude, request.DestinationLongitude, required: true);
+        var isReturn = request.ReturnOfTransportId.HasValue;
+        // A return booking has its own date rules (ValidateReturnBookingAsync); the stop it starts from may have no coordinates.
+        if (!isReturn) ValidateDates(request.RequestedDepartureDate, request.RequestedArrivalDate, request.OriginCountry, request.DestinationCountry);
+        ValidateCoordinates(request.OriginLatitude, request.OriginLongitude, request.DestinationLatitude, request.DestinationLongitude, required: !isReturn);
         if (request.Horses is null || request.Horses.Count == 0)
             throw new BadRequestException("At least one horse is required", "BOOKING_HAS_NO_HORSE");
         if (request.Horses.Select(horse => horse.HorseId).Distinct().Count() != request.Horses.Count)
@@ -91,9 +93,14 @@ public sealed partial class Service
                 throw new NotFoundException("Horse not found", "HORSE_NOT_FOUND");
         }
 
-        var (isRouteValid, routeErrorMessage) = CountryUtils.ValidateRoute(request.OriginCountry, request.DestinationCountry);
-        if (!isRouteValid)
-            throw new BadRequestException(routeErrorMessage);
+        if (isReturn)
+            await ValidateReturnBookingAsync(customer, request, cancellationToken);
+        else
+        {
+            var (isRouteValid, routeErrorMessage) = CountryUtils.ValidateRoute(request.OriginCountry, request.DestinationCountry);
+            if (!isRouteValid)
+                throw new BadRequestException(routeErrorMessage);
+        }
 
         var now = UtcNowTruncated();
         var booking = new BookingEntity
@@ -116,7 +123,8 @@ public sealed partial class Service
             CustomerNote = EmptyToNull(request.CustomerNote),
             SubmittedAt = now,
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
+            ReturnOfTransportId = request.ReturnOfTransportId
         };
 
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);

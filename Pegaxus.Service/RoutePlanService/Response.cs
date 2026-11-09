@@ -1,3 +1,5 @@
+using Pegaxus.Service.Common;
+
 namespace Pegaxus.Service.RoutePlanService;
 
 public static class Response
@@ -87,6 +89,8 @@ public static class Response
         public string? RouteNote { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
+        /// <summary>On a primary awaiting legal review: the backups submitted with it, which the specialist reviews in the same decision.</summary>
+        public IReadOnlyList<DetailResponse>? SubmittedBackups { get; set; }
     }
 
     public sealed class SegmentResponse
@@ -173,6 +177,8 @@ public static class Response
         public required LegalReviewResponse LegalReview { get; init; }
         public DossierResponse? ComplianceDossier { get; init; }
         public required IReadOnlyList<Guid> ConfirmedBackupRoutePlanIds { get; init; }
+        /// <summary>Backups sent back to the coordinator with the primary when the review is not feasible.</summary>
+        public IReadOnlyList<Guid> RejectedBackupRoutePlanIds { get; init; } = [];
         public bool CustomerUploadEnabled { get; init; }
         public bool PersonnelAssignmentPhase2Enabled { get; init; }
         public bool LegalReviewRequested { get; init; }
@@ -204,4 +210,10 @@ public static class Response
         public required string FullName { get; init; }
         public required string Role { get; init; }
     }
+
+    /// <summary>One reversed leg of the original trip; times, vehicles and staff are left for the coordinator.</summary>
+    public sealed record ReturnTemplateSegment(int SequenceNo, LocationBrief FromLocation, LocationBrief ToLocation, string TransportMode,
+        decimal? DistanceKm, int? EstimatedDurationMinutes);
+
+    public sealed record ReturnTemplateResponse(Guid SourceTransportId, string SourceTransportCode, IReadOnlyList<ReturnTemplateSegment> Segments);
 }

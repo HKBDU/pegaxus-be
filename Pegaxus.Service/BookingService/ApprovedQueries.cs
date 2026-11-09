@@ -31,6 +31,8 @@ public sealed partial class Service
             .Include(item => item.Customer)
             .Include(item => item.BookingHorses)
                 .ThenInclude(item => item.Horse)
+            .Include(item => item.BookingHorses)
+                .ThenInclude(item => item.DetachedLocation)
             .Include(item => item.Transport)
                 .ThenInclude(item => item!.ComplianceDossiers)
             .Include(item => item.Transport)
@@ -91,16 +93,8 @@ public sealed partial class Service
             SpecialRequirements = booking.SpecialRequirements,
             CustomerNote = booking.CustomerNote,
             TotalHorses = booking.BookingHorses.Count,
-            Horses = booking.BookingHorses.Select(item => new Response.BookingHorseResponse
-            {
-                HorseId = item.HorseId,
-                HorseName = item.Horse.HorseName,
-                Sex = item.Horse.Sex?.ToString(),
-                Breed = item.Horse.Breed,
-                MicrochipNumber = item.Horse.MicrochipNumber,
-                PassportNumber = item.Horse.PassportNumber,
-                SpecialHandlingNotes = item.SpecialHandlingNotes
-            }).ToList(),
+            Horses = booking.BookingHorses.Select(MapHorse).ToList(),
+            ReturnOf = await ReturnOfAsync(booking.ReturnOfTransportId, booking.BookingHorses.Select(item => item.HorseId), cancellationToken),
             Transport = booking.Transport is null
                 ? null
                 : new Response.TransportDetailResponse

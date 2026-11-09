@@ -96,7 +96,7 @@ public sealed partial class Service
                 route.ToLocation = to;
                 if (!route.DistanceKm.HasValue || !route.EstimatedDurationMinutes.HasValue)
                 {
-                    var metrics = await routeService.CalculateMetricsAsync(from, to, mode, cancellationToken);
+                    var metrics = await MetricsAsync(from, to, mode, cancellationToken);
                     route.DistanceKm = metrics.DistanceKm;
                     route.EstimatedDurationMinutes = metrics.DurationMinutes;
                 }
@@ -128,7 +128,7 @@ public sealed partial class Service
         // An IN_USE vehicle is mid-trip: whether it is free for this plan is decided by the schedule check below, not by its flag.
         if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED or VehicleStatus.IN_USE)))
             throw new UnprocessableEntityException("The vehicle is not available", "VEHICLE_UNAVAILABLE");
-        if (vehicles.Sum(item => item.CapacityHorses ?? 0) < plan.Transport.Booking.BookingHorses.Count)
+        if (vehicles.Sum(item => item.CapacityHorses ?? 0) < plan.Transport.Booking.BookingHorses.Count(horse => horse.DetachedAt is null))
             throw new UnprocessableEntityException("Total vehicle capacity is lower than the number of horses in the booking", "VEHICLE_CAPACITY_EXCEEDED");
         var departureDate = DateOnly.FromDateTime(request.PlannedDepartureAt.UtcDateTime);
         if (vehicles.Any(item =>

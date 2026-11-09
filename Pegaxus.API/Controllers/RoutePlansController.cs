@@ -24,6 +24,17 @@ public sealed class RoutePlansController(RoutePlanService.IRoutePlanService serv
         return CreatedAtAction(nameof(GetById), new { routePlanId = response.RoutePlanId }, ResponseBuilder.SuccessResponse(response, "Route plan created successfully", StatusCodes.Status201Created, HttpContext.TraceIdentifier));
     }
 
+    /// <summary>Get the reversed route of the original trip, for the return booking of a horse left behind.</summary>
+    /// <remarks>Only for the transport plan of a return booking (NOT_RETURN_BOOKING otherwise). Returns the legs the original transport drove
+    /// up to the stop where the horse stays, reversed, without times, vehicles or staff. Fill them in and save them with the create endpoint.</remarks>
+    /// <param name="transportPlanId">The transport plan of the return booking.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the reversed legs (empty when the horse stayed at the origin).</returns>
+    [HttpGet("/api/v1/transport-plans/{transportPlanId:guid}/return-route-template")]
+    [Authorize(Policy = JwtExtensions.EmployeePolicy)]
+    public async Task<IActionResult> GetReturnTemplate(Guid transportPlanId, CancellationToken cancellationToken) =>
+        Success(await service.GetReturnTemplateAsync(AccountId, transportPlanId, cancellationToken), "Return route template retrieved successfully");
+
     /// <summary>List route plans for a transport plan.</summary>
     /// <param name="transportPlanId">The transport plan identifier.</param>
     /// <param name="request">The route plan filters.</param>

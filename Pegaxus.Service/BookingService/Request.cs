@@ -66,6 +66,8 @@ public class Request
         public List<BookingHorseRequest> Horses { get; set; } = [];
         public string? SpecialRequirements { get; set; }
         public string? CustomerNote { get; set; }
+        /// <summary>Set to book the return trip of a horse that this transport left behind.</summary>
+        public Guid? ReturnOfTransportId { get; set; }
     }
 
     public class BookingHorseRequest

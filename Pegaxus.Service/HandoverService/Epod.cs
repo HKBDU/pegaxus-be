@@ -26,7 +26,9 @@ public sealed partial class Service
         if (item.Status != HandoverStatus.COMPLETED) throw InvalidStatus(item);
 
         var bookingCode = await db.Bookings.AsNoTracking().Where(booking => booking.BookingId == transport.BookingId).Select(booking => booking.BookingCode).SingleAsync(cancellationToken);
-        var horses = await db.BookingHorses.AsNoTracking().Where(link => link.BookingId == transport.BookingId).OrderBy(link => link.Horse.HorseName)
+        // Horses left behind mid-trip were not handed over here.
+        var horses = await db.BookingHorses.AsNoTracking().Where(link => link.BookingId == transport.BookingId &&
+                (link.DetachedAt == null || link.DetachedAt > (item.CompletedAt ?? item.ActualHandoverAt ?? item.CreatedAt))).OrderBy(link => link.Horse.HorseName)
             .Select(link => new { link.Horse.HorseName, link.Horse.PassportNumber, link.Horse.MicrochipNumber }).ToListAsync(cancellationToken);
         var sender = await SignatureAsync(item.SenderSignatureUrl, cancellationToken);
         var receiver = await SignatureAsync(item.ReceiverSignatureUrl, cancellationToken);

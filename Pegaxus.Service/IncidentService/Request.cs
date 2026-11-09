@@ -193,4 +193,12 @@ public static class Request
         [JsonExtensionData]
         public Dictionary<string, JsonElement>? ExtraFields { get; set; }
     }
+
+    public sealed class DetachHorseRequest
+    {
+        public DateTimeOffset? LastUpdatedAt { get; set; }
+        /// <summary>The route-plan stop where the horse stays: an end of the leg in transit, or the end of the last completed leg.</summary>
+        public Guid LocationId { get; set; }
+        public string? Note { get; set; }
+    }
 }

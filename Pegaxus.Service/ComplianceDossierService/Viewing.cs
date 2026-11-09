@@ -26,7 +26,8 @@ public sealed partial class Service
             {
                 BookingId = bookingId, BookingCode = booking.BookingCode,
                 BookingSummary = await BuildBookingSummaryAsync(bookingId, cancellationToken),
-                Message = "Compliance dossier has not been initialized. Waiting for transport booking approval."
+                Message = "Compliance dossier has not been initialized. Waiting for transport booking approval.",
+                ReturnOf = viewer.Role is null ? null : await ReturnSourceAsync(booking.ReturnOfTransportId, booking.BookingId, cancellationToken)
             };
         return await BuildOverviewAsync(dossier, booking, viewer.Role, request, cancellationToken);
     }
@@ -193,7 +194,8 @@ public sealed partial class Service
                 {
                     HorseId = group.Key, HorseName = group.First().HorseName ?? string.Empty, Requirements = group.ToList()
                 }).OrderBy(item => item.HorseName).ThenBy(item => item.HorseId).ToList(),
-            Actions = ViewActions(role)
+            Actions = ViewActions(role),
+            ReturnOf = role is null ? null : await ReturnSourceAsync(booking.ReturnOfTransportId, booking.BookingId, cancellationToken)
         };
     }
 

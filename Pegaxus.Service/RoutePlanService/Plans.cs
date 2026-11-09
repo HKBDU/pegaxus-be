@@ -16,6 +16,14 @@ public sealed partial class Service
 {
     public async Task<Response.DetailResponse> CreateAsync(Guid accountId, Guid transportPlanId, Request.SaveRequest request, CancellationToken cancellationToken = default)
     {
+        await PrecomputeMetricsAsync(request.Segments, cancellationToken);
+        var routePlanId = await WithWriteRetryAsync(() => CreateOnceAsync(accountId, transportPlanId, request, cancellationToken));
+        await notificationService.FlushAsync(cancellationToken);
+        return await GetByIdAsync(accountId, routePlanId, cancellationToken);
+    }
+
+    private async Task<Guid> CreateOnceAsync(Guid accountId, Guid transportPlanId, Request.SaveRequest request, CancellationToken cancellationToken)
+    {
         var employee = await RequireEmployeeAsync(accountId, cancellationToken);
         await using var transaction = await db.Database.BeginSerializableOrNoneAsync(cancellationToken);
         var plan = await LoadPlanAsync(transportPlanId, cancellationToken);
@@ -95,8 +103,7 @@ public sealed partial class Service
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
-        await notificationService.FlushAsync(cancellationToken);
-        return await GetByIdAsync(accountId, routePlan.RoutePlanId, cancellationToken);
+        return routePlan.RoutePlanId;
     }
 
     public async Task<Response.ListResponse> GetListAsync(Guid accountId, Guid transportPlanId, Request.ListRequest request, CancellationToken cancellationToken = default)
@@ -134,10 +141,25 @@ public sealed partial class Service
         if (routePlan is null)
             throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
         EnsureReadRole(employee.Role, routePlan.TransportPlan, employee.EmployeeId);
-        return ToDetail(routePlan, await GetLatestLegalReviewAsync(routePlan.RoutePlanId, cancellationToken));
+        var detail = ToDetail(routePlan, await GetLatestLegalReviewAsync(routePlan.RoutePlanId, cancellationToken));
+        if (GetRouteType(routePlan) != RouteType.PRIMARY || routePlan.Status != RoutePlanStatus.DRAFT || routePlan.SubmittedForReviewAt is null)
+            return detail;
+        var backups = new List<Response.DetailResponse>();
+        foreach (var backup in SubmittedBackups(routePlan))
+            backups.Add(ToDetail(backup, await GetLatestLegalReviewAsync(backup.RoutePlanId, cancellationToken)));
+        detail.SubmittedBackups = backups;
+        return detail;
     }
 
     public async Task<Response.UpdateResponse> UpdateAsync(Guid accountId, Guid routePlanId, Request.UpdateRequest request, CancellationToken cancellationToken = default)
+    {
+        await PrecomputeMetricsAsync(request.Segments, cancellationToken);
+        var response = await WithWriteRetryAsync(() => UpdateOnceAsync(accountId, routePlanId, request, cancellationToken));
+        await notificationService.FlushAsync(cancellationToken);
+        return response;
+    }
+
+    private async Task<Response.UpdateResponse> UpdateOnceAsync(Guid accountId, Guid routePlanId, Request.UpdateRequest request, CancellationToken cancellationToken)
     {
         var employee = await RequireEmployeeAsync(accountId, cancellationToken);
         await using var transaction = await db.Database.BeginSerializableOrNoneAsync(cancellationToken);
@@ -210,7 +232,6 @@ public sealed partial class Service
         await db.SaveChangesAsync(cancellationToken);
         if (transaction is not null)
             await transaction.CommitAsync(cancellationToken);
-        await notificationService.FlushAsync(cancellationToken);
         var segments = routePlan.RoutePlanRoutes.ToList();
         return new Response.UpdateResponse
         {

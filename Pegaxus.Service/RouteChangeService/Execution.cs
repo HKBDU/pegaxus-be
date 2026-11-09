@@ -30,7 +30,7 @@ public sealed partial class Service
         var vehicles = await db.Vehicles.AsNoTracking().Where(x => vehicleIds.Contains(x.VehicleId)).ToDictionaryAsync(x => x.VehicleId, token);
         var employees = await db.Employees.AsNoTracking().Include(x => x.Account).Where(x => employeeIds.Contains(x.EmployeeId)).ToDictionaryAsync(x => x.EmployeeId, token);
         var providers = await db.TransportProviders.AsNoTracking().Where(x => providerIds.Contains(x.TransportProviderId)).ToDictionaryAsync(x => x.TransportProviderId, token);
-        var horseCount = await db.BookingHorses.CountAsync(x => x.BookingId == plan.TransportPlan.Transport.BookingId, token);
+        var horseCount = await db.BookingHorses.CountAsync(x => x.BookingId == plan.TransportPlan.Transport.BookingId && x.DetachedAt == null, token);
         foreach (var segment in proposed)
         {
             var route = await db.Routes.AsNoTracking().Include(x => x.FromLocation).Include(x => x.ToLocation)

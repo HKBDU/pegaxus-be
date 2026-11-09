@@ -59,7 +59,12 @@ public partial class Booking
 
     public DateTime UpdatedAt { get; set; }
 
+    /// <summary>Set on a return booking: the transport that left this booking's horse behind mid-trip.</summary>
+    public Guid? ReturnOfTransportId { get; set; }
+
     public virtual Employee? AssignedEmployee { get; set; }
+
+    public virtual Transport? ReturnOfTransport { get; set; }
 
     public virtual ICollection<BookingHorse> BookingHorses { get; set; } = new List<BookingHorse>();
 

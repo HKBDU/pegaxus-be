@@ -25,6 +25,10 @@ public sealed partial class Service
                 ? await documentStorage.CreateReadUrlAsync(photo.PhotoUrl, ct) : await media.CreateReadUrlAsync(photo.PhotoUrl, ct);
             photos.Add(new(photo.IncidentPhotoId, signed.Url, photo.Caption, photo.HorseHealthIncidentDetailId, photo.SortOrder));
         }
+        var horseIds = item.HorseHealthIncidentDetails.Select(detail => detail.HorseId).ToArray();
+        var detached = await db.BookingHorses.AsNoTracking().Include(link => link.DetachedLocation)
+            .Where(link => link.BookingId == transport.BookingId && horseIds.Contains(link.HorseId) && link.DetachedAt != null)
+            .ToDictionaryAsync(link => link.HorseId, ct);
         var horseDetails = item.HorseHealthIncidentDetails.OrderBy(detail => detail.CreatedAt).ThenBy(detail => detail.HorseHealthIncidentDetailId)
             .Select(detail => new Response.HorseDetail(detail.HorseHealthIncidentDetailId,
                 // shortcut: BookingHorse has no stall number; populate it when allocation is added to the schema.
@@ -33,7 +37,9 @@ public sealed partial class Service
                 detail.HeartRateBpm, detail.RespiratoryRateBpm, detail.FirstAidProvided, detail.VeterinarianRequired,
                 AsUtc(detail.VeterinarianContactedAt), detail.IsolationRequired, detail.VeterinarianInstruction,
                 detail.MedicationGiven, detail.OutcomeNote, detail.HorseTransportable, AsUtc(detail.UpdatedAt),
-                includeVitalWarnings ? VitalWarnings(detail) : null)).ToArray();
+                includeVitalWarnings ? VitalWarnings(detail) : null,
+                detached.TryGetValue(detail.HorseId, out var link) ? new Response.HorseDetachment(AsUtc(link.DetachedAt!.Value),
+                    LocationBrief.From(link.DetachedLocation), link.DetachedIncidentReportId) : null)).ToArray();
         var costs = item.EmergencyCostRequests.OrderBy(cost => cost.RequestedAt).ThenBy(cost => cost.EmergencyCostRequestId)
             .Select(MapCost).ToArray();
         var currentPlanId = await CurrentPlanIdAsync(transport.TransportId, ct);
@@ -45,6 +51,7 @@ public sealed partial class Service
         var active = item.Status is IncidentStatus.REPORTED or IncidentStatus.PENDING;
         var canResolve = actor?.Role == EmployeeRole.LOGISTICS_MANAGER && active && pending == 0 && transport.Status is TransportStatus.IN_TRANSIT or TransportStatus.COMPLETED;
         var detail = item.VehicleIncidentDetail;
+        var actions = actor is null ? [] : await ActionsAsync(item, transport, actor, canResolve, ct);
         return new()
         {
             IncidentReportId = item.IncidentReportId, IncidentCode = item.IncidentCode,
@@ -65,7 +72,9 @@ public sealed partial class Service
             RouteChanges = plans.Select(plan => new Response.RouteChange(plan.RoutePlanId, plan.RoutePlanCode, TransportItinerary.PlanType(plan).ToString(),
                 plan.Status.ToString(), AsUtc(plan.UpdatedAt))).ToArray(),
             Hold = await ReadHoldAsync(incidentReportId, ct),
-            CanResolve = canResolve, AvailableActions = actor is null ? [] : await ActionsAsync(item, transport, actor, canResolve, ct),
+            CanResolve = canResolve, AvailableActions = actions,
+            DetachLocations = actions.Contains("DETACH_HORSE")
+                ? DetachLocations(await EffectiveSegmentsAsync(transport.TransportId, ct)).Select(location => LocationBrief.From(location)!).ToArray() : [],
             ServerTime = clock.GetUtcNow(), CreatedAt = AsUtc(item.CreatedAt), UpdatedAt = AsUtc(item.UpdatedAt)
         };
     }
@@ -86,6 +95,8 @@ public sealed partial class Service
             if (crew || coordinator) actions.Add("REQUEST_COST");
             if (coordinator) actions.AddRange(["PROPOSE_REROUTE", "ESCALATE_REROUTE"]);
             if (manager && await ActiveTransportHoldAsync(transport.TransportId, ct) is null) actions.Add("HOLD_ROUTE");
+            if (manager && incident.Category is IncidentCategory.BOTH or IncidentCategory.HORSE_HEALTH && incident.HorseHealthIncidentDetails.Count > 0)
+                actions.Add("DETACH_HORSE");
             if (crew && incident.Status == IncidentStatus.REPORTED && !incident.EmergencyCostRequests.Any(cost => cost.Status is EmergencyCostStatus.PENDING or EmergencyCostStatus.APPROVED))
                 actions.Add("SELF_RESOLVE");
         }

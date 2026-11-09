@@ -61,6 +61,8 @@ public class Response
         public string? RejectionReason { get; init; }
         public string? CancellationReason { get; init; }
         public TransportDetailResponse? Transport { get; init; }
+        /// <summary>Set on a return booking: the original trip that left the horse behind.</summary>
+        public ReturnOfResponse? ReturnOf { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
     }
@@ -95,6 +97,8 @@ public class Response
         public int TotalHorses { get; init; }
         public required IReadOnlyList<BookingHorseResponse> Horses { get; init; }
         public TransportDetailResponse? Transport { get; init; }
+        /// <summary>Set on a return booking: the original trip that left the horse behind.</summary>
+        public ReturnOfResponse? ReturnOf { get; init; }
         public ApprovedTransportPlanResponse? TransportPlan { get; init; }
         public required IReadOnlyList<ComplianceDossierItemResponse> ComplianceDossiers { get; init; }
         public required IReadOnlyList<ApprovedRoutePlanResponse> RoutePlans { get; init; }
@@ -120,6 +124,46 @@ public class Response
         public string? MicrochipNumber { get; init; }
         public string? PassportNumber { get; init; }
         public string? SpecialHandlingNotes { get; init; }
+        /// <summary>Set when the horse was left behind mid-trip; it no longer travels with this booking's transport.</summary>
+        public DateTimeOffset? DetachedAt { get; init; }
+        public string? DetachedLocationName { get; init; }
+    }
+
+    public sealed class ReturnOfResponse
+    {
+        public Guid TransportId { get; init; }
+        public required string TransportCode { get; init; }
+        public Guid BookingId { get; init; }
+        public required string BookingCode { get; init; }
+        public ReturnOfHorseResponse? Horse { get; init; }
+    }
+
+    public sealed class ReturnOfHorseResponse
+    {
+        public Guid HorseId { get; init; }
+        public required string HorseName { get; init; }
+        public DateTimeOffset? DetachedAt { get; init; }
+        public string? DetachedLocationName { get; init; }
+    }
+
+    /// <summary>Pre-filled values for the return booking form of a horse left behind.</summary>
+    public sealed class ReturnDraftResponse
+    {
+        public Guid ReturnOfTransportId { get; init; }
+        public required string TransportCode { get; init; }
+        public required string BookingCode { get; init; }
+        public Guid HorseId { get; init; }
+        public required string HorseName { get; init; }
+        public required string OriginAddress { get; init; }
+        public required string OriginCountry { get; init; }
+        public decimal? OriginLatitude { get; init; }
+        public decimal? OriginLongitude { get; init; }
+        public required string DestinationAddress { get; init; }
+        public required string DestinationCountry { get; init; }
+        public decimal? DestinationLatitude { get; init; }
+        public decimal? DestinationLongitude { get; init; }
+        /// <summary>A live return booking that already exists for this horse, if any.</summary>
+        public Guid? ExistingReturnBookingId { get; init; }
     }
 
     public class AssignedEmployeeResponse

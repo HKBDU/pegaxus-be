@@ -29,6 +29,8 @@ public sealed partial class Service
             .Include(item => item.Customer)
             .Include(item => item.BookingHorses)
                 .ThenInclude(item => item.Horse)
+            .Include(item => item.BookingHorses)
+                .ThenInclude(item => item.DetachedLocation)
             .Include(item => item.AssignedEmployee)
             .Include(item => item.Transport)
             .Where(item =>
@@ -64,16 +66,8 @@ public sealed partial class Service
             RequestedDepartureDate = booking.RequestedDepartureDate,
             RequestedArrivalDate = booking.RequestedArrivalDate,
             TotalHorses = booking.BookingHorses.Count,
-            Horses = booking.BookingHorses.Select(item => new Response.BookingHorseResponse
-            {
-                HorseId = item.HorseId,
-                HorseName = item.Horse.HorseName,
-                Sex = item.Horse.Sex?.ToString(),
-                Breed = item.Horse.Breed,
-                MicrochipNumber = item.Horse.MicrochipNumber,
-                PassportNumber = item.Horse.PassportNumber,
-                SpecialHandlingNotes = item.SpecialHandlingNotes
-            }).ToList(),
+            Horses = booking.BookingHorses.Select(MapHorse).ToList(),
+            ReturnOf = await ReturnOfAsync(booking.ReturnOfTransportId, booking.BookingHorses.Select(item => item.HorseId), cancellationToken),
             SpecialRequirements = booking.SpecialRequirements,
             CustomerNote = booking.CustomerNote,
             AssignedEmployee = booking.AssignedEmployee is null

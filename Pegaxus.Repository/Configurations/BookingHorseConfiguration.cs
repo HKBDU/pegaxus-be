@@ -22,6 +22,21 @@ public sealed class BookingHorseConfiguration : IEntityTypeConfiguration<Booking
             .HasColumnType("timestamp without time zone")
             .HasColumnName("created_at");
         entity.Property(e => e.SpecialHandlingNotes).HasColumnName("special_handling_notes");
+        entity.Property(e => e.DetachedAt)
+            .HasColumnType("timestamp without time zone")
+            .HasColumnName("detached_at");
+        entity.Property(e => e.DetachedIncidentReportId).HasColumnName("detached_incident_report_id");
+        entity.Property(e => e.DetachedLocationId).HasColumnName("detached_location_id");
+
+        entity.HasOne(d => d.DetachedIncidentReport).WithMany()
+            .HasForeignKey(d => d.DetachedIncidentReportId)
+            .OnDelete(DeleteBehavior.SetNull)
+            .HasConstraintName("BookingHorse_detached_incident_report_id_fkey");
+
+        entity.HasOne(d => d.DetachedLocation).WithMany()
+            .HasForeignKey(d => d.DetachedLocationId)
+            .OnDelete(DeleteBehavior.SetNull)
+            .HasConstraintName("BookingHorse_detached_location_id_fkey");
 
         entity.HasOne(d => d.Booking).WithMany(p => p.BookingHorses)
             .HasForeignKey(d => d.BookingId)
