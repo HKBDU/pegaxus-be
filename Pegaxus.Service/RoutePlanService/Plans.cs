@@ -141,7 +141,14 @@ public sealed partial class Service
         if (routePlan is null)
             throw new NotFoundException("Route Plan not found", "ROUTE_PLAN_NOT_FOUND");
         EnsureReadRole(employee.Role, routePlan.TransportPlan, employee.EmployeeId);
-        return ToDetail(routePlan, await GetLatestLegalReviewAsync(routePlan.RoutePlanId, cancellationToken));
+        var detail = ToDetail(routePlan, await GetLatestLegalReviewAsync(routePlan.RoutePlanId, cancellationToken));
+        if (GetRouteType(routePlan) != RouteType.PRIMARY || routePlan.Status != RoutePlanStatus.DRAFT || routePlan.SubmittedForReviewAt is null)
+            return detail;
+        var backups = new List<Response.DetailResponse>();
+        foreach (var backup in SubmittedBackups(routePlan))
+            backups.Add(ToDetail(backup, await GetLatestLegalReviewAsync(backup.RoutePlanId, cancellationToken)));
+        detail.SubmittedBackups = backups;
+        return detail;
     }
 
     public async Task<Response.UpdateResponse> UpdateAsync(Guid accountId, Guid routePlanId, Request.UpdateRequest request, CancellationToken cancellationToken = default)
