@@ -14,7 +14,7 @@ public sealed partial class Service
         var segments = EffectiveSegments(await ReadSegmentsAsync([transportId], actor, cancellationToken));
         var current = CurrentSegment(segments, transport.Status);
         var tracking = ToTrackingSegments(segments, transport.Status, actor);
-        var health = await db.BookingHorses.AsNoTracking().Where(item => item.BookingId == transport.BookingId)
+        var health = await db.BookingHorses.AsNoTracking().Where(item => item.BookingId == transport.BookingId && item.DetachedAt == null)
             .Select(item => db.HorseHealthLogs.Where(log => log.TransportId == transportId && log.HorseId == item.HorseId)
                 .OrderByDescending(log => log.CheckedAt).ThenByDescending(log => log.CreatedAt).ThenByDescending(log => log.HorseHealthLogId)
                 .Select(log => (HorseHealthStatus?)log.HealthStatus).FirstOrDefault()).ToListAsync(cancellationToken);

@@ -53,4 +53,5 @@ public interface IBookingService
     Task<IReadOnlyList<Response.BookingAssignmentResponse>> GetAssignmentsAsync(Guid accountId, Guid bookingId, CancellationToken cancellationToken = default);
     Task<Response.BookingAssignmentResponse> AssignEmployeeAsync(Guid accountId, Guid bookingId, Request.AssignBookingEmployeeRequest request, CancellationToken cancellationToken = default);
     Task<Response.BookingAssignmentResponse> RevokeAssignmentAsync(Guid accountId, Guid bookingId, Guid assignmentId, CancellationToken cancellationToken = default);
+    Task<Response.ReturnDraftResponse> GetReturnDraftAsync(Guid accountId, Guid transportId, Guid horseId, CancellationToken cancellationToken = default);
 }

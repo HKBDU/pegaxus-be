@@ -89,6 +89,12 @@ public class Request
         public string? WaivedReason { get; set; }
     }
 
+    public sealed class WaiveForReturnRequest
+    {
+        /// <summary>Optional; defaults to a reason that names the original transport and dossier.</summary>
+        public string? Reason { get; set; }
+    }
+
     public sealed class UpdateRequirementRequest
     {
         public bool? IsMandatory { get; set; }

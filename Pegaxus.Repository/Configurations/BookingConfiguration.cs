@@ -78,5 +78,12 @@ public sealed class BookingConfiguration : IEntityTypeConfiguration<Booking>
             .HasForeignKey(d => d.CustomerId)
             .OnDelete(DeleteBehavior.ClientSetNull)
             .HasConstraintName("Booking_customer_id_fkey");
+
+        entity.Property(e => e.ReturnOfTransportId).HasColumnName("return_of_transport_id");
+        entity.HasIndex(e => e.ReturnOfTransportId, "Booking_return_of_transport_id_idx");
+        entity.HasOne(d => d.ReturnOfTransport).WithMany()
+            .HasForeignKey(d => d.ReturnOfTransportId)
+            .OnDelete(DeleteBehavior.SetNull)
+            .HasConstraintName("Booking_return_of_transport_id_fkey");
     }
 }

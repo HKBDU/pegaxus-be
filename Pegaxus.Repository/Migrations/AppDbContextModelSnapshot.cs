@@ -538,6 +538,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("date")
                         .HasColumnName("requested_departure_date");
 
+                    b.Property<Guid?>("ReturnOfTransportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("return_of_transport_id");
+
                     b.Property<string>("SpecialRequirements")
                         .HasColumnType("text")
                         .HasColumnName("special_requirements");
@@ -572,6 +576,8 @@ namespace Pegaxus.Repository.Migrations
 
                     b.HasIndex(new[] { "RequestedDepartureDate" }, "Booking_requested_departure_date_idx");
 
+                    b.HasIndex(new[] { "ReturnOfTransportId" }, "Booking_return_of_transport_id_idx");
+
                     b.ToTable("Booking", (string)null);
                 });
 
@@ -589,12 +595,28 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("timestamp without time zone")
                         .HasColumnName("created_at");
 
+                    b.Property<DateTime?>("DetachedAt")
+                        .HasColumnType("timestamp without time zone")
+                        .HasColumnName("detached_at");
+
+                    b.Property<Guid?>("DetachedIncidentReportId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("detached_incident_report_id");
+
+                    b.Property<Guid?>("DetachedLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("detached_location_id");
+
                     b.Property<string>("SpecialHandlingNotes")
                         .HasColumnType("text")
                         .HasColumnName("special_handling_notes");
 
                     b.HasKey("BookingId", "HorseId")
                         .HasName("BookingHorse_pkey");
+
+                    b.HasIndex("DetachedIncidentReportId");
+
+                    b.HasIndex("DetachedLocationId");
 
                     b.HasIndex(new[] { "HorseId" }, "BookingHorse_horse_id_idx");
 
@@ -4992,9 +5014,17 @@ namespace Pegaxus.Repository.Migrations
                         .IsRequired()
                         .HasConstraintName("Booking_customer_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.Transport", "ReturnOfTransport")
+                        .WithMany()
+                        .HasForeignKey("ReturnOfTransportId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("Booking_return_of_transport_id_fkey");
+
                     b.Navigation("AssignedEmployee");
 
                     b.Navigation("Customer");
+
+                    b.Navigation("ReturnOfTransport");
                 });
 
             modelBuilder.Entity("Pegaxus.Repository.Entities.BookingHorse", b =>
@@ -5005,6 +5035,18 @@ namespace Pegaxus.Repository.Migrations
                         .IsRequired()
                         .HasConstraintName("BookingHorse_booking_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.IncidentReport", "DetachedIncidentReport")
+                        .WithMany()
+                        .HasForeignKey("DetachedIncidentReportId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("BookingHorse_detached_incident_report_id_fkey");
+
+                    b.HasOne("Pegaxus.Repository.Entities.Location", "DetachedLocation")
+                        .WithMany()
+                        .HasForeignKey("DetachedLocationId")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("BookingHorse_detached_location_id_fkey");
+
                     b.HasOne("Pegaxus.Repository.Entities.Horse", "Horse")
                         .WithMany("BookingHorses")
                         .HasForeignKey("HorseId")
@@ -5012,6 +5054,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasConstraintName("BookingHorse_horse_id_fkey");
 
                     b.Navigation("Booking");
+
+                    b.Navigation("DetachedIncidentReport");
+
+                    b.Navigation("DetachedLocation");
 
                     b.Navigation("Horse");
                 });

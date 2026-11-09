@@ -59,7 +59,8 @@ public sealed partial class Service
     private async Task<Dictionary<Guid, Horse>> BookingHorsesAsync(Transport transport, IReadOnlyList<Request.HorseDetail> horses, CancellationToken ct)
     {
         var ids = horses.Select(horse => horse.HorseId).ToArray();
-        var found = await db.BookingHorses.AsNoTracking().Where(item => item.BookingId == transport.BookingId && ids.Contains(item.HorseId))
+        // A horse left behind mid-trip no longer travels with this transport.
+        var found = await db.BookingHorses.AsNoTracking().Where(item => item.BookingId == transport.BookingId && ids.Contains(item.HorseId) && item.DetachedAt == null)
             .Select(item => item.Horse).ToDictionaryAsync(horse => horse.HorseId, ct);
         if (found.Count != ids.Length)
             throw new UnprocessableEntityException("The horse does not belong to this transport", "HORSE_NOT_IN_TRANSPORT");

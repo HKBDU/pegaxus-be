@@ -113,6 +113,22 @@ public sealed partial class ComplianceDossiersController
         Success(await _service.WaiveRequirementAsync(AccountId, dossierId, requirementId, request, cancellationToken), "Dossier requirement waived successfully");
 
     /// <summary>
+    /// Waive every open requirement of a return booking's dossier.
+    /// </summary>
+    /// <remarks>Transport Specialists only, on the dossier of a return booking (a horse left behind mid-trip, brought back). The horse's
+    /// papers were checked on the original trip, so each requirement that is not SATISFIED or WAIVED becomes WAIVED with a reason naming
+    /// the original transport and dossier (or the given reason). Each change is audited. Errors include NOT_RETURN_BOOKING and DOSSIER_LOCKED.</remarks>
+    /// <param name="dossierId">The compliance dossier identifier (UUID).</param>
+    /// <param name="request">An optional reason of at most 2000 characters.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with how many requirements were waived and the original trip.</returns>
+    [HttpPost("{dossierId:guid}/waive-for-return")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistPolicy)]
+    public async Task<IActionResult> WaiveForReturn(Guid dossierId, [FromBody] ComplianceDossierService.Request.WaiveForReturnRequest request,
+        CancellationToken cancellationToken) =>
+        Success(await _service.WaiveForReturnAsync(AccountId, dossierId, request, cancellationToken), "Return dossier waived successfully");
+
+    /// <summary>
     /// Update a dossier requirement.
     /// </summary>
     /// <remarks>Transport Specialists may change supplied fields while the dossier is editable. A mandatory requirement cannot be downgraded to optional. Locked dossiers return 409 DOSSIER_LOCKED.</remarks>
