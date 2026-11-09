@@ -304,7 +304,7 @@ public class DocumentReviewTests
             version.DocumentVersionId, approval.Review.DocumentReviewId, new() { Status = DossierRequirementStatus.PROVIDED, Reason = "Wrong signature" });
         var request = new Request.RecordAuthoritySubmissionRequest
         {
-            AuthorityName = "Authority", SubmissionReference = "REF-REVIEW", SubmittedAt = DateTimeOffset.UtcNow,
+            AuthorityName = Pegaxus.Service.Common.CompetentAuthorities.All[5].Name, SubmissionReference = "REF-REVIEW", SubmittedAt = DateTimeOffset.UtcNow,
             ProofFile = new() { PublicId = "evidence/proof/unused" }
         };
         await Assert.ThrowsAsync<ConflictException>(() => service.RecordAuthoritySubmissionAsync(specialist, dossier.ComplianceDossierId, request));

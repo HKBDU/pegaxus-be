@@ -158,7 +158,7 @@ public class ValidationRulesTests
         { AuthorityName = new string('a', 201), SubmissionReference = "REF-1", SubmittedAt = DateTimeOffset.UtcNow, ProofFile = proof }));
         Assert.Contains("200", tooLong.Message);
         await Assert.ThrowsAsync<BadRequestException>(() => service.RecordAuthoritySubmissionAsync(specialist, dossierId, new()
-        { AuthorityName = "Authority", SubmissionReference = "REF-2", SubmittedAt = DateTimeOffset.UtcNow.AddDays(1), ProofFile = proof }));
+        { AuthorityName = Pegaxus.Service.Common.CompetentAuthorities.All[5].Name, SubmissionReference = "REF-2", SubmittedAt = DateTimeOffset.UtcNow.AddDays(1), ProofFile = proof }));
         Assert.Empty(db.AuthoritySubmissions);
     }
 
@@ -169,7 +169,7 @@ public class ValidationRulesTests
         var (specialist, dossierId) = await AuthorityPresignedFileTests.SeedAsync(db);
         var service = DocumentUploadTests.CreateService(db, new DocumentUploadTests.RecordingStorage());
         var submission = await service.RecordAuthoritySubmissionAsync(specialist, dossierId, new()
-        { AuthorityName = "Authority", SubmissionReference = "REF-3", SubmittedAt = DateTimeOffset.UtcNow, ProofFile = DocumentUploadTests.File("proof.pdf", "application/pdf") });
+        { AuthorityName = Pegaxus.Service.Common.CompetentAuthorities.All[5].Name, SubmissionReference = "REF-3", SubmittedAt = DateTimeOffset.UtcNow, ProofFile = DocumentUploadTests.File("proof.pdf", "application/pdf") });
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
 
         await Assert.ThrowsAsync<BadRequestException>(() => service.RecordAuthorityDecisionAsync(specialist, submission.AuthoritySubmissionId, new()
