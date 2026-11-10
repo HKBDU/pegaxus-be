@@ -37,6 +37,30 @@ public sealed partial class ComplianceDossiersController
     }
 
     /// <summary>
+    /// List the customs clearance proofs of a dossier.
+    /// </summary>
+    /// <remarks>Transport Specialists and Logistics Managers see every customs clearance proof submitted for the dossier, newest first, so they can open one for verification. Filter with <c>status</c> (for example PENDING_VERIFICATION or HELD).</remarks>
+    /// <param name="dossierId">The compliance dossier identifier (UUID).</param>
+    /// <param name="status">Optional proof status: PENDING_VERIFICATION, CLEARED, HELD or REJECTED.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the customs clearance proof rows.</returns>
+    /// <exception cref="BadRequestException">The status filter is invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not an active Transport Specialist or Logistics Manager.</exception>
+    /// <exception cref="NotFoundException">The compliance dossier does not exist.</exception>
+    [HttpGet("/api/v1/compliance-dossiers/{dossierId:guid}/customs-clearance-proofs")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrLogisticsManagerPolicy)]
+    public async Task<IActionResult> ListCustomsClearanceProofs(
+        Guid dossierId,
+        [FromQuery] string? status,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.ListCustomsClearanceProofsAsync(
+            AccountId, dossierId, status, cancellationToken);
+
+        return Success(response, "Customs clearance proofs retrieved successfully");
+    }
+
+    /// <summary>
     /// Get customs clearance proof details.
     /// </summary>
     /// <remarks>Returns proof status, evidence files, and ATA Carnet information to an authorized dossier participant.</remarks>

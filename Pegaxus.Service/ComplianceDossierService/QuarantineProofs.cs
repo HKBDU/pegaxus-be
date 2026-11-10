@@ -115,7 +115,8 @@ public sealed partial class Service
 
         foreach (var tsAccountId in tsAccountIds)
             AddNotification(tsAccountId, EmployeeRole.TRANSPORT_SPECIALIST, dossier, title, message, now,
-                request.IsHoldback ? NotificationPriority.URGENT : NotificationPriority.NORMAL);
+                request.IsHoldback ? NotificationPriority.URGENT : NotificationPriority.NORMAL,
+                NotificationLinks.QuarantineProof(EmployeeRole.TRANSPORT_SPECIALIST, dossierId, proof.QuarantineProofId));
         if (request.IsHoldback)
             await QueueClearanceMailAsync(tsAccountIds, dossier, MailService.EmailBodies.ClearanceKind.Bcp, proof.BcpName,
                 MailService.EmailBodies.ClearanceOutcome.Held, null, now, cancellationToken);

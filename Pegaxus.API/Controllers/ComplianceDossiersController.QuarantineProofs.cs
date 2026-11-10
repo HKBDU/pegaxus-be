@@ -37,6 +37,30 @@ public sealed partial class ComplianceDossiersController
     }
 
     /// <summary>
+    /// List the quarantine proofs of a dossier.
+    /// </summary>
+    /// <remarks>Transport Specialists and Logistics Managers see every BCP quarantine proof submitted for the dossier, newest first, so they can open one for verification. Filter with <c>status</c> (for example PENDING_VERIFICATION or HOLDBACK).</remarks>
+    /// <param name="dossierId">The compliance dossier identifier (UUID).</param>
+    /// <param name="status">Optional proof status: PENDING_VERIFICATION, PASSED, PASSED_WITH_CONDITIONS, HOLDBACK, FAILED or REJECTED.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the quarantine proof rows.</returns>
+    /// <exception cref="BadRequestException">The status filter is invalid.</exception>
+    /// <exception cref="ForbiddenException">The caller is not an active Transport Specialist or Logistics Manager.</exception>
+    /// <exception cref="NotFoundException">The compliance dossier does not exist.</exception>
+    [HttpGet("/api/v1/compliance-dossiers/{dossierId:guid}/quarantine-proofs")]
+    [Authorize(Policy = JwtExtensions.TransportSpecialistOrLogisticsManagerPolicy)]
+    public async Task<IActionResult> ListQuarantineProofs(
+        Guid dossierId,
+        [FromQuery] string? status,
+        CancellationToken cancellationToken)
+    {
+        var response = await _service.ListQuarantineProofsAsync(
+            AccountId, dossierId, status, cancellationToken);
+
+        return Success(response, "Quarantine proofs retrieved successfully");
+    }
+
+    /// <summary>
     /// Get quarantine proof details.
     /// </summary>
     /// <remarks>Returns proof status, evidence files, and horse microchip information to an authorized dossier participant.</remarks>

@@ -452,6 +452,48 @@ public class Response
         public string DossierStatus { get; init; } = string.Empty;
     }
 
+    /// <summary>One row of a dossier's quarantine proof list; open the detail endpoint for files and checks.</summary>
+    public class QuarantineProofListItemResponse
+    {
+        public Guid QuarantineProofId { get; init; }
+
+        public string Status { get; init; } = string.Empty;
+
+        public string BcpName { get; init; } = string.Empty;
+
+        public Guid? LocationId { get; init; }
+
+        public DateTimeOffset? InspectionAt { get; init; }
+
+        public QuarantineEmployeeResponse SubmittedBy { get; init; } = new();
+
+        public DateTimeOffset SubmittedAt { get; init; }
+
+        public bool IsFinalized { get; init; }
+
+        public DateTimeOffset? VerifiedAt { get; init; }
+    }
+
+    /// <summary>One row of a dossier's customs clearance proof list; open the detail endpoint for files and checks.</summary>
+    public class CustomsClearanceProofListItemResponse
+    {
+        public Guid CustomsClearanceProofId { get; init; }
+
+        public string Status { get; init; } = string.Empty;
+
+        public string CustomsPortName { get; init; } = string.Empty;
+
+        public Guid? LocationId { get; init; }
+
+        public QuarantineEmployeeResponse SubmittedBy { get; init; } = new();
+
+        public DateTimeOffset SubmittedAt { get; init; }
+
+        public bool IsFinalized { get; init; }
+
+        public DateTimeOffset? VerifiedAt { get; init; }
+    }
+
     public class QuarantineProofResponse
     {
         public Guid QuarantineProofId { get; init; }
