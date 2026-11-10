@@ -86,6 +86,18 @@ public interface IComplianceDossierService
         Request.SubmitQuarantineProofRequest request,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<Response.QuarantineProofListItemResponse>> ListQuarantineProofsAsync(
+        Guid accountId,
+        Guid dossierId,
+        string? status,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Response.CustomsClearanceProofListItemResponse>> ListCustomsClearanceProofsAsync(
+        Guid accountId,
+        Guid dossierId,
+        string? status,
+        CancellationToken cancellationToken = default);
+
     Task<Response.QuarantineProofResponse> GetQuarantineProofAsync(
         Guid accountId,
         Guid proofId,

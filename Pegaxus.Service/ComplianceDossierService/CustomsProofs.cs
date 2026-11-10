@@ -123,7 +123,8 @@ public sealed partial class Service
         var priority = request.IsHeld ? NotificationPriority.URGENT : NotificationPriority.NORMAL;
 
         foreach (var recipient in recipients)
-            AddNotification(recipient.AccountId, recipient.Role, dossier, title, message, now, priority);
+            AddNotification(recipient.AccountId, recipient.Role, dossier, title, message, now, priority,
+                NotificationLinks.CustomsClearanceProof(recipient.Role, dossier.ComplianceDossierId, proof.CustomsClearanceProofId));
         if (request.IsHeld)
             await QueueClearanceMailAsync(recipients.Select(item => item.AccountId), dossier, MailService.EmailBodies.ClearanceKind.Customs,
                 proof.CustomsPortName, MailService.EmailBodies.ClearanceOutcome.Held, null, now, cancellationToken);
