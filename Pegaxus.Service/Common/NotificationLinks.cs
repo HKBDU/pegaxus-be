@@ -24,6 +24,18 @@ public static class NotificationLinks
         _ => null
     };
 
+    /// <summary>The verification page of a BCP quarantine proof for its reviewers; anyone else gets the dossier link.</summary>
+    public static string? QuarantineProof(EmployeeRole? role, Guid dossierId, Guid proofId) =>
+        role is EmployeeRole.TRANSPORT_SPECIALIST or EmployeeRole.LOGISTICS_MANAGER
+            ? $"/quarantine-proofs/{proofId}/verify"
+            : Dossier(role, dossierId);
+
+    /// <summary>The verification page of a customs clearance proof for its reviewers; anyone else gets the dossier link.</summary>
+    public static string? CustomsClearanceProof(EmployeeRole? role, Guid dossierId, Guid proofId) =>
+        role is EmployeeRole.TRANSPORT_SPECIALIST or EmployeeRole.LOGISTICS_MANAGER
+            ? $"/customs-clearance-proofs/{proofId}/verify"
+            : Dossier(role, dossierId);
+
     public static string? Invoice(EmployeeRole? role, Guid bookingId, Guid invoiceId) => role switch
     {
         null => $"/bookings/{bookingId}/invoices/{invoiceId}",
