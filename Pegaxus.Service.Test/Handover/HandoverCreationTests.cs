@@ -15,6 +15,24 @@ namespace Pegaxus.Service.Test;
 public class HandoverCreationTests
 {
     [Fact]
+    public async Task Creation_ADeliveryLeftOnABoundaryTheRouteNoLongerHas_IsReplaced_ButOneOnThisBoundaryIsADuplicate()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        f.Route.TransportPlan.Transport.Status = TransportStatus.IN_TRANSIT;
+        // The old DELIVERY sits on a segment that is no longer the last one (the route was switched).
+        f.Delivery.FromRoutePlanRouteId = f.First.RoutePlanRouteId; await db.SaveChangesAsync();
+
+        var created = await f.Service.CreateAsync(f.TransportId, new() { HandoverType = "DELIVERY", FromRoutePlanRouteId = f.Second.RoutePlanRouteId }, f.Manager.AccountId);
+
+        var stale = await db.HandoverRecords.AsNoTracking().SingleAsync(item => item.HandoverRecordId == f.Delivery.HandoverRecordId);
+        Assert.Equal(HandoverStatus.CANCELLED, stale.Status); Assert.Equal($"Route changed; replaced by {created.HandoverCode}", stale.CancellationReason);
+        var duplicate = await Assert.ThrowsAsync<ConflictException>(() => f.Service.CreateAsync(f.TransportId,
+            new() { HandoverType = "DELIVERY", FromRoutePlanRouteId = f.Second.RoutePlanRouteId }, f.Manager.AccountId));
+        Assert.Equal("HANDOVER_ALREADY_EXISTS", duplicate.ErrorCode);
+        Assert.Single(db.HandoverRecords.Where(item => item.HandoverType == HandoverType.DELIVERY && item.Status != HandoverStatus.CANCELLED));
+    }
+
+    [Fact]
     public async Task Creation_InfersPartiesSnapshotsAndSequenceWithoutStartingJourney()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);

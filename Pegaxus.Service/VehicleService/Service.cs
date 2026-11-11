@@ -203,13 +203,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
 
     private IQueryable<Vehicle> Vehicles() => db.Vehicles.AsNoTracking().Where(x => !x.IsDeleted);
 
-    private IQueryable<RoutePlanRouteVehicle> UnfinishedAssignments() => db.RoutePlanRouteVehicles.AsNoTracking().Where(x =>
-        x.RoutePlanRoute.ActualArrivalAt == null &&
-        x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.COMPLETED && x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
-        x.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED &&
-        x.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED &&
-        x.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.COMPLETED &&
-        x.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.CANCELLED);
+    private IQueryable<RoutePlanRouteVehicle> UnfinishedAssignments() => db.RoutePlanRouteVehicles.AsNoTracking().WhereUnfinished();
 
     private async Task<Vehicle> LockAsync(Guid id, CancellationToken cancellationToken)
     {

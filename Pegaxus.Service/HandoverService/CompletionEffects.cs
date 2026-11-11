@@ -108,6 +108,14 @@ public sealed partial class Service
                 plan.Status = RoutePlanStatus.COMPLETED; plan.UpdatedAt = now;
                 if (plan.TransportPlan.Status == TransportPlanStatus.IN_PROGRESS) { plan.TransportPlan.Status = TransportPlanStatus.COMPLETED; plan.TransportPlan.UpdatedAt = now; }
             }
+            // The trip is over, so a handover still waiting (one left on a route that changed, say) can never happen.
+            foreach (var leftover in await db.HandoverRecords.Where(record => record.TransportId == transport.TransportId && record.HandoverRecordId != item.HandoverRecordId &&
+                         (record.Status == HandoverStatus.PLANNED || record.Status == HandoverStatus.IN_PROGRESS)).ToListAsync(cancellationToken))
+            {
+                leftover.Status = HandoverStatus.CANCELLED;
+                leftover.CancellationReason = "Transport completed";
+                leftover.CancelledAt = leftover.UpdatedAt = now;
+            }
         }
         var released = new List<Response.ReleasedVehicle>();
         if (item.HandoverType is HandoverType.PICKUP or HandoverType.DELIVERY)

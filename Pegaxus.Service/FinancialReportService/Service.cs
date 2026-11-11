@@ -59,11 +59,12 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock) : IFina
 
     internal sealed record Totals(decimal Invoiced, decimal Paid, decimal EmergencyCost);
 
-    /// <summary>R23: income is the FINAL and SUPPLEMENTARY invoices that are not cancelled, the paid part is their confirmed receipts, the cost is the approved emergency costs.</summary>
+    /// <summary>R23: income is the FINAL and SUPPLEMENTARY invoices issued to the customer (a draft has not been sent, a cancelled one is void), the paid part is their
+    /// confirmed receipts, the cost is the approved emergency costs.</summary>
     internal async Task<Totals> TotalsAsync(Guid transportId, CancellationToken cancellationToken)
     {
         var bookingId = await db.Transports.AsNoTracking().Where(item => item.TransportId == transportId).Select(item => item.BookingId).SingleAsync(cancellationToken);
-        var invoices = db.Invoices.AsNoTracking().Where(item => item.BookingId == bookingId && item.Status != InvoiceStatus.CANCELLED &&
+        var invoices = db.Invoices.AsNoTracking().Where(item => item.BookingId == bookingId && item.Status != InvoiceStatus.DRAFT && item.Status != InvoiceStatus.CANCELLED &&
             (item.Type == InvoiceType.FINAL || item.Type == InvoiceType.SUPPLEMENTARY));
         var invoiced = await invoices.SumAsync(item => (decimal?)item.TotalAmount, cancellationToken) ?? 0;
         var paid = await db.Receipts.AsNoTracking().Where(receipt => receipt.Status == ReceiptStatus.CONFIRMED &&
