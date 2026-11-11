@@ -147,6 +147,7 @@ public sealed partial class Service
                 }
                 cost.UpdatedAt = now; incident.UpdatedAt = NextUpdate(incident);
                 await db.SaveChangesAsync(ct);
+                await FinancialReportService.Service.SyncForTransportAsync(db, clock, incident.TransportId, ct);
                 var response = await ReadCostAsync(costId, ct);
                 await transaction.CommitAsync(ct);
                 committed = true;

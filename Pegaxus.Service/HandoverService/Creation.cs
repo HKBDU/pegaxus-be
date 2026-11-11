@@ -56,16 +56,26 @@ public sealed partial class Service
                 };
                 ValidateBoundary(item, segments, effective, customerId);
                 if (!actor.IsSpecialist && !await CanOperateAsync(item, actor, cancellationToken)) throw Forbidden();
-                var duplicate = await db.HandoverRecords.AsNoTracking().Where(record => record.TransportId == transportId && record.HandoverType == type &&
-                    record.FromRoutePlanRouteId == item.FromRoutePlanRouteId && record.ToRoutePlanRouteId == item.ToRoutePlanRouteId && record.Status != HandoverStatus.CANCELLED)
-                    .Select(record => (Guid?)record.HandoverRecordId).FirstOrDefaultAsync(cancellationToken);
-                if (duplicate.HasValue) throw new ConflictException("A handover already exists for this boundary", "HANDOVER_ALREADY_EXISTS", new { HandoverRecordId = duplicate.Value });
+                // A trip has one live PICKUP and one live DELIVERY. One left on a boundary the route no longer has (the route switched to a backup)
+                // is replaced; one on this boundary, or one already finished, is a duplicate. Other types may repeat, once per boundary.
+                var oneOfType = type is HandoverType.PICKUP or HandoverType.DELIVERY;
+                var existing = await db.HandoverRecords.Where(record => record.TransportId == transportId && record.HandoverType == type && record.Status != HandoverStatus.CANCELLED &&
+                    (oneOfType || record.FromRoutePlanRouteId == item.FromRoutePlanRouteId && record.ToRoutePlanRouteId == item.ToRoutePlanRouteId)).ToListAsync(cancellationToken);
+                var duplicate = existing.FirstOrDefault(record => record.FromRoutePlanRouteId == item.FromRoutePlanRouteId && record.ToRoutePlanRouteId == item.ToRoutePlanRouteId ||
+                    record.Status is not (HandoverStatus.PLANNED or HandoverStatus.IN_PROGRESS));
+                if (duplicate is not null) throw new ConflictException("A handover already exists for this boundary", "HANDOVER_ALREADY_EXISTS", new { HandoverRecordId = duplicate.HandoverRecordId });
                 item.SequenceNo = checked((await db.HandoverRecords.Where(record => record.TransportId == transportId).MaxAsync(record => (int?)record.SequenceNo, cancellationToken) ?? 0) + 1);
                 var prefix = $"HO-{now:yyyyMMdd}-";
                 var codes = await db.HandoverRecords.AsNoTracking().Where(record => record.HandoverCode.StartsWith(prefix)).Select(record => record.HandoverCode).ToArrayAsync(cancellationToken);
                 var next = codes.Select(code => int.TryParse(code[prefix.Length..], out var number) ? number : 0).DefaultIfEmpty().Max() + 1;
                 if (next > 9999) throw new ConflictException("The daily handover code range is exhausted", "HANDOVER_CODE_EXHAUSTED");
                 item.HandoverCode = prefix + next.ToString("D4");
+                foreach (var stale in existing)
+                {
+                    stale.Status = HandoverStatus.CANCELLED;
+                    stale.CancellationReason = $"Route changed; replaced by {item.HandoverCode}";
+                    stale.CancelledAt = stale.UpdatedAt = now;
+                }
                 await FillCreationSnapshotsAsync(item, request, from, to, cancellationToken);
                 db.HandoverRecords.Add(item);
                 if (!request.StartNow)
