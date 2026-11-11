@@ -1,3 +1,4 @@
+using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
@@ -54,6 +55,25 @@ public class InvoicePaymentTests
             InvoiceId = invoice.InvoiceId, Amount = invoice.TotalAmount, Currency = invoice.Currency, PaymentMethod = PaymentMethod.BANK_TRANSFER,
             Status = status, TransactionReference = "Keep reference", CreatedAt = invoice.UpdatedAt, UpdatedAt = invoice.UpdatedAt };
         db.Receipts.Add(receipt); return receipt;
+    }
+
+    [Fact]
+    public async Task RecordPayment_AfterDelivery_UpdatesTheSavedFinancialReport()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (actor, _, invoice, plan) = await SeedAsync(db, InvoiceType.FINAL);
+        // The report was taken at delivery, before this invoice was paid.
+        var time = new DateTime(2026, 11, 6, 8, 0, 0);
+        db.FinancialReports.Add(new FinancialReport { FinancialReportId = Guid.NewGuid(), ReportCode = "FR-20261106-0001", TransportId = plan.TransportId,
+            Currency = "VND", SummaryNote = "Keep note", GeneratedAt = time, CreatedAt = time, UpdatedAt = time });
+        await db.SaveChangesAsync();
+
+        await CreateService(db).RecordPaymentAsync(invoice.InvoiceId, ValidRequest(), actor.AccountId);
+
+        var report = await db.FinancialReports.AsNoTracking().SingleAsync();
+        Assert.Equal(120, report.TotalInvoicedAmount); Assert.Equal(120, report.TotalPaidAmount); Assert.Equal(0, report.OutstandingAmount);
+        Assert.Equal("FR-20261106-0001", report.ReportCode); Assert.Equal("Keep note", report.SummaryNote);
+        Assert.Equal(new DateTime(2026, 11, 10, 4, 0, 0), report.GeneratedAt);
     }
 
     [Theory]

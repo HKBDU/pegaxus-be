@@ -193,6 +193,7 @@ public sealed class Service(AppDbContext db, NotificationService.INotificationSe
                 ActionUrl = NotificationLinks.Invoice(EmployeeRole.LOGISTICS_MANAGER, invoice.BookingId, invoice.InvoiceId), CreatedAt = now
             });
         await db.SaveChangesAsync(cancellationToken);
+        await FinancialReportService.Service.SyncForBookingAsync(db, clock, invoice.BookingId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
     }

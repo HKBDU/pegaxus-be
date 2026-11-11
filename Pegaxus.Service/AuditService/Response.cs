@@ -9,7 +9,7 @@ public static class Response
     public sealed record ArchiveHorse(Guid HorseId, string Name, string? MicrochipNumber, string? PassportNumber);
 
     public sealed record ArchiveItem(Guid TransportId, string TransportCode, string Status, Guid BookingId, string BookingCode, string CustomerName,
-        string OriginCountry, string DestinationCountry, IReadOnlyList<ArchiveHorse> Horses, DateTimeOffset? CompletedAt, int ClaimCount, int IncidentCount);
+        string OriginCountry, string DestinationCountry, IReadOnlyList<ArchiveHorse> Horses, DateTimeOffset? CompletedAt, int ClaimCount, int IncidentCount, int HorseCount);
 
     public sealed record ArchiveResponse(IReadOnlyList<ArchiveItem> Items, int PageIndex, int PageSize, int TotalItems, int TotalPages);
 

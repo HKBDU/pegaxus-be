@@ -92,7 +92,8 @@ public class AuditHttpTests
         Assert.Equal("Transport archive retrieved successfully", list.GetProperty("message").GetString());
         Assert.Equal(new[] { "items", "pageIndex", "pageSize", "totalItems", "totalPages" }, Names(list.GetProperty("value")));
         var item = list.GetProperty("value").GetProperty("items")[0];
-        Assert.Equal(new[] { "bookingCode", "bookingId", "claimCount", "completedAt", "customerName", "destinationCountry", "horses", "incidentCount", "originCountry", "status", "transportCode", "transportId" }, Names(item));
+        Assert.Equal(new[] { "bookingCode", "bookingId", "claimCount", "completedAt", "customerName", "destinationCountry", "horseCount", "horses", "incidentCount", "originCountry", "status", "transportCode", "transportId" }, Names(item));
+        Assert.Equal(item.GetProperty("horses").GetArrayLength(), item.GetProperty("horseCount").GetInt32());
         Assert.Equal(new[] { "horseId", "microchipNumber", "name", "passportNumber" }, Names(item.GetProperty("horses")[0]));
 
         var full = await client.GetFromJsonAsync<JsonElement>(audit);
