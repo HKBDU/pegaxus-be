@@ -140,11 +140,10 @@ public sealed partial class Service
         var departureAt = Truncate(request.PlannedDepartureAt);
         var arrivalAt = Truncate(request.PlannedArrivalAt);
         var now = UtcNowTruncated();
+        // Same "trip still holds the vehicle" rule as the vehicle picker, so a vehicle it lists as free is never rejected here.
         var overlappingAssignment = await db.RoutePlanRouteVehicles
-            .Include(item => item.RoutePlanRoute)
-                .ThenInclude(item => item.RoutePlan)
+            .WhereUnfinished()
             .Where(item => vehicleIds.Contains(item.VehicleId) &&
-                item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                 (!excludedRoutePlanId.HasValue || item.RoutePlanRoute.RoutePlanId != excludedRoutePlanId.Value) &&
                 item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId &&
                 (item.RoutePlanRoute.PlannedDepartureAt < arrivalAt && item.RoutePlanRoute.PlannedArrivalAt > departureAt ||

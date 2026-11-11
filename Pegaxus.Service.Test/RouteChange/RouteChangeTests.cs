@@ -426,6 +426,36 @@ public class RouteChangeTests
     }
 
     [Theory]
+    [InlineData("ROUTE_PLAN_COMPLETED")]
+    [InlineData("TRANSPORT_PLAN_COMPLETED")]
+    [InlineData("SEGMENT_ARRIVED")]
+    public async Task Return_Rp1_FinishedTripOnAnotherTransportPlan_DoesNotHoldTheVehicle_EvenWithinItsPlannedTimes(string finished)
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        f.Transport.Booking.OriginCountry = f.Transport.Booking.DestinationCountry = "FR";
+        var back = f.NewRoute(f.Start, f.Origin, 70);
+        var vehicle = await db.Vehicles.SingleAsync(); vehicle.Status = VehicleStatus.AVAILABLE;
+        var other = new TransportPlan { TransportPlanId = Guid.NewGuid(), TransportId = f.Transport.TransportId, PlanCode = "TP2",
+            Status = finished == "TRANSPORT_PLAN_COMPLETED" ? TransportPlanStatus.COMPLETED : TransportPlanStatus.IN_PROGRESS };
+        var plannedAt = DateTime.SpecifyKind(Fixture.StartAt.UtcDateTime, DateTimeKind.Unspecified);
+        // The old trip ended early, but its planned window still overlaps the new segment.
+        var done = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = new() { RoutePlanId = Guid.NewGuid(), TransportPlan = other, RoutePlanCode = "DONE",
+                Status = finished == "ROUTE_PLAN_COMPLETED" ? RoutePlanStatus.COMPLETED : RoutePlanStatus.ACTIVE },
+            RouteId = back.RouteId, PlannedDepartureAt = plannedAt, PlannedArrivalAt = plannedAt.AddHours(2),
+            ActualDepartureAt = plannedAt.AddDays(-60), ActualArrivalAt = finished == "SEGMENT_ARRIVED" ? plannedAt.AddDays(-60).AddHours(1) : null };
+        db.Add(done); db.RoutePlanRouteVehicles.Add(new() { RoutePlanRoute = done, VehicleId = vehicle.VehicleId });
+        await db.SaveChangesAsync();
+
+        var created = await TestSupport.CreateRoutePlans(db).CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, new() {
+            RouteType = "RETURN", Action = "SAVE_DRAFT", RouteNote = "Road closed, return to origin",
+            Segments = [new() { SequenceNo = 1, RouteId = back.RouteId, VehicleIds = [vehicle.VehicleId],
+                PlannedDepartureAt = Fixture.StartAt, PlannedArrivalAt = Fixture.StartAt.AddHours(2) }] });
+
+        Assert.Equal("DRAFT", created.Status);
+    }
+
+    [Theory]
     [InlineData(false, null)]
     [InlineData(true, "VEHICLE_SCHEDULE_CONFLICT")]
     public async Task Return_Rp1_InUseVehicleOnAnotherTransportPlan_IsDecidedByTheScheduleNotTheFlag(bool overran, string? code)
