@@ -92,7 +92,7 @@ public class ChatContractTests
         Assert.Equal("Booking", response.References[0].Label);
         Assert.DoesNotContain(response.References, reference => reference.Type == "admin");
         Assert.DoesNotContain(response.References, reference => reference.Label == "invalid id");
-        Assert.Equal(4, typeof(AssistantReference).GetProperties().Length);
+        Assert.Equal(5, typeof(AssistantReference).GetProperties().Length);
         Assert.DoesNotContain(typeof(AssistantReference).GetProperties(), property => property.Name.Contains("Url", StringComparison.OrdinalIgnoreCase));
     }
 }

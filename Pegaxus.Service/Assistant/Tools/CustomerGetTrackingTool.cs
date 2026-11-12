@@ -52,7 +52,7 @@ public sealed class CustomerGetTrackingTool(
                 transport.TransportId, transport.TransportCode, transport.Status, false,
                 "GPS, route segment, and horse health are available after the transport is ready to travel.",
                 null, null, null, null, null, null, []);
-            var earlyReference = new AssistantReferenceCandidate("tracking", transport.TransportId.ToString(), transport.TransportCode, booking.UpdatedAt);
+            var earlyReference = new AssistantReferenceCandidate("tracking", transport.TransportId.ToString(), transport.TransportCode, booking.UpdatedAt, booking.BookingId.ToString());
             return new(Name, notStarted, [earlyReference]);
         }
 
@@ -70,7 +70,7 @@ public sealed class CustomerGetTrackingTool(
             snapshot.EtaAt, snapshot.PlannedRemainingDistanceKm,
             health.Horses.Select(ProjectHorseHealth).ToArray());
         var reference = new AssistantReferenceCandidate(
-            "tracking", snapshot.TransportId.ToString(), transport.TransportCode, snapshot.ServerTime);
+            "tracking", snapshot.TransportId.ToString(), transport.TransportCode, snapshot.ServerTime, booking.BookingId.ToString());
         return new(Name, data, [reference]);
     }
 
