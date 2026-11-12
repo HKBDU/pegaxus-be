@@ -181,6 +181,42 @@ public class AuthServiceTests
         Assert.Null(await cache.GetStringAsync($"otp:PASSWORD_RESET:{account.Email}"));
     }
 
+    [Fact]
+    public async Task ResetPassword_VerifiesTheEmail_SoAnUnverifiedAccountCanSignIn()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, _) = await TestSupport.AddCustomerAsync(db);
+        account.EmailVerifiedAt = null;
+        await db.SaveChangesAsync();
+        var cache = TestSupport.CreateCache();
+        var otp = "730251";
+        await cache.SetStringAsync($"otp:PASSWORD_RESET:{account.Email}",
+            JsonSerializer.Serialize(new { CodeHash = Hash(otp), Attempts = 0, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(5) }));
+        var service = CreateService(db, cache, TestSupport.CreateMailService());
+
+        await service.ResetPasswordAsync(new AuthRequest.ResetPasswordRequest
+        {
+            Email = account.Email, Otp = otp, NewPassword = "NewPassword1", ConfirmPassword = "NewPassword1"
+        });
+
+        Assert.NotNull(account.EmailVerifiedAt);
+        Assert.Equal("access-token", (await service.LoginAsync(new AuthRequest.LoginRequest { Email = account.Email, Password = "NewPassword1" })).AccessToken);
+    }
+
+    [Fact]
+    public async Task Login_AnEmployeeCreatedByTheManager_SignsInWithTheDefaultPassword()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (manager, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var employees = new Pegaxus.Service.EmployeeService.Service(db, new PasswordHasher<Account>());
+        await employees.CreateAsync(new() { Role = "DRIVER", Email = "New.Driver@example.com", Phone = "+33123456789", FullName = "New Driver" }, manager.AccountId);
+        var service = CreateService(db, TestSupport.CreateCache(), TestSupport.CreateMailService());
+
+        var login = await service.LoginAsync(new AuthRequest.LoginRequest { Email = "new.driver@example.com", Password = "123@Abc." });
+
+        Assert.Equal("access-token", login.AccessToken);
+    }
+
     private static AuthService CreateService(
         Pegaxus.Repository.AppDbContext db,
         IDistributedCache cache,
