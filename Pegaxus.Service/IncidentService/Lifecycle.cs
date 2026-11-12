@@ -53,12 +53,13 @@ public sealed partial class Service
                 var allowed = request switch
                 {
                     Request.ResolveRequest => actor.Role == EmployeeRole.LOGISTICS_MANAGER,
-                    Request.CancelRequest => actor.Role == EmployeeRole.LOGISTICS_MANAGER || Crew(actor) && await CrewAssignedAsync(transport.TransportId, actor, ct),
-                    Request.SelfResolveRequest => Crew(actor) && await CrewAssignedAsync(transport.TransportId, actor, ct),
+                    Request.CancelRequest => actor.Role == EmployeeRole.LOGISTICS_MANAGER || await CrewOnDutyOrReporterAsync(incident, transport, actor, ct),
+                    Request.SelfResolveRequest => await CrewOnDutyOrReporterAsync(incident, transport, actor, ct),
                     Request.RaiseSeverityRequest => actor.Role == EmployeeRole.LOGISTICS_MANAGER ||
-                        await CoordinatorAssignedAsync(transport.TransportId, actor, ct) || Crew(actor) && await CrewAssignedAsync(transport.TransportId, actor, ct),
+                        await CoordinatorAssignedAsync(transport.TransportId, actor, ct) || await CrewOnDutyOrReporterAsync(incident, transport, actor, ct),
                     _ => false
                 };
+                if (!allowed && request is not Request.ResolveRequest && Crew(actor) && await CrewAssignedAsync(transport.TransportId, actor, ct)) throw NotOnDuty();
                 if (!allowed) throw new ForbiddenException("The account cannot perform this action on this incident", "FORBIDDEN");
                 var selfResolve = request is Request.SelfResolveRequest and not Request.ResolveRequest;
                 // The crew that reported by mistake may cancel the report, but only before the manager has taken it up.

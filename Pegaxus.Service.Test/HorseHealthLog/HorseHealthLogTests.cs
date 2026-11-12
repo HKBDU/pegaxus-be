@@ -293,6 +293,26 @@ public class HorseHealthLogTests
         }
     }
 
+    [Fact]
+    public async Task Access_OnlyTheEscortOfTheSegmentInProgress_RecordsLogs()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var nextEscort = await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.ESCORT);
+        var second = PersonnelAssignmentTests.Segment(f.RoutePlan, 2); second.EscortEmployeeId = nextEscort.EmployeeId; db.Add(second);
+        f.Transport.Status = TransportStatus.IN_TRANSIT; f.Segment.ActualDepartureAt = Fixture.Now.AddHours(-2);
+        await db.SaveChangesAsync();
+        Assert.Equal("NOT_CURRENT_SEGMENT_CREW", (await Assert.ThrowsAsync<ForbiddenException>(() =>
+            f.Service.CreateAsync(f.Transport.TransportId, f.Request(), nextEscort.AccountId))).ErrorCode);
+        Assert.True((await f.Service.CreateAsync(f.Transport.TransportId, f.Request(), f.Escort.AccountId)).Created);
+
+        // After the handover the horses are with the next escort.
+        f.Segment.ActualArrivalAt = second.ActualDepartureAt = Fixture.Now.AddHours(-1);
+        await db.SaveChangesAsync();
+        Assert.Equal("NOT_CURRENT_SEGMENT_CREW", (await Assert.ThrowsAsync<ForbiddenException>(() =>
+            f.Service.MarkAllNormalAsync(f.Transport.TransportId, new() { LogType = "OTHER" }, f.Escort.AccountId))).ErrorCode);
+        Assert.True((await f.Service.MarkAllNormalAsync(f.Transport.TransportId, new() { LogType = "OTHER" }, nextEscort.AccountId)) is not null); Assert.True(await db.HorseHealthLogs.CountAsync() > 1);
+    }
+
     [Theory]
     [InlineData("inactiveAccount")]
     [InlineData("deletedAccount")]

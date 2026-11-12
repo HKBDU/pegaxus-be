@@ -381,9 +381,11 @@ public class RouteOutsourcingTests
             var (actor, segment, provider) = await SeedAsync(db);
             var secondRoute = new RoutePlan { RoutePlanId = Guid.NewGuid(), RoutePlanCode = "RP-2", TransportPlan = segment.RoutePlan.TransportPlan,
                 UpdatedAt = segment.UpdatedAt, CreatedAt = segment.CreatedAt, Status = RoutePlanStatus.DRAFT };
-            var other = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = secondRoute, Route = segment.Route,
-                SequenceNo = 1, UpdatedAt = segment.UpdatedAt, CreatedAt = segment.CreatedAt };
-            db.RoutePlanRoutes.Add(other);
+            // Only a segment in between can be outsourced, so the second plan's segment also sits between two of our own.
+            RoutePlanRoute SecondRouteSegment(int sequence) => new() { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = secondRoute, Route = segment.Route,
+                SequenceNo = sequence, UpdatedAt = segment.UpdatedAt, CreatedAt = segment.CreatedAt };
+            var other = SecondRouteSegment(2);
+            db.RoutePlanRoutes.AddRange(SecondRouteSegment(1), other, SecondRouteSegment(3));
             await db.SaveChangesAsync();
             await using var first = new AppDbContext(options);
             await using var second = new AppDbContext(options);

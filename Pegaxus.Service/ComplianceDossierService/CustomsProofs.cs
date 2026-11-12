@@ -63,6 +63,7 @@ public sealed partial class Service
 
         if (driverId is null)
             throw new ForbiddenException("You are not assigned to this transport", "NOT_ASSIGNED_TO_TRIP");
+        await EnsureCrewOnDutyAsync(dossier.Transport, driverId.Value, EmployeeRole.DRIVER, cancellationToken);
 
         var customsLane = ParseCustomsLane(request.CustomsLane);
         var now = UtcNow();
@@ -501,4 +502,16 @@ public sealed partial class Service
         CustomsLane.RedLane => "RED_LANE",
         _ => lane.ToString().ToUpperInvariant()
     };
+
+    /// <summary>Only the crew whose segment is in progress (the first one before pickup) submits a border proof for the horses it has.</summary>
+    private async Task EnsureCrewOnDutyAsync(Transport transport, Guid employeeId, EmployeeRole role, CancellationToken cancellationToken)
+    {
+        var plans = await _db.RoutePlans.AsNoTracking().Include(plan => plan.RoutePlanRoutes)
+            .Where(plan => plan.TransportPlan.TransportId == transport.TransportId &&
+                (plan.Status == RoutePlanStatus.CONFIRMED || plan.Status == RoutePlanStatus.ACTIVE || plan.Status == RoutePlanStatus.COMPLETED))
+            .ToArrayAsync(cancellationToken);
+        if (TransportItinerary.Current(TransportItinerary.Effective(plans), transport.Status)?.Route is { } current &&
+            (role == EmployeeRole.DRIVER ? current.DriverEmployeeId : current.EscortEmployeeId) != employeeId)
+            throw new ForbiddenException("Only the crew of the segment in progress can do this", "NOT_CURRENT_SEGMENT_CREW");
+    }
 }
