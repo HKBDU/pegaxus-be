@@ -5,6 +5,8 @@ namespace Pegaxus.Service.Assistant.Gemini;
 
 public interface IGeminiClient
 {
+    Task<bool> IsInScopeAsync(string message, CancellationToken cancellationToken);
+
     Task<GeminiInteractionResult> CreateAsync(
         JsonArray input,
         IReadOnlyList<AssistantToolDefinition> tools,

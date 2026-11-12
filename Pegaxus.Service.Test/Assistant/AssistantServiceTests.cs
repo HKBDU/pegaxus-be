@@ -84,6 +84,8 @@ public class AssistantServiceTests
         private readonly Queue<GeminiInteractionResult> _responses = new(responses);
         public List<JsonArray> Inputs { get; } = [];
 
+        public Task<bool> IsInScopeAsync(string message, CancellationToken cancellationToken) => Task.FromResult(true);
+
         public Task<GeminiInteractionResult> CreateAsync(JsonArray input, IReadOnlyList<AssistantToolDefinition> tools, CancellationToken cancellationToken)
         {
             Inputs.Add((JsonArray)input.DeepClone());

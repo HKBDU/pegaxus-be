@@ -12,11 +12,16 @@ public sealed class AssistantService(
     AssistantToolRegistry tools,
     Microsoft.Extensions.Options.IOptions<AssistantOptions> options) : IAssistantService
 {
+    private const string OutOfScopeReply = "I can only help look up information about my transport bookings. Which booking would you like to see?";
     private readonly AssistantOptions _options = options.Value;
 
     public async Task<ChatResponse> ChatAsync(Guid accountId, ChatRequest request, CancellationToken cancellationToken)
     {
         if (accountId == Guid.Empty) throw new UnauthorizedAccessException("Authenticated account is required.");
+        var latestUserMessage = request.Messages.LastOrDefault(message => message.Role == "user")?.Content.Trim();
+        if (string.IsNullOrWhiteSpace(latestUserMessage) || !await gemini.IsInScopeAsync(latestUserMessage, cancellationToken))
+            return new ChatResponse(OutOfScopeReply, []);
+
         var input = new JsonArray();
         foreach (var message in request.Messages)
         {
