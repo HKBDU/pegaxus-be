@@ -44,6 +44,8 @@ public sealed partial class Service
                 }
                 if (transport.Status != TransportStatus.IN_TRANSIT)
                     throw new ConflictException("Incidents can only be reported while the transport is in transit", "INVALID_TRANSPORT_STATUS");
+                // An offline retry above is still answered after a handover; a new report comes only from the crew that has the horses.
+                if (!await CrewOnDutyAsync(transport, actor, cancellationToken)) throw NotOnDuty();
                 if (!await db.RoutePlanRouteVehicles.AsNoTracking().AnyAsync(item => item.VehicleId == request.VehicleId &&
                         item.RoutePlanRoute.RoutePlan.TransportPlan.TransportId == transport.TransportId &&
                         AssignmentStatuses.Contains(item.RoutePlanRoute.RoutePlan.Status) &&

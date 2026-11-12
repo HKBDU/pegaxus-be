@@ -31,8 +31,8 @@ public sealed partial class Service
                 var actor = await ActorAsync(accountId, cancellationToken);
                 var (incident, transport) = await LockIncidentAsync(incidentReportId, cancellationToken);
                 if (actor.Role != EmployeeRole.LOGISTICS_MANAGER && !await CoordinatorAssignedAsync(transport.TransportId, actor, cancellationToken) &&
-                    !(Crew(actor) && (actor.Role == EmployeeRole.ESCORT || incident.EmployeeId == actor.EmployeeId) &&
-                        await CrewAssignedAsync(transport.TransportId, actor, cancellationToken)))
+                    !(Crew(actor) && incident.EmployeeId == actor.EmployeeId && await CrewAssignedAsync(transport.TransportId, actor, cancellationToken) ||
+                      actor.Role == EmployeeRole.ESCORT && await CrewOnDutyAsync(transport, actor, cancellationToken)))
                     throw new ForbiddenException("Only the assigned escort, reporting driver, assigned coordinator or logistics manager can add follow-up", "FORBIDDEN");
                 EnsureOpenHorseIncident(incident);
                 if (Truncate(request.LastUpdatedAt!.Value) != Truncate(incident.UpdatedAt))

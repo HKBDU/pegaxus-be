@@ -59,6 +59,11 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock, IValida
             throw new ForbiddenException(ForbiddenMessage, "FORBIDDEN");
         if (transport.Status is not (TransportStatus.READY or TransportStatus.IN_TRANSIT))
             throw new ConflictException("Horse health logs can only be recorded while the transport is ready or in transit", "INVALID_TRANSPORT_STATUS");
+        // Only the escort who has the horses now records their health; one who handed them over, or is still waiting for them, does not.
+        var plans = await db.RoutePlans.AsNoTracking().Include(plan => plan.RoutePlanRoutes)
+            .Where(plan => plan.TransportPlan.TransportId == transportId && AssignmentStatuses.Contains(plan.Status)).ToArrayAsync(cancellationToken);
+        if (Common.TransportItinerary.Current(Common.TransportItinerary.Effective(plans), transport.Status)?.Route is { } current && current.EscortEmployeeId != escortId)
+            throw new ForbiddenException("Only the crew of the segment in progress can do this", "NOT_CURRENT_SEGMENT_CREW");
         return transport.BookingId;
     }
 

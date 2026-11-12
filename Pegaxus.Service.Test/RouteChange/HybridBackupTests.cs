@@ -54,7 +54,7 @@ public class HybridBackupTests
     }
 
     [Fact]
-    public async Task Rp1_SeaOrAirSegment_CannotUseACompanyVehicle_ButCanBeOutsourced()
+    public async Task Rp1_SeaOrAirSegment_CannotUseACompanyVehicle_AndCannotBeOutsourcedAsTheLastSegment()
     {
         await using var db = TestSupport.CreateDb();
         var f = await CreateFixtureAsync(db);
@@ -74,8 +74,10 @@ public class HybridBackupTests
 
         var outsourced = Segment(2, "BACKUP", f.Alternative, 0, 2);
         outsourced.Outsourcing = new() { TransportProviderId = provider.TransportProviderId };
-        var result = await service.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, Backup(Segment(1, "PRIMARY", completed, -3, -1), outsourced));
-        Assert.True(result.Segments[1].IsOutsourced);
+        // The last segment ends with the delivery to the customer, which our own crew does.
+        error = await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
+            service.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, Backup(Segment(1, "PRIMARY", completed, -3, -1), outsourced)));
+        Assert.Equal("OUTSOURCED_ENDPOINT_SEGMENT", error.ErrorCode);
     }
 
     [Fact]

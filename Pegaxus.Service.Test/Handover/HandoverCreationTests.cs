@@ -62,8 +62,9 @@ public class HandoverCreationTests
         Assert.Equal(2, await db.Notifications.CountAsync()); Assert.Equal(2, f.Realtime.Messages.Count);
         request.StartNow = true; request.FromRoutePlanRouteId = f.Second.RoutePlanRouteId; request.ToRoutePlanRouteId = f.First.RoutePlanRouteId;
         Assert.Equal("INVALID_SEGMENT_PAIR", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CreateAsync(f.TransportId, request, f.Manager.AccountId))).ErrorCode);
+        // A carrier handover only fits a boundary where a provider runs one side.
         request.HandoverType = "CARRIER_HANDOVER";
-        Assert.Equal("HANDOVER_TYPE_NOT_SUPPORTED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CreateAsync(f.TransportId, request, f.Manager.AccountId))).ErrorCode);
+        Assert.Equal("INVALID_SEGMENT_PAIR", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CreateAsync(f.TransportId, request, f.Manager.AccountId))).ErrorCode);
     }
 
     [Fact]
