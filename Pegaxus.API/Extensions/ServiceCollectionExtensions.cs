@@ -249,6 +249,41 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>Server-side Gemini settings for the Customer Assistant.</summary>
+    public static IServiceCollection AddAssistantModule(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<Pegaxus.Service.Assistant.AssistantOptions>()
+            .Configure(options =>
+            {
+                options.ApiKey = configuration["GEMINI_API_KEY"] ?? string.Empty;
+                options.Model = configuration["GEMINI_MODEL"]?.Trim() ?? string.Empty;
+                options.ApiUrl = configuration["GEMINI_API_URL"] ?? options.ApiUrl;
+                options.TimeoutSeconds = ReadInteger(configuration["GEMINI_TIMEOUT_SECONDS"], 60);
+                options.MaxOutputTokens = ReadInteger(configuration["GEMINI_MAX_OUTPUT_TOKENS"], 1024);
+                options.MaxToolCalls = ReadInteger(configuration["GEMINI_MAX_TOOL_CALLS"], 5);
+            })
+            .Validate(options => !string.IsNullOrWhiteSpace(options.ApiKey), "GEMINI_API_KEY must be configured.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Model), "GEMINI_MODEL must be configured.")
+            .Validate(options => Uri.TryCreate(options.ApiUrl, UriKind.Absolute, out var uri) &&
+                uri.Scheme == Uri.UriSchemeHttps && string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Fragment),
+                "GEMINI_API_URL must be an absolute HTTPS URL without user info or fragment.")
+            .Validate(options => options.TimeoutSeconds is >= 1 and <= 300,
+                "GEMINI_TIMEOUT_SECONDS must be between 1 and 300.")
+            .Validate(options => options.MaxOutputTokens is >= 1 and <= 8192,
+                "GEMINI_MAX_OUTPUT_TOKENS must be between 1 and 8192.")
+            .Validate(options => options.MaxToolCalls is >= 1 and <= 5,
+                "GEMINI_MAX_TOOL_CALLS must be between 1 and 5.")
+            .ValidateOnStart();
+
+        return services;
+    }
+
+    private static int ReadInteger(string? value, int defaultValue) =>
+        string.IsNullOrWhiteSpace(value) ? defaultValue :
+        int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 0;
+
     /// <summary>Customer claims about a delivery and how the logistics manager handles them.</summary>
     public static IServiceCollection AddClaimsModule(this IServiceCollection services)
     {
