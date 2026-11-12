@@ -157,6 +157,8 @@ public sealed partial class Service
 
     private static void ValidateRouteRules(IReadOnlyList<MaterializedSegment> segments, TransportPlan plan, RouteType routeType, RoutePlan? primary, Guid? updatingRoutePlanId = null)
     {
+        if (segments.Count > 0 && (segments[0].Request.Outsourcing is not null || segments[^1].Request.Outsourcing is not null))
+            throw HandoverRules.OutsourcedEndpoint();
         for (var index = 1; index < segments.Count; index++)
         {
             if (segments[index - 1].Route.ToLocationId != segments[index].Route.FromLocationId)

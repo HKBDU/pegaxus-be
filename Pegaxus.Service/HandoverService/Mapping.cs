@@ -37,9 +37,9 @@ public sealed partial class Service
         var geofence = await GeofenceAsync(item, cancellationToken);
         return new(item.HandoverRecordId, item.HandoverCode, new(transport.Id, transport.Code, transport.Status.ToString()), transport.BookingId,
             item.SequenceNo, item.HandoverType.ToString(), item.Status.ToString(), AsUtc(item.PlannedHandoverAt), AsUtc(item.ActualHandoverAt), AsUtc(item.CompletedAt),
-            new(item.FromType.ToString(), item.FromCustomerId, item.FromEmployeeId, null, item.FromPartyName, item.FromContactName,
+            new(item.FromType.ToString(), item.FromCustomerId, item.FromEmployeeId, item.FromTransportProviderId, item.FromPartyName, item.FromContactName,
                 actor.IsCustomer && item.FromType == HandoverPartyType.EMPLOYEE ? null : item.FromContactPhone),
-            new(item.ToType.ToString(), item.ToCustomerId, item.ToEmployeeId, null, item.ToPartyName, item.ToContactName,
+            new(item.ToType.ToString(), item.ToCustomerId, item.ToEmployeeId, item.ToTransportProviderId, item.ToPartyName, item.ToContactName,
                 actor.IsCustomer && item.ToType == HandoverPartyType.EMPLOYEE ? null : item.ToContactPhone),
             Brief(item.FromRoutePlanRouteId), Brief(item.ToRoutePlanRouteId), new(item.LocationName, item.Address, item.Country),
             item.HorseConditionNote, item.DocumentHandoverNote, item.EquipmentHandoverNote, item.DiscrepancyNote, senderSignatureUrl, receiverSignatureUrl,

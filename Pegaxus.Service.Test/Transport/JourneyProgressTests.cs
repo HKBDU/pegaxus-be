@@ -192,7 +192,7 @@ public class JourneyProgressTests
     }
 
     [Fact]
-    public async Task OutsourcedSegments_HideInternalResourcesAndDisableProviderHandovers()
+    public async Task OutsourcedSegments_HideInternalResourcesAndOfferACarrierHandoverOnBothSides()
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db);
@@ -209,7 +209,8 @@ public class JourneyProgressTests
         Assert.Null(result.Segments[1].Driver);
         Assert.Null(result.Segments[1].Escort);
         Assert.Empty(result.Segments[1].Vehicles);
-        Assert.All(result.HandoverBoundaries.Skip(1).Take(2), item => { Assert.False(item.CanCreate); Assert.Empty(item.AllowedHandoverTypes); });
+        // Our crew hands the horses to the provider and takes them back, so both boundaries of the outsourced segment take a carrier handover.
+        Assert.All(result.HandoverBoundaries.Skip(1).Take(2), item => { Assert.True(item.HandoverRequired); Assert.Equal(new[] { "CARRIER_HANDOVER" }, item.AllowedHandoverTypes); });
     }
 
     [Theory]

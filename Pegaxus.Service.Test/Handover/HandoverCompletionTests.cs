@@ -252,7 +252,7 @@ public class HandoverCompletionTests
     [InlineData("party-changed", "INVALID_SEGMENT_PAIR")]
     [InlineData("xor", "INVALID_SEGMENT_PAIR")]
     [InlineData("foreign", "INVALID_SEGMENT_PAIR")]
-    [InlineData("carrier", "HANDOVER_TYPE_NOT_SUPPORTED")]
+    [InlineData("carrier", "INVALID_SEGMENT_PAIR")]
     [InlineData("outsourced", "OUTSOURCED_SEGMENT")]
     public async Task Complete_RevalidatesBoundaryAndParties(string invalid, string code)
     {
