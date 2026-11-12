@@ -61,6 +61,8 @@ public sealed partial class Service
 
         var now = UtcNow();
         account.PasswordHash = _passwordHasher.HashPassword(account, request.NewPassword);
+        // The OTP reached this inbox, which proves the address as well as an email-verification OTP would.
+        account.EmailVerifiedAt ??= now;
         account.UpdatedAt = now;
         foreach (var refreshToken in account.RefreshTokens.Where(item => item.RevokedAt is null))
             refreshToken.RevokedAt = now;
