@@ -60,6 +60,27 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock,
             (actor.Role == EmployeeRole.DRIVER && segment.DriverEmployeeId == actor.EmployeeId ||
              actor.Role == EmployeeRole.ESCORT && segment.EscortEmployeeId == actor.EmployeeId));
 
+    /// <summary>
+    /// Crew act on the trip only while their own segment is the one in progress (the first one before pickup): a crew that already handed
+    /// the horses over, or one still waiting for them, cannot report or close incidents for the crew that has them now.
+    /// </summary>
+    private async Task<bool> CrewOnDutyAsync(Transport transport, Employee actor, CancellationToken ct)
+    {
+        if (!Crew(actor) || !await CrewAssignedAsync(transport.TransportId, actor, ct)) return false;
+        var current = await CurrentSegmentAsync(transport, ct);
+        // No segment is in progress yet (the route is not confirmed): the trip assignment decides.
+        if (current is null) return true;
+        return actor.Role == EmployeeRole.DRIVER ? current.DriverEmployeeId == actor.EmployeeId : current.EscortEmployeeId == actor.EmployeeId;
+    }
+
+    /// <summary>The crew on duty, or the crew member who reported the incident and knows it best.</summary>
+    private async Task<bool> CrewOnDutyOrReporterAsync(IncidentReport incident, Transport transport, Employee actor, CancellationToken ct) =>
+        Crew(actor) && incident.EmployeeId == actor.EmployeeId && await CrewAssignedAsync(transport.TransportId, actor, ct) ||
+        await CrewOnDutyAsync(transport, actor, ct);
+
+    private static ForbiddenException NotOnDuty() =>
+        new("Only the crew of the segment in progress can do this", "NOT_CURRENT_SEGMENT_CREW");
+
     private Task<Guid?> CurrentPlanIdAsync(Guid transportId, CancellationToken ct) =>
         db.TransportPlans.AsNoTracking().Where(plan => plan.TransportId == transportId && plan.Status != TransportPlanStatus.CANCELLED)
             .OrderByDescending(plan => plan.CreatedAt).ThenBy(plan => plan.TransportPlanId)

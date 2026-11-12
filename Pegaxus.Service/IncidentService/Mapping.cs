@@ -84,12 +84,15 @@ public sealed partial class Service
         if (incident.Status is not (IncidentStatus.REPORTED or IncidentStatus.PENDING)) return [];
         var manager = actor.Role == EmployeeRole.LOGISTICS_MANAGER;
         var coordinator = await CoordinatorAssignedAsync(transport.TransportId, actor, ct);
-        var crew = Crew(actor) && await CrewAssignedAsync(transport.TransportId, actor, ct);
-        var reporter = crew && incident.EmployeeId == actor.EmployeeId;
+        var assigned = Crew(actor) && await CrewAssignedAsync(transport.TransportId, actor, ct);
+        var reporter = assigned && incident.EmployeeId == actor.EmployeeId;
+        var onDuty = assigned && await CrewOnDutyAsync(transport, actor, ct);
+        // The crew on duty, or the reporter, acts on the incident; a crew that is not on its segment yet (or any more) only reads it.
+        var crew = onDuty || reporter;
         var actions = new List<string>();
         if (crew && actor.Role == EmployeeRole.ESCORT && incident.Category is IncidentCategory.BOTH or IncidentCategory.HORSE_HEALTH) actions.Add("ADD_HORSE_DETAIL");
         if (incident.VehicleIncidentDetail is not null && (manager || coordinator || reporter)) actions.Add("SUPPLEMENT_VEHICLE");
-        if (incident.HorseHealthIncidentDetails.Count > 0 && (manager || coordinator || reporter || crew && actor.Role == EmployeeRole.ESCORT)) actions.Add("FOLLOW_UP_HORSE");
+        if (incident.HorseHealthIncidentDetails.Count > 0 && (manager || coordinator || reporter || onDuty && actor.Role == EmployeeRole.ESCORT)) actions.Add("FOLLOW_UP_HORSE");
         if (transport.Status == TransportStatus.IN_TRANSIT)
         {
             if (crew || coordinator) actions.Add("REQUEST_COST");

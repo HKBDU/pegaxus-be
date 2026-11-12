@@ -36,12 +36,13 @@ public sealed partial class Service
 
     private static void ValidateBoundary(HandoverRecord item, RoutePlanRoute[] segments, RoutePlanRoute[] effective, Guid customerId)
     {
-        if (item.HandoverType == HandoverType.CARRIER_HANDOVER)
-            throw new UnprocessableEntityException("Provider handovers are not supported by the current database schema", "HANDOVER_TYPE_NOT_SUPPORTED");
         var from = segments.SingleOrDefault(segment => segment.RoutePlanRouteId == item.FromRoutePlanRouteId);
         var to = segments.SingleOrDefault(segment => segment.RoutePlanRouteId == item.ToRoutePlanRouteId);
-        if (item.HandoverType != HandoverType.OTHER && (from?.TransportProviderId is not null || to?.TransportProviderId is not null))
-            throw new UnprocessableEntityException("Outsourced segments require a provider handover", item.HandoverType is HandoverType.TRANSFER or HandoverType.BORDER_HANDOVER ? "OUTSOURCED_SEGMENT" : "HANDOVER_TYPE_NOT_SUPPORTED");
+        var outsourced = from?.TransportProviderId is not null || to?.TransportProviderId is not null;
+        if (item.HandoverType is HandoverType.TRANSFER or HandoverType.BORDER_HANDOVER && outsourced)
+            throw new UnprocessableEntityException("A provider takes over or hands back the horses here, so use a carrier handover", "OUTSOURCED_SEGMENT");
+        if (item.HandoverType is HandoverType.PICKUP or HandoverType.DELIVERY && outsourced)
+            throw new UnprocessableEntityException("Pickup and delivery are always done by our own crew", "HANDOVER_TYPE_NOT_SUPPORTED");
         var fromIndex = Array.FindIndex(effective, segment => segment.RoutePlanRouteId == item.FromRoutePlanRouteId);
         var toIndex = Array.FindIndex(effective, segment => segment.RoutePlanRouteId == item.ToRoutePlanRouteId);
         var valid = item.HandoverType switch
@@ -50,6 +51,10 @@ public sealed partial class Service
                 CustomerParty(item.FromType, item.FromCustomerId, item.FromEmployeeId, customerId) && EmployeeParty(item.ToType, item.ToCustomerId, item.ToEmployeeId, to?.DriverEmployeeId),
             HandoverType.TRANSFER or HandoverType.BORDER_HANDOVER => fromIndex >= 0 && toIndex == fromIndex + 1 &&
                 EmployeeParty(item.FromType, item.FromCustomerId, item.FromEmployeeId, from?.DriverEmployeeId) && EmployeeParty(item.ToType, item.ToCustomerId, item.ToEmployeeId, to?.DriverEmployeeId),
+            // The provider has no account: the crew of the internal side names it and signs with it.
+            HandoverType.CARRIER_HANDOVER => fromIndex >= 0 && toIndex == fromIndex + 1 && outsourced &&
+                CarrierParty(item.FromType, item.FromCustomerId, item.FromEmployeeId, item.FromTransportProviderId, from!) &&
+                CarrierParty(item.ToType, item.ToCustomerId, item.ToEmployeeId, item.ToTransportProviderId, to!),
             HandoverType.DELIVERY => item.ToRoutePlanRouteId is null && fromIndex >= 0 && fromIndex == effective.Length - 1 &&
                 EmployeeParty(item.FromType, item.FromCustomerId, item.FromEmployeeId, from?.DriverEmployeeId) && CustomerParty(item.ToType, item.ToCustomerId, item.ToEmployeeId, customerId),
             HandoverType.OTHER => (item.FromRoutePlanRouteId is null || from is not null) && (item.ToRoutePlanRouteId is null || to is not null) &&
@@ -63,6 +68,10 @@ public sealed partial class Service
 
     private static bool CustomerParty(HandoverPartyType type, Guid? customerId, Guid? employeeId, Guid expected) => type == HandoverPartyType.CUSTOMER && customerId == expected && employeeId is null;
     private static bool EmployeeParty(HandoverPartyType type, Guid? customerId, Guid? employeeId, Guid? expected) => type == HandoverPartyType.EMPLOYEE && expected.HasValue && employeeId == expected && customerId is null;
+    private static bool CarrierParty(HandoverPartyType type, Guid? customerId, Guid? employeeId, Guid? providerId, RoutePlanRoute segment) =>
+        segment.TransportProviderId is { } expected
+            ? type == HandoverPartyType.PROVIDER && providerId == expected && employeeId is null && customerId is null
+            : providerId is null && EmployeeParty(type, customerId, employeeId, segment.DriverEmployeeId);
     private static bool ValidParty(HandoverPartyType type, Guid? customerId, Guid? employeeId) => type switch
     { HandoverPartyType.CUSTOMER => customerId.HasValue && employeeId is null, HandoverPartyType.EMPLOYEE => employeeId.HasValue && customerId is null, _ => false };
 

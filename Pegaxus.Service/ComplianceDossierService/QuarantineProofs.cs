@@ -47,13 +47,14 @@ public sealed partial class Service
             .Active()
             .Where(employee => employee.AccountId == accountId && (employee.Role == EmployeeRole.DRIVER || employee.Role == EmployeeRole.ESCORT) && employee.EmployeeTransportPlans.Any(item =>
                     item.TransportPlan.TransportId == dossier.TransportId))
-            .Select(employee => new { employee.EmployeeId, employee.FullName })
+            .Select(employee => new { employee.EmployeeId, employee.FullName, employee.Role })
             .SingleOrDefaultAsync(cancellationToken);
 
         if (assignedEmployee is null)
             throw new ForbiddenException(
                 "You are not assigned to this transport",
                 "NOT_ASSIGNED_TO_TRIP");
+        await EnsureCrewOnDutyAsync(dossier.Transport, assignedEmployee.EmployeeId, assignedEmployee.Role, cancellationToken);
 
         var now = UtcNow();
         var proof = new QuarantineProof

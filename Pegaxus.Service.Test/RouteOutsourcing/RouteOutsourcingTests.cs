@@ -141,6 +141,20 @@ public class RouteOutsourcingTests
     }
 
     [Theory]
+    [InlineData(1)]
+    [InlineData(3)]
+    public async Task Assign_FirstOrLastSegment_IsRejected_BecauseOurCrewDoesPickupAndDelivery(int sequence)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (actor, segment, provider) = await SeedAsync(db);
+        var edge = await db.RoutePlanRoutes.SingleAsync(item => item.RoutePlanId == segment.RoutePlanId && item.SequenceNo == sequence);
+        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
+            Service(db).SetAsync(actor, segment.RoutePlanId, edge.RoutePlanRouteId, Assign(segment, provider)));
+        Assert.Equal("OUTSOURCED_ENDPOINT_SEGMENT", error.ErrorCode);
+        Assert.Null((await db.RoutePlanRoutes.AsNoTracking().SingleAsync(item => item.RoutePlanRouteId == edge.RoutePlanRouteId)).TransportProviderId);
+    }
+
+    [Theory]
     [InlineData(RoutePlanStatus.CONFIRMED)]
     [InlineData(RoutePlanStatus.PENDING_LEGAL_REVIEW)]
     [InlineData(RoutePlanStatus.PENDING_MANAGER_APPROVAL)]
@@ -367,9 +381,11 @@ public class RouteOutsourcingTests
             var (actor, segment, provider) = await SeedAsync(db);
             var secondRoute = new RoutePlan { RoutePlanId = Guid.NewGuid(), RoutePlanCode = "RP-2", TransportPlan = segment.RoutePlan.TransportPlan,
                 UpdatedAt = segment.UpdatedAt, CreatedAt = segment.CreatedAt, Status = RoutePlanStatus.DRAFT };
-            var other = new RoutePlanRoute { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = secondRoute, Route = segment.Route,
-                SequenceNo = 1, UpdatedAt = segment.UpdatedAt, CreatedAt = segment.CreatedAt };
-            db.RoutePlanRoutes.Add(other);
+            // Only a segment in between can be outsourced, so the second plan's segment also sits between two of our own.
+            RoutePlanRoute SecondRouteSegment(int sequence) => new() { RoutePlanRouteId = Guid.NewGuid(), RoutePlan = secondRoute, Route = segment.Route,
+                SequenceNo = sequence, UpdatedAt = segment.UpdatedAt, CreatedAt = segment.CreatedAt };
+            var other = SecondRouteSegment(2);
+            db.RoutePlanRoutes.AddRange(SecondRouteSegment(1), other, SecondRouteSegment(3));
             await db.SaveChangesAsync();
             await using var first = new AppDbContext(options);
             await using var second = new AppDbContext(options);
@@ -566,6 +582,17 @@ public class RouteOutsourcingTests
         };
         var provider = new TransportProvider { TransportProviderId = Guid.NewGuid(), ProviderCode = "PRV-1", ProviderName = "Lufthansa Cargo",
             SupportedModes = "road, air", Status = ProviderStatus.ACTIVE, CreatedAt = now, UpdatedAt = now };
+        // Only a segment in between can be outsourced, so the flight sits between two road legs run by our crew.
+        segment.SequenceNo = 2;
+        RoutePlanRoute Road(int sequence, Location from, Location to) => new()
+        {
+            RoutePlanRouteId = Guid.NewGuid(), RoutePlan = routePlan, SequenceNo = sequence, CreatedAt = now, UpdatedAt = now,
+            Route = new Route { RouteId = Guid.NewGuid(), RouteCode = $"ROAD-{sequence}", TransportMode = TransportMode.ROAD, CreatedAt = now, UpdatedAt = now,
+                FromLocation = from, ToLocation = to }
+        };
+        var stable = new Location { LocationId = Guid.NewGuid(), LocationName = "Stable", Country = "DE", CreatedAt = now, UpdatedAt = now };
+        var farm = new Location { LocationId = Guid.NewGuid(), LocationName = "Farm", Country = "GB", CreatedAt = now, UpdatedAt = now };
+        db.AddRange(Road(1, stable, segment.Route.FromLocation), Road(3, segment.Route.ToLocation, farm));
         db.AddRange(segment, provider, new EmployeeTransportPlan { TransportPlan = plan, Employee = coordinator, AssignedAt = now });
         await db.SaveChangesAsync();
         return (manager.AccountId, segment, provider);

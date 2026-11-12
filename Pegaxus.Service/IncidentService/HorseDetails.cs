@@ -28,6 +28,7 @@ public sealed partial class Service
                 var (incident, transport) = await LockIncidentAsync(incidentReportId, cancellationToken);
                 if (!await CrewAssignedAsync(transport.TransportId, actor, cancellationToken))
                     throw new ForbiddenException("Only the assigned escort can add horse details", "FORBIDDEN");
+                if (!await CrewOnDutyOrReporterAsync(incident, transport, actor, cancellationToken)) throw NotOnDuty();
                 EnsureOpenHorseIncident(incident);
                 await BookingHorsesAsync(transport, request.Horses, cancellationToken);
                 var ids = request.Horses.Select(horse => horse.HorseId).ToArray();
