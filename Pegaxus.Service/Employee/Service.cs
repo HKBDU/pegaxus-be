@@ -135,6 +135,8 @@ public sealed class Service : IEmployeeService
             Email = email,
             AccountType = AccountType.EMPLOYEE,
             Status = AccountStatus.ACTIVE,
+            // The manager entered this address and the welcome mail goes to it: no separate verification step.
+            EmailVerifiedAt = now,
             CreatedAt = now,
             UpdatedAt = now
         };
