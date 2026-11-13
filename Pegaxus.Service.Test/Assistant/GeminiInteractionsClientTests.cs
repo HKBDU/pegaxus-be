@@ -41,6 +41,9 @@ public class GeminiInteractionsClientTests
         using var body = JsonDocument.Parse(capturedBody!);
         Assert.False(body.RootElement.GetProperty("store").GetBoolean());
         Assert.Equal("gemini-test", body.RootElement.GetProperty("model").GetString());
+        var instruction = body.RootElement.GetProperty("system_instruction").GetString()!;
+        Assert.Contains($"The current time is {DateTimeOffset.UtcNow:yyyy-MM-dd}", instruction);
+        Assert.DoesNotContain("{{", instruction);
         Assert.Equal("Bookings found.", result.OutputText);
         Assert.Equal("keep-me", result.Steps[0]!["signature"]!.GetValue<string>());
     }
