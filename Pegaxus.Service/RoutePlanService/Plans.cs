@@ -40,6 +40,10 @@ public sealed partial class Service
             throw new ConflictException("A primary route plan already exists for this transport plan", "PRIMARY_ROUTE_PLAN_EXISTS");
         if (routeType == RouteType.BACKUP && primary is null)
             throw new ConflictException("A backup route plan requires an existing primary route plan", "PRIMARY_ROUTE_PLAN_REQUIRED");
+        // Readiness was decided with the backups that exist, so a ready transport takes no new one before pickup. On the way an
+        // incident may still need an emergency backup; a completed transport needs none.
+        if (routeType == RouteType.BACKUP && plan.Transport.Status is TransportStatus.READY or TransportStatus.COMPLETED)
+            throw new ConflictException("Backup routes can no longer be added once the transport is ready", "TRANSPORT_ALREADY_READY");
         if (routeType == RouteType.RETURN)
         {
             if (primary is null) throw new ConflictException("A return route requires an existing primary.", "PRIMARY_ROUTE_PLAN_REQUIRED");
@@ -273,6 +277,8 @@ public sealed partial class Service
             ? $"Cancelled: {request.Reason.Trim()}"
             : $"{routePlan.RouteNote} | Cancelled: {request.Reason.Trim()}";
         routePlan.UpdatedAt = cancelledAt;
+        // Dropping a draft backup can leave only confirmed plans, which may be the last condition for READY.
+        await TransportReadiness.SyncAsync(db, routePlan.TransportPlan.TransportId, cancelledAt, cancellationToken);
         var specialistIds = routePlan.TransportPlan.EmployeeTransportPlans
             .Where(item => item.Employee.Role == EmployeeRole.TRANSPORT_SPECIALIST && item.Employee.IsActive && !item.Employee.IsDeleted)
             .Select(item => item.Employee.AccountId).Distinct().ToList();

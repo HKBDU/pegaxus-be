@@ -231,12 +231,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             }
         }
         var recipients = oldIds.Concat(newIds).Distinct().ToArray();
-        if (PersonnelComplete(segments) && plan.Transport.Status is TransportStatus.CREATED or TransportStatus.PLANNING)
-        {
-            var transport = await db.Transports.SingleAsync(x => x.TransportId == plan.TransportId, cancellationToken);
-            transport.Status = TransportStatus.READY;
-            transport.UpdatedAt = now;
-        }
+        await TransportReadiness.SyncAsync(db, plan.TransportId, now, cancellationToken);
         var recipientEmployees = await db.Employees.AsNoTracking().Include(x => x.Account).Where(x => recipients.Contains(x.EmployeeId)).ToListAsync(cancellationToken);
         foreach (var employee in recipientEmployees)
         {

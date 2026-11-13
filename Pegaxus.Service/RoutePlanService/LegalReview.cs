@@ -113,10 +113,8 @@ public sealed partial class Service
             foreach (var vehicle in routePlan.RoutePlanRoutes.Concat(confirmedBackups.SelectMany(item => item.RoutePlanRoutes))
                          .SelectMany(item => item.RoutePlanRouteVehicles).Select(item => item.Vehicle).DistinctBy(item => item.VehicleId))
                 if (vehicle.Status != VehicleStatus.IN_USE) vehicle.Status = VehicleStatus.ASSIGNED;
-            if (routeType == RouteType.PRIMARY &&
-                routePlan.RoutePlanRoutes.Where(item => !item.TransportProviderId.HasValue)
-                    .All(item => item.DriverEmployeeId.HasValue && item.EscortEmployeeId.HasValue))
-                transport.Status = TransportStatus.READY;
+            if (routeType is RouteType.PRIMARY or RouteType.BACKUP)
+                await TransportReadiness.SyncAsync(db, transport.TransportId, now, cancellationToken);
         }
         else if (auditDossier is not null)
         {
