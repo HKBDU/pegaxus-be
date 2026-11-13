@@ -99,6 +99,29 @@ public class AssistantToolOwnershipTests
     }
 
     [Fact]
+    public async Task BookingDetail_FindsTheCustomersOwnBookingByExactCode_AndNoOneElses()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (owner, ownerCustomer) = await TestSupport.AddCustomerAsync(db);
+        var (other, _) = await TestSupport.AddCustomerAsync(db);
+        var (booking, _) = await TestSupport.AddPendingBookingAsync(db, ownerCustomer);
+        var tool = new CustomerGetBookingTool(new Pegaxus.Service.BookingService.Service(
+            db, TestSupport.CreateMailService(), TestSupport.CreateNotifications(db)));
+        var byCode = Args($"{{\"bookingCode\":\" {booking.BookingCode.ToLowerInvariant()} \"}}");
+
+        var found = await tool.RunAsync(byCode, new AssistantToolContext(owner.AccountId, CancellationToken.None));
+        Assert.Equal(booking.BookingId, Assert.IsType<BookingDetailToolData>(found.Data).BookingId);
+
+        await Assert.ThrowsAsync<NotFoundException>(() => tool.RunAsync(byCode, new AssistantToolContext(other.AccountId, CancellationToken.None)));
+        // A partial code is never taken for the booking it happens to match.
+        await Assert.ThrowsAsync<NotFoundException>(() => tool.RunAsync(
+            Args($"{{\"bookingCode\":\"{booking.BookingCode[..^1]}\"}}"), new AssistantToolContext(owner.AccountId, CancellationToken.None)));
+        await Assert.ThrowsAsync<BadRequestException>(() => tool.RunAsync(
+            Args($"{{\"bookingId\":\"{booking.BookingId}\",\"bookingCode\":\"{booking.BookingCode}\"}}"), new AssistantToolContext(owner.AccountId, CancellationToken.None)));
+        await Assert.ThrowsAsync<BadRequestException>(() => tool.RunAsync(Args("{}"), new AssistantToolContext(owner.AccountId, CancellationToken.None)));
+    }
+
+    [Fact]
     public async Task DossierTool_ReadsEveryPageAndReturnsOnlyIncompleteRequirements()
     {
         var accountId = Guid.NewGuid();

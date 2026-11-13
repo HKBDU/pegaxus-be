@@ -46,23 +46,26 @@ public sealed class CustomerGetBookingTool(Pegaxus.Service.BookingService.IBooki
 {
     private sealed class Arguments
     {
-        public Guid BookingId { get; init; }
+        public Guid? BookingId { get; init; }
+        public string? BookingCode { get; init; }
     }
 
     public string Name => "customer_get_booking";
-    public string Description => "Get a booking owned by the authenticated customer.";
+    public string Description => "Get a booking owned by the authenticated customer, by its bookingId or by the booking code the customer typed. Pass exactly one of them.";
     public JsonElement ParametersSchema => AssistantToolJson.Schema("""
-        {"type":"object","properties":{"bookingId":{"type":"string","format":"uuid"}},"required":["bookingId"],"additionalProperties":false}
+        {"type":"object","properties":{"bookingId":{"type":"string","format":"uuid"},"bookingCode":{"type":"string","maxLength":50}},"additionalProperties":false}
         """);
 
     public async Task<AssistantToolResult> RunAsync(JsonElement arguments, AssistantToolContext context)
     {
         AssistantToolJson.ValidateContext(context);
         var input = AssistantToolJson.Parse<Arguments>(arguments);
-        if (input.BookingId == Guid.Empty)
-            throw new BadRequestException("bookingId must be a non-empty UUID.", "VALIDATION_ERROR");
+        var code = input.BookingCode?.Trim();
+        if ((input.BookingId is not null) == !string.IsNullOrEmpty(code) || input.BookingId == Guid.Empty || code?.Length > 50)
+            throw new BadRequestException("Pass either a non-empty bookingId UUID or a bookingCode.", "VALIDATION_ERROR");
 
-        var booking = await bookings.GetAsync(context.AccountId, input.BookingId, context.CancellationToken);
+        var bookingId = input.BookingId ?? await IdByCodeAsync(code!, context);
+        var booking = await bookings.GetAsync(context.AccountId, bookingId, context.CancellationToken);
         var data = new BookingDetailToolData(booking.BookingId, booking.BookingCode, booking.Status,
             booking.OriginAddress, booking.OriginCountry, booking.DestinationAddress, booking.DestinationCountry,
             booking.RequestedDepartureDate, booking.RequestedArrivalDate, booking.TotalHorses,
@@ -71,6 +74,17 @@ public sealed class CustomerGetBookingTool(Pegaxus.Service.BookingService.IBooki
                 booking.Transport.TransportCode, booking.Transport.Status), booking.CreatedAt, booking.UpdatedAt);
         var reference = new AssistantReferenceCandidate("booking", booking.BookingId.ToString(), booking.BookingCode, booking.UpdatedAt);
         return new(Name, data, [reference]);
+    }
+
+    /// <summary>Only an exact code match among the customer's own bookings counts; a partial match is never substituted.</summary>
+    private async Task<Guid> IdByCodeAsync(string code, AssistantToolContext context)
+    {
+        var matches = await bookings.GetListAsync(context.AccountId, new BookingRequest.BookingListRequest
+        {
+            PageIndex = 1, PageSize = 20, Search = code, SortBy = ["createdAt:desc"]
+        }, context.CancellationToken);
+        return matches.Items.FirstOrDefault(item => string.Equals(item.BookingCode, code, StringComparison.OrdinalIgnoreCase))?.BookingId
+            ?? throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
     }
 }
 
