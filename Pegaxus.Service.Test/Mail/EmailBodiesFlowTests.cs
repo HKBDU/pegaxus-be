@@ -63,6 +63,12 @@ public class EmailBodiesFlowTests
         ("claim-approved", Mail.ClaimResultBody(text, "CLM-1", "REQ-1", true, text, 18000000, "VND", link)),
         ("claim-rejected", Mail.ClaimResultBody(text, "CLM-1", "REQ-1", false, text, null, "VND", link)),
         ("claim-closed", Mail.ClaimClosedBody(text, "CLM-1", "REQ-1", link)),
+        ("health-customer", Mail.HorseHealthCustomerBody(text, "REQ-1", "TR-1", text, true, true, link, text)),
+        ("booking-approved-contact", Mail.BookingApprovedBody(text, "REQ-1", "TR-1", new DateOnly(2026, 12, 1), link, text)),
+        ("booking-rejected-contact", Mail.BookingRejectedBody(text, "REQ-1", text, link, text)),
+        ("booking-changed-contact", Mail.BookingChangedBody(text, "REQ-1", text, true, text, false, link, text)),
+        ("delivered-contact", Mail.TransportDeliveredBody(text, "TR-1", new DateTime(2026, 12, 1, 6, 0, 0), link, false, text)),
+        ("plan-updated-customer", Mail.TransportPlanBody(text, "TP-1", Mail.TransportPlanMailKind.Updated, text, link, "REQ-1", text)),
         ("audit-package-ready", Mail.AuditPackageReadyBody(text, "TR-1", "TR-1-standard.zip", 700L * 1024 * 1024, link, new DateTime(2026, 11, 2, 2, 0, 0))),
     ];
 
@@ -109,6 +115,46 @@ public class EmailBodiesFlowTests
     {
         foreach (var (name, html) in AllTemplates(link: null))
             Assert.DoesNotContain("<a href", html);
+    }
+
+    [Fact]
+    public void EveryTemplate_ShowsTheSupportHotlineInTheFooter()
+    {
+        Assert.Equal("0961556885", Mail.SupportPhone);
+        foreach (var (name, html) in AllTemplates())
+            Assert.Contains("Need help? Call our hotline", html);
+        Assert.Contains("0961556885", Mail.EmployeeWelcomeBody("Ada", "Driver", "ada@example.com", Link));
+    }
+
+    [Fact]
+    public void CustomerEmails_NameTheContactPerson_OnlyWhenOneIsAssigned()
+    {
+        var withContact = Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, Link, "Max Manager");
+        Assert.Contains("Your Pegaxus contact:", withContact);
+        Assert.Contains("Max Manager", withContact);
+        Assert.DoesNotContain("Your Pegaxus contact:", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, Link));
+        Assert.DoesNotContain("Your Pegaxus contact:", Mail.BookingApprovedBody("Ada", "REQ-1", "TR-1", null, Link, "  "));
+        // Staff do not need to be told who looks after the booking.
+        Assert.DoesNotContain("Your Pegaxus contact:", Mail.BookingChangedBody("Max", "REQ-1", "FR to GB", false, "Reason text", true, Link, "Max Manager"));
+    }
+
+    [Fact]
+    public void HorseHealthCustomerEmail_StatesTheConditionAndNothingElse()
+    {
+        var critical = Mail.HorseHealthCustomerBody("Ada", "REQ-1", "TR-1", "Silver Arrow", true, false, Link);
+        var vet = Mail.HorseHealthCustomerBody("Ada", "REQ-1", "TR-1", "Silver Arrow", false, true, Link);
+        Assert.Contains("Silver Arrow", critical); Assert.Contains("is in a critical condition", critical); Assert.DoesNotContain("veterinarian", critical);
+        Assert.Contains("needs a veterinarian", vet); Assert.DoesNotContain("critical condition", vet);
+        Assert.Contains("Your horse needs urgent attention", critical);
+    }
+
+    [Fact]
+    public void CustomerPlanUpdateEmail_NamesTheBooking_NotTheInternalPlanCode()
+    {
+        var html = Mail.TransportPlanBody("Ada", "TP-INTERNAL-1", Mail.TransportPlanMailKind.Updated, "New date", Link, "REQ-77");
+        Assert.Contains("REQ-77", html); Assert.Contains("Booking code", html);
+        Assert.DoesNotContain("TP-INTERNAL-1", html); Assert.DoesNotContain("Plan code", html);
+        Assert.Contains("TP-INTERNAL-1", Mail.TransportPlanBody("Max", "TP-INTERNAL-1", Mail.TransportPlanMailKind.Updated, "New date", Link));
     }
 
     [Fact]

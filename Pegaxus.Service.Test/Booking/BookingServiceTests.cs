@@ -159,6 +159,32 @@ public class BookingServiceTests
         Assert.Equal("BOOKING_HAS_NO_HORSE", exception.ErrorCode);
     }
 
+    [Theory]
+    [InlineData(TransportPlanStatus.PENDING, false)]
+    [InlineData(TransportPlanStatus.APPROVED, true)]
+    public async Task GetApprovedList_ShowsAnAssignedCoordinatorOnlyApprovedTransportPlans(TransportPlanStatus planStatus, bool listed)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (_, customer) = await TestSupport.AddCustomerAsync(db);
+        var (coordinatorAccount, coordinator) = await TestSupport.AddLogisticsManagerAsync(db);
+        coordinator.Role = EmployeeRole.FLEET_ROUTE_COORDINATOR;
+        var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer, withHorse: true);
+        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        booking.Status = BookingStatus.APPROVED;
+        var plan = new TransportPlan
+        {
+            TransportPlanId = Guid.NewGuid(), PlanCode = "TP-RC", Status = planStatus, CreatedAt = now, UpdatedAt = now,
+            Transport = new Transport { TransportId = Guid.NewGuid(), TransportCode = "TR-RC", Booking = booking, CreatedAt = now, UpdatedAt = now }
+        };
+        db.TransportPlans.Add(plan);
+        db.EmployeeTransportPlans.Add(new EmployeeTransportPlan { Employee = coordinator, TransportPlan = plan, Responsibility = "FLEET_ROUTE_COORDINATOR", IsPrimary = true });
+        await db.SaveChangesAsync();
+
+        var result = await CreateService(db).GetApprovedListAsync(coordinatorAccount.AccountId, new BookingRequest.ApprovedBookingListRequest { PageSize = 20 });
+
+        Assert.Equal(listed, result.Items.Any(item => item.BookingId == booking.BookingId));
+    }
+
     [Fact]
     public async Task GetApprovedList_ReturnsApprovedBookingAndAppliesContractFilters()
     {

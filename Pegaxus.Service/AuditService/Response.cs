@@ -9,7 +9,7 @@ public static class Response
     public sealed record ArchiveHorse(Guid HorseId, string Name, string? MicrochipNumber, string? PassportNumber);
 
     public sealed record ArchiveItem(Guid TransportId, string TransportCode, string Status, Guid BookingId, string BookingCode, string CustomerName,
-        string OriginCountry, string DestinationCountry, IReadOnlyList<ArchiveHorse> Horses, DateTimeOffset? CompletedAt, int ClaimCount, int IncidentCount);
+        string OriginCountry, string DestinationCountry, IReadOnlyList<ArchiveHorse> Horses, DateTimeOffset? CompletedAt, int ClaimCount, int IncidentCount, int HorseCount);
 
     public sealed record ArchiveResponse(IReadOnlyList<ArchiveItem> Items, int PageIndex, int PageSize, int TotalItems, int TotalPages);
 
@@ -26,7 +26,9 @@ public static class Response
     public sealed record HealthLogItem(Guid HealthLogId, DateTimeOffset CheckedAt, string LogType, string HealthStatus, decimal? TemperatureCelsius, int? HeartRateBpm,
         int? RespiratoryRateBpm, string? SymptomNote, string? InjuryNote, string? TreatmentProvided, string? MedicationGiven, bool VeterinarianRequired,
         string? VeterinarianNote, string? GeneralNote, int PhotoCount);
-    public sealed record HorseItem(Guid HorseId, string Name, string? MicrochipNumber, string? PassportNumber, decimal? WeightKg, decimal? HeightCm, IReadOnlyList<HealthLogItem> HealthLogs);
+    /// <summary><paramref name="DetachedAt"/> is set when the horse was left behind mid-trip at <paramref name="DetachedLocationName"/>.</summary>
+    public sealed record HorseItem(Guid HorseId, string Name, string? MicrochipNumber, string? PassportNumber, decimal? WeightKg, decimal? HeightCm, IReadOnlyList<HealthLogItem> HealthLogs,
+        DateTimeOffset? DetachedAt = null, string? DetachedLocationName = null);
 
     /// <summary>A leg of a route plan. For a customer the planned times, partner, cost, vehicle and staff are null: they only see what really happened.</summary>
     public sealed record SegmentItem(Guid RoutePlanRouteId, int SequenceNo, string RouteType, string Status, string From, string To, string TransportMode, string ExecutedBy,

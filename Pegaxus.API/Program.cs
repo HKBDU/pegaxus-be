@@ -52,6 +52,7 @@ builder.Services.AddErrorHandling();
 builder.Services.AddAuthModule();
 builder.Services.AddAccountsModule();
 builder.Services.AddBookingModule();
+builder.Services.AddAssistantModule(builder.Configuration);
 builder.Services.AddInvoicingModule(builder.Configuration);
 builder.Services.AddPriceListRateLimiting();
 builder.Services.AddClaimsModule();

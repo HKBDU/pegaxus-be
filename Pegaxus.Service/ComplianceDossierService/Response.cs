@@ -132,6 +132,27 @@ public class Response
         public IReadOnlyList<RequirementResponse> TripRequirements { get; init; } = [];
         public IReadOnlyList<HorseRequirementsResponse> HorseRequirements { get; init; } = [];
         public ActionsResponse Actions { get; init; } = new();
+        /// <summary>Set when the booking is a return booking: the original trip, whose documents can be reused.</summary>
+        public ReturnSourceResponse? ReturnOf { get; init; }
+    }
+
+    public sealed class ReturnSourceResponse
+    {
+        public Guid TransportId { get; init; }
+        public string TransportCode { get; init; } = string.Empty;
+        public Guid BookingId { get; init; }
+        public string BookingCode { get; init; } = string.Empty;
+        public Guid? DossierId { get; init; }
+        public string? DossierCode { get; init; }
+        public string? HorseName { get; init; }
+    }
+
+    public sealed class WaiveForReturnResponse
+    {
+        public Guid ComplianceDossierId { get; init; }
+        public int WaivedCount { get; init; }
+        public int RequirementCount { get; init; }
+        public ReturnSourceResponse ReturnOf { get; init; } = new();
     }
 
     public sealed class DossierSummaryResponse
@@ -336,6 +357,20 @@ public class Response
     public class AuthoritySubmissionListResponse
     {
         public IReadOnlyList<AuthoritySubmissionItemResponse> Items { get; init; } = [];
+        /// <summary>The countries on the route and the authorities a new submission may go to.</summary>
+        public RouteAuthoritiesResponse RouteAuthorities { get; init; } = new();
+    }
+
+    public sealed class RouteAuthoritiesResponse
+    {
+        public IReadOnlyList<string> RouteCountries { get; init; } = [];
+        public IReadOnlyList<CompetentAuthorityResponse> AllowedAuthorities { get; init; } = [];
+    }
+
+    public sealed class CompetentAuthorityResponse
+    {
+        public string Name { get; init; } = string.Empty;
+        public string CountryCode { get; init; } = string.Empty;
     }
 
     public class AuthoritySubmissionItemResponse
@@ -415,6 +450,48 @@ public class Response
         public string SubmissionStatus { get; init; } = string.Empty;
 
         public string DossierStatus { get; init; } = string.Empty;
+    }
+
+    /// <summary>One row of a dossier's quarantine proof list; open the detail endpoint for files and checks.</summary>
+    public class QuarantineProofListItemResponse
+    {
+        public Guid QuarantineProofId { get; init; }
+
+        public string Status { get; init; } = string.Empty;
+
+        public string BcpName { get; init; } = string.Empty;
+
+        public Guid? LocationId { get; init; }
+
+        public DateTimeOffset? InspectionAt { get; init; }
+
+        public QuarantineEmployeeResponse SubmittedBy { get; init; } = new();
+
+        public DateTimeOffset SubmittedAt { get; init; }
+
+        public bool IsFinalized { get; init; }
+
+        public DateTimeOffset? VerifiedAt { get; init; }
+    }
+
+    /// <summary>One row of a dossier's customs clearance proof list; open the detail endpoint for files and checks.</summary>
+    public class CustomsClearanceProofListItemResponse
+    {
+        public Guid CustomsClearanceProofId { get; init; }
+
+        public string Status { get; init; } = string.Empty;
+
+        public string CustomsPortName { get; init; } = string.Empty;
+
+        public Guid? LocationId { get; init; }
+
+        public QuarantineEmployeeResponse SubmittedBy { get; init; } = new();
+
+        public DateTimeOffset SubmittedAt { get; init; }
+
+        public bool IsFinalized { get; init; }
+
+        public DateTimeOffset? VerifiedAt { get; init; }
     }
 
     public class QuarantineProofResponse

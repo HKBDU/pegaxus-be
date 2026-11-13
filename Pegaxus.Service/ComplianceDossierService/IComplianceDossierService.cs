@@ -39,6 +39,7 @@ public interface IComplianceDossierService
 
     Task<Response.RequirementResponse> AddRequirementAsync(Guid accountId, Guid dossierId, Request.RequirementRequest request, CancellationToken cancellationToken = default);
     Task<Response.RequirementResponse> WaiveRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.WaiveRequirementRequest request, CancellationToken cancellationToken = default);
+    Task<Response.WaiveForReturnResponse> WaiveForReturnAsync(Guid accountId, Guid dossierId, Request.WaiveForReturnRequest request, CancellationToken cancellationToken = default);
     Task<Response.RequirementResponse> UpdateRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.UpdateRequirementRequest request, CancellationToken cancellationToken = default);
     Task<Response.RemovalResponse> RemoveRequirementAsync(Guid accountId, Guid dossierId, Guid requirementId, Request.RemoveRequirementRequest request, CancellationToken cancellationToken = default);
 
@@ -83,6 +84,18 @@ public interface IComplianceDossierService
         Guid accountId,
         Guid dossierId,
         Request.SubmitQuarantineProofRequest request,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Response.QuarantineProofListItemResponse>> ListQuarantineProofsAsync(
+        Guid accountId,
+        Guid dossierId,
+        string? status,
+        CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<Response.CustomsClearanceProofListItemResponse>> ListCustomsClearanceProofsAsync(
+        Guid accountId,
+        Guid dossierId,
+        string? status,
         CancellationToken cancellationToken = default);
 
     Task<Response.QuarantineProofResponse> GetQuarantineProofAsync(

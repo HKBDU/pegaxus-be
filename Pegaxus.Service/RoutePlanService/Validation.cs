@@ -96,7 +96,7 @@ public sealed partial class Service
                 route.ToLocation = to;
                 if (!route.DistanceKm.HasValue || !route.EstimatedDurationMinutes.HasValue)
                 {
-                    var metrics = await routeService.CalculateMetricsAsync(from, to, mode, cancellationToken);
+                    var metrics = await MetricsAsync(from, to, mode, cancellationToken);
                     route.DistanceKm = metrics.DistanceKm;
                     route.EstimatedDurationMinutes = metrics.DurationMinutes;
                 }
@@ -119,15 +119,16 @@ public sealed partial class Service
         }
         if (request.VehicleIds.Count == 0)
             return;
+        // The company fleet only has road vehicles, so a sea or air segment is always carried by a transport provider.
+        if (route.TransportMode != TransportMode.ROAD)
+            throw new UnprocessableEntityException("Sea and air segments must be outsourced to a transport provider.", "SEGMENT_REQUIRES_OUTSOURCING");
         var vehicles = db.Vehicles.Where(item => request.VehicleIds.Contains(item.VehicleId) && !item.IsDeleted).ToList();
         if (vehicles.Count != request.VehicleIds.Distinct().Count())
             throw new NotFoundException("Vehicle not found", "VEHICLE_NOT_FOUND");
-        if (vehicles.Any(item => item.TransportMode != route.TransportMode))
-            throw new UnprocessableEntityException("The vehicle transport mode does not match the segment", "VEHICLE_MODE_MISMATCH");
         // An IN_USE vehicle is mid-trip: whether it is free for this plan is decided by the schedule check below, not by its flag.
         if (vehicles.Any(item => item.Status is not (VehicleStatus.AVAILABLE or VehicleStatus.ASSIGNED or VehicleStatus.IN_USE)))
             throw new UnprocessableEntityException("The vehicle is not available", "VEHICLE_UNAVAILABLE");
-        if (vehicles.Sum(item => item.CapacityHorses ?? 0) < plan.Transport.Booking.BookingHorses.Count)
+        if (vehicles.Sum(item => item.CapacityHorses ?? 0) < plan.Transport.Booking.BookingHorses.Count(horse => horse.DetachedAt is null))
             throw new UnprocessableEntityException("Total vehicle capacity is lower than the number of horses in the booking", "VEHICLE_CAPACITY_EXCEEDED");
         var departureDate = DateOnly.FromDateTime(request.PlannedDepartureAt.UtcDateTime);
         if (vehicles.Any(item =>
@@ -139,11 +140,10 @@ public sealed partial class Service
         var departureAt = Truncate(request.PlannedDepartureAt);
         var arrivalAt = Truncate(request.PlannedArrivalAt);
         var now = UtcNowTruncated();
+        // Same "trip still holds the vehicle" rule as the vehicle picker, so a vehicle it lists as free is never rejected here.
         var overlappingAssignment = await db.RoutePlanRouteVehicles
-            .Include(item => item.RoutePlanRoute)
-                .ThenInclude(item => item.RoutePlan)
+            .WhereUnfinished()
             .Where(item => vehicleIds.Contains(item.VehicleId) &&
-                item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && item.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
                 (!excludedRoutePlanId.HasValue || item.RoutePlanRoute.RoutePlanId != excludedRoutePlanId.Value) &&
                 item.RoutePlanRoute.RoutePlan.TransportPlanId != plan.TransportPlanId &&
                 (item.RoutePlanRoute.PlannedDepartureAt < arrivalAt && item.RoutePlanRoute.PlannedArrivalAt > departureAt ||
@@ -157,6 +157,8 @@ public sealed partial class Service
 
     private static void ValidateRouteRules(IReadOnlyList<MaterializedSegment> segments, TransportPlan plan, RouteType routeType, RoutePlan? primary, Guid? updatingRoutePlanId = null)
     {
+        if (segments.Count > 0 && (segments[0].Request.Outsourcing is not null || segments[^1].Request.Outsourcing is not null))
+            throw HandoverRules.OutsourcedEndpoint();
         for (var index = 1; index < segments.Count; index++)
         {
             if (segments[index - 1].Route.ToLocationId != segments[index].Route.FromLocationId)
@@ -164,15 +166,6 @@ public sealed partial class Service
             if (segments[index].Request.PlannedDepartureAt < segments[index - 1].Request.PlannedArrivalAt)
                 throw new UnprocessableEntityException("A segment cannot depart before the previous segment arrives", "SEGMENT_TIME_OVERLAP");
         }
-        if (plan.Transport.Booking.OriginCountry != plan.Transport.Booking.DestinationCountry && !segments.Any(item =>
-                item.Route.FromLocation.LocationType is LocationType.BORDER_GATE or LocationType.AIRPORT or LocationType.SEAPORT ||
-                item.Route.ToLocation.LocationType is LocationType.BORDER_GATE or LocationType.AIRPORT or LocationType.SEAPORT))
-            throw new UnprocessableEntityException("A cross-border transport requires at least one border control point", "BCP_REQUIRED");
-        var restFailure = RouteRestRules.Evaluate(segments.Select(item => new RouteRestRules.Leg(
-            item.Request.PlannedDepartureAt.UtcDateTime, item.Request.PlannedArrivalAt.UtcDateTime, item.Route.TransportMode,
-            item.Route.FromLocation.LocationType, item.Route.ToLocation.LocationType)).ToArray()).FirstOrDefault(check => !check.Passed);
-        if (restFailure is not null)
-            throw new UnprocessableEntityException(restFailure.Message, "REST_RULE_VIOLATION");
         if (routeType == RouteType.BACKUP && primary is not null)
         {
             var primarySegments = primary.RoutePlanRoutes.OrderBy(item => item.SequenceNo).ToList();

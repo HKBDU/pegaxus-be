@@ -8,6 +8,14 @@ public static class Request
         public bool IsFeasible { get; set; }
         public string? Note { get; set; }
         public List<int> BlockedSegments { get; set; } = [];
+        /// <summary>Segments of the submitted backups reviewed together with the primary. Any blocked segment rejects the whole pair.</summary>
+        public List<BlockedBackupSegment> BlockedBackupSegments { get; set; } = [];
+    }
+
+    public sealed class BlockedBackupSegment
+    {
+        public Guid RoutePlanId { get; set; }
+        public int SequenceNo { get; set; }
     }
 
     public sealed class ListRequest

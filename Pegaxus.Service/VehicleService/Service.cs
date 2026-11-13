@@ -78,6 +78,9 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             "vehiclecode:desc" => query.OrderByDescending(x => x.VehicleCode),
             "capacityhorses:asc" => query.OrderBy(x => x.CapacityHorses),
             "capacityhorses:desc" => query.OrderByDescending(x => x.CapacityHorses),
+            // Smallest truck first (pair it with minCapacity = horse count), an idle truck before one already assigned, so a small booking does not take a big truck.
+            "bestfit" => query.OrderBy(x => x.CapacityHorses == null).ThenBy(x => x.CapacityHorses)
+                .ThenBy(x => x.Status != VehicleStatus.AVAILABLE).ThenBy(x => x.VehicleCode),
             "updatedat:asc" => query.OrderBy(x => x.UpdatedAt),
             "updatedat:desc" => query.OrderByDescending(x => x.UpdatedAt),
             _ => query.OrderBy(x => x.VehicleCode)
@@ -200,13 +203,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
 
     private IQueryable<Vehicle> Vehicles() => db.Vehicles.AsNoTracking().Where(x => !x.IsDeleted);
 
-    private IQueryable<RoutePlanRouteVehicle> UnfinishedAssignments() => db.RoutePlanRouteVehicles.AsNoTracking().Where(x =>
-        x.RoutePlanRoute.ActualArrivalAt == null &&
-        x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.COMPLETED && x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.CANCELLED && x.RoutePlanRoute.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
-        x.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED &&
-        x.RoutePlanRoute.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED &&
-        x.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.COMPLETED &&
-        x.RoutePlanRoute.RoutePlan.TransportPlan.Transport.Status != TransportStatus.CANCELLED);
+    private IQueryable<RoutePlanRouteVehicle> UnfinishedAssignments() => db.RoutePlanRouteVehicles.AsNoTracking().WhereUnfinished();
 
     private async Task<Vehicle> LockAsync(Guid id, CancellationToken cancellationToken)
     {

@@ -216,6 +216,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             BeforeData = before, AfterData = after, CreatedAt = now });
         var oldIds = new HashSet<Guid>();
         var newIds = new HashSet<Guid>();
+        var removedFrom = new List<(Guid EmployeeId, RoutePlanRoute Segment)>();
         foreach (var segment in updated)
         {
             var previous = before.RootElement.EnumerateArray().Single(x => x.GetProperty("routePlanRouteId").GetGuid() == segment.RoutePlanRouteId);
@@ -225,23 +226,17 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 var oldId = old.ValueKind == JsonValueKind.Null ? (Guid?)null : old.GetProperty("employeeId").GetGuid();
                 var newId = role == "driver" ? segment.DriverEmployeeId : segment.EscortEmployeeId;
                 if (oldId == newId) continue;
-                if (oldId.HasValue) oldIds.Add(oldId.Value);
+                if (oldId.HasValue) { oldIds.Add(oldId.Value); removedFrom.Add((oldId.Value, segment)); }
                 if (newId.HasValue) newIds.Add(newId.Value);
             }
         }
         var recipients = oldIds.Concat(newIds).Distinct().ToArray();
-        if (PersonnelComplete(segments) && plan.Transport.Status is TransportStatus.CREATED or TransportStatus.PLANNING)
-        {
-            var transport = await db.Transports.SingleAsync(x => x.TransportId == plan.TransportId, cancellationToken);
-            transport.Status = TransportStatus.READY;
-            transport.UpdatedAt = now;
-        }
+        await TransportReadiness.SyncAsync(db, plan.TransportId, now, cancellationToken);
         var recipientEmployees = await db.Employees.AsNoTracking().Include(x => x.Account).Where(x => recipients.Contains(x.EmployeeId)).ToListAsync(cancellationToken);
-        var schedule = string.Join("\n", segments.Select(x => $"Segment {x.SequenceNo}: {x.PlannedDepartureAt:O} - {x.PlannedArrivalAt:O}; " +
-            $"Driver {x.DriverEmployee?.EmployeeCode ?? "-"}; Escort {x.EscortEmployee?.EmployeeCode ?? "-"}; Provider {x.TransportProvider?.ProviderName ?? "-"}"));
-        var message = $"Route plan {route.RoutePlanCode}: {(reason is null ? "personnel have been assigned." : "personnel were replaced. Reason: " + reason)}\nSchedule:\n{schedule}";
         foreach (var employee in recipientEmployees)
         {
+            var message = AssignmentMessage(route.RoutePlanCode, employee, segments,
+                removedFrom.Where(x => x.EmployeeId == employee.EmployeeId).Select(x => x.Segment).ToList(), reason);
             notifications.Queue(new() { AccountId = employee.AccountId, TransportId = plan.TransportId, Type = NotificationType.ROUTE,
                 Priority = newIds.Contains(employee.EmployeeId) ? NotificationPriority.HIGH : NotificationPriority.NORMAL, Title = reason is null ? "Personnel assigned" : "Personnel replaced", Message = message,
                 ReferenceType = nameof(RoutePlan), ReferenceId = routePlanId, ActionUrl = NotificationLinks.RoutePlan(employee.Role, routePlanId), CreatedAt = now });
@@ -367,6 +362,31 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                     x.DriverEmployee?.EmployeeCode, x.EscortEmployee?.EmployeeCode, x.TransportProvider?.ProviderName)))
         }, now);
     }
+    /// <summary>One short line per recipient about their own segments; the full schedule is in the email and on the route plan page.</summary>
+    internal static string AssignmentMessage(string routePlanCode, Employee employee, IReadOnlyList<RoutePlanRoute> segments,
+        IReadOnlyList<RoutePlanRoute> removedFrom, string? reason)
+    {
+        var own = segments.Where(x => x.DriverEmployeeId == employee.EmployeeId || x.EscortEmployeeId == employee.EmployeeId)
+            .OrderBy(x => x.SequenceNo).ToList();
+        var left = removedFrom.Where(x => own.All(o => o.RoutePlanRouteId != x.RoutePlanRouteId)).OrderBy(x => x.SequenceNo).ToList();
+        var parts = new List<string>();
+        if (own.Count > 0)
+        {
+            var first = own[0];
+            var where = own.Count == 1
+                ? $"segment {first.SequenceNo} ({first.Route?.FromLocation?.LocationName ?? "?"} → {first.Route?.ToLocation?.LocationName ?? "?"})"
+                : $"segments {string.Join(", ", own.Select(x => x.SequenceNo))}";
+            parts.Add($"you are assigned as {RoleLabel.Of(employee.Role)} on {where}, {(own.Count == 1 ? "departing" : "first departure")} {Utc(first.PlannedDepartureAt)}.");
+        }
+        if (left.Count > 0)
+            parts.Add($"{(own.Count > 0 ? "You" : "you")} were removed from {(left.Count == 1 ? "segment" : "segments")} {string.Join(", ", left.Select(x => x.SequenceNo))}.");
+        var text = $"Route plan {routePlanCode}: {string.Join(" ", parts)}";
+        return reason is null ? text : $"{text} Reason: {reason}";
+    }
+
+    private static string Utc(DateTime? value) =>
+        value.HasValue ? value.Value.ToString("dd MMM yyyy HH:mm", System.Globalization.CultureInfo.InvariantCulture) + " UTC" : "(time not set)";
+
     private static Response.EmployeeBrief? Brief(Employee? employee, DateTime? assignedAt = null) => employee is null ? null :
         new(employee.EmployeeId, employee.EmployeeCode, employee.FullName, employee.Role.ToString(),
             employee.Account.Email, employee.Account.AvatarUrl, employee.Country, AsUtc(assignedAt));

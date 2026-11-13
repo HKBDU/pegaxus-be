@@ -34,7 +34,12 @@ public sealed partial class Service
         var type = delivery ? NotificationType.HANDOVER : NotificationType.TRANSPORT;
         var customer = await db.Customers.AsNoTracking().Where(customer => customer.Bookings.Any(booking => booking.BookingId == transport.BookingId) &&
                 !customer.IsDeleted && !customer.Account.IsDeleted && customer.Account.Status == AccountStatus.ACTIVE && customer.Account.AccountType == AccountType.CUSTOMER)
-            .Select(customer => new { customer.AccountId, customer.FullName, customer.Account.Email }).SingleOrDefaultAsync(cancellationToken);
+            .Select(customer => new
+            {
+                customer.AccountId, customer.FullName, customer.Account.Email,
+                ContactName = customer.Bookings.Where(booking => booking.BookingId == transport.BookingId)
+                    .Select(booking => booking.AssignedEmployee == null ? null : booking.AssignedEmployee.FullName).FirstOrDefault()
+            }).SingleOrDefaultAsync(cancellationToken);
         if (customer is not null)
         {
             var transportPage = $"/bookings/{transport.BookingId}/transports/{transport.TransportId}";
@@ -44,7 +49,7 @@ public sealed partial class Service
                 OutboxQueue.AddEmail(db, new()
                 {
                     To = customer.Email, Subject = $"Transport completed — {transport.TransportCode}",
-                    Body = MailService.EmailBodies.TransportDeliveredBody(customer.FullName, transport.TransportCode, now, transportPage, effects.HasDiscrepancy == true)
+                    Body = MailService.EmailBodies.TransportDeliveredBody(customer.FullName, transport.TransportCode, now, transportPage, effects.HasDiscrepancy == true, customer.ContactName)
                 }, now);
         }
 

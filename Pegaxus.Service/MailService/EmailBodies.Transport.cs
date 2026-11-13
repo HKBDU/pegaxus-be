@@ -18,6 +18,26 @@ public static partial class EmailBodies
         Notice("Critical horse health alert", $"Critical health alert on transport {transportCode}", transportCode, staffName,
             Encode(summary), Tone.Error, "Urgent", [Row("Transport code", Accent(transportCode))], null, "Note", actionUrl, "Open health log");
 
+    /// <summary>
+    /// Customer alert: the escort recorded a horse as critical or as needing a veterinarian. Only the horse name and the
+    /// condition are shown; the veterinarian's note stays internal.
+    /// </summary>
+    public static string HorseHealthCustomerBody(
+        string customerName, string bookingCode, string transportCode, string horseName, bool critical, bool veterinarianRequired,
+        string? actionUrl, string? contactName = null)
+    {
+        var condition = (critical, veterinarianRequired) switch
+        {
+            (true, true) => "is in a critical condition and needs a veterinarian",
+            (true, false) => "is in a critical condition",
+            _ => "needs a veterinarian"
+        };
+        return Notice("Your horse needs urgent attention", $"{horseName} {condition}", transportCode, customerName,
+            $"{Strong(horseName)} {condition}. Our team is responding and will keep you updated.", Tone.Error, "Urgent",
+            [Row("Booking code", Accent(bookingCode)), Row("Transport code", Accent(transportCode))],
+            null, "Note", actionUrl, "View transport", contactName: contactName);
+    }
+
     /// <summary>A handover was scheduled for the recipient, or cancelled.</summary>
     public static string HandoverBody(string recipientName, string handoverCode, bool cancelled, string? detail, string? actionUrl) =>
         Notice(cancelled ? "Handover cancelled" : "Handover scheduled", $"Handover {handoverCode} {(cancelled ? "was cancelled" : "is scheduled")}",

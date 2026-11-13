@@ -3,6 +3,7 @@ namespace Pegaxus.Service.RoutePlanService;
 public interface IRoutePlanService
 {
     Task<Response.DetailResponse> CreateAsync(Guid accountId, Guid transportPlanId, Request.SaveRequest request, CancellationToken cancellationToken = default);
+    Task<Response.ReturnTemplateResponse> GetReturnTemplateAsync(Guid accountId, Guid transportPlanId, CancellationToken cancellationToken = default);
     Task<Response.ListResponse> GetListAsync(Guid accountId, Guid transportPlanId, Request.ListRequest request, CancellationToken cancellationToken = default);
     Task<Response.DetailResponse> GetByIdAsync(Guid accountId, Guid routePlanId, CancellationToken cancellationToken = default);
     Task<Response.UpdateResponse> UpdateAsync(Guid accountId, Guid routePlanId, Request.UpdateRequest request, CancellationToken cancellationToken = default);

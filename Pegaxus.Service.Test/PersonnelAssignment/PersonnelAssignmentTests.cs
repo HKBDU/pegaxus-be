@@ -117,10 +117,16 @@ public class PersonnelAssignmentTests
         var audit = await db.CatalogAuditLogs.SingleAsync();
         Assert.Equal(manager.AccountId, audit.ActorAccountId); Assert.Equal("PERSONNEL_ASSIGNED", audit.ActionType);
         Assert.Equal(2, await db.Notifications.CountAsync());
-        Assert.All(await db.Notifications.ToArrayAsync(), x => { Assert.Equal(route.TransportPlan.TransportId, x.TransportId); Assert.Contains("Segment 1", x.Message); });
+        Assert.All(await db.Notifications.ToArrayAsync(), x => Assert.Equal(route.TransportPlan.TransportId, x.TransportId));
+        // Each person reads only their own segment, with a readable UTC time; the outsourced segment is not listed.
+        Assert.Equal($"Route plan {route.RoutePlanCode}: you are assigned as Driver on segment 1 (Stable → Airport), departing 10 Oct 2026 14:00 UTC.",
+            (await db.Notifications.SingleAsync(x => x.AccountNotifications.Any(a => a.AccountId == driver.AccountId))).Message);
+        Assert.Equal($"Route plan {route.RoutePlanCode}: you are assigned as Escort on segment 1 (Stable → Airport), departing 10 Oct 2026 14:00 UTC.",
+            (await db.Notifications.SingleAsync(x => x.AccountNotifications.Any(a => a.AccountId == escort.AccountId))).Message);
         Assert.Equal(2, await db.OutboxMessages.CountAsync()); // Only assigned employees receive emails.
         Assert.DoesNotContain(await db.OutboxMessages.ToListAsync(), x => x.Payload.Contains("provider@example.com"));
-        Assert.Equal(TransportStatus.READY, route.TransportPlan.Transport.Status);
+        // A full crew alone is not enough: no approved dossier and no backup yet (see TransportReadinessTests).
+        Assert.Equal(TransportStatus.CREATED, route.TransportPlan.Transport.Status);
         Assert.True(result.UpdatedAt > TestClock.GetUtcNow());
         Assert.Equal("SEGMENT_ALREADY_ASSIGNED", (await Assert.ThrowsAsync<ConflictException>(() =>
             service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId))).ErrorCode);
@@ -155,6 +161,15 @@ public class PersonnelAssignmentTests
         Assert.Contains(driver.EmployeeId.ToString(), audit.BeforeData.RootElement.GetRawText());
         Assert.Contains(replacement.EmployeeId.ToString(), audit.AfterData.RootElement.GetRawText());
         Assert.Contains(await db.Notifications.ToListAsync(), x => x.Message.Contains("<b>Sick</b>"));
+        // The replaced driver keeps segment 2, so they read both what they kept and what they lost; the new one reads their segment.
+        var firstReplace = await db.Notifications.Include(x => x.AccountNotifications).Where(x => x.Message.Contains("<b>Sick</b>")).ToListAsync();
+        Assert.Equal($"Route plan {route.RoutePlanCode}: you are assigned as Driver on segment 2 (Stable → Airport), departing 10 Oct 2026 16:00 UTC. You were removed from segment 1. Reason: <b>Sick</b>",
+            firstReplace.Single(x => x.AccountNotifications.Any(a => a.AccountId == driver.AccountId)).Message);
+        Assert.Equal($"Route plan {route.RoutePlanCode}: you are assigned as Driver on segment 1 (Stable → Airport), departing 10 Oct 2026 14:00 UTC. Reason: <b>Sick</b>",
+            firstReplace.Single(x => x.AccountNotifications.Any(a => a.AccountId == replacement.AccountId)).Message);
+        Assert.Contains(await db.Notifications.ToListAsync(), x => x.AccountNotifications.Any(a => a.AccountId == driver.AccountId) &&
+            x.Message == $"Route plan {route.RoutePlanCode}: you were removed from segment 2. Reason: Sick");
+        Assert.DoesNotContain(await db.Notifications.ToListAsync(), x => x.Message.Contains(".0000000"));
         Assert.Contains(await db.OutboxMessages.ToListAsync(), x => x.Payload.Contains("Sick"));
     }
 

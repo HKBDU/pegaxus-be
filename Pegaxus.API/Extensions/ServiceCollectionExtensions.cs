@@ -249,6 +249,55 @@ public static class ServiceCollectionExtensions
         return services;
     }
 
+    /// <summary>Server-side Gemini settings for the Customer Assistant.</summary>
+    public static IServiceCollection AddAssistantModule(this IServiceCollection services, IConfiguration configuration)
+    {
+        services.AddOptions<Pegaxus.Service.Assistant.AssistantOptions>()
+            .Configure(options =>
+            {
+                options.ApiKey = configuration["GEMINI_API_KEY"] ?? string.Empty;
+                options.Model = configuration["GEMINI_MODEL"]?.Trim() ?? string.Empty;
+                options.ApiUrl = configuration["GEMINI_API_URL"] ?? options.ApiUrl;
+                options.TimeoutSeconds = ReadInteger(configuration["GEMINI_TIMEOUT_SECONDS"], 60);
+                options.MaxOutputTokens = ReadInteger(configuration["GEMINI_MAX_OUTPUT_TOKENS"], 1024);
+                options.MaxToolCalls = ReadInteger(configuration["GEMINI_MAX_TOOL_CALLS"], 5);
+            })
+            .Validate(options => !string.IsNullOrWhiteSpace(options.ApiKey), "GEMINI_API_KEY must be configured.")
+            .Validate(options => !string.IsNullOrWhiteSpace(options.Model), "GEMINI_MODEL must be configured.")
+            .Validate(options => Uri.TryCreate(options.ApiUrl, UriKind.Absolute, out var uri) &&
+                uri.Scheme == Uri.UriSchemeHttps && string.IsNullOrEmpty(uri.UserInfo) && string.IsNullOrEmpty(uri.Fragment),
+                "GEMINI_API_URL must be an absolute HTTPS URL without user info or fragment.")
+            .Validate(options => options.TimeoutSeconds is >= 1 and <= 300,
+                "GEMINI_TIMEOUT_SECONDS must be between 1 and 300.")
+            .Validate(options => options.MaxOutputTokens is >= 1 and <= 8192,
+                "GEMINI_MAX_OUTPUT_TOKENS must be between 1 and 8192.")
+            .Validate(options => options.MaxToolCalls is >= 1 and <= 5,
+                "GEMINI_MAX_TOOL_CALLS must be between 1 and 5.")
+            .ValidateOnStart();
+
+        services.AddScoped<Pegaxus.Service.Assistant.Tools.IAssistantTool, Pegaxus.Service.Assistant.Tools.CustomerListMyBookingsTool>();
+        services.AddScoped<Pegaxus.Service.Assistant.Tools.IAssistantTool, Pegaxus.Service.Assistant.Tools.CustomerGetBookingTool>();
+        services.AddScoped<Pegaxus.Service.Assistant.Tools.IAssistantTool, Pegaxus.Service.Assistant.Tools.CustomerGetBookingHistoryTool>();
+        services.AddScoped<Pegaxus.Service.Assistant.Tools.IAssistantTool, Pegaxus.Service.Assistant.Tools.CustomerGetDossierTool>();
+        services.AddScoped<Pegaxus.Service.Assistant.Tools.IAssistantTool, Pegaxus.Service.Assistant.Tools.CustomerGetTrackingTool>();
+        services.AddScoped<Pegaxus.Service.Assistant.Tools.AssistantToolRegistry>();
+        services.AddScoped<Pegaxus.Service.Assistant.IAssistantService, Pegaxus.Service.Assistant.AssistantService>();
+        services.AddScoped<IValidator<Pegaxus.Service.Assistant.ChatRequest>, Pegaxus.Service.Assistant.Validator.ChatRequestValidator>();
+        services.AddHttpClient<Pegaxus.Service.Assistant.Gemini.IGeminiClient, Pegaxus.Service.Assistant.Gemini.GeminiInteractionsClient>((provider, client) =>
+        {
+            var options = provider.GetRequiredService<Microsoft.Extensions.Options.IOptions<Pegaxus.Service.Assistant.AssistantOptions>>().Value;
+            client.Timeout = TimeSpan.FromSeconds(options.TimeoutSeconds);
+        });
+
+        return services;
+    }
+
+    private static int ReadInteger(string? value, int defaultValue) =>
+        string.IsNullOrWhiteSpace(value) ? defaultValue :
+        int.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : 0;
+
     /// <summary>Customer claims about a delivery and how the logistics manager handles them.</summary>
     public static IServiceCollection AddClaimsModule(this IServiceCollection services)
     {

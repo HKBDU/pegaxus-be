@@ -13,7 +13,7 @@ public partial class Service
     public async Task<Response.NegotiatedBookingResponse> NegotiateAsync(
         Guid accountId, Guid bookingId, Request.NegotiateBookingRequest request, CancellationToken cancellationToken = default)
     {
-        await GetLogisticsManagerAsync(accountId, cancellationToken);
+        var manager = await GetLogisticsManagerAsync(accountId, cancellationToken);
         var validation = await new Validations.NegotiateBookingRequestValidator().ValidateAsync(request, cancellationToken);
         if (!validation.IsValid)
             throw new BadRequestException(string.Join(" ", validation.Errors.Select(error => error.ErrorMessage)));
@@ -21,7 +21,7 @@ public partial class Service
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
             // Updating the key to itself holds a row lock until the transaction ends.
         await _db.LockRowsAsync(_db.Bookings.Where(item => item.BookingId == bookingId), item => item.BookingId, cancellationToken);
-        var booking = await _db.Bookings.Include(value => value.Customer)
+        var booking = await _db.Bookings.Include(value => value.Customer).Include(value => value.AssignedEmployee)
             .Include(value => value.Transport).ThenInclude(value => value!.ComplianceDossiers).ThenInclude(value => value!.DossierRequirements)
             .SingleOrDefaultAsync(value => value.BookingId == bookingId, cancellationToken)
             ?? throw new NotFoundException("Booking not found.", "BOOKING_NOT_FOUND");
@@ -79,7 +79,7 @@ public partial class Service
             recipient, $"{title} — {booking.BookingCode}",
             MailService.EmailBodies.BookingChangedBody(recipient.FullName, booking.BookingCode,
                 $"{booking.OriginCountry} to {booking.DestinationCountry}", status == BookingStatus.CANCELLED, reason, recipient.Role is not null,
-                NotificationLinks.Booking(recipient.Role, booking.BookingId))), cancellationToken);
+                NotificationLinks.Booking(recipient.Role, booking.BookingId), (booking.AssignedEmployee ?? manager).FullName)), cancellationToken);
         await _db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);

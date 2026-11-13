@@ -18,6 +18,7 @@ public sealed partial class Service
             .Select(item => new
             {
                 Horse = new Response.HorseBrief(item.HorseId, item.Horse.HorseName, item.Horse.MicrochipNumber, item.Horse.PassportNumber),
+                item.DetachedAt,
                 LogCount = db.HorseHealthLogs.Count(log => log.TransportId == transportId && log.HorseId == item.HorseId),
                 LatestLog = db.HorseHealthLogs.Where(log => log.TransportId == transportId && log.HorseId == item.HorseId)
                     .OrderByDescending(log => log.CheckedAt).ThenByDescending(log => log.CreatedAt).ThenByDescending(log => log.HorseHealthLogId)
@@ -29,7 +30,8 @@ public sealed partial class Service
             }).ToListAsync(cancellationToken);
         var escort = await GetCurrentEscortAsync(transportId, transport.Status, actor, cancellationToken);
         return new(clock.GetUtcNow(), transportId, transport.Status.ToString(), escort,
-            horses.Select(item => new Response.HorseOverview(item.Horse, item.LatestLog?.HealthStatus, item.LatestLog, item.LogCount)).ToArray());
+            horses.Select(item => new Response.HorseOverview(item.Horse, item.LatestLog?.HealthStatus, item.LatestLog, item.LogCount,
+                item.DetachedAt.HasValue ? AsUtc(item.DetachedAt.Value) : null)).ToArray());
     }
 
     public async Task<Response.ListResponse> GetLogsAsync(Guid transportId, Guid horseId, Request.ListRequest request, Guid accountId,

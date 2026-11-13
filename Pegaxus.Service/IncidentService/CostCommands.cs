@@ -25,7 +25,7 @@ public sealed partial class Service
                 await using var transaction = await db.Database.BeginSerializableAsync(ct);
                 var actor = await ActorAsync(accountId, ct);
                 var (incident, transport) = await LockIncidentAsync(incidentReportId, ct);
-                if (!(Crew(actor) && await CrewAssignedAsync(transport.TransportId, actor, ct) ||
+                if (!(await CrewOnDutyOrReporterAsync(incident, transport, actor, ct) ||
                     await CoordinatorAssignedAsync(transport.TransportId, actor, ct)))
                     throw new ForbiddenException(CostForbiddenMessage, "FORBIDDEN");
                 EnsureCostIncidentOpen(incident);
@@ -147,6 +147,7 @@ public sealed partial class Service
                 }
                 cost.UpdatedAt = now; incident.UpdatedAt = NextUpdate(incident);
                 await db.SaveChangesAsync(ct);
+                await FinancialReportService.Service.SyncForTransportAsync(db, clock, incident.TransportId, ct);
                 var response = await ReadCostAsync(costId, ct);
                 await transaction.CommitAsync(ct);
                 committed = true;

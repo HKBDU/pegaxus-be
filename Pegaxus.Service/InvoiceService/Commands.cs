@@ -91,6 +91,7 @@ public sealed partial class Service
                 }, now);
             }
             await db.SaveChangesAsync(cancellationToken);
+            await FinancialReportService.Service.SyncForBookingAsync(db, clock, invoice.BookingId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);
             return new(invoiceId, invoice.InvoiceCode, invoice.Status.ToString(), AsUtc(now), reason, ["CREATE_ANOTHER"], AsUtc(invoice.UpdatedAt));
@@ -197,6 +198,7 @@ public sealed partial class Service
                     NotificationLinks.Invoice(null, invoice.BookingId, invoiceId))
             }, now);
             await db.SaveChangesAsync(cancellationToken);
+            await FinancialReportService.Service.SyncForBookingAsync(db, clock, invoice.BookingId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);
             return new(invoiceId, invoice.InvoiceCode, invoice.Type.ToString(), invoice.Status.ToString(),

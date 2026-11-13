@@ -393,6 +393,31 @@ public class VehicleServiceTests
     }
 
     [Fact]
+    public async Task List_BestFit_PutsTheSmallestTruckThatFitsFirst_AndAnIdleOneBeforeAnAssignedOne()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var service = CreateService(db);
+        var big = await service.CreateAsync(ValidRequest("PLATE-BIG"), account.AccountId);
+        var busyRequest = ValidRequest("PLATE-4A"); busyRequest.CapacityHorses = 4;
+        var busy = await service.CreateAsync(busyRequest, account.AccountId);
+        var idleRequest = ValidRequest("PLATE-4B"); idleRequest.CapacityHorses = 4;
+        var idle = await service.CreateAsync(idleRequest, account.AccountId);
+        var smallRequest = ValidRequest("PLATE-TWO"); smallRequest.CapacityHorses = 2;
+        var small = await service.CreateAsync(smallRequest, account.AccountId);
+        (await db.Vehicles.SingleAsync(x => x.VehicleId == busy.VehicleId)).Status = VehicleStatus.ASSIGNED;
+        await db.SaveChangesAsync();
+
+        var list = await service.GetListAsync(new() { SortBy = "bestFit", MinCapacity = 3 }, account.AccountId);
+
+        // The 2-horse truck is filtered out; of the rest the idle 4-horse truck comes first, then the assigned one, then the 6-horse truck.
+        Assert.Equal([idle.VehicleId, busy.VehicleId, big.VehicleId], list.Items.Select(x => x.VehicleId));
+        Assert.DoesNotContain(list.Items, x => x.VehicleId == small.VehicleId);
+        // Without bestFit the default order is unchanged: vehicle code.
+        Assert.Equal(big.VehicleId, (await service.GetListAsync(new() { MinCapacity = 3 }, account.AccountId)).Items[0].VehicleId);
+    }
+
+    [Fact]
     public async Task Country_IsNormalizedReturnedFilteredAndValidated()
     {
         await using var db = TestSupport.CreateDb();

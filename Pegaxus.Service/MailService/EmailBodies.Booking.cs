@@ -4,7 +4,7 @@ public static partial class EmailBodies
 {
     public static string BookingApprovedBody(
         string customerName, string bookingCode, string transportCode,
-        DateOnly? departureDate, string? actionUrl) =>
+        DateOnly? departureDate, string? actionUrl, string? contactName = null) =>
         Header("Booking approved", "Your Pegaxus booking has been approved") +
         $"""
               {Title("Booking approved", bookingCode)}
@@ -15,12 +15,13 @@ public static partial class EmailBodies
                   Row("Booking code", Accent(bookingCode)),
                   Row("Transport code", Encode(transportCode)),
                   Row("Planned departure", Accent(FmtDate(departureDate))))}
+              {ContactLine(contactName)}
               {Button(actionUrl, "View details")}
         """ +
         Footer();
 
     public static string BookingRejectedBody(
-        string customerName, string bookingCode, string reason, string? actionUrl) =>
+        string customerName, string bookingCode, string reason, string? actionUrl, string? contactName = null) =>
         Header("Booking rejected", "Your Pegaxus booking could not be approved") +
         $"""
               {Title("Booking rejected", bookingCode)}
@@ -29,6 +30,7 @@ public static partial class EmailBodies
               {ErrorPill("Rejected")}
               {Rows(Row("Booking code", Accent(bookingCode)))}
               {LabeledParagraph("Reason", reason)}
+              {ContactLine(contactName)}
               {Button(actionUrl, "View booking")}
               {Muted("If you believe this is a mistake, please contact our support team.")}
         """ +
@@ -52,7 +54,7 @@ public static partial class EmailBodies
 
     /// <summary>An approved booking was cancelled or returned to draft by the hotline change. Sent to the customer and to the assigned specialists.</summary>
     public static string BookingChangedBody(
-        string recipientName, string bookingCode, string route, bool cancelled, string reason, bool forStaff, string? actionUrl) =>
+        string recipientName, string bookingCode, string route, bool cancelled, string reason, bool forStaff, string? actionUrl, string? contactName = null) =>
         Notice(
             cancelled ? "Booking cancelled" : "Booking returned to draft",
             cancelled ? $"Booking {bookingCode} was cancelled" : $"Booking {bookingCode} was returned to draft",
@@ -66,5 +68,5 @@ public static partial class EmailBodies
             },
             cancelled ? Tone.Error : Tone.Warning, cancelled ? "Cancelled" : forStaff ? "Suspended" : "Action required",
             [Row("Booking code", Accent(bookingCode)), Row("Route", Encode(route))],
-            reason, "Reason", actionUrl, "View booking");
+            reason, "Reason", actionUrl, "View booking", contactName: forStaff ? null : contactName);
 }

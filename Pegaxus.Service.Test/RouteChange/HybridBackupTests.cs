@@ -54,6 +54,51 @@ public class HybridBackupTests
     }
 
     [Fact]
+    public async Task Rp1_SeaOrAirSegment_CannotUseACompanyVehicle_AndCannotBeOutsourcedAsTheLastSegment()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await CreateFixtureAsync(db);
+        var (completed, _) = await PrimaryRoutesAsync(db, f);
+        var vehicle = await db.Vehicles.SingleAsync();
+        f.Alternative.TransportMode = TransportMode.SEA;
+        var provider = new TransportProvider { TransportProviderId = Guid.NewGuid(), ProviderCode = "FERRY", ProviderName = "Ferry line",
+            SupportedModes = "SEA", Status = ProviderStatus.ACTIVE };
+        db.Add(provider);
+        await db.SaveChangesAsync();
+        var service = TestSupport.CreateRoutePlans(db);
+
+        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() => service.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, Backup(
+            Segment(1, "PRIMARY", completed, -3, -1),
+            Segment(2, "BACKUP", f.Alternative, 0, 2, vehicle.VehicleId))));
+        Assert.Equal("SEGMENT_REQUIRES_OUTSOURCING", error.ErrorCode);
+
+        var outsourced = Segment(2, "BACKUP", f.Alternative, 0, 2);
+        outsourced.Outsourcing = new() { TransportProviderId = provider.TransportProviderId };
+        // The last segment ends with the delivery to the customer, which our own crew does.
+        error = await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
+            service.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, Backup(Segment(1, "PRIMARY", completed, -3, -1), outsourced)));
+        Assert.Equal("OUTSOURCED_ENDPOINT_SEGMENT", error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Rp1_CrossBorderBackup_NeedsNeitherABorderPointNorARestStop()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await CreateFixtureAsync(db);
+        f.Transport.Booking.DestinationCountry = "GB";
+        await db.SaveChangesAsync();
+        var (completed, _) = await PrimaryRoutesAsync(db, f);
+
+        // A long road leg with no rest and no border point used to fail with REST_RULE_VIOLATION or BCP_REQUIRED.
+        var result = await TestSupport.CreateRoutePlans(db).CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, Backup(
+            Segment(1, "PRIMARY", completed, -3, -1),
+            Segment(2, "BACKUP", f.Alternative, 0, 30)));
+
+        Assert.Equal("DRAFT", result.Status);
+        Assert.Equal(2, result.Segments.Count);
+    }
+
+    [Fact]
     public async Task Rp1_OmittedSegmentTypes_FallBackToThePlanType()
     {
         await using var db = TestSupport.CreateDb();
@@ -116,7 +161,8 @@ public class HybridBackupTests
         var f = await CreateFixtureAsync(db);
         var (completed, _) = await PrimaryRoutesAsync(db, f);
         var service = TestSupport.CreateRoutePlans(db);
-        f.Transport.Status = TransportStatus.READY;
+        // Still planning: a READY transport takes no new backup, and an in-transit one cannot edit its plans.
+        f.Transport.Status = TransportStatus.PLANNING;
         await db.SaveChangesAsync();
         var created = await service.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, Backup(
             Segment(1, "PRIMARY", completed, -3, -1), Segment(2, "BACKUP", f.Alternative, 0, 2)));
@@ -141,7 +187,7 @@ public class HybridBackupTests
     }
 
     [Fact]
-    public async Task Rp7_OnThePrimary_AlsoConfirmsEveryDraftBackupOfTheSameTransportPlan()
+    public async Task Rp7_OnThePrimary_AlsoConfirmsEverySubmittedBackupOfTheSameTransportPlan()
     {
         await using var db = TestSupport.CreateDb();
         var f = await CreateFixtureAsync(db);
@@ -319,5 +365,78 @@ public class HybridBackupTests
         var error = await Assert.ThrowsAsync<ConflictException>(() => f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal()));
 
         Assert.Equal("SEGMENT_LOCKED", error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Rp7_OnThePrimary_LeavesAnUnsubmittedBackupAsADraft()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await CreateFixtureAsync(db);
+        var submitted = await DraftPrimaryWithDraftBackupAsync(db, f);
+        var unsubmitted = await f.AlternateAsync(RouteType.BACKUP, RoutePlanStatus.DRAFT);
+        unsubmitted.SubmittedForReviewAt = null;
+        await db.SaveChangesAsync();
+        var specialist = await db.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST);
+
+        var result = await TestSupport.CreateRoutePlans(db).ReviewLegalAsync(specialist.AccountId, f.Plan.RoutePlanId,
+            new() { LastUpdatedAt = RouteChangeTests.Fixture.Version(f.Plan), IsFeasible = true });
+
+        Assert.Equal([submitted.RoutePlanId], result.ConfirmedBackupRoutePlanIds);
+        Assert.Equal(RoutePlanStatus.CONFIRMED, submitted.Status);
+        Assert.Equal(RoutePlanStatus.DRAFT, unsubmitted.Status);
+    }
+
+    [Fact]
+    public async Task Rp7_ABlockedBackupSegment_SendsThePrimaryAndTheBackupBackTogether()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await CreateFixtureAsync(db);
+        var backup = await DraftPrimaryWithDraftBackupAsync(db, f);
+        var blocked = backup.RoutePlanRoutes.OrderBy(x => x.SequenceNo).Last().SequenceNo;
+        var specialist = await db.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST);
+        var routes = TestSupport.CreateRoutePlans(db);
+
+        var pending = await routes.GetByIdAsync(specialist.AccountId, f.Plan.RoutePlanId);
+        Assert.Equal(backup.RoutePlanId, Assert.Single(pending.SubmittedBackups!).RoutePlanId);
+
+        var result = await routes.ReviewLegalAsync(specialist.AccountId, f.Plan.RoutePlanId, new()
+        {
+            LastUpdatedAt = RouteChangeTests.Fixture.Version(f.Plan), IsFeasible = false, Note = "No permit for this border crossing",
+            BlockedBackupSegments = [new() { RoutePlanId = backup.RoutePlanId, SequenceNo = blocked }]
+        });
+
+        Assert.Equal("DRAFT", result.Status);
+        Assert.Empty(result.ConfirmedBackupRoutePlanIds);
+        Assert.Equal([backup.RoutePlanId], result.RejectedBackupRoutePlanIds);
+        Assert.Null(f.Plan.SubmittedForReviewAt); Assert.Null(backup.SubmittedForReviewAt);
+        Assert.Equal(RoutePlanStatus.DRAFT, backup.Status);
+        var backupReview = (await routes.GetByIdAsync(specialist.AccountId, backup.RoutePlanId)).LegalReview!;
+        Assert.False(backupReview.IsFeasible); Assert.Equal([blocked], backupReview.BlockedSegments);
+        Assert.Empty((await routes.GetByIdAsync(specialist.AccountId, f.Plan.RoutePlanId)).LegalReview!.BlockedSegments);
+        Assert.Contains(await db.Notifications.ToListAsync(), item => item.Message.Contains(backup.RoutePlanCode) && item.Message.Contains(f.Plan.RoutePlanCode));
+    }
+
+    [Fact]
+    public async Task Rp7_RejectsAnUnknownBackupSegment_AndABlockedSegmentMarkedFeasible()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await CreateFixtureAsync(db);
+        var backup = await DraftPrimaryWithDraftBackupAsync(db, f);
+        var specialist = await db.Employees.SingleAsync(x => x.Role == EmployeeRole.TRANSPORT_SPECIALIST);
+        var routes = TestSupport.CreateRoutePlans(db);
+
+        var unknown = await Assert.ThrowsAsync<BadRequestException>(() => routes.ReviewLegalAsync(specialist.AccountId, f.Plan.RoutePlanId, new()
+        {
+            LastUpdatedAt = RouteChangeTests.Fixture.Version(f.Plan), IsFeasible = false, Note = "Blocked",
+            BlockedBackupSegments = [new() { RoutePlanId = Guid.NewGuid(), SequenceNo = 1 }]
+        }));
+        Assert.Equal("UNKNOWN_BACKUP_SEGMENT", unknown.ErrorCode);
+        var feasible = await Assert.ThrowsAsync<BadRequestException>(() => routes.ReviewLegalAsync(specialist.AccountId, f.Plan.RoutePlanId, new()
+        {
+            LastUpdatedAt = RouteChangeTests.Fixture.Version(f.Plan), IsFeasible = true,
+            BlockedBackupSegments = [new() { RoutePlanId = backup.RoutePlanId, SequenceNo = backup.RoutePlanRoutes.First().SequenceNo }]
+        }));
+        Assert.Equal("BLOCKED_SEGMENTS_REQUIRE_REJECTION", feasible.ErrorCode);
+        Assert.Equal(RoutePlanStatus.DRAFT, backup.Status);
     }
 }

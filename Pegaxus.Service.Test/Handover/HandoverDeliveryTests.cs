@@ -39,6 +39,22 @@ public class HandoverDeliveryTests
     // ------------------------------------------------------------ effects
 
     [Fact]
+    public async Task Delivery_CancelsTheHandoversOfTheTripThatAreStillWaiting()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
+        var waiting = new HandoverRecord { HandoverRecordId = Guid.NewGuid(), TransportId = f.TransportId, SequenceNo = 9, HandoverCode = "HO-" + Guid.NewGuid().ToString("N"),
+            HandoverType = HandoverType.OTHER, Status = HandoverStatus.PLANNED, FromType = HandoverPartyType.EMPLOYEE, FromEmployeeId = f.Driver.EmployeeId,
+            ToType = HandoverPartyType.EMPLOYEE, ToEmployeeId = f.Receiver.EmployeeId, PlannedHandoverAt = Fixture.Now, CreatedAt = Fixture.Now, UpdatedAt = Fixture.Now };
+        db.HandoverRecords.Add(waiting); await db.SaveChangesAsync();
+
+        await DeliverAsync(f);
+
+        var left = await db.HandoverRecords.AsNoTracking().SingleAsync(item => item.HandoverRecordId == waiting.HandoverRecordId);
+        Assert.Equal(HandoverStatus.CANCELLED, left.Status); Assert.Equal("Transport completed", left.CancellationReason);
+        Assert.Equal(3, await db.HandoverRecords.CountAsync(item => item.Status == HandoverStatus.COMPLETED));
+    }
+
+    [Fact]
     public async Task Delivery_SendsARepairVehicleToMaintenanceEvenWhenItIsBookedOnALaterTrip()
     {
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
@@ -190,6 +206,7 @@ public class HandoverDeliveryTests
         var final = Invoice(db, booking.BookingId, f.Manager.EmployeeId, InvoiceType.FINAL, InvoiceStatus.PAID, 1_000);
         Invoice(db, booking.BookingId, f.Manager.EmployeeId, InvoiceType.SUPPLEMENTARY, InvoiceStatus.ISSUED, 200);
         Invoice(db, booking.BookingId, f.Manager.EmployeeId, InvoiceType.SUPPLEMENTARY, InvoiceStatus.CANCELLED, 5_000);
+        Invoice(db, booking.BookingId, f.Manager.EmployeeId, InvoiceType.SUPPLEMENTARY, InvoiceStatus.DRAFT, 3_000); // not sent to the customer yet
         Invoice(db, booking.BookingId, f.Manager.EmployeeId, InvoiceType.DEPOSIT, InvoiceStatus.PAID, 400);
         db.Receipts.Add(new Receipt { ReceiptId = Guid.NewGuid(), ReceiptCode = "RCP-1", InvoiceId = final.InvoiceId, Amount = 1_000, Currency = "VND", PaymentMethod = PaymentMethod.CASH,
             Status = ReceiptStatus.CONFIRMED, CreatedAt = Fixture.Now, UpdatedAt = Fixture.Now });

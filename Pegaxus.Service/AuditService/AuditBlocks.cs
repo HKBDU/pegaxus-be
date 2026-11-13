@@ -69,7 +69,8 @@ public sealed partial class Service
     private async Task<List<Response.HorseItem>> HorsesBlockAsync(TransportRow transport, Actor actor, CancellationToken cancellationToken)
     {
         var horses = await db.BookingHorses.AsNoTracking().Where(link => link.BookingId == transport.BookingId).OrderBy(link => link.Horse.HorseName).ThenBy(link => link.HorseId)
-            .Select(link => new { link.Horse.HorseId, link.Horse.HorseName, link.Horse.MicrochipNumber, link.Horse.PassportNumber, link.Horse.WeightKg, link.Horse.HeightCm })
+            .Select(link => new { link.Horse.HorseId, link.Horse.HorseName, link.Horse.MicrochipNumber, link.Horse.PassportNumber, link.Horse.WeightKg, link.Horse.HeightCm,
+                link.DetachedAt, DetachedLocationName = link.DetachedLocation == null ? null : link.DetachedLocation.LocationName })
             .ToListAsync(cancellationToken);
         // Same view as flow4: a customer reads the whole health log of their horses, only without the veterinarian's own note.
         var logs = (await db.HorseHealthLogs.AsNoTracking().Where(item => item.TransportId == transport.TransportId).OrderBy(item => item.CheckedAt).ThenBy(item => item.HorseHealthLogId)
@@ -81,7 +82,8 @@ public sealed partial class Service
         return horses.Select(horse => new Response.HorseItem(horse.HorseId, horse.HorseName, horse.MicrochipNumber, horse.PassportNumber, horse.WeightKg, horse.HeightCm,
             logs[horse.HorseId].Select(log => new Response.HealthLogItem(log.HorseHealthLogId, AsUtc(log.CheckedAt), log.LogType.ToString(), log.HealthStatus.ToString(),
                 log.TemperatureCelsius, log.HeartRateBpm, log.RespiratoryRateBpm, log.SymptomNote, log.InjuryNote, log.TreatmentProvided, log.MedicationGiven, log.VeterinarianRequired,
-                actor.IsManager ? log.VeterinarianNote : null, log.GeneralNote, log.PhotoUrls.Length)).ToList())).ToList();
+                actor.IsManager ? log.VeterinarianNote : null, log.GeneralNote, log.PhotoUrls.Length)).ToList(),
+            AsUtc(horse.DetachedAt), horse.DetachedLocationName)).ToList();
     }
 
     // ------------------------------------------------------------------ routing

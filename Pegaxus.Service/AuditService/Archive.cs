@@ -81,7 +81,7 @@ public sealed partial class Service
         return new(rows.Select(item => new Response.ArchiveItem(item.TransportId, item.TransportCode, item.Status.ToString(), item.BookingId, item.BookingCode, item.CustomerName,
                 item.OriginCountry, item.DestinationCountry,
                 horses[item.BookingId].Select(horse => new Response.ArchiveHorse(horse.HorseId, horse.HorseName, horse.MicrochipNumber, horse.PassportNumber)).ToList(),
-                AsUtc(item.CompletedAt), claims.GetValueOrDefault(item.TransportId), incidentCounts.GetValueOrDefault(item.TransportId))).ToList(),
+                AsUtc(item.CompletedAt), claims.GetValueOrDefault(item.TransportId), incidentCounts.GetValueOrDefault(item.TransportId), horses[item.BookingId].Count())).ToList(),
             request.PageIndex, request.PageSize, total, Paging.TotalPages(total, request.PageSize));
     }
 }

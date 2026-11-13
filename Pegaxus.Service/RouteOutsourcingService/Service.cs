@@ -66,6 +66,9 @@ public sealed class Service(AppDbContext db, IValidator<Request> validator, Noti
             if (!(provider.SupportedModes ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Contains(segment.Route.TransportMode.ToString(), StringComparer.OrdinalIgnoreCase))
                 throw new UnprocessableEntityException("The provider does not support the transport mode of this segment", "PROVIDER_MODE_MISMATCH");
+            var sequences = await db.RoutePlanRoutes.Where(item => item.RoutePlanId == routePlanId).Select(item => item.SequenceNo).ToListAsync(cancellationToken);
+            if (segment.SequenceNo == sequences.Min() || segment.SequenceNo == sequences.Max())
+                throw HandoverRules.OutsourcedEndpoint();
         }
 
         var note = EmptyToNull(request.Note);

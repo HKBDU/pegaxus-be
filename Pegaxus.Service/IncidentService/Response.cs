@@ -88,6 +88,8 @@ public static class Response
         public Hold? Hold { get; init; }
         public bool CanResolve { get; init; }
         public IReadOnlyList<string> AvailableActions { get; init; } = [];
+        /// <summary>Stops where a horse of this incident may be left (only filled when DETACH_HORSE is available).</summary>
+        public IReadOnlyList<LocationBrief> DetachLocations { get; init; } = [];
         public DateTimeOffset ServerTime { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
@@ -106,7 +108,11 @@ public static class Response
         string? Symptoms, decimal? BodyTemperatureCelsius, int? HeartRateBpm, int? RespiratoryRateBpm, string? FirstAidProvided,
         bool VeterinarianRequired, DateTimeOffset? VeterinarianContactedAt, bool IsolationRequired, string? VeterinarianInstruction,
         string? MedicationGiven, string? OutcomeNote, bool? HorseTransportable, DateTimeOffset UpdatedAt,
-        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? VitalWarnings = null);
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<string>? VitalWarnings = null,
+        HorseDetachment? Detachment = null);
+
+    /// <summary>The horse was left behind at <see cref="Location"/> and no longer travels with this transport.</summary>
+    public sealed record HorseDetachment(DateTimeOffset DetachedAt, LocationBrief? Location, Guid? IncidentReportId);
 
     public sealed record CostDecision(string Decision, long? ApprovedAmount, string? DecisionReason, EmployeeBrief DecidedBy, DateTimeOffset DecidedAt);
     public sealed record CostRequest(Guid EmergencyCostRequestId, string RequestCode, string Category, string Description,

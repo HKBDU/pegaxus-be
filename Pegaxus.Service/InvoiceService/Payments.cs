@@ -190,6 +190,7 @@ public sealed partial class Service
                     NotificationLinks.Invoice(null, invoice.BookingId, invoiceId))
             }, now);
             await db.SaveChangesAsync(cancellationToken);
+            await FinancialReportService.Service.SyncForBookingAsync(db, clock, invoice.BookingId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
             await notifications.FlushAsync(cancellationToken);
             return new(new(receipt.ReceiptId, receipt.ReceiptCode, Vnd.ToLong(receipt.Amount), receipt.Currency, receipt.PaymentMethod.ToString(),

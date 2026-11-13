@@ -74,7 +74,8 @@ public class HorseHealthLogTests
         var result = await f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId);
         Assert.True(result.Created); Assert.True(result.Value.Effects.EmergencyNotified);
         Assert.Equal(healthStatus == "CRITICAL", result.Value.Effects.CanReportIncident);
-        var alerts = await db.Notifications.ToArrayAsync(); Assert.Equal(2, alerts.Length);
+        var all = await db.Notifications.ToArrayAsync(); Assert.Equal(3, all.Length);
+        var alerts = all.Where(alert => alert.Title == "Critical horse health alert").ToArray(); Assert.Equal(2, alerts.Length);
         Assert.All(alerts, alert =>
         {
             Assert.Equal(NotificationType.HORSE_HEALTH, alert.NotificationType); Assert.Equal(NotificationPriority.URGENT, alert.Priority);
@@ -82,15 +83,25 @@ public class HorseHealthLogTests
             Assert.Equal(result.Value.HorseHealthLogId, alert.ReferenceId);
             Assert.Equal($"/admin/ongoing-transports/{f.Transport.TransportId}/health", alert.ActionUrl);
         });
-        Assert.Equal(new[] { f.Manager.AccountId, f.Coordinator.AccountId }.Order(), (await db.AccountNotifications.Select(item => item.AccountId).ToListAsync()).Order());
-        Assert.Equal(2, f.Realtime.Messages.Count);
+        // The customer is told too, with the horse name and its condition only: the veterinarian note stays internal.
+        var customerAccount = await db.Transports.Where(item => item.TransportId == f.Transport.TransportId).Select(item => item.Booking.Customer.AccountId).SingleAsync();
+        var customerAlert = Assert.Single(all, alert => alert.Title == "Your horse needs urgent attention");
+        Assert.Equal(NotificationType.HORSE_HEALTH, customerAlert.NotificationType); Assert.Equal(NotificationPriority.URGENT, customerAlert.Priority);
+        Assert.Contains(f.Horse.HorseName, customerAlert.Message);
+        Assert.Contains(healthStatus == "CRITICAL" ? "critical" : "veterinarian", customerAlert.Message);
+        Assert.DoesNotContain("Call vet", customerAlert.Message);
+        Assert.StartsWith("/bookings/", customerAlert.ActionUrl); Assert.EndsWith($"/transports/{f.Transport.TransportId}", customerAlert.ActionUrl);
+        Assert.Equal(new[] { f.Manager.AccountId, f.Coordinator.AccountId, customerAccount }.Order(), (await db.AccountNotifications.Select(item => item.AccountId).ToListAsync()).Order());
+        var mail = Assert.Single(await db.OutboxMessages.ToListAsync());
+        Assert.Contains("Your horse needs urgent attention", mail.Payload); Assert.DoesNotContain("Call vet", mail.Payload);
+        Assert.Equal(3, f.Realtime.Messages.Count);
         request.HealthStatus = "NORMAL"; request.GeneralNote = "Must not overwrite";
         result = await f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId);
         Assert.False(result.Created); Assert.Equal(healthStatus, result.Value.HealthStatus);
         Assert.Null(result.Value.GeneralNote); Assert.Equal(vet ? "Call vet" : null, result.Value.VeterinarianNote);
         Assert.False(result.Value.Effects.EmergencyNotified); Assert.False(result.Value.Effects.CanReportIncident);
-        Assert.Equal(1, await db.HorseHealthLogs.CountAsync()); Assert.Equal(2, await db.Notifications.CountAsync());
-        Assert.Equal(2, f.Realtime.Messages.Count); Assert.Single(f.Storage.Confirmations); Assert.Empty(f.Storage.Deletes);
+        Assert.Equal(1, await db.HorseHealthLogs.CountAsync()); Assert.Equal(3, await db.Notifications.CountAsync());
+        Assert.Equal(3, f.Realtime.Messages.Count); Assert.Single(f.Storage.Confirmations); Assert.Empty(f.Storage.Deletes);
         Assert.Empty(await db.IncidentReports.ToListAsync());
     }
 
@@ -134,7 +145,7 @@ public class HorseHealthLogTests
         Assert.True(result.Created); Assert.Equal(1, result.Value.CreatedCount);
         Assert.Equal("CRITICAL", result.Value.Logs.Single(log => log.Horse.HorseId == f.Horse.HorseId).HealthStatus);
         Assert.Contains(result.Value.Logs, log => log.HorseHealthLogId == first.Value.HorseHealthLogId);
-        Assert.Equal(2, await db.HorseHealthLogs.CountAsync()); Assert.Equal(2, await db.Notifications.CountAsync());
+        Assert.Equal(2, await db.HorseHealthLogs.CountAsync()); Assert.Equal(3, await db.Notifications.CountAsync());
     }
 
     [Theory]
@@ -170,7 +181,7 @@ public class HorseHealthLogTests
         var request = f.Request(); request.CheckedAt = null; request.HealthStatus = "CRITICAL";
         var result = await f.Service.CreateAsync(f.Transport.TransportId, request, f.Escort.AccountId);
         Assert.Equal(DbTime.AsUtc(Fixture.Now), result.Value.CheckedAt); Assert.Equal(1, audit.Calls);
-        Assert.True(audit.HadLogAndAlerts); Assert.Equal(2, f.Realtime.Messages.Count);
+        Assert.True(audit.HadLogAndAlerts); Assert.Equal(3, f.Realtime.Messages.Count);
     }
 
     [Theory]
@@ -280,6 +291,26 @@ public class HorseHealthLogTests
             await Assert.ThrowsAsync<ForbiddenException>(() => f.Service.MarkAllNormalAsync(f.Transport.TransportId, new() { LogType = "OTHER" }, f.Escort.AccountId));
             Assert.Equal(0, await db.HorseHealthLogs.CountAsync());
         }
+    }
+
+    [Fact]
+    public async Task Access_OnlyTheEscortOfTheSegmentInProgress_RecordsLogs()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var nextEscort = await PersonnelAssignmentTests.EmployeeAsync(db, EmployeeRole.ESCORT);
+        var second = PersonnelAssignmentTests.Segment(f.RoutePlan, 2); second.EscortEmployeeId = nextEscort.EmployeeId; db.Add(second);
+        f.Transport.Status = TransportStatus.IN_TRANSIT; f.Segment.ActualDepartureAt = Fixture.Now.AddHours(-2);
+        await db.SaveChangesAsync();
+        Assert.Equal("NOT_CURRENT_SEGMENT_CREW", (await Assert.ThrowsAsync<ForbiddenException>(() =>
+            f.Service.CreateAsync(f.Transport.TransportId, f.Request(), nextEscort.AccountId))).ErrorCode);
+        Assert.True((await f.Service.CreateAsync(f.Transport.TransportId, f.Request(), f.Escort.AccountId)).Created);
+
+        // After the handover the horses are with the next escort.
+        f.Segment.ActualArrivalAt = second.ActualDepartureAt = Fixture.Now.AddHours(-1);
+        await db.SaveChangesAsync();
+        Assert.Equal("NOT_CURRENT_SEGMENT_CREW", (await Assert.ThrowsAsync<ForbiddenException>(() =>
+            f.Service.MarkAllNormalAsync(f.Transport.TransportId, new() { LogType = "OTHER" }, f.Escort.AccountId))).ErrorCode);
+        Assert.True((await f.Service.MarkAllNormalAsync(f.Transport.TransportId, new() { LogType = "OTHER" }, nextEscort.AccountId)) is not null); Assert.True(await db.HorseHealthLogs.CountAsync() > 1);
     }
 
     [Theory]
@@ -499,7 +530,7 @@ public class HorseHealthLogTests
             if (Enabled)
             {
                 Calls++; HadLogAndAlerts = eventData.Context!.ChangeTracker.Entries<HorseHealthLog>().Any(entry => entry.State == EntityState.Added) &&
-                    eventData.Context.ChangeTracker.Entries<Notification>().Count(entry => entry.State == EntityState.Added) == 2;
+                    eventData.Context.ChangeTracker.Entries<Notification>().Count(entry => entry.State == EntityState.Added) == 3;
                 if (Fail) throw new IOException("Planned database failure");
             }
             return ValueTask.FromResult(result);

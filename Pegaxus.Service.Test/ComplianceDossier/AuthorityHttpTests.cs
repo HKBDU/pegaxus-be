@@ -33,7 +33,7 @@ public class AuthorityHttpTests
         var submitUrl = $"/api/v1/compliance-dossiers/{dossierId}/authority-submissions";
         using var created = await client.PostAsJsonAsync(submitUrl, new
         {
-            authorityName = "Authority", submissionReference = "REF-HTTP", submittedAt = DateTimeOffset.UtcNow,
+            authorityName = Pegaxus.Service.Common.CompetentAuthorities.All[5].Name, submissionReference = "REF-HTTP", submittedAt = DateTimeOffset.UtcNow,
             proofFile = DocumentUploadTests.File("proof.pdf", "application/pdf")
         });
         Assert.Equal(HttpStatusCode.Created, created.StatusCode);

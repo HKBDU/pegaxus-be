@@ -62,6 +62,7 @@ public sealed partial class Service : IComplianceDossierService
     }
 
     /// <param name="role">The recipient employee role, or <c>null</c> for the booking customer.</param>
+    /// <param name="actionUrl">The page the notification opens; defaults to the recipient's dossier page.</param>
     private void AddNotification(
         Guid accountId,
         EmployeeRole? role,
@@ -69,7 +70,8 @@ public sealed partial class Service : IComplianceDossierService
         string title,
         string message,
         DateTime now,
-        NotificationPriority priority = NotificationPriority.NORMAL)
+        NotificationPriority priority = NotificationPriority.NORMAL,
+        string? actionUrl = null)
     {
         _notificationService.Queue(new NotificationService.NotificationCreateRequest
         {
@@ -81,7 +83,7 @@ public sealed partial class Service : IComplianceDossierService
             Message = message,
             ReferenceType = "ComplianceDossier",
             ReferenceId = dossier.ComplianceDossierId,
-            ActionUrl = NotificationLinks.Dossier(role, dossier.ComplianceDossierId),
+            ActionUrl = actionUrl ?? NotificationLinks.Dossier(role, dossier.ComplianceDossierId),
             CreatedAt = now
         });
     }

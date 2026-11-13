@@ -35,4 +35,8 @@ public static class HandoverRules
     /// </summary>
     public static bool RequiredBetween(Guid? fromDriverEmployeeId, Guid? toDriverEmployeeId) =>
         !fromDriverEmployeeId.HasValue || fromDriverEmployeeId != toDriverEmployeeId;
+
+    /// <summary>Our crew takes the horses from the customer and hands them back; a provider only carries them in between (carrier handover).</summary>
+    public static Exceptions.UnprocessableEntityException OutsourcedEndpoint() =>
+        new("The first and last segments must be run by our own crew; only a segment in between can be outsourced", "OUTSOURCED_ENDPOINT_SEGMENT");
 }

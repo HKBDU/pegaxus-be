@@ -64,10 +64,13 @@ public partial class HandoverPostgresTests
             var failure = new SaveAudit { FailAfterSave = true };
             await using (var writer = new AppDbContext(new DbContextOptionsBuilder<AppDbContext>(options).AddInterceptors(failure).Options))
                 await Assert.ThrowsAsync<IOException>(() => f.CreateService(writer).CompleteAsync(f.Delivery.HandoverRecordId, Request(f.Delivery), f.Manager.AccountId));
-            Assert.Equal(1, failure.Calls); Assert.Equal((1, 3, 4), failure.Writes); Assert.Equal(2, f.Media.Confirmed.Count);
+            // The DELIVERY record plus the PICKUP and TRANSFER still in progress, which completing the trip cancels.
+            Assert.Equal(1, failure.Calls); Assert.Equal((3, 3, 4), failure.Writes); Assert.Equal(2, f.Media.Confirmed.Count);
             await using var verify = new AppDbContext(options);
             var record = await verify.HandoverRecords.SingleAsync(item => item.HandoverRecordId == f.Delivery.HandoverRecordId);
             Assert.Equal(HandoverStatus.IN_PROGRESS, record.Status); Assert.Null(record.CompletedAt); Assert.Null(record.SenderSignatureUrl); Assert.Null(record.ReceiverSignatureUrl);
+            Assert.All(await verify.HandoverRecords.Where(item => item.HandoverRecordId != f.Delivery.HandoverRecordId).ToArrayAsync(),
+                item => { Assert.Equal(HandoverStatus.IN_PROGRESS, item.Status); Assert.Null(item.CancelledAt); });
             var transport = await verify.Transports.SingleAsync(); Assert.Equal(TransportStatus.IN_TRANSIT, transport.Status); Assert.Null(transport.CompletedAt); Assert.Null(transport.ActualArrivalAt);
             Assert.Null((await verify.RoutePlanRoutes.SingleAsync(segment => segment.RoutePlanRouteId == f.Second.RoutePlanRouteId)).ActualArrivalAt);
             Assert.Equal(RoutePlanStatus.ACTIVE, (await verify.RoutePlans.SingleAsync()).Status); Assert.Equal(TransportPlanStatus.IN_PROGRESS, (await verify.TransportPlans.SingleAsync()).Status);

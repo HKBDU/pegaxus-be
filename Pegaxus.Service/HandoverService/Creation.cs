@@ -28,7 +28,7 @@ public sealed partial class Service
                 await db.LockRowsAsync(db.Transports.Where(item => item.TransportId == transportId), item => item.TransportId, cancellationToken);
                 var (transport, segments) = await LockJourneyAsync(transportId, cancellationToken);
                 var type = Enum.Parse<HandoverType>(request.HandoverType);
-                if (type == HandoverType.CARRIER_HANDOVER || type == HandoverType.OTHER && (request.FromType == "PROVIDER" || request.ToType == "PROVIDER"))
+                if (type == HandoverType.OTHER && (request.FromType == "PROVIDER" || request.ToType == "PROVIDER"))
                     throw new UnprocessableEntityException("Provider handovers are not supported by the current database schema", "HANDOVER_TYPE_NOT_SUPPORTED");
                 if (transport.Status != (type == HandoverType.PICKUP ? TransportStatus.READY : TransportStatus.IN_TRANSIT))
                     throw new ConflictException("The transport status does not allow creating this handover", "INVALID_TRANSPORT_STATUS");
@@ -46,8 +46,13 @@ public sealed partial class Service
                     FromRoutePlanRouteId = request.FromRoutePlanRouteId, ToRoutePlanRouteId = request.ToRoutePlanRouteId,
                     Status = request.StartNow ? HandoverStatus.IN_PROGRESS : HandoverStatus.PLANNED,
                     PlannedHandoverAt = request.PlannedHandoverAt.HasValue ? Truncate(request.PlannedHandoverAt.Value) : now,
-                    FromType = type == HandoverType.OTHER ? Enum.Parse<HandoverPartyType>(request.FromType!) : type == HandoverType.PICKUP ? HandoverPartyType.CUSTOMER : HandoverPartyType.EMPLOYEE,
-                    ToType = type == HandoverType.OTHER ? Enum.Parse<HandoverPartyType>(request.ToType!) : type == HandoverType.DELIVERY ? HandoverPartyType.CUSTOMER : HandoverPartyType.EMPLOYEE,
+                    FromType = type == HandoverType.OTHER ? Enum.Parse<HandoverPartyType>(request.FromType!) : type == HandoverType.PICKUP ? HandoverPartyType.CUSTOMER
+                        : from?.TransportProviderId is not null ? HandoverPartyType.PROVIDER : HandoverPartyType.EMPLOYEE,
+                    ToType = type == HandoverType.OTHER ? Enum.Parse<HandoverPartyType>(request.ToType!) : type == HandoverType.DELIVERY ? HandoverPartyType.CUSTOMER
+                        : to?.TransportProviderId is not null ? HandoverPartyType.PROVIDER : HandoverPartyType.EMPLOYEE,
+                    // A carrier handover names the provider of the outsourced segment; the provider has no account, so our crew signs with it on the spot.
+                    FromTransportProviderId = type == HandoverType.CARRIER_HANDOVER ? from?.TransportProviderId : null,
+                    ToTransportProviderId = type == HandoverType.CARRIER_HANDOVER ? to?.TransportProviderId : null,
                     FromCustomerId = type == HandoverType.OTHER ? request.FromCustomerId : type == HandoverType.PICKUP ? customerId : null,
                     ToCustomerId = type == HandoverType.OTHER ? request.ToCustomerId : type == HandoverType.DELIVERY ? customerId : null,
                     FromEmployeeId = type == HandoverType.OTHER ? request.FromEmployeeId : from?.DriverEmployeeId,
@@ -56,16 +61,26 @@ public sealed partial class Service
                 };
                 ValidateBoundary(item, segments, effective, customerId);
                 if (!actor.IsSpecialist && !await CanOperateAsync(item, actor, cancellationToken)) throw Forbidden();
-                var duplicate = await db.HandoverRecords.AsNoTracking().Where(record => record.TransportId == transportId && record.HandoverType == type &&
-                    record.FromRoutePlanRouteId == item.FromRoutePlanRouteId && record.ToRoutePlanRouteId == item.ToRoutePlanRouteId && record.Status != HandoverStatus.CANCELLED)
-                    .Select(record => (Guid?)record.HandoverRecordId).FirstOrDefaultAsync(cancellationToken);
-                if (duplicate.HasValue) throw new ConflictException("A handover already exists for this boundary", "HANDOVER_ALREADY_EXISTS", new { HandoverRecordId = duplicate.Value });
+                // A trip has one live PICKUP and one live DELIVERY. One left on a boundary the route no longer has (the route switched to a backup)
+                // is replaced; one on this boundary, or one already finished, is a duplicate. Other types may repeat, once per boundary.
+                var oneOfType = type is HandoverType.PICKUP or HandoverType.DELIVERY;
+                var existing = await db.HandoverRecords.Where(record => record.TransportId == transportId && record.HandoverType == type && record.Status != HandoverStatus.CANCELLED &&
+                    (oneOfType || record.FromRoutePlanRouteId == item.FromRoutePlanRouteId && record.ToRoutePlanRouteId == item.ToRoutePlanRouteId)).ToListAsync(cancellationToken);
+                var duplicate = existing.FirstOrDefault(record => record.FromRoutePlanRouteId == item.FromRoutePlanRouteId && record.ToRoutePlanRouteId == item.ToRoutePlanRouteId ||
+                    record.Status is not (HandoverStatus.PLANNED or HandoverStatus.IN_PROGRESS));
+                if (duplicate is not null) throw new ConflictException("A handover already exists for this boundary", "HANDOVER_ALREADY_EXISTS", new { HandoverRecordId = duplicate.HandoverRecordId });
                 item.SequenceNo = checked((await db.HandoverRecords.Where(record => record.TransportId == transportId).MaxAsync(record => (int?)record.SequenceNo, cancellationToken) ?? 0) + 1);
                 var prefix = $"HO-{now:yyyyMMdd}-";
                 var codes = await db.HandoverRecords.AsNoTracking().Where(record => record.HandoverCode.StartsWith(prefix)).Select(record => record.HandoverCode).ToArrayAsync(cancellationToken);
                 var next = codes.Select(code => int.TryParse(code[prefix.Length..], out var number) ? number : 0).DefaultIfEmpty().Max() + 1;
                 if (next > 9999) throw new ConflictException("The daily handover code range is exhausted", "HANDOVER_CODE_EXHAUSTED");
                 item.HandoverCode = prefix + next.ToString("D4");
+                foreach (var stale in existing)
+                {
+                    stale.Status = HandoverStatus.CANCELLED;
+                    stale.CancellationReason = $"Route changed; replaced by {item.HandoverCode}";
+                    stale.CancelledAt = stale.UpdatedAt = now;
+                }
                 await FillCreationSnapshotsAsync(item, request, from, to, cancellationToken);
                 db.HandoverRecords.Add(item);
                 if (!request.StartNow)
@@ -99,8 +114,15 @@ public sealed partial class Service
 
     private async Task FillCreationSnapshotsAsync(HandoverRecord item, Request.CreateRequest request, RoutePlanRoute? from, RoutePlanRoute? to, CancellationToken cancellationToken)
     {
-        async Task<(string Name, string? Phone)> PartyAsync(Guid? customerId, Guid? employeeId)
+        async Task<(string Name, string? Phone)> PartyAsync(Guid? customerId, Guid? employeeId, Guid? providerId)
         {
+            if (providerId.HasValue)
+            {
+                var provider = await db.TransportProviders.AsNoTracking().Where(provider => provider.TransportProviderId == providerId && !provider.IsDeleted)
+                    .Select(provider => new { provider.ProviderName, provider.Phone }).SingleOrDefaultAsync(cancellationToken);
+                if (provider is null) throw new UnprocessableEntityException("The handover party is unavailable", "INVALID_SEGMENT_PAIR");
+                return (provider.ProviderName, provider.Phone);
+            }
             if (customerId.HasValue)
             {
                 var customer = await db.Customers.AsNoTracking().Where(customer => customer.CustomerId == customerId && !customer.IsDeleted &&
@@ -113,8 +135,8 @@ public sealed partial class Service
             if (employee is null) throw new UnprocessableEntityException("The handover party is unavailable", "INVALID_SEGMENT_PAIR");
             return (employee.FullName, employee.Phone);
         }
-        var sender = await PartyAsync(item.FromCustomerId, item.FromEmployeeId);
-        var receiver = await PartyAsync(item.ToCustomerId, item.ToEmployeeId);
+        var sender = await PartyAsync(item.FromCustomerId, item.FromEmployeeId, item.FromTransportProviderId);
+        var receiver = await PartyAsync(item.ToCustomerId, item.ToEmployeeId, item.ToTransportProviderId);
         var locationId = item.HandoverType == HandoverType.PICKUP && to is not null
             ? await db.Routes.Where(route => route.RouteId == to.RouteId).Select(route => (Guid?)route.FromLocationId).SingleAsync(cancellationToken)
             : from is not null ? await db.Routes.Where(route => route.RouteId == from.RouteId).Select(route => (Guid?)route.ToLocationId).SingleAsync(cancellationToken) : null;

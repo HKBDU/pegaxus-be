@@ -127,9 +127,10 @@ public sealed partial class Service
                 item.ToRoutePlanRouteId == to?.Segment.RoutePlanRouteId)?.Brief;
             var outsourced = from?.Segment.IsOutsourced == true || to?.Segment.IsOutsourced == true;
             var required = from is null || to is null || outsourced || HandoverRules.RequiredBetween(from.DriverEmployeeId, to.DriverEmployeeId);
-            // shortcut: provider handovers stay disabled until B-03 adds PROVIDER parties.
-            string[] allowed = outsourced || !required ? [] : index == 0 ? ["PICKUP"] : index == segments.Count ? ["DELIVERY"] : ["TRANSFER", "BORDER_HANDOVER"];
-            var open = !outsourced && required && existing is null && (index == 0 ? transport.Status == TransportStatus.READY : transport.Status == TransportStatus.IN_TRANSIT);
+            // Where a provider takes over or hands back the horses the crew records a carrier handover; pickup and delivery are never outsourced.
+            string[] allowed = !required ? [] : outsourced ? (from is not null && to is not null ? ["CARRIER_HANDOVER"] : [])
+                : index == 0 ? ["PICKUP"] : index == segments.Count ? ["DELIVERY"] : ["TRANSFER", "BORDER_HANDOVER"];
+            var open = allowed.Length > 0 && existing is null && (index == 0 ? transport.Status == TransportStatus.READY : transport.Status == TransportStatus.IN_TRANSIT);
             var isManager = actor.Role is EmployeeRole.LOGISTICS_MANAGER or EmployeeRole.FLEET_ROUTE_COORDINATOR;
             // Crew start a handover on the spot; managers and specialists may also schedule one, but specialists cannot start it.
             var modes = new List<string>();
