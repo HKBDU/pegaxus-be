@@ -161,7 +161,8 @@ public class HybridBackupTests
         var f = await CreateFixtureAsync(db);
         var (completed, _) = await PrimaryRoutesAsync(db, f);
         var service = TestSupport.CreateRoutePlans(db);
-        f.Transport.Status = TransportStatus.READY;
+        // Still planning: a READY transport takes no new backup, and an in-transit one cannot edit its plans.
+        f.Transport.Status = TransportStatus.PLANNING;
         await db.SaveChangesAsync();
         var created = await service.CreateAsync(f.Coordinator.AccountId, f.Plan.TransportPlanId, Backup(
             Segment(1, "PRIMARY", completed, -3, -1), Segment(2, "BACKUP", f.Alternative, 0, 2)));

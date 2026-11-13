@@ -280,6 +280,9 @@ public sealed partial class Service
         if (employeeId is null)
             throw new ForbiddenException("Only an active Transport Specialist can record authority decisions");
 
+        // The decision may move the transport to READY, which reads crew and route plans written by other requests: keep the
+        // transport row lock taken there until this decision is saved.
+        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
         var submission = await _db.AuthoritySubmissions
             .Include(item => item.ComplianceDossier)
             .SingleOrDefaultAsync(item => item.AuthoritySubmissionId == submissionId, cancellationToken);
@@ -333,7 +336,9 @@ public sealed partial class Service
 
         if (decision == AuthoritySubmissionStatus.RETURNED)
         {
-            dossier.Status = ComplianceDossierStatus.IN_PREPARATION;
+            // Like a rejection, only a required authority sends the dossier back, and never once every required authority approved it.
+            if (submission.IsRequired && dossier.Status != ComplianceDossierStatus.APPROVED)
+                dossier.Status = ComplianceDossierStatus.IN_PREPARATION;
         }
         else if (decision == AuthoritySubmissionStatus.REJECTED)
         {
@@ -350,15 +355,16 @@ public sealed partial class Service
         // it counts once the dossier is submitted again.
         else if (dossier.Status != ComplianceDossierStatus.IN_PREPARATION)
         {
-            // Only the latest submission to each required authority counts: an earlier returned or rejected one was replaced by it.
+            // An authority that was ever submitted to as required stays required, even when a later resubmission is not ticked;
+            // it passes when its latest submission, ticked or not, is approved. Earlier returned or rejected ones were replaced by it.
             var others = await _db.AuthoritySubmissions
                 .Where(item => item.ComplianceDossierId == dossier.ComplianceDossierId && item.AuthoritySubmissionId != submission.AuthoritySubmissionId)
                 .Select(item => new { item.AuthorityName, item.SubmissionNo, item.IsRequired, item.Status })
                 .ToListAsync(cancellationToken);
             var latest = others.Append(new { submission.AuthorityName, submission.SubmissionNo, submission.IsRequired, submission.Status })
                 .GroupBy(item => item.AuthorityName.Trim().ToUpperInvariant())
-                .Select(group => group.MaxBy(item => item.SubmissionNo)!)
-                .Where(item => item.IsRequired);
+                .Where(group => group.Any(item => item.IsRequired))
+                .Select(group => group.MaxBy(item => item.SubmissionNo)!);
 
             dossier.Status = latest.All(item => item.Status == AuthoritySubmissionStatus.APPROVED)
                 ? ComplianceDossierStatus.APPROVED
@@ -369,6 +375,9 @@ public sealed partial class Service
         }
 
         dossier.UpdatedAt = now;
+        // Approval of the main dossier can be the last condition the transport waits for; a rejection can take READY away again.
+        if (dossier.DossierType == DossierType.MAIN)
+            await TransportReadiness.SyncAsync(_db, dossier.TransportId, now, cancellationToken);
 
         _db.AuditDossiers.Add(new AuditDossier
         {
@@ -416,6 +425,7 @@ public sealed partial class Service
         }
 
         await _db.SaveChangesAsync(cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
         await _notificationService.FlushAsync(cancellationToken);
 
         return new Response.AuthorityDecisionResponse

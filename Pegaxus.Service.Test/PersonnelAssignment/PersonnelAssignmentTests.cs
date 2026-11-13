@@ -125,7 +125,8 @@ public class PersonnelAssignmentTests
             (await db.Notifications.SingleAsync(x => x.AccountNotifications.Any(a => a.AccountId == escort.AccountId))).Message);
         Assert.Equal(2, await db.OutboxMessages.CountAsync()); // Only assigned employees receive emails.
         Assert.DoesNotContain(await db.OutboxMessages.ToListAsync(), x => x.Payload.Contains("provider@example.com"));
-        Assert.Equal(TransportStatus.READY, route.TransportPlan.Transport.Status);
+        // A full crew alone is not enough: no approved dossier and no backup yet (see TransportReadinessTests).
+        Assert.Equal(TransportStatus.CREATED, route.TransportPlan.Transport.Status);
         Assert.True(result.UpdatedAt > TestClock.GetUtcNow());
         Assert.Equal("SEGMENT_ALREADY_ASSIGNED", (await Assert.ThrowsAsync<ConflictException>(() =>
             service.AssignAsync(route.RoutePlanId, Assign(route, segment, driver, escort), manager.AccountId))).ErrorCode);
