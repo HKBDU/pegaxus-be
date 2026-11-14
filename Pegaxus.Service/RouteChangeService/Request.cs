@@ -68,12 +68,18 @@ public static class Request
         public DateTimeOffset LastUpdatedAt { get; set; }
         public List<SegmentRequest>? Segments { get; set; }
         public string? Note { get; set; }
+        /// <summary>When the first return segment really departs; every return segment moves by the same amount.</summary>
+        public DateTimeOffset? StartAt { get; set; }
     }
 
     public sealed class SegmentRequest
     {
         public Guid RoutePlanRouteId { get; set; }
         public List<Guid>? VehicleIds { get; set; }
+        /// <summary>Replaces the suggested driver of an internal segment.</summary>
+        public Guid? DriverEmployeeId { get; set; }
+        /// <summary>Replaces the suggested escort of an internal segment.</summary>
+        public Guid? EscortEmployeeId { get; set; }
         public OutsourcingRequest? Outsourcing { get; set; }
     }
 

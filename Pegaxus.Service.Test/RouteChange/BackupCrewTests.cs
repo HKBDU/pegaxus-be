@@ -128,6 +128,16 @@ public class BackupCrewTests
         Assert.Equal("ACTIVE", result.Status);
         Assert.Null(f.Current.SupersededAt); Assert.Equal(f.Driver.EmployeeId, f.Current.DriverEmployeeId);
         Assert.NotNull(suffix.SupersededAt);
+        // The kept segment stays on the journey although the horse has not reached it yet.
+        var plans = await db.RoutePlans.AsNoTracking().Include(x => x.RoutePlanRoutes).ToListAsync();
+        Assert.Equal(new[] { f.Completed.RoutePlanRouteId, f.Current.RoutePlanRouteId, detour.RoutePlanRouteId },
+            Pegaxus.Service.Common.TransportItinerary.Effective(plans).Select(x => x.Route.RoutePlanRouteId));
+        // The personnel page lists the replaced primary segment as superseded, then the backup segment that took over.
+        var assignments = await PersonnelAssignmentTests.CreateService(db).GetAsync(f.Plan.TransportPlanId, f.Manager.AccountId);
+        Assert.Equal(new[] { (f.Completed.RoutePlanRouteId, "PRIMARY", false), (f.Current.RoutePlanRouteId, "PRIMARY", false),
+                (suffix.RoutePlanRouteId, "PRIMARY", true), (detour.RoutePlanRouteId, "BACKUP", false) },
+            assignments.Phase2.Segments.Select(x => (x.RoutePlanRouteId, x.RouteType, x.IsSuperseded)));
+        Assert.Equal("Finish", assignments.Phase2.Segments[^1].ToLocationName);
     }
 
     [Theory]

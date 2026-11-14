@@ -98,7 +98,7 @@ public class HorseIncidentHttpTests
     }
 
     [Theory]
-    [InlineData("temperature", 400, "VALIDATION_ERROR")][InlineData("vitals", 422, "VITAL_SIGNS_OUT_OF_RANGE")]
+    [InlineData("temperature", 400, "VALIDATION_ERROR")][InlineData("vitals", 400, "VITAL_SIGNS_OUT_OF_RANGE")]
     [InlineData("empty", 400, "VALIDATION_ERROR")][InlineData("location", 400, "VALIDATION_ERROR")]
     [InlineData("photos", 400, "TOO_MANY_IMAGES")][InlineData("horse", 422, "HORSE_NOT_IN_TRANSPORT")]
     [InlineData("missingLocation", 404, "LOCATION_NOT_FOUND")]
@@ -121,6 +121,8 @@ public class HorseIncidentHttpTests
         Assert.Equal(status, (int)response.StatusCode); var body = await response.Content.ReadFromJsonAsync<JsonElement>();
         Assert.False(body.GetProperty("isSuccess").GetBoolean()); Assert.Equal(errorCode, body.GetProperty("errorCode").GetString());
         if (errorCode == "VALIDATION_ERROR") Assert.NotEmpty(body.GetProperty("errors").EnumerateArray());
+        if (scenario == "vitals")
+            Assert.Equal("horses[0].bodyTemperatureCelsius", Assert.Single(body.GetProperty("errors").EnumerateArray()).GetProperty("field").GetString());
         Assert.Empty(db.IncidentReports); Assert.Empty(db.HorseHealthLogs); Assert.Empty(f.Storage.Confirmations);
     }
 

@@ -113,7 +113,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
                 Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Backup route activated",
                     $"Your transport is now following a backup route (route plan {plan.RoutePlanCode}) because of an incident on the way.{NoteSuffix(request.Note)}",
                     NotificationPriority.URGENT, now, NotificationLinks.Booking(null, plan.TransportPlan.Transport.BookingId));
-                var backupDrivers = await NotifyBackupCrewAsync(plan, active, range, tail, request.Note, now, cancellationToken);
+                var backupDrivers = await NotifyCrewChangeAsync(plan, "backup", "Backup route activated", active, range, tail, request.Note, now, cancellationToken);
                 await MailChangedAsync(plan, [plan.TransportPlan.Transport.Booking.Customer.AccountId], MailService.EmailBodies.RouteChangeKind.BackupActivated,
                     request.Note, now, cancellationToken);
                 await MailChangedAsync(plan, backupDrivers.Select(item => item.AccountId), MailService.EmailBodies.RouteChangeKind.DriverBackup,
@@ -179,12 +179,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             throw new ConflictException("The reviewed compliance dossier must be approved.", "DOSSIER_NOT_APPROVED");
         if (plan.TransportPlan.Transport.ExtraDossier?.Status != ComplianceDossierStatus.APPROVED)
             throw new UnprocessableEntityException("The extra compliance dossier must be approved before the return route can be activated", "RETURN_DOSSIER_NOT_APPROVED");
-        var active = await EffectiveSegmentsAsync(plan, cancellationToken);
-        var remaining = active.Where(x => !x.ActualArrivalAt.HasValue).ToList();
-        EnsureUntravelled(remaining);
-        if (segments[0].FromLocation.LocationId != remaining[0].FromLocation.LocationId ||
-            segments[^1].ToLocation.LocationId != active[0].FromLocation.LocationId)
-            throw new UnprocessableEntityException("Return route must connect the current stop to the origin.", "RETURN_NOT_ANCHORED");
+        var (active, remaining) = await ReturnAnchorAsync(plan, segments, cancellationToken);
         CheckConnections(segments);
         var proposed = segments.ToList();
         foreach (var change in request.Segments ?? [])
@@ -211,7 +206,12 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             }
             proposed[index] = segment;
         }
-        proposed = InheritPersonnel(proposed, active);
+        // The crew is chosen now: the suggestion takes the crew at the current stop, and the manager fills or replaces it.
+        proposed = SuggestReturnCrew(proposed, active, remaining).Select(x => x.Segment).ToList();
+        proposed = await ApplyCrewAsync(proposed, request.Segments?.Select(x => new Request.CrewRequest {
+            RoutePlanRouteId = x.RoutePlanRouteId, DriverEmployeeId = x.DriverEmployeeId, EscortEmployeeId = x.EscortEmployeeId }).ToList(), cancellationToken);
+        if (request.StartAt is { } startAt) proposed = Shift(proposed, startAt);
+        CheckConnections(proposed);
         await ValidateResourcesAsync(proposed, plan, true, cancellationToken);
         var now = NextVersion(plan);
         await WriteResourcesAsync(proposed, plan, now, cancellationToken);
@@ -226,6 +226,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         await MailChangedAsync(plan, [plan.TransportPlan.Transport.Booking.Customer.AccountId], MailService.EmailBodies.RouteChangeKind.ReturnActivated,
             request.Note, now, cancellationToken);
         await MailReviewAsync(plan, activeCoordinators, MailService.EmailBodies.RouteReviewKind.ReturnActive, request.Note, now, cancellationToken);
+        await NotifyCrewChangeAsync(plan, "return", "Return route activated", active, remaining, proposed, request.Note, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         var detail = await routePlans.GetByIdAsync(accountId, routePlanId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);

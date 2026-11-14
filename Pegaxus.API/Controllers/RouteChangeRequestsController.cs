@@ -47,9 +47,27 @@ public sealed class RouteChangeRequestsController(IRouteChangeService service) :
     public async Task<IActionResult> Decide(Guid routePlanId, [FromBody] Request.DecisionRequest request, CancellationToken cancellationToken) =>
         Success(await service.DecideAsync(routePlanId, AccountId, request, cancellationToken), request.Decision == "APPROVE" ? "Route change approved successfully" : "Route change rejected successfully");
 
-    /// <summary>Activate a legally confirmed RETURN route.</summary>
+    /// <summary>Suggest the crew of a confirmed RETURN route before it is activated.</summary>
+    /// <remarks>
+    /// Internal return segments take the crew at the current stop (the crew of the next segment, or else the crew that brought the
+    /// horse there); needsCrew marks a segment still missing someone. Fails with 409 SEGMENT_LOCKED while the horse is between two
+    /// stops and 422 RETURN_NOT_ANCHORED when the return does not leave from the current stop.
+    /// </remarks>
     /// <param name="routePlanId">The RETURN route plan UUID.</param>
-    /// <param name="request">Route version and optional resource assignments.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the suggested crew and start time.</returns>
+    [HttpGet("/api/v1/route-plans/{routePlanId:guid}/return-crew")]
+    [Authorize(Policy = JwtExtensions.LogisticsManagerPolicy)]
+    public async Task<IActionResult> GetReturnCrewPlan(Guid routePlanId, CancellationToken cancellationToken) =>
+        Success(await service.GetReturnCrewPlanAsync(routePlanId, AccountId, cancellationToken), "Return crew suggestion retrieved successfully");
+
+    /// <summary>Activate a legally confirmed RETURN route.</summary>
+    /// <remarks>
+    /// startAt moves every return segment so the first one departs then. Each segment entry can replace the suggested driver and
+    /// escort, the vehicles, or switch to a transport provider.
+    /// </remarks>
+    /// <param name="routePlanId">The RETURN route plan UUID.</param>
+    /// <param name="request">Route version, optional start time and optional crew and resource assignments.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the active route segments.</returns>
     [HttpPost("/api/v1/route-plans/{routePlanId:guid}/return-activation")]

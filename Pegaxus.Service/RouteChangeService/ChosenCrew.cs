@@ -9,8 +9,9 @@ using static Pegaxus.Service.Common.DbTime;
 namespace Pegaxus.Service.RouteChangeService;
 
 /// <summary>
-/// A backup route has no crew of its own. The manager chooses it when approving the change: the suggestion takes the crew of the
-/// untravelled primary segments, and the manager fills the gaps, replaces people or vehicles, and sets when the backup really starts.
+/// A backup or return route has no crew of its own. The manager chooses it when the route takes over: the suggestion takes the crew
+/// of the replaced primary segments (backup) or the crew at the current stop (return), and the manager fills the gaps, replaces
+/// people or vehicles, and sets when the route really starts.
 /// </summary>
 public sealed partial class Service
 {
@@ -30,11 +31,58 @@ public sealed partial class Service
         var primaryId = await PrimaryIdAsync(plan, cancellationToken);
         var tail = BackupTail(segments);
         var range = Replaceable(await SegmentsAsync(primaryId, cancellationToken), tail);
-        var suggested = SuggestCrew(tail, range);
+        return CrewPlanOf(plan, SuggestCrew(tail, range));
+    }
+
+    public async Task<Response.CrewPlan> GetReturnCrewPlanAsync(Guid routePlanId, Guid accountId, CancellationToken cancellationToken = default)
+    {
+        await ActorAsync(accountId, [EmployeeRole.LOGISTICS_MANAGER], cancellationToken);
+        var plan = await db.RoutePlans.AsNoTracking().Include(x => x.TransportPlan).ThenInclude(x => x.Transport)
+            .SingleOrDefaultAsync(x => x.RoutePlanId == routePlanId, cancellationToken)
+            ?? throw new NotFoundException("Route plan not found.", "ROUTE_PLAN_NOT_FOUND");
+        EnsureInTransit(plan);
+        var segments = await SegmentsAsync(routePlanId, cancellationToken);
+        EnsureTypeStatus(plan, segments, "RETURN", RoutePlanStatus.CONFIRMED);
+        var (active, remaining) = await ReturnAnchorAsync(plan, segments, cancellationToken);
+        return CrewPlanOf(plan, SuggestReturnCrew(segments, active, remaining));
+    }
+
+    private Response.CrewPlan CrewPlanOf(RoutePlan plan, List<(Response.Segment Segment, Guid? SourceId)> suggested)
+    {
         var now = AsUtc(Now);
         var start = suggested[0].Segment.PlannedDepartureAt < now ? now : suggested[0].Segment.PlannedDepartureAt;
-        return new(routePlanId, AsUtc(plan.UpdatedAt), start, suggested.Select(x => new Response.CrewSegment(x.Segment, x.SourceId,
+        return new(plan.RoutePlanId, AsUtc(plan.UpdatedAt), start, suggested.Select(x => new Response.CrewSegment(x.Segment, x.SourceId,
             x.Segment.ExecutionType == "INTERNAL" && (x.Segment.Driver is null || x.Segment.Escort is null))).ToList());
+    }
+
+    /// <summary>
+    /// The effective itinerary and its unfinished part. A return starts from a stop: the horse must not be between two stops,
+    /// and the return must leave from where the horse is and end at the origin.
+    /// </summary>
+    private async Task<(List<Response.Segment> Active, List<Response.Segment> Remaining)> ReturnAnchorAsync(
+        RoutePlan plan, List<Response.Segment> segments, CancellationToken token)
+    {
+        var active = await EffectiveSegmentsAsync(plan, token);
+        var remaining = active.Where(x => !x.ActualArrivalAt.HasValue).ToList();
+        EnsureUntravelled(remaining);
+        if (segments[0].FromLocation.LocationId != remaining[0].FromLocation.LocationId ||
+            segments[^1].ToLocation.LocationId != active[0].FromLocation.LocationId)
+            throw new UnprocessableEntityException("Return route must connect the current stop to the origin.", "RETURN_NOT_ANCHORED");
+        return (active, remaining);
+    }
+
+    /// <summary>
+    /// Every internal return segment gets the crew already at the current stop: the crew waiting for the next segment, or else
+    /// the crew that brought the horse there.
+    /// </summary>
+    private static List<(Response.Segment Segment, Guid? SourceId)> SuggestReturnCrew(List<Response.Segment> segments,
+        List<Response.Segment> active, List<Response.Segment> remaining)
+    {
+        static bool Crewed(Response.Segment x) => x.Driver is not null && x.Escort is not null;
+        var source = Crewed(remaining[0]) ? remaining[0] : active.LastOrDefault(x => x.ActualArrivalAt.HasValue && Crewed(x));
+        return source is null
+            ? segments.Select(x => (x with { Driver = null, Escort = null }, (Guid?)null)).ToList()
+            : SuggestCrew(segments, [source]);
     }
 
     /// <summary>Applies the manager's picks over the suggestion; an empty field keeps the suggested person.</summary>
@@ -44,7 +92,7 @@ public sealed partial class Service
         foreach (var change in changes ?? [])
         {
             var index = result.FindIndex(x => x.RoutePlanRouteId == change.RoutePlanRouteId);
-            if (index < 0) throw new NotFoundException("Segment not found in the backup part of this route.", "SEGMENT_NOT_FOUND");
+            if (index < 0) throw new NotFoundException("Segment not found in the part of the route that takes over.", "SEGMENT_NOT_FOUND");
             var segment = result[index];
             if (segment.ExecutionType != "INTERNAL")
             {
@@ -126,12 +174,12 @@ public sealed partial class Service
     }
 
     /// <summary>
-    /// Tells each crew member what the change means for them: the backup crew gets its segments, the crew of the segment on the way
+    /// Tells each crew member what the change means for them: the new crew gets its segments, the crew of the segment on the way
     /// hands over at the branch point, and the crew whose primary segments were replaced learns it has no further segment.
-    /// Returns the drivers who still drive, for the mail.
+    /// <paramref name="kind"/> is "backup" or "return". Returns the drivers who still drive, for the mail.
     /// </summary>
-    private async Task<List<Employee>> NotifyBackupCrewAsync(RoutePlan plan, List<Response.Segment> active, List<Response.Segment> range,
-        List<Response.Segment> tail, string? note, DateTime now, CancellationToken token)
+    private async Task<List<Employee>> NotifyCrewChangeAsync(RoutePlan plan, string kind, string title, List<Response.Segment> active,
+        List<Response.Segment> range, List<Response.Segment> tail, string? note, DateTime now, CancellationToken token)
     {
         var assigned = tail.SelectMany(segment => new[] { segment.Driver, segment.Escort }.OfType<Response.EmployeeBrief>()
                 .Select(person => (person.EmployeeId, Segment: segment)))
@@ -146,11 +194,11 @@ public sealed partial class Service
         foreach (var person in people)
         {
             var message = assigned.TryGetValue(person.EmployeeId, out var mine)
-                ? $"You now run backup route plan {plan.RoutePlanCode}: {string.Join("; ", mine.Select(Describe))}."
+                ? $"You now run {kind} route plan {plan.RoutePlanCode}: {string.Join("; ", mine.Select(Describe))}."
                 : released.Contains(person.EmployeeId)
-                    ? $"Your remaining segments on this transport were replaced by backup route plan {plan.RoutePlanCode}. You have no further segment on it."
-                    : $"Finish your current segment, then hand over at the branch point: the convoy follows backup route plan {plan.RoutePlanCode}.";
-            Notify(person.AccountId, plan, "Backup route activated", message + NoteSuffix(note), NotificationPriority.URGENT, now, null);
+                    ? $"Your remaining segments on this transport were replaced by {kind} route plan {plan.RoutePlanCode}. You have no further segment on it."
+                    : $"Finish your current segment, then hand over at the branch point: the convoy follows {kind} route plan {plan.RoutePlanCode}.";
+            Notify(person.AccountId, plan, title, message + NoteSuffix(note), NotificationPriority.URGENT, now, null);
         }
         return people.Where(x => x.Role == EmployeeRole.DRIVER && !released.Contains(x.EmployeeId)).ToList();
     }

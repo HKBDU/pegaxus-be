@@ -48,8 +48,8 @@ public static class TransportItinerary
 
     /// <summary>
     /// Effective itinerary of a transport: the PRIMARY plan's segments that are not superseded or already departed.
-    /// An ACTIVE or COMPLETED BACKUP plan keeps the departed primary segments and continues with its own segments from
-    /// the first BACKUP segment onwards. An ACTIVE or COMPLETED RETURN plan keeps every departed segment and appends
+    /// An ACTIVE or COMPLETED BACKUP plan keeps the departed primary segments and those before its branch point, and
+    /// continues with its own segments from the first BACKUP segment onwards. An ACTIVE or COMPLETED RETURN plan keeps every departed segment and appends
     /// all of its own. Plans that are not yet active never contribute.
     /// </summary>
     public static IReadOnlyList<Segment> Effective(IEnumerable<RoutePlan> plans)
@@ -61,7 +61,9 @@ public static class TransportItinerary
 
         if (Pick(all.Where(IsBackupPlan), RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED) is { } backup &&
             BranchSequenceNo(backup) is { } branch)
-            routes = Departed(routes).Concat(Visible(backup).Where(route => route.SequenceNo >= branch)).ToList();
+            // The primary segments before the branch point still run even when the horse has not reached them yet.
+            routes = routes.Where(route => route.ActualDepartureAt.HasValue || route.SequenceNo < branch)
+                .Concat(Visible(backup).Where(route => route.SequenceNo >= branch)).ToList();
 
         if (Pick(all.Where(IsReturnPlan), RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED) is { } returning)
             routes = Departed(routes).Concat(Visible(returning)).ToList();

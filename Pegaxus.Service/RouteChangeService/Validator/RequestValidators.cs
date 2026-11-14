@@ -62,6 +62,8 @@ public sealed class SegmentRequestValidator : AbstractValidator<Request.SegmentR
     {
         RuleFor(x => x.RoutePlanRouteId).NotEmpty();
         RuleFor(x => x.VehicleIds).Must(x => x is null || x.Count <= 100 && x.All(id => id != Guid.Empty) && x.Distinct().Count() == x.Count);
+        RuleFor(x => x.DriverEmployeeId).NotEqual(Guid.Empty).When(x => x.DriverEmployeeId.HasValue);
+        RuleFor(x => x.EscortEmployeeId).NotEqual(Guid.Empty).When(x => x.EscortEmployeeId.HasValue);
         When(x => x.Outsourcing is not null, () =>
         {
             RuleFor(x => x.Outsourcing!.TransportProviderId).NotEmpty();
