@@ -47,6 +47,12 @@ public partial class RoutePlanRoute
 
     public DateTime? SupersededAt { get; set; }
 
+    /// <summary>
+    /// Set when the segment stopped early, away from its route's end: the convoy turned back at an incident to follow a
+    /// backup or return route. Null when the segment ended where its route ends.
+    /// </summary>
+    public Guid? EndedAtLocationId { get; set; }
+
     public DateTime CreatedAt { get; set; }
 
     public DateTime UpdatedAt { get; set; }
@@ -58,6 +64,8 @@ public partial class RoutePlanRoute
     public virtual ICollection<HandoverRecord> HandoverRecordFromRoutePlanRoutes { get; set; } = new List<HandoverRecord>();
 
     public virtual ICollection<HandoverRecord> HandoverRecordToRoutePlanRoutes { get; set; } = new List<HandoverRecord>();
+
+    public virtual Location? EndedAtLocation { get; set; }
 
     public virtual Route Route { get; set; } = null!;
 

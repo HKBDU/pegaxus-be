@@ -354,7 +354,7 @@ public class HybridBackupTests
     }
 
     [Fact]
-    public async Task Ec1_FailsWhenEveryPrimarySegmentHasAlreadyDeparted()
+    public async Task Ec1_TurningBackOnTheLastSegment_NeedsTheIncidentWhereTheSegmentStops()
     {
         await using var db = TestSupport.CreateDb();
         var f = await CreateFixtureAsync(db);
@@ -362,9 +362,9 @@ public class HybridBackupTests
         await db.SaveChangesAsync();
         var backup = await f.AlternateAsync();
 
-        var error = await Assert.ThrowsAsync<ConflictException>(() => f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal()));
+        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal()));
 
-        Assert.Equal("SEGMENT_LOCKED", error.ErrorCode);
+        Assert.Equal("INCIDENT_LOCATION_REQUIRED", error.ErrorCode);
     }
 
     [Fact]

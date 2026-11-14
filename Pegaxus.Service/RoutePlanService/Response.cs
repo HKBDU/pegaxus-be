@@ -101,6 +101,8 @@ public static class Response
         public required RouteResponse Route { get; init; }
         public required LocationResponse FromLocation { get; init; }
         public required LocationResponse ToLocation { get; init; }
+        /// <summary>Where the segment stopped early, away from ToLocation (the convoy turned back at an incident); null otherwise.</summary>
+        public LocationResponse? EndedAtLocation { get; init; }
         public DateTimeOffset? PlannedDepartureAt { get; init; }
         public DateTimeOffset? PlannedArrivalAt { get; init; }
         public DateTimeOffset? ActualDepartureAt { get; init; }

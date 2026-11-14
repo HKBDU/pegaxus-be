@@ -25,7 +25,12 @@ public static class Response
         DateTimeOffset? ActualDepartureAt, DateTimeOffset? ActualArrivalAt, string Status, decimal? DwellAfterMinutes,
         string ExecutionType, List<VehicleBrief> Vehicles, Outsourcing? Outsourcing, EmployeeBrief? Driver, EmployeeBrief? Escort, string? Note);
     /// <summary>The backup segments with the suggested crew, for the manager to complete before approving.</summary>
-    public sealed record CrewPlan(Guid RoutePlanId, DateTimeOffset LastUpdatedAt, DateTimeOffset SuggestedStartAt, IReadOnlyList<CrewSegment> Segments);
+    /// <param name="AnchorMode">INCIDENT_LOCATION (the running segment stops at the incident), NEXT_STOP (the convoy goes on to StartLocation)
+    /// or AT_STOP (the convoy waits at StartLocation).</param>
+    /// <param name="TurnsBack">The convoy drives back to StartLocation, which it has passed.</param>
+    /// <param name="EndedAtLocation">Where the running segment stops early, for INCIDENT_LOCATION.</param>
+    public sealed record CrewPlan(Guid RoutePlanId, DateTimeOffset LastUpdatedAt, DateTimeOffset SuggestedStartAt, IReadOnlyList<CrewSegment> Segments,
+        string AnchorMode, LocationBrief StartLocation, bool TurnsBack, LocationBrief? EndedAtLocation);
     /// <summary>SuggestedFromRoutePlanRouteId is the primary segment the crew came from; NeedsCrew marks an internal segment still missing someone.</summary>
     public sealed record CrewSegment(Segment Segment, Guid? SuggestedFromRoutePlanRouteId, bool NeedsCrew);
     public sealed record Comparison(decimal DistanceDeltaKm, decimal DelayMinutes, bool BcpChanged, bool Additional24hRest,

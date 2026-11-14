@@ -74,6 +74,7 @@ public sealed partial class Service
                 Route = new Response.RouteResponse { RouteId = segment.Route.RouteId, RouteCode = segment.Route.RouteCode, RouteName = segment.Route.RouteName, TransportMode = segment.Route.TransportMode.ToString(), DistanceKm = segment.Route.DistanceKm, EstimatedDurationMinutes = segment.Route.EstimatedDurationMinutes },
                 FromLocation = ToLocation(segment.Route.FromLocation),
                 ToLocation = ToLocation(segment.Route.ToLocation),
+                EndedAtLocation = segment.EndedAtLocation is null ? null : ToLocation(segment.EndedAtLocation),
                 PlannedDepartureAt = segment.PlannedDepartureAt.HasValue ? AsUtc(segment.PlannedDepartureAt.Value) : null,
                 PlannedArrivalAt = segment.PlannedArrivalAt.HasValue ? AsUtc(segment.PlannedArrivalAt.Value) : null,
                 ActualDepartureAt = segment.ActualDepartureAt.HasValue ? AsUtc(segment.ActualDepartureAt.Value) : null,
