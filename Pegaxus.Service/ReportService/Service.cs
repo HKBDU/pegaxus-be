@@ -140,7 +140,21 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock) : IRepo
             .Select(item => new { item.TransportPlanId, Minutes = item.EstimatedDurationMinutes!.Value, item.CreatedAt }).ToListAsync(cancellationToken);
         var primaryMinutes = primaries.GroupBy(item => item.TransportPlanId)
             .ToDictionary(group => group.Key, group => group.OrderByDescending(item => item.CreatedAt).First().Minutes);
-        return latest.ToDictionary(pair => pair.Key, pair => new PlanFigures(pair.Value.PlannedEndAt,
+        // The committed arrival is the end of the confirmed primary route; the plan's own end is only a planning window.
+        // Superseded primary segments keep their times, so a backup or return never moves it and a disrupted trip still counts late.
+        var primaryEnds = await db.RoutePlanRoutes.AsNoTracking().Where(item => planIds.Contains(item.RoutePlan.TransportPlanId) &&
+                item.RoutePlan.PrimaryRoutePlanId == null && item.RouteType == RouteType.PRIMARY && item.PlannedArrivalAt != null &&
+                (item.RoutePlan.Status == RoutePlanStatus.CONFIRMED || item.RoutePlan.Status == RoutePlanStatus.ACTIVE || item.RoutePlan.Status == RoutePlanStatus.COMPLETED) &&
+                item.RoutePlan.RoutePlanRoutes.All(other => other.RouteType == RouteType.PRIMARY))
+            .Select(item => new { item.RoutePlan.TransportPlanId, item.RoutePlanId, item.RoutePlan.CreatedAt, item.SequenceNo, Arrival = item.PlannedArrivalAt!.Value })
+            .ToListAsync(cancellationToken);
+        var committed = primaryEnds.GroupBy(item => item.TransportPlanId).ToDictionary(group => group.Key, group =>
+        {
+            var plan = group.OrderByDescending(item => item.CreatedAt).ThenBy(item => item.RoutePlanId).First().RoutePlanId;
+            return group.Where(item => item.RoutePlanId == plan).OrderByDescending(item => item.SequenceNo).First().Arrival;
+        });
+        return latest.ToDictionary(pair => pair.Key, pair => new PlanFigures(
+            committed.TryGetValue(pair.Value.TransportPlanId, out var end) ? end : pair.Value.PlannedEndAt,
             primaryMinutes.TryGetValue(pair.Value.TransportPlanId, out var minutes) ? minutes
             : pair.Value.EstimatedDurationMinutes > 0 ? pair.Value.EstimatedDurationMinutes : null));
     }
