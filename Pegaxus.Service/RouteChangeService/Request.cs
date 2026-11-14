@@ -49,6 +49,18 @@ public static class Request
         public string Decision { get; set; } = "";
         public string? Note { get; set; }
         public Guid? IncidentReportId { get; set; }
+        /// <summary>BACKUP approval only: when the first backup segment really departs; every backup segment moves by the same amount.</summary>
+        public DateTimeOffset? StartAt { get; set; }
+        /// <summary>BACKUP approval only: crew or vehicles the manager picks instead of the suggestion.</summary>
+        public List<CrewRequest>? Segments { get; set; }
+    }
+
+    public sealed class CrewRequest
+    {
+        public Guid RoutePlanRouteId { get; set; }
+        public Guid? DriverEmployeeId { get; set; }
+        public Guid? EscortEmployeeId { get; set; }
+        public List<Guid>? VehicleIds { get; set; }
     }
 
     public sealed class ActivationRequest

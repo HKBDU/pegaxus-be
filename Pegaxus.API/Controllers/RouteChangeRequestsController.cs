@@ -20,9 +20,26 @@ public sealed class RouteChangeRequestsController(IRouteChangeService service) :
     public async Task<IActionResult> Create(Guid routePlanId, [FromBody] Request.CreateRequest request, CancellationToken cancellationToken) =>
         Success(await service.CreateAsync(routePlanId, AccountId, request, cancellationToken), "Route change request sent successfully");
 
+    /// <summary>Suggest the crew of a confirmed BACKUP route before it is approved.</summary>
+    /// <remarks>
+    /// Lists the backup segments from the branch point. Internal segments take the driver and escort of the untravelled PRIMARY
+    /// segments by position; needsCrew marks a segment still missing someone. suggestedStartAt is the planned departure, or now when
+    /// that has passed. The Logistics Manager, or the Route Coordinator assigned to the transport plan.
+    /// </remarks>
+    /// <param name="routePlanId">The BACKUP route plan UUID.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the suggested crew; 409 when the transport is not in transit or the route is not a confirmed backup.</returns>
+    [HttpGet("/api/v1/route-plans/{routePlanId:guid}/change-crew")]
+    public async Task<IActionResult> GetCrewPlan(Guid routePlanId, CancellationToken cancellationToken) =>
+        Success(await service.GetCrewPlanAsync(routePlanId, AccountId, cancellationToken), "Backup crew suggestion retrieved successfully");
+
     /// <summary>Approve or reject a BACKUP or RETURN route.</summary>
+    /// <remarks>
+    /// For a BACKUP approval, startAt moves every backup segment so the first one departs then, and segments overrides the suggested
+    /// driver, escort or vehicles of internal backup segments (an empty field keeps the suggestion). The segment type cannot change.
+    /// </remarks>
     /// <param name="routePlanId">The route plan UUID.</param>
-    /// <param name="request">Decision, route version, optional note and optional incidentReportId (an open incident on the same transport moves to PENDING).</param>
+    /// <param name="request">Decision, route version, optional note, optional incidentReportId (an open incident on the same transport moves to PENDING), and for a BACKUP approval optional startAt and segments.</param>
     /// <param name="cancellationToken">The request cancellation token.</param>
     /// <returns>200 OK with the route and dossier status.</returns>
     [HttpPost("/api/v1/route-plans/{routePlanId:guid}/change-decision")]

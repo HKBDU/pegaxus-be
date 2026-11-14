@@ -74,15 +74,6 @@ public sealed partial class Service
         return drivers;
     }
 
-    private async Task NotifyPrimaryEscortsAsync(RoutePlan plan, Guid primaryId, string title, string message, DateTime now, CancellationToken token)
-    {
-        var escortIds = db.RoutePlanRoutes.Where(x => x.RoutePlanId == primaryId &&
-            x.ActualArrivalAt == null && x.EscortEmployeeId.HasValue)
-            .OrderBy(x => x.SequenceNo).Take(1).Select(x => x.EscortEmployeeId!.Value);
-        var escorts = await db.Employees.AsNoTracking().Active().Where(x => escortIds.Contains(x.EmployeeId) && x.Role == EmployeeRole.ESCORT).ToListAsync(token);
-        foreach (var escort in escorts) Notify(escort.AccountId, plan, title, message, NotificationPriority.URGENT, now, null);
-    }
-
     private void Notify(Guid accountId, RoutePlan plan, string title, string message, NotificationPriority priority, DateTime now, string? actionUrl) =>
         notifications.Queue(new() { AccountId = accountId, TransportId = plan.TransportPlan.TransportId, Type = NotificationType.ROUTE,
             Priority = priority, Title = title, Message = message, ReferenceType = "RoutePlan",

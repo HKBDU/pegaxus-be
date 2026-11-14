@@ -25,6 +25,22 @@ public sealed class DecisionRequestValidator : AbstractValidator<Request.Decisio
         RuleFor(x => x.Decision).Must(x => x is "APPROVE" or "REJECT");
         RuleFor(x => x.Note).Must(x => x?.Trim().Length >= 10).When(x => x.Decision == "REJECT");
         RuleFor(x => x.Note).MaximumLength(4000);
+        RuleFor(x => x.StartAt).Null().When(x => x.Decision != "APPROVE").WithMessage("A start time is only taken with an approval.");
+        RuleFor(x => x.Segments).Null().When(x => x.Decision != "APPROVE").WithMessage("Crew changes are only taken with an approval.");
+        RuleFor(x => x.Segments).Must(x => x is null || x.Count <= 100 && x.All(s => s is not null) &&
+            x.Select(s => s.RoutePlanRouteId).Distinct().Count() == x.Count).WithMessage("Send each segment once.");
+        RuleForEach(x => x.Segments).SetValidator(new CrewRequestValidator());
+    }
+}
+
+public sealed class CrewRequestValidator : AbstractValidator<Request.CrewRequest>
+{
+    public CrewRequestValidator()
+    {
+        RuleFor(x => x.RoutePlanRouteId).NotEmpty();
+        RuleFor(x => x.DriverEmployeeId).NotEqual(Guid.Empty).When(x => x.DriverEmployeeId.HasValue);
+        RuleFor(x => x.EscortEmployeeId).NotEqual(Guid.Empty).When(x => x.EscortEmployeeId.HasValue);
+        RuleFor(x => x.VehicleIds).Must(x => x is null || x.Count <= 100 && x.All(id => id != Guid.Empty) && x.Distinct().Count() == x.Count);
     }
 }
 

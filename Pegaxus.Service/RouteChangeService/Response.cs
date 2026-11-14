@@ -24,6 +24,10 @@ public static class Response
         LocationBrief FromLocation, LocationBrief ToLocation, DateTimeOffset PlannedDepartureAt, DateTimeOffset PlannedArrivalAt,
         DateTimeOffset? ActualDepartureAt, DateTimeOffset? ActualArrivalAt, string Status, decimal? DwellAfterMinutes,
         string ExecutionType, List<VehicleBrief> Vehicles, Outsourcing? Outsourcing, EmployeeBrief? Driver, EmployeeBrief? Escort, string? Note);
+    /// <summary>The backup segments with the suggested crew, for the manager to complete before approving.</summary>
+    public sealed record CrewPlan(Guid RoutePlanId, DateTimeOffset LastUpdatedAt, DateTimeOffset SuggestedStartAt, IReadOnlyList<CrewSegment> Segments);
+    /// <summary>SuggestedFromRoutePlanRouteId is the primary segment the crew came from; NeedsCrew marks an internal segment still missing someone.</summary>
+    public sealed record CrewSegment(Segment Segment, Guid? SuggestedFromRoutePlanRouteId, bool NeedsCrew);
     public sealed record Comparison(decimal DistanceDeltaKm, decimal DelayMinutes, bool BcpChanged, bool Additional24hRest,
         LocationBrief? PreviousBcp, LocationBrief? NewBcp, DateTimeOffset PreviousEta, DateTimeOffset NewEta);
 }
