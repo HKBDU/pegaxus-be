@@ -14,7 +14,8 @@ public static class Response
     public sealed record ProviderBrief(Guid TransportProviderId, string ProviderCode, string ProviderName);
     public sealed record SegmentResponse(Guid RoutePlanRouteId, int SequenceNo, bool IsOutsourced,
         DateTimeOffset? PlannedDepartureAt, DateTimeOffset? PlannedArrivalAt,
-        EmployeeBrief? Driver, EmployeeBrief? Escort, ProviderBrief? Provider, bool IsComplete);
+        EmployeeBrief? Driver, EmployeeBrief? Escort, ProviderBrief? Provider, bool IsComplete,
+        string RouteType, bool IsSuperseded, string? FromLocationName, string? ToLocationName, string? FromCountry);
     public sealed record Phase1Response(bool IsAssigned, bool IsLocked, EmployeeBrief? TransportSpecialist, EmployeeBrief? RouteCoordinator);
     public sealed record Phase2Response(bool Enabled, Guid? RoutePlanId, bool IsPersonnelComplete, IReadOnlyList<SegmentResponse> Segments);
     public sealed record AssignmentsResponse(Guid TransportPlanId, Phase1Response Phase1, Phase2Response Phase2,

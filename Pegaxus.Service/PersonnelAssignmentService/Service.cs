@@ -42,6 +42,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         if (candidates.Count > 1) throw new ConflictException("Multiple confirmed primary routes exist for this plan.", "AMBIGUOUS_PRIMARY_ROUTE");
         var route = candidates.SingleOrDefault();
         var segments = route is null ? [] : await LoadSegmentsAsync(route.RoutePlanId, false, cancellationToken);
+        var takeover = route is null ? [] : await TakeoverSegmentsAsync(transportPlanId, route.RoutePlanId, cancellationToken);
         var specialist = phase1.FirstOrDefault(x => x.Responsibility == "TRANSPORT_SPECIALIST" && x.IsPrimary);
         var coordinator = phase1.FirstOrDefault(x => x.Responsibility == "FLEET_ROUTE_COORDINATOR" && x.IsPrimary);
         var dossier = plan.Transport.MainDossier;
@@ -49,7 +50,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             specialist is not null && coordinator is not null, route is not null,
             Brief(specialist?.Employee, specialist?.AssignedAt),
             Brief(coordinator?.Employee, coordinator?.AssignedAt)),
-            new(route is not null, route?.RoutePlanId, PersonnelComplete(segments), segments.Select(Map).ToArray()),
+            new(route is not null, route?.RoutePlanId, PersonnelComplete(segments), segments.Concat(takeover).Select(Map).ToArray()),
             route is null ? null : AsUtc(route.UpdatedAt),
             dossier is null ? null : new(dossier.ComplianceDossierId, dossier.DossierCode, dossier.Status.ToString()));
     }
@@ -318,6 +319,24 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         }
     }
 
+    /// <summary>
+    /// The segments of an active backup or return that took over from the primary, in journey order. The primary segments they
+    /// replaced stay in the list with isSuperseded, so the page shows who was planned and who now runs.
+    /// </summary>
+    private async Task<List<RoutePlanRoute>> TakeoverSegmentsAsync(Guid transportPlanId, Guid primaryId, CancellationToken cancellationToken)
+    {
+        var plans = await db.RoutePlans.AsNoTracking().Include(x => x.RoutePlanRoutes)
+            .Where(x => x.TransportPlanId == transportPlanId).ToListAsync(cancellationToken);
+        var ids = TransportItinerary.Effective(plans).Select(x => x.Route).Where(x => x.RoutePlanId != primaryId)
+            .Select(x => x.RoutePlanRouteId).ToList();
+        if (ids.Count == 0) return [];
+        var rows = await db.RoutePlanRoutes.AsNoTracking().Include(x => x.DriverEmployee).ThenInclude(x => x!.Account)
+            .Include(x => x.EscortEmployee).ThenInclude(x => x!.Account).Include(x => x.TransportProvider)
+            .Include(x => x.Route).ThenInclude(x => x.FromLocation).Include(x => x.Route).ThenInclude(x => x.ToLocation)
+            .Where(x => ids.Contains(x.RoutePlanRouteId)).ToListAsync(cancellationToken);
+        return ids.Select(id => rows.Single(x => x.RoutePlanRouteId == id)).ToList();
+    }
+
     private async Task<List<RoutePlanRoute>> LoadSegmentsAsync(Guid id, bool tracked, CancellationToken cancellationToken)
     {
         if (tracked && db.Database.IsNpgsql())
@@ -393,7 +412,8 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
     private static Response.SegmentResponse Map(RoutePlanRoute x) => new(x.RoutePlanRouteId, x.SequenceNo, x.TransportProviderId.HasValue,
         AsUtc(x.PlannedDepartureAt), AsUtc(x.PlannedArrivalAt), Brief(x.DriverEmployee), Brief(x.EscortEmployee),
         x.TransportProvider is null ? null : new(x.TransportProvider.TransportProviderId, x.TransportProvider.ProviderCode, x.TransportProvider.ProviderName),
-        x.TransportProviderId.HasValue ? !x.DriverEmployeeId.HasValue && !x.EscortEmployeeId.HasValue : x.DriverEmployeeId.HasValue && x.EscortEmployeeId.HasValue);
+        x.TransportProviderId.HasValue ? !x.DriverEmployeeId.HasValue && !x.EscortEmployeeId.HasValue : x.DriverEmployeeId.HasValue && x.EscortEmployeeId.HasValue,
+        x.RouteType.ToString(), x.SupersededAt.HasValue, x.Route?.FromLocation?.LocationName, x.Route?.ToLocation?.LocationName, x.Route?.FromLocation?.Country);
     private static bool PersonnelComplete(IReadOnlyList<RoutePlanRoute> segments) => segments.Count > 0 && segments.All(x => Map(x).IsComplete);
     private static JsonDocument Snapshot(IReadOnlyList<RoutePlanRoute> segments) => JsonSerializer.SerializeToDocument(segments.Select(Map), new JsonSerializerOptions(JsonSerializerDefaults.Web));
     private DateTime Now() => new(clock.GetUtcNow().Ticks / 10 * 10, DateTimeKind.Unspecified);

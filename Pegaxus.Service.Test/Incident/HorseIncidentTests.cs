@@ -175,17 +175,31 @@ public class HorseIncidentTests
     }
 
     [Theory]
-    [InlineData(34.9, 38, 12)][InlineData(43.1, 38, 12)][InlineData(38.2, 9, 12)]
-    [InlineData(38.2, 201, 12)][InlineData(38.2, 38, 1)][InlineData(38.2, 38, 101)]
-    public async Task Vitals_RejectBiologicallyImpossibleValuesOnReportAndAddition(decimal temperature, int heartRate, int respiration)
+    [InlineData(34.9, 38, 12, "bodyTemperatureCelsius")][InlineData(43.1, 38, 12, "bodyTemperatureCelsius")][InlineData(38.2, 9, 12, "heartRateBpm")]
+    [InlineData(38.2, 201, 12, "heartRateBpm")][InlineData(38.2, 38, 1, "respiratoryRateBpm")][InlineData(38.2, 38, 101, "respiratoryRateBpm")]
+    public async Task Vitals_RejectBiologicallyImpossibleValuesOnReportAndAddition_NamingTheField(decimal temperature, int heartRate, int respiration, string field)
     {
         await using var db = TestSupport.CreateDb(); var f = await Scenario.CreateAsync(db); var request = f.Report();
         var horse = request.Horses[0]; horse.BodyTemperatureCelsius = temperature; horse.HeartRateBpm = heartRate; horse.RespiratoryRateBpm = respiration;
-        Assert.Equal("VITAL_SIGNS_OUT_OF_RANGE", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.ReportHorseHealthAsync(request, f.Escort.AccountId))).ErrorCode);
+        var reported = await Assert.ThrowsAsync<FieldValidationException>(() => f.Service.ReportHorseHealthAsync(request, f.Escort.AccountId));
+        Assert.Equal("VITAL_SIGNS_OUT_OF_RANGE", reported.ErrorCode);
+        Assert.Equal($"horses[0].{field}", Assert.Single(reported.Errors).Field);
         var incident = await f.SeedIncidentAsync();
-        Assert.Equal("VITAL_SIGNS_OUT_OF_RANGE", (await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.AddHorseDetailsAsync(incident.IncidentReportId,
+        Assert.Equal("VITAL_SIGNS_OUT_OF_RANGE", (await Assert.ThrowsAsync<FieldValidationException>(() => f.Service.AddHorseDetailsAsync(incident.IncidentReportId,
             new() { Horses = request.Horses }, f.Escort.AccountId))).ErrorCode);
         Assert.Empty(db.HorseHealthIncidentDetails); Assert.Empty(db.HorseHealthLogs);
+    }
+
+    [Fact]
+    public async Task Vitals_ReportEveryWrongFieldAtOnce()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Scenario.CreateAsync(db); var request = f.Report();
+        var horse = request.Horses[0]; horse.BodyTemperatureCelsius = 30; horse.HeartRateBpm = 300; horse.RespiratoryRateBpm = 0;
+
+        var error = await Assert.ThrowsAsync<FieldValidationException>(() => f.Service.ReportHorseHealthAsync(request, f.Escort.AccountId));
+
+        Assert.Equal(new[] { "horses[0].bodyTemperatureCelsius", "horses[0].heartRateBpm", "horses[0].respiratoryRateBpm" },
+            error.Errors.Select(item => item.Field));
     }
 
     [Fact]

@@ -104,12 +104,25 @@ public sealed partial class Service
         if (request.PhotoFiles?.Count > 5) throw new BadRequestException("At most 5 photos are accepted", "TOO_MANY_IMAGES");
     }
 
+    /// <summary>
+    /// Rejects values no live horse can have, one error per field (horses[i].heartRateBpm, ...) so the form marks the right input.
+    /// Values outside the normal range are only warnings, see <see cref="VitalWarnings"/>.
+    /// </summary>
     private static void CheckVitals(IReadOnlyList<Request.HorseDetail> horses)
     {
-        if (horses.Any(horse => horse.BodyTemperatureCelsius is < 35 or > 43))
-            throw new UnprocessableEntityException("Body temperature is outside the biological range of a racehorse (35°C - 43°C). Please check the thermometer and enter the value again.", "VITAL_SIGNS_OUT_OF_RANGE");
-        if (horses.Any(horse => horse.HeartRateBpm is < 10 or > 200 || horse.RespiratoryRateBpm is < 2 or > 100))
-            throw new UnprocessableEntityException("Vital signs are outside the biological range. Please check the entered values again.", "VITAL_SIGNS_OUT_OF_RANGE");
+        var errors = new List<FieldError>();
+        for (var i = 0; i < horses.Count; i++)
+        {
+            var horse = horses[i];
+            if (horse.BodyTemperatureCelsius is < 35 or > 43)
+                errors.Add(new($"horses[{i}].bodyTemperatureCelsius", "Body temperature must be between 35 and 43 °C. Please check the thermometer and enter the value again."));
+            if (horse.HeartRateBpm is < 10 or > 200)
+                errors.Add(new($"horses[{i}].heartRateBpm", "Heart rate must be between 10 and 200 beats per minute."));
+            if (horse.RespiratoryRateBpm is < 2 or > 100)
+                errors.Add(new($"horses[{i}].respiratoryRateBpm", "Respiratory rate must be between 2 and 100 breaths per minute."));
+        }
+        if (errors.Count > 0)
+            throw new FieldValidationException(errors, "VITAL_SIGNS_OUT_OF_RANGE", "Vital signs are outside the biological range. Please check the highlighted values.");
     }
 
     private static IReadOnlyList<string> VitalWarnings(HorseHealthIncidentDetail horse)
