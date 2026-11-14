@@ -1,7 +1,7 @@
 namespace Pegaxus.Service.Common;
 
 /// <summary>
-/// The competent authorities a compliance dossier can be submitted to, one or more for every country that has locations in the system.
+/// The competent authorities a compliance dossier can be submitted to, one or more for every country a booking can start or end in (the EU members and the United Kingdom).
 /// A dossier may only be submitted to an authority of a country on its route (origin, destination or a stop of its legs); the front end
 /// offers the same fixed list, so a resubmission to the same authority always matches its earlier submission by name.
 /// Keep this list in sync with the front end (src/shared/constants/competent-authorities.ts).
@@ -30,7 +30,21 @@ public static class CompetentAuthorities
         new("Jordbruksverket - Swedish Board of Agriculture (Sweden)", "SE"),
         new("DVFA - Danish Veterinary and Food Administration (Denmark)", "DK"),
         new("SVS - State Veterinary Administration (Czech Republic)", "CZ"),
-        new("DGAV - Direção-Geral de Alimentação e Veterinária (Portugal)", "PT")
+        new("DGAV - Direção-Geral de Alimentação e Veterinária (Portugal)", "PT"),
+        new("BFSA - Bulgarian Food Safety Agency (Bulgaria)", "BG"),
+        new("Veterinary and Food Safety Directorate - Ministry of Agriculture, Forestry and Fisheries (Croatia)", "HR"),
+        new("Veterinary Services - Ministry of Agriculture, Rural Development and Environment (Cyprus)", "CY"),
+        new("PTA - Agriculture and Food Board (Estonia)", "EE"),
+        new("Ruokavirasto - Finnish Food Authority (Finland)", "FI"),
+        new("DG Veterinary Services - Ministry of Rural Development and Food (Greece)", "GR"),
+        new("Nébih - National Food Chain Safety Office (Hungary)", "HU"),
+        new("PVD - Food and Veterinary Service (Latvia)", "LV"),
+        new("VMVT - State Food and Veterinary Service (Lithuania)", "LT"),
+        new("ALVA - Luxembourg Veterinary and Food Administration (Luxembourg)", "LU"),
+        new("VRD - Veterinary Regulation Directorate (Malta)", "MT"),
+        new("ANSVSA - National Sanitary Veterinary and Food Safety Authority (Romania)", "RO"),
+        new("ŠVPS SR - State Veterinary and Food Administration (Slovakia)", "SK"),
+        new("UVHVVR - Administration for Food Safety, Veterinary Sector and Plant Protection (Slovenia)", "SI")
     ];
 
     /// <summary>The listed authority named <paramref name="name"/> (any case), or null when it is not listed.</summary>
