@@ -16,7 +16,8 @@ public static class Response
     public sealed record AssignedItem(Guid TransportId, string TransportCode, string BookingCode, string Status,
         string MyRole, SegmentBrief? CurrentSegment, int HorseCount, DateTimeOffset? DepartureAt, DateTimeOffset? EtaAt);
 
-    public sealed record SegmentBrief(Guid RoutePlanRouteId, int DisplayOrder, string FromLocationName, string ToLocationName, string Status);
+    /// <param name="IsMine">The caller runs this segment: a Driver as its driver, an Escort as its escort. Always false in staff lists.</param>
+    public sealed record SegmentBrief(Guid RoutePlanRouteId, int DisplayOrder, string FromLocationName, string ToLocationName, string Status, bool IsMine);
 
     public sealed record OverviewResponse(DateTimeOffset ServerTime, TransportBrief Transport, BookingBrief Booking,
         string? RouteType, RoutePlanBrief? RoutePlan, TrackingSegment? CurrentSegment, int TotalSegments, int CompletedSegments,

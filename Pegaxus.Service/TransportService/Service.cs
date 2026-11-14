@@ -68,7 +68,7 @@ public sealed partial class Service(AppDbContext db, TimeProvider clock,
         {
             var effective = EffectiveSegments(segments.Where(segment => segment.TransportId == item.TransportId).ToList());
             return new Response.AssignedItem(item.TransportId, item.TransportCode, item.BookingCode, item.Status.ToString(),
-                actor.Role == EmployeeRole.DRIVER ? "DRIVER" : "ESCORT", ToBrief(CurrentSegment(effective, item.Status), effective), item.HorseCount,
+                actor.Role == EmployeeRole.DRIVER ? "DRIVER" : "ESCORT", ToBrief(CurrentSegment(effective, item.Status), effective, actor), item.HorseCount,
                 AsUtc(item.DepartureAt), effective.LastOrDefault()?.Segment.PlannedArrivalAt);
         }).ToList();
         return new(clock.GetUtcNow(), items);
