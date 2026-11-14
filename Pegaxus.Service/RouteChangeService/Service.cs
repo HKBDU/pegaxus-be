@@ -33,7 +33,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         var primary = await PrimaryAsync(plan, cancellationToken);
         var active = await SegmentsAsync(primary.RoutePlanId, cancellationToken);
         var tail = BackupTail(backup);
-        var range = Replaceable(active);
+        var range = Replaceable(active, tail);
         if (range.Concat(tail).Any(x => !x.Route.DistanceKm.HasValue || x.Route.DistanceKm < 0))
             throw new ConflictException("Measured route distances are required for BR-036.", "ROUTE_DATA_INCOMPLETE");
         var comparison = Compare(active, range, tail, request.NewEstimatedArrivalAt) with {
@@ -71,6 +71,8 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         var type = PlanTypeOf(segments);
         EnsureTypeStatus(plan, segments, type, type == "BACKUP" ? RoutePlanStatus.CONFIRMED : RoutePlanStatus.DRAFT);
         if (type is not ("BACKUP" or "RETURN")) throw InvalidStatus(plan);
+        if (type == "RETURN" && (request.StartAt.HasValue || request.Segments is not null))
+            throw new BadRequestException("A start time and crew changes apply to a backup route only.", "VALIDATION_ERROR");
         var transport = plan.TransportPlan.Transport;
         var dossier = transport.MainDossier;
         if (type == "RETURN" && dossier?.Status != ComplianceDossierStatus.APPROVED)
@@ -97,27 +99,21 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             {
                 var primary = await PrimaryAsync(plan, cancellationToken);
                 var active = await SegmentsAsync(primary.RoutePlanId, cancellationToken);
-                var range = Replaceable(active);
                 var tail = BackupTail(segments);
-                CheckConnections(tail);
+                var range = Replaceable(active, tail);
+                // The crew is chosen now: the suggestion takes the crew of the replaced primary segments, and the manager fills or replaces it.
                 tail = InheritPersonnel(tail, range);
+                tail = await ApplyCrewAsync(tail, request.Segments, cancellationToken);
+                if (request.StartAt is { } startAt) tail = Shift(tail, startAt);
+                CheckConnections(tail);
                 await ValidateResourcesAsync(tail, plan, true, cancellationToken);
-                foreach (var segment in tail)
-                {
-                    var row = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlanRouteId == segment.RoutePlanRouteId, cancellationToken);
-                    row.DriverEmployeeId = segment.Driver?.EmployeeId;
-                    row.EscortEmployeeId = segment.Escort?.EmployeeId;
-                    row.UpdatedAt = now;
-                }
+                await WriteResourcesAsync(tail, plan, now, cancellationToken);
                 await SupersedeAsync(range, now, cancellationToken);
                 plan.Status = RoutePlanStatus.ACTIVE;
                 Notify(plan.TransportPlan.Transport.Booking.Customer.AccountId, plan, "Backup route activated",
                     $"Your transport is now following a backup route (route plan {plan.RoutePlanCode}) because of an incident on the way.{NoteSuffix(request.Note)}",
                     NotificationPriority.URGENT, now, NotificationLinks.Booking(null, plan.TransportPlan.Transport.BookingId));
-                var backupDrivers = await NotifyPrimaryDriversAsync(plan, primary.RoutePlanId, "Backup route activated",
-                    $"Follow backup route plan {plan.RoutePlanCode} from the branch point. Check your updated segments.{NoteSuffix(request.Note)}", now, cancellationToken);
-                await NotifyPrimaryEscortsAsync(plan, primary.RoutePlanId, "Backup route activated",
-                    $"The convoy now follows backup route plan {plan.RoutePlanCode} from the branch point. Check your updated segments.{NoteSuffix(request.Note)}", now, cancellationToken);
+                var backupDrivers = await NotifyCrewChangeAsync(plan, "backup", "Backup route activated", active, range, tail, request.Note, now, cancellationToken);
                 await MailChangedAsync(plan, [plan.TransportPlan.Transport.Booking.Customer.AccountId], MailService.EmailBodies.RouteChangeKind.BackupActivated,
                     request.Note, now, cancellationToken);
                 await MailChangedAsync(plan, backupDrivers.Select(item => item.AccountId), MailService.EmailBodies.RouteChangeKind.DriverBackup,
@@ -183,12 +179,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             throw new ConflictException("The reviewed compliance dossier must be approved.", "DOSSIER_NOT_APPROVED");
         if (plan.TransportPlan.Transport.ExtraDossier?.Status != ComplianceDossierStatus.APPROVED)
             throw new UnprocessableEntityException("The extra compliance dossier must be approved before the return route can be activated", "RETURN_DOSSIER_NOT_APPROVED");
-        var active = await EffectiveSegmentsAsync(plan, cancellationToken);
-        var remaining = active.Where(x => !x.ActualArrivalAt.HasValue).ToList();
-        EnsureUntravelled(remaining);
-        if (segments[0].FromLocation.LocationId != remaining[0].FromLocation.LocationId ||
-            segments[^1].ToLocation.LocationId != active[0].FromLocation.LocationId)
-            throw new UnprocessableEntityException("Return route must connect the current stop to the origin.", "RETURN_NOT_ANCHORED");
+        var (active, remaining) = await ReturnAnchorAsync(plan, segments, cancellationToken);
         CheckConnections(segments);
         var proposed = segments.ToList();
         foreach (var change in request.Segments ?? [])
@@ -215,46 +206,15 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             }
             proposed[index] = segment;
         }
-        proposed = InheritPersonnel(proposed, active);
+        // The crew is chosen now: the suggestion takes the crew at the current stop, and the manager fills or replaces it.
+        proposed = SuggestReturnCrew(proposed, active, remaining).Select(x => x.Segment).ToList();
+        proposed = await ApplyCrewAsync(proposed, request.Segments?.Select(x => new Request.CrewRequest {
+            RoutePlanRouteId = x.RoutePlanRouteId, DriverEmployeeId = x.DriverEmployeeId, EscortEmployeeId = x.EscortEmployeeId }).ToList(), cancellationToken);
+        if (request.StartAt is { } startAt) proposed = Shift(proposed, startAt);
+        CheckConnections(proposed);
         await ValidateResourcesAsync(proposed, plan, true, cancellationToken);
         var now = NextVersion(plan);
-        var removedVehicleIds = new List<Guid>();
-        foreach (var segment in proposed)
-        {
-            var row = await db.RoutePlanRoutes.Include(x => x.RoutePlanRouteVehicles).SingleAsync(x => x.RoutePlanRouteId == segment.RoutePlanRouteId, cancellationToken);
-            row.TransportProviderId = segment.Outsourcing?.Provider.TransportProviderId;
-            row.DriverEmployeeId = segment.Driver?.EmployeeId; row.EscortEmployeeId = segment.Escort?.EmployeeId;
-            row.Note = segment.Note; row.UpdatedAt = now;
-            var desired = segment.Vehicles.Select(x => x.VehicleId).ToArray();
-            var dropped = row.RoutePlanRouteVehicles.Where(x => !desired.Contains(x.VehicleId)).ToList();
-            removedVehicleIds.AddRange(dropped.Select(x => x.VehicleId));
-            db.RoutePlanRouteVehicles.RemoveRange(dropped);
-            foreach (var id in desired.Where(id => !row.RoutePlanRouteVehicles.Any(x => x.VehicleId == id)))
-                db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = row.RoutePlanRouteId, VehicleId = id, AssignedAt = now });
-            if (row.TransportProviderId is Guid providerId && !await db.TransportPlanProviders.AnyAsync(x =>
-                    x.TransportPlanId == plan.TransportPlanId && x.TransportProviderId == providerId, cancellationToken) &&
-                !db.TransportPlanProviders.Local.Any(x => x.TransportPlanId == plan.TransportPlanId && x.TransportProviderId == providerId))
-                db.TransportPlanProviders.Add(new() { TransportPlanId = plan.TransportPlanId, TransportProviderId = providerId });
-        }
-        foreach (var id in proposed.SelectMany(x => x.Vehicles).Select(x => x.VehicleId).Distinct())
-        {
-            var vehicle = await db.Vehicles.SingleAsync(x => x.VehicleId == id, cancellationToken);
-            if (db.Database.IsRelational()) await db.Entry(vehicle).ReloadAsync(cancellationToken);
-            if (vehicle.Status == VehicleStatus.AVAILABLE) { vehicle.Status = VehicleStatus.ASSIGNED; vehicle.UpdatedAt = now; }
-        }
-        // A vehicle dropped from the return route goes back to the pool unless this plan still uses it or another confirmed or active plan holds it.
-        var kept = proposed.SelectMany(x => x.Vehicles).Select(x => x.VehicleId).ToHashSet();
-        var droppedIds = removedVehicleIds.Where(id => !kept.Contains(id)).Distinct().ToList();
-        var heldElsewhere = await db.RoutePlanRouteVehicles.AsNoTracking()
-            .Where(x => droppedIds.Contains(x.VehicleId) && x.RoutePlanRoute.RoutePlanId != plan.RoutePlanId && x.RoutePlanRoute.ActualArrivalAt == null &&
-                (x.RoutePlanRoute.RoutePlan.Status == RoutePlanStatus.CONFIRMED || x.RoutePlanRoute.RoutePlan.Status == RoutePlanStatus.ACTIVE))
-            .Select(x => x.VehicleId).Distinct().ToListAsync(cancellationToken);
-        foreach (var id in droppedIds.Except(heldElsewhere))
-        {
-            var vehicle = await db.Vehicles.SingleAsync(x => x.VehicleId == id, cancellationToken);
-            if (db.Database.IsRelational()) await db.Entry(vehicle).ReloadAsync(cancellationToken);
-            if (vehicle.Status == VehicleStatus.ASSIGNED) { vehicle.Status = VehicleStatus.AVAILABLE; vehicle.UpdatedAt = now; }
-        }
+        await WriteResourcesAsync(proposed, plan, now, cancellationToken);
         await SupersedeAsync(remaining, now, cancellationToken);
         plan.Status = RoutePlanStatus.ACTIVE; plan.UpdatedAt = now;
         Audit(plan, accountId, "RETURN_ROUTE_ACTIVATED", request.Note, now);
@@ -266,6 +226,7 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         await MailChangedAsync(plan, [plan.TransportPlan.Transport.Booking.Customer.AccountId], MailService.EmailBodies.RouteChangeKind.ReturnActivated,
             request.Note, now, cancellationToken);
         await MailReviewAsync(plan, activeCoordinators, MailService.EmailBodies.RouteReviewKind.ReturnActive, request.Note, now, cancellationToken);
+        await NotifyCrewChangeAsync(plan, "return", "Return route activated", active, remaining, proposed, request.Note, now, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         var detail = await routePlans.GetByIdAsync(accountId, routePlanId, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
@@ -280,11 +241,20 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         return backup.Where(x => x.SequenceNo >= branch).ToList();
     }
 
-    private static List<Response.Segment> Replaceable(List<Response.Segment> active)
+    /// <summary>
+    /// The primary segments the backup replaces: from the untravelled primary segment that starts at the branch point to the end.
+    /// Untravelled segments before the branch point stay on the primary, so the horse still reaches the branch point.
+    /// </summary>
+    private static List<Response.Segment> Replaceable(List<Response.Segment> active, List<Response.Segment> tail)
     {
-        var range = active.Where(x => !x.ActualDepartureAt.HasValue).ToList();
-        if (range.Count == 0) throw new ConflictException("Only untravelled segments can be replaced.", "SEGMENT_LOCKED");
-        return range;
+        if (active.All(x => x.ActualDepartureAt.HasValue))
+            throw new ConflictException("Only untravelled segments can be replaced.", "SEGMENT_LOCKED");
+        var branch = tail[0].FromLocation.LocationId;
+        var start = active.FindIndex(x => !x.ActualDepartureAt.HasValue && x.FromLocation.LocationId == branch);
+        if (start >= 0) return active.Skip(start).ToList();
+        if (active.Any(x => x.ActualDepartureAt.HasValue && x.FromLocation.LocationId == branch))
+            throw new ConflictException("The horse has already passed the branch point of this backup route.", "BRANCH_POINT_PASSED");
+        throw new UnprocessableEntityException("The branch point of this backup route is not on the primary route.", "BRANCH_POINT_NOT_ON_ROUTE");
     }
 
     private static void EnsureUntravelled(List<Response.Segment> segments)
@@ -294,13 +264,21 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
     }
 
     private static List<Response.Segment> InheritPersonnel(List<Response.Segment> segments, List<Response.Segment> primary) =>
+        SuggestCrew(segments, primary).Select(x => x.Segment).ToList();
+
+    /// <summary>
+    /// Pairs the segments with the primary ones by position (the last primary segment covers any extra), falling back to the last
+    /// fully crewed primary segment. Returns the primary segment each crew came from, or null when none was found.
+    /// </summary>
+    private static List<(Response.Segment Segment, Guid? SourceId)> SuggestCrew(List<Response.Segment> segments, List<Response.Segment> primary) =>
         segments.Select((x, i) =>
         {
+            if (x.ExecutionType != "INTERNAL") return (x with { Driver = null, Escort = null }, (Guid?)null);
             var crew = primary[Math.Min(i, primary.Count - 1)];
             if (crew.Driver is null || crew.Escort is null)
                 crew = primary.LastOrDefault(p => p.Driver is not null && p.Escort is not null) ?? crew;
-            return x.ExecutionType == "INTERNAL" ? x with { Driver = crew.Driver, Escort = crew.Escort }
-                : x with { Driver = null, Escort = null };
+            return (x with { Driver = crew.Driver, Escort = crew.Escort },
+                crew.Driver is null && crew.Escort is null ? null : crew.RoutePlanRouteId);
         }).ToList();
 
     private static void CheckConnections(List<Response.Segment> segments)

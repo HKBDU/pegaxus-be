@@ -27,7 +27,13 @@ public sealed partial class Service
             ? alternative.Where(segment => segment.Type == RouteType.BACKUP).Min(segment => segment.SequenceNo) : 1;
         var history = rows.Where(segment => segment.PlanId != selected.Key && segment.ActualDepartureAt.HasValue)
             .OrderBy(segment => segment.ActualDepartureAt).ThenBy(segment => segment.PlanId).ThenBy(segment => segment.SequenceNo);
-        return history.Concat(selected.Where(segment => segment.SequenceNo >= branch && (segment.SupersededAt is null || segment.ActualDepartureAt.HasValue))
+        // A backup that branches further ahead keeps the primary segments up to its branch point, travelled or not.
+        var kept = alternative is not null && branch > 1
+            ? rows.Where(segment => segment.PlanId != selected.Key && plans.Any(group => group.Key == segment.PlanId &&
+                    group.All(item => item.Type == RouteType.PRIMARY)) && !segment.ActualDepartureAt.HasValue && segment.SupersededAt is null &&
+                    segment.SequenceNo < branch).OrderBy(segment => segment.SequenceNo).ThenBy(segment => segment.Id).ToArray()
+            : [];
+        return history.Concat(kept).Concat(selected.Where(segment => segment.SequenceNo >= branch && (segment.SupersededAt is null || segment.ActualDepartureAt.HasValue))
             .OrderBy(segment => segment.SequenceNo).ThenBy(segment => segment.Id)).ToArray();
     }
 

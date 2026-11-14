@@ -23,13 +23,16 @@ public sealed partial class Service
             throw new ForbiddenException("Only the Route Coordinator assigned to this Transport Plan can perform this action.");
     }
 
-    private async Task<RoutePlan> PrimaryAsync(RoutePlan plan, CancellationToken token)
+    private async Task<RoutePlan> PrimaryAsync(RoutePlan plan, CancellationToken token) =>
+        await LockPlanAsync(await PrimaryIdAsync(plan, token), token);
+
+    private async Task<Guid> PrimaryIdAsync(RoutePlan plan, CancellationToken token)
     {
         var primaryIds = await db.RoutePlans.AsNoTracking().Where(x => x.TransportPlanId == plan.TransportPlanId &&
             x.Status == RoutePlanStatus.ACTIVE && x.RoutePlanRoutes.Any() &&
             x.RoutePlanRoutes.All(s => s.RouteType == RouteType.PRIMARY)).Select(x => x.RoutePlanId).ToArrayAsync(token);
         if (primaryIds.Length != 1) throw new ConflictException("One active primary route is required.", "PRIMARY_ROUTE_PLAN_REQUIRED");
-        return await LockPlanAsync(primaryIds[0], token);
+        return primaryIds[0];
     }
 
     private async Task<Employee> ActorAsync(Guid accountId, EmployeeRole[] roles, CancellationToken token)

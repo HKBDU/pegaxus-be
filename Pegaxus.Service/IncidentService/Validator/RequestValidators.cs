@@ -87,7 +87,7 @@ public sealed class HorseDetailValidator : AbstractValidator<Request.HorseDetail
         RuleFor(item => item.VeterinarianInstruction).MaximumLength(2000);
         RuleFor(item => item.MedicationGiven).MaximumLength(2000);
         RuleFor(item => item.BodyTemperatureCelsius).Must(value => value is null || decimal.Round(value.Value, 1) == value)
-            .WithMessage("Body temperature must have at most one decimal place.");
+            .WithMessage("Body temperature must have at most one decimal place (for example 38.2).");
         RuleFor(item => item.VeterinarianContactedAt).Must(value => value is null || value <= clock.GetUtcNow().AddMinutes(5))
             .WithMessage("Veterinarian contact time must not be more than 5 minutes in the future.");
     }

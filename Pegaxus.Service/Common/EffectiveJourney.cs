@@ -28,7 +28,10 @@ public static class EffectiveJourney
             .Where(segment => segment.ActualDepartureAt.HasValue).OrderBy(segment => segment.ActualDepartureAt)
             .ThenBy(segment => segment.SequenceNo).ThenBy(segment => segment.RoutePlanRouteId);
         var branch = active.Where(segment => segment.RouteType == RouteType.BACKUP).Select(segment => (int?)segment.SequenceNo).Min();
-        return history.Concat(active.Where(segment => (branch == null || segment.SequenceNo >= branch) &&
+        // A backup that branches further ahead keeps the primary segments up to its branch point, travelled or not.
+        var kept = branch is null ? [] : primary.Where(segment => !segment.ActualDepartureAt.HasValue && segment.SupersededAt == null &&
+            segment.SequenceNo < branch).OrderBy(segment => segment.SequenceNo).ThenBy(segment => segment.RoutePlanRouteId).ToList();
+        return history.Concat(kept).Concat(active.Where(segment => (branch == null || segment.SequenceNo >= branch) &&
                 (segment.SupersededAt == null || segment.ActualDepartureAt.HasValue))
             .OrderBy(segment => segment.SequenceNo).ThenBy(segment => segment.RoutePlanRouteId)).ToList();
     }
