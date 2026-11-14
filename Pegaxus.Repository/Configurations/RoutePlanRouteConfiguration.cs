@@ -79,5 +79,12 @@ public sealed class RoutePlanRouteConfiguration : IEntityTypeConfiguration<Route
         entity.HasOne(d => d.TransportProvider).WithMany(p => p.RoutePlanRoutes)
             .HasForeignKey(d => d.TransportProviderId)
             .HasConstraintName("RoutePlanRoute_transport_provider_id_fkey");
+
+        entity.Property(e => e.EndedAtLocationId).HasColumnName("ended_at_location_id");
+        entity.HasIndex(e => e.EndedAtLocationId, "RoutePlanRoute_ended_at_location_id_idx");
+        entity.HasOne(d => d.EndedAtLocation).WithMany()
+            .HasForeignKey(d => d.EndedAtLocationId)
+            .OnDelete(DeleteBehavior.Restrict)
+            .HasConstraintName("RoutePlanRoute_ended_at_location_id_fkey");
     }
 }

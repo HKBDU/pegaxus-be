@@ -4269,6 +4269,10 @@ namespace Pegaxus.Repository.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("driver_employee_id");
 
+                    b.Property<Guid?>("EndedAtLocationId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("ended_at_location_id");
+
                     b.Property<Guid?>("EscortEmployeeId")
                         .HasColumnType("uuid")
                         .HasColumnName("escort_employee_id");
@@ -4349,6 +4353,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasDatabaseName("RoutePlanRoute_route_type_idx");
 
                     b.HasIndex(new[] { "DriverEmployeeId" }, "RoutePlanRoute_driver_employee_id_idx");
+
+                    b.HasIndex(new[] { "EndedAtLocationId" }, "RoutePlanRoute_ended_at_location_id_idx");
 
                     b.HasIndex(new[] { "EscortEmployeeId" }, "RoutePlanRoute_escort_employee_id_idx");
 
@@ -5915,6 +5921,12 @@ namespace Pegaxus.Repository.Migrations
                         .HasForeignKey("DriverEmployeeId")
                         .HasConstraintName("RoutePlanRoute_driver_employee_id_fkey");
 
+                    b.HasOne("Pegaxus.Repository.Entities.Location", "EndedAtLocation")
+                        .WithMany()
+                        .HasForeignKey("EndedAtLocationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("RoutePlanRoute_ended_at_location_id_fkey");
+
                     b.HasOne("Pegaxus.Repository.Entities.Employee", "EscortEmployee")
                         .WithMany("EscortRoutePlanRoutes")
                         .HasForeignKey("EscortEmployeeId")
@@ -5938,6 +5950,8 @@ namespace Pegaxus.Repository.Migrations
                         .HasConstraintName("RoutePlanRoute_transport_provider_id_fkey");
 
                     b.Navigation("DriverEmployee");
+
+                    b.Navigation("EndedAtLocation");
 
                     b.Navigation("EscortEmployee");
 

@@ -141,9 +141,9 @@ public class BackupCrewTests
     }
 
     [Theory]
-    [InlineData("passed", "BRANCH_POINT_PASSED")]
+    [InlineData("passed", "INCIDENT_LOCATION_REQUIRED")]
     [InlineData("elsewhere", "BRANCH_POINT_NOT_ON_ROUTE")]
-    public async Task Change_ABranchPointBehindTheHorseOrOffTheRoute_IsRefusedEverywhere(string kind, string code)
+    public async Task Change_TurningBackWithoutAnIncidentOrABranchPointOffTheRoute_IsRefusedEverywhere(string kind, string code)
     {
         await using var db = TestSupport.CreateDb();
         var f = await RouteChangeTests.Fixture.CreateAsync(db);
@@ -167,6 +167,63 @@ public class BackupCrewTests
             f.Service.DecideAsync(backup.RoutePlanId, f.Manager.AccountId,
                 new() { Decision = "APPROVE", LastUpdatedAt = RouteChangeTests.Fixture.Version(backup) }))).ErrorCode);
         Assert.Equal(RoutePlanStatus.CONFIRMED, backup.Status);
+    }
+
+    [Fact]
+    public async Task Approve_PastEveryBranchPoint_TurnsBackFromTheIncident()
+    {
+        await using var db = TestSupport.CreateDb(); var trip = await TripFixture.CreateAsync(db); var f = trip.F;
+        // The default backup branches at S1, which the convoy left while running S1 -> S2.
+        var backup = await f.AlternateAsync();
+        var detour = await BackupRowAsync(db, backup);
+
+        var crew = await f.Service.GetCrewPlanAsync(backup.RoutePlanId, f.Manager.AccountId);
+        Assert.Equal(("INCIDENT_LOCATION", true, f.Start.LocationId, trip.X.LocationId),
+            (crew.AnchorMode, crew.TurnsBack, crew.StartLocation.LocationId, crew.EndedAtLocation!.LocationId));
+        // The crew with the horse drives back.
+        Assert.Equal(f.Current.RoutePlanRouteId, crew.Segments[0].SuggestedFromRoutePlanRouteId);
+
+        var result = await f.Service.DecideAsync(backup.RoutePlanId, f.Manager.AccountId, new()
+            { Decision = "APPROVE", LastUpdatedAt = RouteChangeTests.Fixture.Version(backup), IncidentReportId = trip.Incident.IncidentReportId });
+
+        Assert.Equal("ACTIVE", result.Status);
+        Assert.Equal(trip.X.LocationId, f.Current.EndedAtLocationId); Assert.NotNull(f.Current.ActualArrivalAt);
+        Assert.NotNull(trip.Suffix.SupersededAt);
+        Assert.NotNull(detour.ActualDepartureAt);
+        var plans = await db.RoutePlans.AsNoTracking().Include(x => x.RoutePlanRoutes).ToListAsync();
+        var journey = Pegaxus.Service.Common.TransportItinerary.Effective(plans).Select(x => x.Route.RoutePlanRouteId).ToList();
+        Assert.Equal(new[] { f.Completed.RoutePlanRouteId, f.Current.RoutePlanRouteId, detour.RoutePlanRouteId }, journey.Take(3));
+        Assert.Contains("Stop where the incident happened and turn back to Safe stop", await MessageAsync(db, f.Driver));
+    }
+
+    [Fact]
+    public async Task Approve_WithSeveralBranchPoints_TakesTheNearestAhead_AndSkipsTheStretchAlreadyCovered()
+    {
+        await using var db = TestSupport.CreateDb(); var trip = await TripFixture.CreateAsync(db); var f = trip.F;
+        // Backup O -> S1 (shared), S1 -> Y -> S2 (first detour, behind the convoy), S2 -> D by another road (second detour, ahead).
+        var y = new Location { LocationId = Guid.NewGuid(), LocationName = "Y", Country = "FR" };
+        db.Add(y);
+        var backup = NewBackup(db, f);
+        AddRow(db, backup, f.Completed.RouteId, 1, RouteType.PRIMARY, Start.AddHours(-3));
+        var first = AddRow(db, backup, f.NewRoute(f.Start, y, 30).RouteId, 2, RouteType.BACKUP, Start);
+        var rejoin = AddRow(db, backup, f.NewRoute(y, f.End, 30).RouteId, 3, RouteType.BACKUP, Start.AddHours(1));
+        var second = AddRow(db, backup, f.NewRoute(f.End, trip.D, 25).RouteId, 4, RouteType.BACKUP, Start.AddHours(3));
+        db.RoutePlanRouteVehicles.Add(new() { RoutePlanRouteId = second.RoutePlanRouteId, VehicleId = await db.Vehicles.Select(x => x.VehicleId).SingleAsync(), AssignedAt = Start.UtcDateTime });
+        await db.SaveChangesAsync();
+
+        var crew = await f.Service.GetCrewPlanAsync(backup.RoutePlanId, f.Manager.AccountId);
+        Assert.Equal(("NEXT_STOP", false, f.End.LocationId), (crew.AnchorMode, crew.TurnsBack, crew.StartLocation.LocationId));
+        Assert.Equal(second.RoutePlanRouteId, Assert.Single(crew.Segments).Segment.RoutePlanRouteId);
+
+        var result = await f.Service.DecideAsync(backup.RoutePlanId, f.Manager.AccountId,
+            new() { Decision = "APPROVE", LastUpdatedAt = RouteChangeTests.Fixture.Version(backup) });
+
+        Assert.Equal("ACTIVE", result.Status);
+        Assert.Null(f.Current.ActualArrivalAt); Assert.Null(f.Current.SupersededAt);
+        Assert.NotNull(trip.Suffix.SupersededAt); Assert.NotNull(first.SupersededAt); Assert.NotNull(rejoin.SupersededAt);
+        var plans = await db.RoutePlans.AsNoTracking().Include(x => x.RoutePlanRoutes).ToListAsync();
+        Assert.Equal(new[] { f.Completed.RoutePlanRouteId, f.Current.RoutePlanRouteId, second.RoutePlanRouteId },
+            Pegaxus.Service.Common.TransportItinerary.Effective(plans).Select(x => x.Route.RoutePlanRouteId));
     }
 
     [Fact]
