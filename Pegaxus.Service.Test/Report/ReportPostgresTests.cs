@@ -28,9 +28,9 @@ public class ReportPostgresTests
             var service = s.F.For(db); var manager = s.F.ManagerAccount.AccountId;
 
             var onTime = await service.GetOnTimeAsync(manager, ReportTests.OnTime());
-            // The six trips of the scenario plus the on-time trip added for the incident data.
-            Assert.Equal((7L, 2), (onTime.Kpi.TotalTransports.Value, onTime.Items.Count));
-            Assert.Equal(71.4m, onTime.Kpi.OnTimeRate.Value);
+            // The six trips of the scenario plus the on-time trip added for the incident data; the early trip is listed but not on time.
+            Assert.Equal((7L, 3), (onTime.Kpi.TotalTransports.Value, onTime.Items.Count));
+            Assert.Equal(57.1m, onTime.Kpi.OnTimeRate.Value);
             Assert.Equal(("Eurotunnel", 1), (onTime.ByProvider[0].ProviderName, onTime.ByProvider[0].Total));
             Assert.Equal(new[] { ("UNKNOWN", 1), ("VEHICLE_INCIDENT", 1) }, onTime.DelayCauses.Select(item => (item.Cause, item.Count)));
             var filtered = ReportTests.OnTime(); filtered.OriginCountry = "france"; filtered.DestinationCountry = "GERMANY"; filtered.TransportProviderId = s.Provider.TransportProviderId;

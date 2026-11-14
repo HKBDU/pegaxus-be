@@ -79,7 +79,7 @@ public sealed partial class Service
     [
         new("KPI", KpiHeaders,
         [
-            Row("Transports", report.Kpi.TotalTransports), Row("On-time rate (%)", report.Kpi.OnTimeRate), Row("Average delay (minutes)", report.Kpi.AvgDelayMinutes),
+            Row("Transports", report.Kpi.TotalTransports), Row("On-time rate (%)", report.Kpi.OnTimeRate), Row("Median deviation (minutes)", report.Kpi.MedianDeviationMinutes), Row("Average delay (minutes)", report.Kpi.AvgDelayMinutes),
             ["SLA target (%)", report.Kpi.SlaTargetRate, null, null], ["Meets SLA", report.Kpi.MeetsSla, null, null]
         ]),
         new("Distribution", ["Bucket", "Transports"], report.Distribution.Select(pair => new object?[] { pair.Key, pair.Value }).ToList()),

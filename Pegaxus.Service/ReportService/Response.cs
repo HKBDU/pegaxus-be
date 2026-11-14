@@ -11,7 +11,9 @@ public static class Response
 
     // ------------------------------------------------------------------ RA1
 
-    public sealed record OnTimeKpi(Kpi<long> TotalTransports, Kpi<decimal> OnTimeRate, Kpi<decimal> AvgDelayMinutes, int SlaTargetRate, bool MeetsSla);
+    /// <param name="MedianDeviationMinutes">Middle signed deviation from the committed arrival (negative is early); preferred over the average.</param>
+    public sealed record OnTimeKpi(Kpi<long> TotalTransports, Kpi<decimal> OnTimeRate, Kpi<decimal> AvgDelayMinutes, int SlaTargetRate, bool MeetsSla,
+        Kpi<decimal> MedianDeviationMinutes);
     public sealed record TrendPoint(string Label, DateOnly From, DateOnly To, int Total, decimal? OnTimeRate);
     public sealed record ProviderPoint(Guid? TransportProviderId, string ProviderName, int Total, decimal? OnTimeRate);
     public sealed record DelayCause(string Cause, int Count);

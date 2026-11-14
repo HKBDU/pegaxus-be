@@ -80,15 +80,15 @@ public class ReportHttpTests
         Assert.Equal("On-time delivery report retrieved successfully", onTime.GetProperty("message").GetString());
         var value = onTime.GetProperty("value");
         Assert.Equal(new[] { "byProvider", "delayCauses", "distribution", "excluded", "generatedAt", "items", "kpi", "pageIndex", "pageSize", "period", "totalItems", "totalPages", "trend" }, Names(value));
-        Assert.Equal(new[] { "avgDelayMinutes", "meetsSla", "onTimeRate", "slaTargetRate", "totalTransports" }, Names(value.GetProperty("kpi")));
+        Assert.Equal(new[] { "avgDelayMinutes", "medianDeviationMinutes", "meetsSla", "onTimeRate", "slaTargetRate", "totalTransports" }, Names(value.GetProperty("kpi")));
         Assert.Equal(new[] { "change", "previous", "value" }, Names(value.GetProperty("kpi").GetProperty("onTimeRate")));
-        Assert.Equal(66.7m, value.GetProperty("kpi").GetProperty("onTimeRate").GetProperty("value").GetDecimal());
+        Assert.Equal(50.0m, value.GetProperty("kpi").GetProperty("onTimeRate").GetProperty("value").GetDecimal());
         Assert.Equal("2026-10-01", value.GetProperty("period").GetProperty("dateFrom").GetString());
         Assert.Equal("2026-08-31", value.GetProperty("period").GetProperty("previousDateFrom").GetString());
-        Assert.Equal(1, value.GetProperty("items").GetArrayLength()); Assert.Equal(2, value.GetProperty("totalPages").GetInt32());
+        Assert.Equal(1, value.GetProperty("items").GetArrayLength()); Assert.Equal(3, value.GetProperty("totalPages").GetInt32());
         Assert.Equal(new[] { "actualArrivalAt", "bookingCode", "bucket", "delayMinutes", "destinationCountry", "mainCause", "originCountry", "plannedEndAt", "transportCode", "transportId" },
             Names(value.GetProperty("items")[0]));
-        Assert.Equal(new[] { "MAJOR_DELAY", "MINOR_DELAY", "ON_TIME" }, Names(value.GetProperty("distribution")));
+        Assert.Equal(new[] { "EARLY", "MAJOR_DELAY", "MINOR_DELAY", "ON_TIME" }, Names(value.GetProperty("distribution")));
 
         var incident = await client.GetFromJsonAsync<JsonElement>($"/api/v1/reports/incident-claim-frequency?{Range}");
         Assert.Equal("Incident and claim frequency report retrieved successfully", incident.GetProperty("message").GetString());

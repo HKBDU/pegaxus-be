@@ -46,7 +46,7 @@ public sealed class OnTimeRequestValidator : AbstractValidator<Request.OnTimeReq
         this.AddFilterRules();
         this.AddPagingRules();
         RuleFor(request => request.DriverEmployeeId).NotEqual(Guid.Empty).When(request => request.DriverEmployeeId.HasValue);
-        RuleFor(request => request.Bucket).InSet("bucket", "ON_TIME", "MINOR_DELAY", "MAJOR_DELAY").When(request => request.Bucket is not null);
+        RuleFor(request => request.Bucket).InSet("bucket", "EARLY", "ON_TIME", "MINOR_DELAY", "MAJOR_DELAY").When(request => request.Bucket is not null);
         RuleFor(request => request.TrendBy).InSet("trendBy", "WEEK", "MONTH");
         RuleFor(request => request.SortBy).InSet("sortBy", "delayMinutes:asc", "delayMinutes:desc", "completedAt:asc", "completedAt:desc");
     }

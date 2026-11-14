@@ -9,7 +9,7 @@ namespace Pegaxus.Service.ReportService;
 
 public sealed partial class Service
 {
-    private const string OnTime = "ON_TIME", MinorDelay = "MINOR_DELAY", MajorDelay = "MAJOR_DELAY";
+    private const string Early = "EARLY", OnTime = "ON_TIME", MinorDelay = "MINOR_DELAY", MajorDelay = "MAJOR_DELAY";
     private const string InternalFleet = "Internal fleet";
 
     private sealed record OnTimeRow(TransportRow Transport, DateTime PlannedEndAt, DateTime ActualArrivalAt, int DelayMinutes, string Bucket);
@@ -19,8 +19,23 @@ public sealed partial class Service
         public int Excluded => MissingPlannedEnd + MissingActualArrival;
     }
 
-    /// <summary>R25: up to 60 minutes late is on time, under 180 is a minor delay, the rest is a major delay.</summary>
-    private static string BucketOf(int delayMinutes) => delayMinutes <= 60 ? OnTime : delayMinutes < 180 ? MinorDelay : MajorDelay;
+    /// <summary>
+    /// R25: within 60 minutes either side of the committed arrival is on time, under 180 minutes late is a minor delay, the rest is a
+    /// major delay. Arriving more than 60 minutes early is not on time either: it means the plan did not match the trip.
+    /// </summary>
+    private static string BucketOf(int delayMinutes) =>
+        delayMinutes < -60 ? Early : delayMinutes <= 60 ? OnTime : delayMinutes < 180 ? MinorDelay : MajorDelay;
+
+    private static bool IsLate(OnTimeRow row) => row.Bucket is MinorDelay or MajorDelay;
+
+    /// <summary>The middle deviation: a few trips far off the plan do not drag it the way they drag an average.</summary>
+    private static decimal? Median(IReadOnlyList<int> values)
+    {
+        if (values.Count == 0) return null;
+        var sorted = values.Order().ToList();
+        var middle = sorted.Count / 2;
+        return sorted.Count % 2 == 1 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2m;
+    }
 
     public async Task<Response.OnTimeReport> GetOnTimeAsync(Guid accountId, Request.OnTimeRequest request, CancellationToken cancellationToken = default)
     {
@@ -67,14 +82,15 @@ public sealed partial class Service
             CountKpi(rows.Count, before.Rows.Count, before.Rows.Count + before.Excluded > 0),
             RateKpi(rate, previousRate),
             RateKpi(Average(rows.Select(item => (decimal)item.DelayMinutes).ToList()), Average(before.Rows.Select(item => (decimal)item.DelayMinutes).ToList())),
-            SlaTargetRate, rate >= SlaTargetRate);
+            SlaTargetRate, rate >= SlaTargetRate,
+            RateKpi(Median(rows.Select(item => item.DelayMinutes).ToList()), Median(before.Rows.Select(item => item.DelayMinutes).ToList())));
 
         var distribution = new Dictionary<string, int>
         {
-            [OnTime] = rows.Count(item => item.Bucket == OnTime), [MinorDelay] = rows.Count(item => item.Bucket == MinorDelay), [MajorDelay] = rows.Count(item => item.Bucket == MajorDelay)
+            [Early] = rows.Count(item => item.Bucket == Early), [OnTime] = rows.Count(item => item.Bucket == OnTime), [MinorDelay] = rows.Count(item => item.Bucket == MinorDelay), [MajorDelay] = rows.Count(item => item.Bucket == MajorDelay)
         };
 
-        var late = rows.Where(item => item.Bucket != OnTime).ToList();
+        var late = rows.Where(IsLate).ToList();
         // The bucket filter only narrows the table below; every figure above still counts all trips.
         var shown = rows.Where(item => request.Bucket is null ? item.Bucket != OnTime : item.Bucket.Equals(request.Bucket.Trim(), StringComparison.OrdinalIgnoreCase));
         IOrderedEnumerable<OnTimeRow> ordered = Sort(request.SortBy) switch
@@ -97,7 +113,7 @@ public sealed partial class Service
             new(current.Excluded, new Dictionary<string, int> { ["MISSING_PLANNED_END"] = current.MissingPlannedEnd, ["MISSING_ACTUAL_ARRIVAL"] = current.MissingActualArrival }),
             items.Select(item => new Response.OnTimeItem(item.Transport.TransportId, item.Transport.TransportCode, item.Transport.BookingCode, item.Transport.OriginCountry,
                 item.Transport.DestinationCountry, AsUtc(item.PlannedEndAt), AsUtc(item.ActualArrivalAt), item.DelayMinutes, item.Bucket,
-                item.Bucket == OnTime ? null : causes[item.Transport.TransportId])).ToList(),
+                IsLate(item) ? causes[item.Transport.TransportId] : null)).ToList(),
             1, Math.Max(items.Count, 1), items.Count, 1);
     }
 
