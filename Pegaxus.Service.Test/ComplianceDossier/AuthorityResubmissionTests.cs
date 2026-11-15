@@ -37,6 +37,8 @@ public class AuthorityResubmissionTests
         await service.RecordAuthorityDecisionAsync(specialist, dgal.AuthoritySubmissionId, Approve());
         Assert.Equal(ComplianceDossierStatus.IN_PREPARATION, (await db.ComplianceDossiers.AsNoTracking().SingleAsync()).Status);
 
+        // The specialist acts on the rejection (here: revises a requirement) before the dossier may go back.
+        await AuthorityDecisionRulesTests.ReviseRequirementAsync(db, dossierId);
         await service.MarkReadyForSubmissionAsync(specialist, dossierId);
         var again = await service.RecordAuthoritySubmissionAsync(specialist, dossierId, Submission(Bmel));
         var decided = await service.RecordAuthorityDecisionAsync(specialist, again.AuthoritySubmissionId, Approve());

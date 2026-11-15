@@ -53,8 +53,11 @@ public sealed partial class Service
         foreach (var file in submissions.SelectMany(item => item.EvidenceFiles))
             readUrls[file.AuthoritySubmissionEvidenceFileId] = (await _mediaService.CreateReadUrlAsync(file.FileUrl, cancellationToken)).Url;
 
+        var (tripStart, tripEnd) = await TripWindowAsync(dossier.TransportId, cancellationToken);
         return new Response.AuthoritySubmissionListResponse
         {
+            TripStartDate = tripStart,
+            TripEndDate = tripEnd,
             RouteAuthorities = RouteAuthorities(await RouteCountriesAsync(dossier.TransportId, cancellationToken)),
             Items = submissions.Select(item => new Response.AuthoritySubmissionItemResponse
             {
@@ -294,6 +297,8 @@ public sealed partial class Service
             throw new ConflictException(
                 "This AuthoritySubmission already has a decision and is read-only",
                 "SUBMISSION_ALREADY_DECIDED");
+
+        await ValidateDecisionDatesAsync(decision, request, submission, cancellationToken);
 
         if (request.DecisionFile is null || string.IsNullOrWhiteSpace(request.DecisionFile.PublicId))
             throw new BadRequestException(

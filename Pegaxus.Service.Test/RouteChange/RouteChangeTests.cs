@@ -193,6 +193,10 @@ public class RouteChangeTests
         Assert.Null(f.Completed.SupersededAt); Assert.NotNull(suffix.SupersededAt); Assert.NotNull(f.Current.SupersededAt);
         var detail = await TestSupport.CreateRoutePlans(db).GetByIdAsync(f.Manager.AccountId, f.Plan.RoutePlanId);
         Assert.Equal(new[] { f.Completed.RouteId, f.Alternative.RouteId, suffix.RouteId }, detail.Segments.Select(x => x.Route.RouteId));
+        // The replaced PRIMARY segments stay readable beside the effective itinerary.
+        Assert.Equal(new[] { f.Current.RoutePlanRouteId, suffix.RoutePlanRouteId }, detail.ReplacedSegments.Select(x => x.RoutePlanRouteId));
+        Assert.All(detail.ReplacedSegments, x => Assert.NotNull(x.SupersededAt));
+        Assert.Equal(backup.RoutePlanCode, detail.ReplacedByRoutePlanCode);
         Assert.Equal(f.Driver.EmployeeId, detail.Segments[1].Driver!.EmployeeId);
         Assert.Equal(205m, detail.TotalDistanceKm); Assert.Equal(420, detail.EstimatedDurationMinutes);
         Assert.Equal("SEGMENT_LOCKED", (await Assert.ThrowsAsync<ConflictException>(() =>
