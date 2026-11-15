@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Repository.Extensions;
 using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 using Pegaxus.Service.OutboxService;
@@ -254,15 +255,18 @@ public sealed partial class Service
             .Include(item => item.Transport)
             .SingleOrDefaultAsync(item => item.BookingId == bookingId, cancellationToken);
         EnsurePending(booking);
-        if (booking!.Transport is not null)
-            throw new ConflictException("The booking already has a transport", "INVALID_BOOKING_STATUS");
+        // A booking sent back for changes after its first approval (negotiation) keeps its transport: approving it again reuses
+        // that transport instead of creating a second one. Only a cancelled transport cannot be reused.
+        var reused = booking!.Transport;
+        if (reused is { Status: TransportStatus.CANCELLED })
+            throw new ConflictException("The booking already has a cancelled transport", "INVALID_BOOKING_STATUS");
         if (!await HasHorseAsync(bookingId, cancellationToken))
             throw new UnprocessableEntityException(
                 "The booking has no horse and cannot be approved",
                 "BOOKING_HAS_NO_HORSE");
 
         var now = UtcNowTruncated();
-        var transport = new Transport
+        var transport = reused ?? new Transport
         {
             TransportId = Guid.NewGuid(),
             TransportCode = await GenerateTransportCodeAsync(cancellationToken),
@@ -276,7 +280,19 @@ public sealed partial class Service
         booking.AssignedEmployeeId = employee.EmployeeId;
         booking.ApprovedAt = now;
         booking.UpdatedAt = now;
-        _db.Transports.Add(transport);
+        if (reused is null)
+            _db.Transports.Add(transport);
+        else
+        {
+            transport.UpdatedAt = now;
+            // The specialists who worked on the dossier resume it: it stays in DRAFT until they review the changed booking again.
+            var specialists = await _db.Employees.Active().Where(item => item.Role == EmployeeRole.TRANSPORT_SPECIALIST &&
+                    item.EmployeeTransportPlans.Any(assignment => assignment.TransportPlan.TransportId == transport.TransportId))
+                .Select(item => item.AccountId).Distinct().ToListAsync(cancellationToken);
+            foreach (var recipient in specialists)
+                AddNotification(recipient, EmployeeRole.TRANSPORT_SPECIALIST, transport.TransportId, booking, "Booking approved again",
+                    $"Booking {booking.BookingCode} ({RouteSummary(booking)}) was approved again after the customer's changes. Review it and resume its compliance dossier.", now);
+        }
         AddHistory(bookingId, accountId, BookingHistoryType.APPROVE, BookingStatus.PENDING, BookingStatus.APPROVED, null, now);
         AddNotification(booking.Customer.AccountId, null, transport.TransportId, booking, "Booking approved",
             $"Your booking {booking.BookingCode} ({RouteSummary(booking)}) has been approved. Our team will now prepare your transport plan and keep you updated.", now);
@@ -321,15 +337,28 @@ public sealed partial class Service
         var employee = await GetLogisticsManagerAsync(accountId, cancellationToken);
         var booking = await _db.Bookings
             .Include(item => item.Customer).ThenInclude(customer => customer.Account)
-            .Include(item => item.Transport)
+            .Include(item => item.Transport).ThenInclude(item => item!.ComplianceDossiers).ThenInclude(item => item.DossierRequirements)
             .SingleOrDefaultAsync(item => item.BookingId == bookingId, cancellationToken);
         EnsurePending(booking);
-        if (booking!.Transport is not null)
-            throw new ConflictException("The booking already has a transport", "INVALID_BOOKING_STATUS");
 
         var now = UtcNowTruncated();
         var reason = request.Reason.Trim();
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        // A booking sent back for changes after its first approval still has its transport: rejecting it cancels that work.
+        if (booking!.Transport is { Status: not TransportStatus.CANCELLED } transport)
+        {
+            await CancelTransportWorkAsync(booking, transport, accountId, reason, now, cancellationToken);
+            transport.Status = TransportStatus.CANCELLED;
+            transport.CancelledAt = now;
+            transport.CancellationReason = reason;
+            transport.UpdatedAt = now;
+            if (transport.MainDossier is { Status: not ComplianceDossierStatus.CLOSED } dossier)
+            {
+                dossier.Status = ComplianceDossierStatus.CLOSED;
+                dossier.ClosedAt = dossier.UpdatedAt = now;
+                dossier.Note = $"{dossier.Note}\nBooking REJECTED: {reason}".Trim();
+            }
+        }
         booking.Status = BookingStatus.REJECTED;
         booking.AssignedEmployeeId = employee.EmployeeId;
         booking.RejectedAt = now;
