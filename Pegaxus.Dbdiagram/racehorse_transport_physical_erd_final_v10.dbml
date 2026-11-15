@@ -14,6 +14,11 @@
 // V10 fix (horse avatar): Horse.avatar_url varchar(500), nullable, like Account.avatar_url.
 // V10 (price list): adds PriceList and PriceListItem (quotation price list, one active at a time, edited by Logistics Managers),
 //   Invoice.tax_rate (VAT percentage the invoice was built with) and InvoiceItem.price_list_item_id (source line, no foreign key).
+// V10 (legal review request): RoutePlan.submitted_for_review_at, set when legal review is requested and cleared when the TS answers.
+// V10 (horse detachment): BookingHorse.detached_at / detached_incident_report_id / detached_location_id record a horse left
+//   behind mid-trip; Booking.return_of_transport_id links the return booking that brings it home to the original transport.
+// V10 (route change anchor): RoutePlanRoute.ended_at_location_id, set when a running segment stopped early at an incident
+//   because a BACKUP or RETURN took over (the convoy turned back there).
 // V9 (Flow 4): adds HandoverRecord provider parties (handover_party_type.PROVIDER), RoutePlanRoute.status,
 //   ComplianceDossier.dossier_type (MAIN/EXTRA; one dossier per transport and type), TransportPlan origin/destination
 //   Location and Booking origin/destination coordinates. Coordinates use decimal(10,4), like Location.
@@ -749,6 +754,9 @@ Table Booking {
   rejection_reason text
   cancellation_reason text
 
+  // V10: set on a return booking only, the transport that left this booking's horse behind mid-trip.
+  return_of_transport_id uuid
+
   created_at timestamp [not null]
   updated_at timestamp [not null]
 
@@ -757,6 +765,7 @@ Table Booking {
     assigned_employee_id
     status
     requested_departure_date
+    return_of_transport_id
   }
 }
 
@@ -767,11 +776,19 @@ Table BookingHorse {
 
   special_handling_notes text
 
+  // V10: set when the horse was left behind mid-trip; the rest of the booking travels on.
+  detached_at timestamp
+  // The incident that caused the detachment, and the route-plan stop where the horse stays with a local facility.
+  detached_incident_report_id uuid
+  detached_location_id uuid
+
   created_at timestamp [not null]
 
   indexes {
     (booking_id, horse_id) [pk]
     horse_id
+    detached_incident_report_id
+    detached_location_id
   }
 }
 
@@ -888,6 +905,9 @@ Table RoutePlan {
   estimated_duration_minutes int
 
   route_note text
+
+  // V10: when legal review was requested (legalReviewRequested in the API); kept on a re-save, cleared when the TS answers.
+  submitted_for_review_at timestamp
 
   created_at timestamp [not null]
   updated_at timestamp [not null]
@@ -1013,6 +1033,10 @@ Table RoutePlanRoute {
 
   superseded_at timestamp
 
+  // V10: set when the segment stopped early at an incident, away from its route's end, because a BACKUP or RETURN took over.
+  // NULL when the segment ended where its route ends.
+  ended_at_location_id uuid
+
   created_at timestamp [not null]
   updated_at timestamp [not null]
 
@@ -1023,6 +1047,7 @@ Table RoutePlanRoute {
     driver_employee_id
     escort_employee_id
     transport_provider_id
+    ended_at_location_id
 
     (route_plan_id, sequence_no) [unique]
   }
@@ -2653,6 +2678,9 @@ Ref: Booking.assigned_employee_id > Employee.employee_id
 
 Ref: BookingHorse.booking_id > Booking.booking_id
 Ref: BookingHorse.horse_id > Horse.horse_id
+Ref: BookingHorse.detached_incident_report_id > IncidentReport.incident_report_id
+Ref: BookingHorse.detached_location_id > Location.location_id
+Ref: Booking.return_of_transport_id > Transport.transport_id
 
 Ref: BookingStatusHistory.booking_id > Booking.booking_id
 Ref: BookingStatusHistory.changed_by_account_id > Account.account_id
@@ -2680,6 +2708,7 @@ Ref: RoutePlanRoute.route_id > Route.route_id
 Ref: RoutePlanRoute.driver_employee_id > Employee.employee_id
 Ref: RoutePlanRoute.escort_employee_id > Employee.employee_id
 Ref: RoutePlanRoute.transport_provider_id > TransportProvider.transport_provider_id
+Ref: RoutePlanRoute.ended_at_location_id > Location.location_id
 
 // RoutePlanRoute N - N Vehicle
 Ref: RoutePlanRouteVehicle.route_plan_route_id > RoutePlanRoute.route_plan_route_id

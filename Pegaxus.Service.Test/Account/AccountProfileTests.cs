@@ -14,6 +14,23 @@ public class AccountProfileTests
     private static readonly byte[] Png = Convert.FromBase64String("iVBORw0KGgo=");
 
     [Fact]
+    public async Task Profile_ShowsTheCustomerCodeAndTheEmployeeWorkStatus()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (customerAccount, customer) = await TestSupport.AddCustomerAsync(db);
+        var (employeeAccount, employee) = await TestSupport.AddLogisticsManagerAsync(db);
+        var service = Service(db, new AvatarMedia());
+
+        Assert.Equal(customer.CustomerCode, (await service.GetCurrentProfileAsync(customerAccount.AccountId)).Customer!.CustomerCode);
+        Assert.Equal("Active", (await service.GetCurrentProfileAsync(employeeAccount.AccountId)).Employee!.WorkStatus);
+
+        employee.IsActive = false;
+        await db.SaveChangesAsync();
+
+        Assert.Equal("Inactive", (await service.GetCurrentProfileAsync(employeeAccount.AccountId)).Employee!.WorkStatus);
+    }
+
+    [Fact]
     public async Task Avatar_IsConfirmedFromAPresignedUploadAndStoredAsItsPublicUrl()
     {
         await using var db = TestSupport.CreateDb();

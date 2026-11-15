@@ -87,6 +87,11 @@ public sealed partial class Service
             if (await _db.DossierRequirements.AnyAsync(item => item.ComplianceDossierId == dossierId && !item.IsDeleted && item.IsMandatory &&
                 item.Status != DossierRequirementStatus.SATISFIED && item.Status != DossierRequirementStatus.WAIVED, cancellationToken))
                 throw new ConflictException("All mandatory dossier requirements must be satisfied or waived before marking the dossier ready for submission.");
+            // An authority's rejection or request for more information must be acted on before the same dossier goes back.
+            if (await PendingRevisionAsync(dossierId, cancellationToken) is { } revision)
+                throw new ConflictException(
+                    $"{revision.AuthorityName} sent this dossier back. Add the requirement it asked for, or request a corrected document from the customer, before marking it ready again.",
+                    "AUTHORITY_REVISION_PENDING");
             var previousStatus = dossier.Status;
             var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
             dossier.Status = ComplianceDossierStatus.READY_FOR_SUBMISSION;

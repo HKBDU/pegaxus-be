@@ -42,6 +42,7 @@ public sealed class Service : IAccountService
             ? new Response.CustomerResponse
             {
                 CustomerId = customerData.CustomerId,
+                CustomerCode = customerData.CustomerCode,
                 DateOfBirth = customerData.DateOfBirth
             }
             : null;
@@ -50,7 +51,9 @@ public sealed class Service : IAccountService
             {
                 EmployeeId = employeeData.EmployeeId,
                 EmployeeCode = employeeData.EmployeeCode,
-                DateOfBirth = employeeData.DateOfBirth
+                DateOfBirth = employeeData.DateOfBirth,
+                // There is no separate work status column: an employee is working while the account is active.
+                WorkStatus = employeeData.IsActive ? "Active" : "Inactive"
             }
             : null;
         var isEmployee = employee is not null;

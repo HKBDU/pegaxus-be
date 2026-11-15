@@ -134,6 +134,19 @@ public class Response
         public ActionsResponse Actions { get; init; } = new();
         /// <summary>Set when the booking is a return booking: the original trip, whose documents can be reused.</summary>
         public ReturnSourceResponse? ReturnOf { get; init; }
+        /// <summary>
+        /// Set while a required authority's rejection or request for more information has not been acted on: no requirement was
+        /// added or changed and no document was requested since. The dossier cannot be marked ready for submission until then.
+        /// </summary>
+        public AuthorityRevisionResponse? PendingAuthorityRevision { get; init; }
+    }
+
+    public sealed class AuthorityRevisionResponse
+    {
+        public string AuthorityName { get; init; } = string.Empty;
+        /// <summary>REJECTED or RETURNED.</summary>
+        public string Decision { get; init; } = string.Empty;
+        public DateTimeOffset SentBackAt { get; init; }
     }
 
     public sealed class ReturnSourceResponse
@@ -357,6 +370,10 @@ public class Response
     public class AuthoritySubmissionListResponse
     {
         public IReadOnlyList<AuthoritySubmissionItemResponse> Items { get; init; } = [];
+        /// <summary>First day of the trip (scheduled itinerary, else the requested departure date).</summary>
+        public DateOnly TripStartDate { get; init; }
+        /// <summary>Last day of the trip: an approved permit must not expire before it.</summary>
+        public DateOnly TripEndDate { get; init; }
         /// <summary>The countries on the route and the authorities a new submission may go to.</summary>
         public RouteAuthoritiesResponse RouteAuthorities { get; init; } = new();
     }

@@ -62,6 +62,13 @@ public static class CountryUtils
         return value.Length == 2 && (EuIsoCodes.Contains(value) || value.Equals("GB", StringComparison.OrdinalIgnoreCase)) ? value.ToUpperInvariant() : null;
     }
 
+    /// <summary>
+    /// The country name a booking stores ("France", "United Kingdom") for an accepted ISO code or name; null for any other
+    /// country. Bookings hold names while locations and employees hold ISO codes.
+    /// </summary>
+    public static string? CountryName(string? country) =>
+        IsoCode(country) is { } code ? IsoByName.First(pair => pair.Value == code).Key : null;
+
     /// <summary>The codes a requirement country can use to apply to this country: its own ISO code, plus EU for a member state.</summary>
     public static IReadOnlyList<string> RegulatoryCodes(string? country) =>
         IsoCode(country) is { } code ? (EuIsoCodes.Contains(code) ? [code, "EU"] : [code]) : [];
