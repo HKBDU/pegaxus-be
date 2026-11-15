@@ -390,7 +390,10 @@ public sealed partial class Service
                 "INVALID_BOOKING_STATUS");
         if (booking.Transport is null)
             throw new ConflictException("The approved booking has no Transport", "TRANSPORT_NOT_FOUND");
-        if (booking.Transport.TransportPlans.Count > 0)
+        // Query the plans directly: the transport row is locked above, but its TransportPlans collection is not loaded, so
+        // checking it in memory let a second request create a duplicate plan.
+        if (await db.TransportPlans.AnyAsync(plan => plan.TransportId == booking.Transport.TransportId &&
+                plan.Status != TransportPlanStatus.CANCELLED, cancellationToken))
             throw new ConflictException(
                 "Transport Plan already exists for this booking. Please edit the existing plan.",
                 "TRANSPORT_PLAN_EXISTS");
@@ -420,6 +423,17 @@ public sealed partial class Service
             CreatedAt = now,
             UpdatedAt = now
         };
+
+        // A deposit paid before the plan existed approves the plan at once, exactly as paying it afterwards would
+        // (InvoiceService approves the existing plan when the deposit is recorded), so phase 1 assignment is open either way.
+        if (await db.Invoices.AnyAsync(invoice => invoice.BookingId == bookingId && invoice.Type == InvoiceType.DEPOSIT &&
+                invoice.Status == InvoiceStatus.PAID, cancellationToken))
+        {
+            transportPlan.Status = TransportPlanStatus.APPROVED;
+            transportPlan.ApprovedAt = now;
+            transportPlan.ApprovedByEmployeeId = await db.Employees.Where(employee => employee.AccountId == accountId)
+                .Select(employee => (Guid?)employee.EmployeeId).SingleOrDefaultAsync(cancellationToken);
+        }
 
         booking.Transport.Status = TransportStatus.PLANNING;
         booking.Transport.UpdatedAt = now;

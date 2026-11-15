@@ -49,6 +49,37 @@ public sealed partial class Service
         var effective = GetRouteType(item) == RouteType.PRIMARY && item.Status == RoutePlanStatus.ACTIVE;
         if (effective)
             segments = TransportItinerary.Effective(item.TransportPlan.RoutePlans).Select(segment => segment.Route).ToList();
+        // The PRIMARY's own segments a backup replaced before they were driven: kept so the old route stays visible.
+        var replaced = effective
+            ? item.RoutePlanRoutes.Where(segment => segment.SupersededAt != null && !segment.ActualDepartureAt.HasValue)
+                .OrderBy(segment => segment.SequenceNo).ToList()
+            : [];
+        var replacedBy = replaced.Count == 0 ? null : item.TransportPlan.RoutePlans
+            .Where(plan => TransportItinerary.IsBackupPlan(plan) && plan.Status is RoutePlanStatus.ACTIVE or RoutePlanStatus.COMPLETED)
+            .OrderByDescending(plan => plan.UpdatedAt).Select(plan => plan.RoutePlanCode).FirstOrDefault();
+        List<Response.SegmentResponse> Map(List<RoutePlanRoute> list) => list.Select((segment, index) => new Response.SegmentResponse
+            {
+                RoutePlanRouteId = segment.RoutePlanRouteId,
+                SequenceNo = segment.SequenceNo,
+                RouteType = segment.RouteType.ToString(),
+                Route = new Response.RouteResponse { RouteId = segment.Route.RouteId, RouteCode = segment.Route.RouteCode, RouteName = segment.Route.RouteName, TransportMode = segment.Route.TransportMode.ToString(), DistanceKm = segment.Route.DistanceKm, EstimatedDurationMinutes = segment.Route.EstimatedDurationMinutes },
+                FromLocation = ToLocation(segment.Route.FromLocation),
+                ToLocation = ToLocation(segment.Route.ToLocation),
+                EndedAtLocation = segment.EndedAtLocation is null ? null : ToLocation(segment.EndedAtLocation),
+                PlannedDepartureAt = segment.PlannedDepartureAt.HasValue ? AsUtc(segment.PlannedDepartureAt.Value) : null,
+                PlannedArrivalAt = segment.PlannedArrivalAt.HasValue ? AsUtc(segment.PlannedArrivalAt.Value) : null,
+                ActualDepartureAt = segment.ActualDepartureAt.HasValue ? AsUtc(segment.ActualDepartureAt.Value) : null,
+                ActualArrivalAt = segment.ActualArrivalAt.HasValue ? AsUtc(segment.ActualArrivalAt.Value) : null,
+                Status = TransportItinerary.StatusOf(segment).ToString(),
+                DwellAfterMinutes = index < list.Count - 1 && segment.PlannedArrivalAt.HasValue && list[index + 1].PlannedDepartureAt.HasValue ? (int)(list[index + 1].PlannedDepartureAt.GetValueOrDefault() - segment.PlannedArrivalAt.GetValueOrDefault()).TotalMinutes : null,
+                IsOutsourced = segment.TransportProviderId.HasValue,
+                Vehicles = segment.RoutePlanRouteVehicles.Select(item => new Response.VehicleResponse { VehicleId = item.Vehicle.VehicleId, VehicleCode = item.Vehicle.VehicleCode, VehicleName = item.Vehicle.VehicleName, LicensePlate = item.Vehicle.LicensePlate, TransportMode = item.Vehicle.TransportMode.ToString(), CapacityHorses = item.Vehicle.CapacityHorses }).ToList(),
+                Outsourcing = segment.TransportProvider is null ? null : new Response.ProviderResponse { TransportProviderId = segment.TransportProvider.TransportProviderId, ProviderCode = segment.TransportProvider.ProviderCode, ProviderName = segment.TransportProvider.ProviderName, Status = segment.TransportProvider.Status.ToString(), SupportedModes = ParseSupportedModes(segment.TransportProvider.SupportedModes) },
+                Driver = segment.DriverEmployee is null ? null : new Response.EmployeeResponse { EmployeeId = segment.DriverEmployee.EmployeeId, EmployeeCode = segment.DriverEmployee.EmployeeCode, FullName = segment.DriverEmployee.FullName, Role = segment.DriverEmployee.Role.ToString() },
+                Escort = segment.EscortEmployee is null ? null : new Response.EmployeeResponse { EmployeeId = segment.EscortEmployee.EmployeeId, EmployeeCode = segment.EscortEmployee.EmployeeCode, FullName = segment.EscortEmployee.FullName, Role = segment.EscortEmployee.Role.ToString() },
+                Note = segment.Note,
+                SupersededAt = segment.SupersededAt.HasValue ? AsUtc(segment.SupersededAt.Value) : null
+            }).ToList();
         return new Response.DetailResponse
         {
             RoutePlanId = item.RoutePlanId,
@@ -66,28 +97,9 @@ public sealed partial class Service
                     : item.EstimatedDurationMinutes ?? 0,
             PlannedDepartureAt = segments.FirstOrDefault()?.PlannedDepartureAt is { } start ? AsUtc(start) : null,
             PlannedArrivalAt = segments.LastOrDefault()?.PlannedArrivalAt is { } end ? AsUtc(end) : null,
-            Segments = segments.Select((segment, index) => new Response.SegmentResponse
-            {
-                RoutePlanRouteId = segment.RoutePlanRouteId,
-                SequenceNo = segment.SequenceNo,
-                RouteType = segment.RouteType.ToString(),
-                Route = new Response.RouteResponse { RouteId = segment.Route.RouteId, RouteCode = segment.Route.RouteCode, RouteName = segment.Route.RouteName, TransportMode = segment.Route.TransportMode.ToString(), DistanceKm = segment.Route.DistanceKm, EstimatedDurationMinutes = segment.Route.EstimatedDurationMinutes },
-                FromLocation = ToLocation(segment.Route.FromLocation),
-                ToLocation = ToLocation(segment.Route.ToLocation),
-                EndedAtLocation = segment.EndedAtLocation is null ? null : ToLocation(segment.EndedAtLocation),
-                PlannedDepartureAt = segment.PlannedDepartureAt.HasValue ? AsUtc(segment.PlannedDepartureAt.Value) : null,
-                PlannedArrivalAt = segment.PlannedArrivalAt.HasValue ? AsUtc(segment.PlannedArrivalAt.Value) : null,
-                ActualDepartureAt = segment.ActualDepartureAt.HasValue ? AsUtc(segment.ActualDepartureAt.Value) : null,
-                ActualArrivalAt = segment.ActualArrivalAt.HasValue ? AsUtc(segment.ActualArrivalAt.Value) : null,
-                Status = TransportItinerary.StatusOf(segment).ToString(),
-                DwellAfterMinutes = index < segments.Count - 1 && segment.PlannedArrivalAt.HasValue && segments[index + 1].PlannedDepartureAt.HasValue ? (int)(segments[index + 1].PlannedDepartureAt.GetValueOrDefault() - segment.PlannedArrivalAt.GetValueOrDefault()).TotalMinutes : null,
-                IsOutsourced = segment.TransportProviderId.HasValue,
-                Vehicles = segment.RoutePlanRouteVehicles.Select(item => new Response.VehicleResponse { VehicleId = item.Vehicle.VehicleId, VehicleCode = item.Vehicle.VehicleCode, VehicleName = item.Vehicle.VehicleName, LicensePlate = item.Vehicle.LicensePlate, TransportMode = item.Vehicle.TransportMode.ToString(), CapacityHorses = item.Vehicle.CapacityHorses }).ToList(),
-                Outsourcing = segment.TransportProvider is null ? null : new Response.ProviderResponse { TransportProviderId = segment.TransportProvider.TransportProviderId, ProviderCode = segment.TransportProvider.ProviderCode, ProviderName = segment.TransportProvider.ProviderName, Status = segment.TransportProvider.Status.ToString(), SupportedModes = ParseSupportedModes(segment.TransportProvider.SupportedModes) },
-                Driver = segment.DriverEmployee is null ? null : new Response.EmployeeResponse { EmployeeId = segment.DriverEmployee.EmployeeId, EmployeeCode = segment.DriverEmployee.EmployeeCode, FullName = segment.DriverEmployee.FullName, Role = segment.DriverEmployee.Role.ToString() },
-                Escort = segment.EscortEmployee is null ? null : new Response.EmployeeResponse { EmployeeId = segment.EscortEmployee.EmployeeId, EmployeeCode = segment.EscortEmployee.EmployeeCode, FullName = segment.EscortEmployee.FullName, Role = segment.EscortEmployee.Role.ToString() },
-                Note = segment.Note
-            }).ToList(),
+            Segments = Map(segments),
+            ReplacedSegments = Map(replaced),
+            ReplacedByRoutePlanCode = replacedBy,
             IsPersonnelComplete = segments.Where(item => !item.TransportProviderId.HasValue).All(item => item.DriverEmployeeId.HasValue && item.EscortEmployeeId.HasValue),
             BranchSequenceNo = TransportItinerary.BranchSequenceNo(item),
             BranchLocation = BranchLocation(item),

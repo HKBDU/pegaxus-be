@@ -22,6 +22,7 @@
 - `ComplianceDossier` là bộ hồ sơ do TS chuẩn bị trước khi xuất phát. Mọi kết quả kiểm dịch/hải quan tại cửa khẩu, kể cả `FAILED` hoặc `REJECTED`, chỉ cập nhật proof tương ứng và không thay đổi `ComplianceDossier.status`.
 - `AuditDossier` là bảng append-only; `target_entity + target_id` là polymorphic reference được backend kiểm tra.
 - `CatalogAuditLog` là bảng append-only dành cho thay đổi catalog/master, ví dụ `ComplianceRequirement`; không dùng thay thế `AuditDossier`.
+- **V10 (đồng bộ BE 15/11/2026):** bổ sung `RoutePlan.submitted_for_review_at`; tách ngựa giữa chuyến (`BookingHorse.detached_*`, `Booking.return_of_transport_id`); `RoutePlanRoute.ended_at_location_id` cho chặng dừng sớm tại sự cố khi BACKUP/RETURN thay thế. Bổ sung các field đã có trong DBML nhưng thiếu ở dictionary: `Customer.customer_code`, `Employee.address`/`country`, `IncidentReport.transport_id`/`emergency_settlement_required`, `RoutePlan.primary_route_plan_id`, các field outsource và `superseded_at` của `RoutePlanRoute`.
 - `PriceList` và `PriceListItem` là bảng giá định mức dùng để sinh dòng phí hóa đơn báo giá. Tại mỗi thời điểm chỉ có một `PriceList` active; bảng active bị khóa (xem Appendix A, rule 18-20). `Invoice.tax_rate` lưu VAT % mà hóa đơn được tính, `InvoiceItem.price_list_item_id` lưu dòng giá nguồn (không có FK).
 
 # 1. `Account`
@@ -75,6 +76,7 @@
 |---|---|---|---|---|
 | `customer_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `Customer`. |
 | `account_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Account.account_id`. |
+| `customer_code` | `varchar(20)` |  | Yes | Mã khách hàng duy nhất. |
 | `full_name` | `varchar(150)` |  | Yes | Họ và tên đầy đủ. |
 | `phone` | `varchar(30)` |  | No | Số điện thoại liên hệ. |
 | `date_of_birth` | `date` |  | No | Ngày sinh. |
@@ -102,6 +104,8 @@
 | `employee_code` | `varchar(50)` |  | Yes | Mã nhân viên duy nhất. |
 | `full_name` | `varchar(150)` |  | Yes | Họ và tên đầy đủ. |
 | `phone` | `varchar(30)` |  | No | Số điện thoại liên hệ. |
+| `address` | `varchar(500)` |  | No | Địa chỉ của nhân viên. |
+| `country` | `varchar(100)` |  | No | Quốc gia nơi nhân viên đang làm việc; dùng để lọc nhân sự theo nước khi phân công. |
 | `date_of_birth` | `date` |  | No | Ngày sinh. |
 | `role` | `employee_role` |  | Yes | Vai trò nghiệp vụ của Employee. Enum `employee_role`: LOGISTICS_MANAGER, TRANSPORT_SPECIALIST, FLEET_ROUTE_COORDINATOR, DRIVER, ESCORT. |
 | `is_active` | `boolean` |  | Yes | Cho biết bản ghi nhân viên còn đang hoạt động hay không. |
@@ -170,6 +174,7 @@
 | `cancelled_at` | `timestamp` |  | No | Thời điểm nghiệp vụ/bản ghi bị hủy. |
 | `rejection_reason` | `text` |  | No | Lý do bị từ chối. |
 | `cancellation_reason` | `text` |  | No | Lý do hủy. |
+| `return_of_transport_id` | `uuid` | FK | No | Chỉ có ở booking quay về: Transport đã để lại ngựa của booking này giữa chuyến. Khóa ngoại `Transport.transport_id`. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -182,6 +187,9 @@
 | `booking_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Booking.booking_id`. |
 | `horse_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `Horse.horse_id`. |
 | `special_handling_notes` | `text` |  | No | Hướng dẫn xử lý/chăm sóc đặc biệt cho Horse trong Booking. |
+| `detached_at` | `timestamp` |  | No | Thời điểm ngựa bị tách khỏi chuyến giữa đường (không đi tiếp được); phần còn lại của booking đi tiếp. NULL nếu ngựa đi hết chuyến. |
+| `detached_incident_report_id` | `uuid` | FK | No | Sự cố dẫn tới việc tách ngựa. Khóa ngoại `IncidentReport.incident_report_id`. |
+| `detached_location_id` | `uuid` | FK | No | Điểm dừng của lộ trình nơi ngựa được gửi lại cho cơ sở thú y địa phương. Khóa ngoại `Location.location_id`. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 
 # 8. `BookingStatusHistory`
@@ -253,11 +261,13 @@
 |---|---|---|---|---|
 | `route_plan_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `RoutePlan`. |
 | `transport_plan_id` | `uuid` | FK | Yes | Khóa ngoại tham chiếu `TransportPlan.transport_plan_id`. Một TransportPlan có thể được tham chiếu bởi nhiều RoutePlan. |
+| `primary_route_plan_id` | `uuid` | FK | No | Với BACKUP/RETURN: RoutePlan PRIMARY mà phương án này dự phòng/quay về. NULL với PRIMARY. Khóa ngoại tự tham chiếu `RoutePlan.route_plan_id`. |
 | `route_plan_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `RoutePlan`. |
 | `status` | `route_plan_status` |  | Yes | Trạng thái hiện tại của bản ghi theo enum tương ứng của bảng. Enum `route_plan_status`: DRAFT, CONFIRMED, ACTIVE, COMPLETED, CANCELLED. |
 | `total_distance_km` | `decimal(10,2)` |  | No | Tổng khoảng cách của RoutePlan, đơn vị km. |
 | `estimated_duration_minutes` | `int` |  | No | Thời lượng ước tính, tính bằng phút. |
 | `route_note` | `text` |  | No | Ghi chú về Route/RoutePlan. |
+| `submitted_for_review_at` | `timestamp` |  | No | Thời điểm RC gửi yêu cầu thẩm định pháp lý (API: `legalReviewRequested`, `legalReviewRequestedAt`). Giữ nguyên khi lưu nháp lại; xóa khi TS trả lời. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -310,7 +320,7 @@
 
 # 14. `RoutePlanRoute`
 
-**Cập nhật BE:** bổ sung `service_type`, `provider_reference`, `outsourcing_cost_amount`, `outsourcing_currency` và `superseded_at` để lưu outsource và route change. **V9:** bổ sung `status` (`route_segment_status`); dữ liệu cũ được backfill từ `actual_departure_at`/`actual_arrival_at`.
+**Cập nhật BE:** bổ sung `service_type`, `provider_reference`, `outsourcing_cost_amount`, `outsourcing_currency` và `superseded_at` để lưu outsource và route change. **V9:** bổ sung `status` (`route_segment_status`); dữ liệu cũ được backfill từ `actual_departure_at`/`actual_arrival_at`. **V10:** bổ sung `ended_at_location_id` (chặng dừng sớm tại sự cố).
 
 **Ý nghĩa bảng:** RoutePlanRoute: Bảng trung gian biểu diễn một Route được dùng trong một RoutePlan, gồm thứ tự đi, Driver/Escort phụ trách, provider thuê ngoài và thời gian dự kiến/thực tế của chính lần sử dụng Route đó.
 
@@ -332,11 +342,17 @@
 | `driver_employee_id` | `uuid` | FK | No | Driver phụ trách chặng này. Có thể NULL khi RoutePlan còn DRAFT; phải là Employee có role=DRIVER trước CONFIRMED/ACTIVE. |
 | `escort_employee_id` | `uuid` | FK | No | Escort phụ trách chặng này. Phải là Employee có role=ESCORT khi chặng nội bộ được phân công. |
 | `transport_provider_id` | `uuid` | FK | No | Provider thực hiện chặng thuê ngoài. NULL nghĩa là chặng nội bộ; có giá trị thì không gán vehicle/driver/escort nội bộ. |
+| `service_type` | `varchar(100)` |  | No | Loại dịch vụ của chặng thuê ngoài (ví dụ chuyến bay chở ngựa). |
+| `provider_reference` | `varchar(150)` |  | No | Mã tham chiếu bên provider (số chuyến bay, mã đặt chỗ...). |
+| `outsourcing_cost_amount` | `decimal(18,2)` |  | No | Chi phí thuê ngoài của chặng. |
+| `outsourcing_currency` | `varchar(3)` |  | No | Đơn vị tiền tệ của chi phí thuê ngoài (ISO 4217). |
 | `planned_departure_at` | `timestamp` |  | No | Thời điểm dự kiến khởi hành của chặng. |
 | `planned_arrival_at` | `timestamp` |  | No | Thời điểm dự kiến đến của chặng. |
 | `actual_departure_at` | `timestamp` |  | No | Thời điểm khởi hành thực tế. |
 | `actual_arrival_at` | `timestamp` |  | No | Thời điểm đến thực tế. |
 | `note` | `text` |  | No | Ghi chú bổ sung. |
+| `superseded_at` | `timestamp` |  | No | Thời điểm chặng bị thay thế khi BACKUP/RETURN được kích hoạt. Chặng chưa đi mà có giá trị thì không còn thuộc lộ trình thực tế; giờ dự kiến được giữ nguyên để báo cáo đúng giờ so với lộ trình đã cam kết. |
+| `ended_at_location_id` | `uuid` | FK | No | V10: nơi chặng dừng sớm tại sự cố, khác điểm cuối của Route, khi BACKUP/RETURN thay thế và xe quay đầu tại đó. NULL nếu chặng kết thúc đúng điểm cuối. Khóa ngoại `Location.location_id`. |
 | `created_at` | `timestamp` |  | Yes | Thời điểm bản ghi được tạo. |
 | `updated_at` | `timestamp` |  | Yes | Thời điểm bản ghi được cập nhật gần nhất. |
 
@@ -529,6 +545,8 @@
 |---|---|---|---|---|
 | `incident_report_id` | `uuid` | PK | No | Khóa chính định danh duy nhất bản ghi `IncidentReport`. |
 | `incident_code` | `varchar(50)` |  | Yes | Mã nghiệp vụ duy nhất của `IncidentReport`. |
+| `transport_id` | `uuid` | FK | No | Transport xảy ra sự cố. Khóa ngoại `Transport.transport_id`. |
+| `emergency_settlement_required` | `boolean` |  | Yes | Sự cố cần quyết toán chi phí khẩn cấp. Mặc định `false`. |
 | `employee_id` | `uuid` | FK | Yes | Employee báo cáo sự cố. |
 | `location_id` | `uuid` | FK | Yes | Location nơi sự cố xảy ra/được ghi nhận. |
 | `category` | `incident_category` |  | Yes | Phạm vi sự cố: VEHICLE, HORSE_HEALTH hoặc BOTH. Enum `incident_category`: VEHICLE, HORSE_HEALTH, BOTH. |

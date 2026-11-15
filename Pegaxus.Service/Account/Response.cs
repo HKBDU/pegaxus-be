@@ -26,6 +26,7 @@ public static class Response
     public sealed class CustomerResponse
     {
         public Guid CustomerId { get; init; }
+        public string? CustomerCode { get; init; }
         public DateOnly? DateOfBirth { get; init; }
     }
 
@@ -34,5 +35,7 @@ public static class Response
         public Guid EmployeeId { get; init; }
         public required string EmployeeCode { get; init; }
         public DateOnly? DateOfBirth { get; init; }
+        /// <summary>"Active" or "Inactive", from the employee's active flag.</summary>
+        public string? WorkStatus { get; init; }
     }
 }

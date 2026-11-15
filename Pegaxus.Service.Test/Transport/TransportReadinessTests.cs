@@ -194,6 +194,7 @@ public class TransportReadinessTests
         var france = await service.RecordAuthoritySubmissionAsync(specialist, dossierId, Submission(Dgal, true));
         var germany = await service.RecordAuthoritySubmissionAsync(specialist, dossierId, Submission(Bmel, true));
         await service.RecordAuthorityDecisionAsync(specialist, germany.AuthoritySubmissionId, Reject());
+        await AuthorityDecisionRulesTests.ReviseRequirementAsync(db, dossierId);
         await service.MarkReadyForSubmissionAsync(specialist, dossierId);
         // The resubmission to the German authority forgets the "required" tick.
         var again = await service.RecordAuthoritySubmissionAsync(specialist, dossierId, Submission(Bmel, false));

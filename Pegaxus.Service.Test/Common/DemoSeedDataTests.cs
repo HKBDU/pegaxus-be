@@ -110,7 +110,8 @@ public class DemoSeedDataTests
         var kept = await db.Horses.SingleAsync(item => item.HorseId == edited.HorseId);
         Assert.Equal("Renamed by the owner", kept.HorseName); Assert.Equal("ABC123456789012", kept.PassportNumber);
         var fixedBooking = await db.Bookings.SingleAsync(item => item.BookingId == booking.BookingId);
-        Assert.Equal("IE", fixedBooking.OriginCountry); Assert.True(fixedBooking.RequestedDepartureDate > DateOnly.FromDateTime(DateTime.UtcNow));
+        // Bookings store country names (QA-08); the seed maps its ISO codes.
+        Assert.Equal("Ireland", fixedBooking.OriginCountry); Assert.True(fixedBooking.RequestedDepartureDate > DateOnly.FromDateTime(DateTime.UtcNow));
         Assert.True(fixedBooking.UpdatedAt > new DateTime(2026, 3, 1));
         Assert.Equal("Mercedes-Benz Actros Horse Lorry", (await db.Vehicles.SingleAsync(item => item.VehicleId == vehicle.VehicleId)).VehicleName);
         Assert.Equal("Equitrans Europeenne SAS", (await db.TransportProviders.SingleAsync(item => item.TransportProviderId == provider.TransportProviderId)).ProviderName);

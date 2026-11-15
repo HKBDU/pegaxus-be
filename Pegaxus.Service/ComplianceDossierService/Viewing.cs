@@ -195,7 +195,15 @@ public sealed partial class Service
                     HorseId = group.Key, HorseName = group.First().HorseName ?? string.Empty, Requirements = group.ToList()
                 }).OrderBy(item => item.HorseName).ThenBy(item => item.HorseId).ToList(),
             Actions = ViewActions(role),
-            ReturnOf = role is null ? null : await ReturnSourceAsync(booking.ReturnOfTransportId, booking.BookingId, cancellationToken)
+            ReturnOf = role is null ? null : await ReturnSourceAsync(booking.ReturnOfTransportId, booking.BookingId, cancellationToken),
+            PendingAuthorityRevision = role is not null &&
+                dossier.Status is ComplianceDossierStatus.IN_PREPARATION or ComplianceDossierStatus.REJECTED &&
+                await PendingRevisionAsync(dossier.ComplianceDossierId, cancellationToken) is { } revision
+                    ? new Response.AuthorityRevisionResponse
+                    {
+                        AuthorityName = revision.AuthorityName, Decision = revision.Decision, SentBackAt = DbTime.AsUtc(revision.SentBackAt)
+                    }
+                    : null
         };
     }
 
