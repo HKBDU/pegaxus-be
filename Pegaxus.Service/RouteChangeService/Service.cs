@@ -33,9 +33,14 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
         var primary = await PrimaryAsync(plan, cancellationToken);
         var active = await SegmentsAsync(primary.RoutePlanId, cancellationToken);
         var anchor = await BackupAnchorAsync(plan.TransportPlan.TransportId, backup, active, request.IncidentReportId, cancellationToken);
-        var (tail, range) = (anchor.Tail, anchor.Replaced);
+        var tail = anchor.Tail;
+        // Turning back on the last primary segment leaves nothing untravelled; that running segment is what the backup replaces.
+        var range = anchor.Replaced.Count > 0 ? anchor.Replaced
+            : anchor.Current is { } running ? [running]
+            : throw new ConflictException("Only untravelled segments can be replaced.", "SEGMENT_LOCKED");
         if (range.Concat(tail).Any(x => !x.Route.DistanceKm.HasValue || x.Route.DistanceKm < 0))
-            throw new ConflictException("Measured route distances are required for BR-036.", "ROUTE_DATA_INCOMPLETE");
+            throw new ConflictException("Every road on the current and the backup route needs a measured distance before the change can be compared.",
+                "ROUTE_DATA_INCOMPLETE");
         var comparison = Compare(active, range, tail, request.NewEstimatedArrivalAt) with {
             DelayMinutes = (decimal)(request.NewEstimatedArrivalAt - active[^1].PlannedArrivalAt).TotalMinutes };
         // Only a manager can activate a backup, so every request goes through; the summary says how big the change is.
