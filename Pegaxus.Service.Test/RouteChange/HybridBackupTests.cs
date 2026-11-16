@@ -368,6 +368,29 @@ public class HybridBackupTests
     }
 
     [Fact]
+    public async Task Ec1_TurningBackOnTheLastSegmentWithAnIncident_ComparesAgainstTheRunningSegment()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await CreateFixtureAsync(db);
+        f.Current.ActualDepartureAt = f.Current.PlannedDepartureAt;
+        var incident = new IncidentReport { IncidentReportId = Guid.NewGuid(), TransportId = f.Transport.TransportId, IncidentCode = "INC-LAST",
+            EmployeeId = f.Driver.EmployeeId, LocationId = f.Start.LocationId, Category = IncidentCategory.VEHICLE, Severity = IncidentSeverity.HIGH,
+            Status = IncidentStatus.REPORTED, Title = "Engine failure", Description = "Engine failed on the last segment" };
+        db.Add(incident);
+        await db.SaveChangesAsync();
+        var backup = await f.AlternateAsync();
+        var request = f.Proposal();
+        request.IncidentReportId = incident.IncidentReportId;
+
+        var created = await f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, request);
+
+        Assert.Equal(("BACKUP", "CONFIRMED"), (created.RouteType, created.Status));
+        var message = (await db.Notifications.ToListAsync()).Single(x => x.Title == "Emergency backup route needs approval").Message;
+        Assert.Contains("Incident: INC-LAST", message);
+        Assert.DoesNotContain("BR-036", message);
+    }
+
+    [Fact]
     public async Task Rp7_OnThePrimary_LeavesAnUnsubmittedBackupAsADraft()
     {
         await using var db = TestSupport.CreateDb();
