@@ -171,6 +171,32 @@ public class HandoverCompletionTests
         Assert.Equal("VEHICLE_STILL_ON_ANOTHER_TRIP", error.ErrorCode); Assert.Equal(VehicleStatus.ASSIGNED, vehicle.Status);
     }
 
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task Complete_IsBlockedWhileReceivingCrewIsStillOnAnotherTrip(bool transfer, bool otherDeparted)
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateStartedAsync(db);
+        var (other, segment) = await PersonnelAssignmentTests.RouteAsync(db, RoutePlanStatus.ACTIVE); other.TransportPlan.Transport.Status = TransportStatus.IN_TRANSIT;
+        // The receiving crew of the handover under test is still on the other transport's segment.
+        if (transfer) segment.DriverEmployeeId = f.Receiver.EmployeeId; else segment.EscortEmployeeId = f.Escort.EmployeeId;
+        if (otherDeparted) segment.ActualDepartureAt = Fixture.Now.AddHours(-3);
+        await db.SaveChangesAsync();
+        if (transfer) await f.Service.CompleteAsync(f.Pickup.HandoverRecordId, Request(f.Pickup), f.Manager.AccountId);
+        var record = transfer ? f.Transfer : f.Pickup;
+
+        if (!otherDeparted)
+        {
+            Assert.Equal("COMPLETED", (await f.Service.CompleteAsync(record.HandoverRecordId, Request(record), f.Manager.AccountId)).Status);
+            return;
+        }
+        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CompleteAsync(record.HandoverRecordId, Request(record), f.Manager.AccountId));
+
+        Assert.Equal("PERSONNEL_STILL_ON_ANOTHER_TRIP", error.ErrorCode);
+        Assert.Contains(other.TransportPlan.Transport.TransportCode, error.Message);
+    }
+
     [Fact]
     public async Task Complete_NotifiesAllActiveManagersAndCoordinators()
     {

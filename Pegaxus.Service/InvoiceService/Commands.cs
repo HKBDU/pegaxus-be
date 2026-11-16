@@ -238,7 +238,7 @@ public sealed partial class Service
             _ => booking.Transport.Status != TransportStatus.CANCELLED
         };
         if (!validTransport)
-            throw new ConflictException("Transport status does not allow this invoice type", "INVALID_TRANSPORT_STATUS");
+            throw TransportStatusNotAllowed(type, booking.Transport?.TransportCode, booking.Transport?.Status);
 
         var invoices = await db.Invoices.AsNoTracking().Where(item => item.BookingId == bookingId)
             .OrderBy(item => item.CreatedAt).ThenBy(item => item.InvoiceId)

@@ -91,6 +91,39 @@ public sealed partial class Service
             throw new UnprocessableEntityException("A vehicle of this transport is still on another unfinished trip", "VEHICLE_STILL_ON_ANOTHER_TRIP");
     }
 
+    /// <summary>
+    /// The crew taking the horses must be free: a driver or escort still driving a segment of another transport (it left but has
+    /// not arrived, for example because that trip overran) cannot take this one. The manager replaces them first.
+    /// </summary>
+    private async Task EnsureReceivingCrewFreeAsync(HandoverRecord item, Transport transport, RoutePlanRoute[] segments, CancellationToken cancellationToken)
+    {
+        if (item.HandoverType is HandoverType.DELIVERY or HandoverType.OTHER) return;
+        var to = segments.SingleOrDefault(segment => segment.RoutePlanRouteId == item.ToRoutePlanRouteId);
+        if (to is null || to.TransportProviderId is not null) return;
+        var crew = new[] { to.DriverEmployeeId, to.EscortEmployeeId }.OfType<Guid>().ToArray();
+        if (crew.Length == 0) return;
+        var busy = await db.RoutePlanRoutes.AsNoTracking().Where(segment =>
+                segment.RoutePlan.TransportPlan.TransportId != transport.TransportId &&
+                segment.ActualDepartureAt != null && segment.ActualArrivalAt == null &&
+                (segment.DriverEmployeeId.HasValue && crew.Contains(segment.DriverEmployeeId.Value) ||
+                 segment.EscortEmployeeId.HasValue && crew.Contains(segment.EscortEmployeeId.Value)) &&
+                segment.RoutePlan.Status != RoutePlanStatus.COMPLETED && segment.RoutePlan.Status != RoutePlanStatus.CANCELLED && segment.RoutePlan.Status != RoutePlanStatus.REJECTED_BY_MANAGER &&
+                segment.RoutePlan.TransportPlan.Status != TransportPlanStatus.COMPLETED && segment.RoutePlan.TransportPlan.Status != TransportPlanStatus.CANCELLED &&
+                segment.RoutePlan.TransportPlan.Transport.Status != TransportStatus.COMPLETED && segment.RoutePlan.TransportPlan.Transport.Status != TransportStatus.CANCELLED)
+            .Select(segment => new
+            {
+                EmployeeId = segment.DriverEmployeeId.HasValue && crew.Contains(segment.DriverEmployeeId.Value) ? segment.DriverEmployeeId : segment.EscortEmployeeId,
+                segment.RoutePlan.TransportPlan.Transport.TransportCode
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (busy is null) return;
+        var person = await db.Employees.AsNoTracking().Where(employee => employee.EmployeeId == busy.EmployeeId)
+            .Select(employee => new { employee.FullName, employee.Role }).SingleAsync(cancellationToken);
+        throw new UnprocessableEntityException(
+            $"{RoleLabel.Of(person.Role)} {person.FullName} is still on transport {busy.TransportCode}, which has not arrived yet. Replace them before this handover.",
+            "PERSONNEL_STILL_ON_ANOTHER_TRIP");
+    }
+
     private async Task<Response.CompletionEffects> ApplyEffectsAsync(HandoverRecord item, Transport transport, RoutePlanRoute[] segments, RoutePlanRoute[] effective, DateTime now, CancellationToken cancellationToken)
     {
         var from = segments.SingleOrDefault(segment => segment.RoutePlanRouteId == item.FromRoutePlanRouteId);

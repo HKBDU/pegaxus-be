@@ -41,6 +41,7 @@ public sealed partial class Service
             Geo.DistanceMeters(request.Latitude!.Value, request.Longitude!.Value, geofence.Latitude, geofence.Longitude) > geofence.RadiusMeters)
             throw new UnprocessableEntityException("You are not within the handover radius of the handover point", "NOT_IN_HANDOVER_RADIUS");
         if (item.HandoverType == HandoverType.PICKUP) await EnsureVehiclesReturnedAsync(transport, effective, cancellationToken);
+        await EnsureReceivingCrewFreeAsync(item, transport, segments, cancellationToken);
         var now = Truncate(clock.GetUtcNow());
         ApplyCompletion(item, request, senderUrl, receiverUrl, now);
         var effects = await ApplyEffectsAsync(item, transport, segments, effective, now, cancellationToken);
