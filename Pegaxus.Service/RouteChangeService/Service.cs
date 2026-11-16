@@ -38,25 +38,55 @@ public sealed partial class Service(AppDbContext db, NotificationService.INotifi
             throw new ConflictException("Measured route distances are required for BR-036.", "ROUTE_DATA_INCOMPLETE");
         var comparison = Compare(active, range, tail, request.NewEstimatedArrivalAt) with {
             DelayMinutes = (decimal)(request.NewEstimatedArrivalAt - active[^1].PlannedArrivalAt).TotalMinutes };
-        if (ApprovalReasons(comparison).Length == 0)
-            throw new UnprocessableEntityException("The change is below the approval threshold (BR-036)", "APPROVAL_NOT_REQUIRED");
+        // Only a manager can activate a backup, so every request goes through; the summary says how big the change is.
+        var points = ChangePoints(comparison);
+        var summary = ChangeSummary(points);
         var managers = await db.Employees.AsNoTracking().Active().Where(x => x.Role == EmployeeRole.LOGISTICS_MANAGER)
             .Select(x => x.AccountId).ToArrayAsync(cancellationToken);
         if (managers.Length == 0) throw new ConflictException("No active Logistics Manager can review this request.", "REVIEWER_UNAVAILABLE");
         var now = Now;
         var incident = request.IncidentReportId is { } incidentId ? await IncidentLinks.AttachAsync(db, incidentId, plan.TransportPlan.TransportId, now, cancellationToken) : null;
         var incidentLine = incident is null ? "" : $"\nIncident: {incident.IncidentCode}";
-        var message = FormattableString.Invariant($"Backup route plan {plan.RoutePlanCode} is waiting for your decision.{incidentLine}\nReason: {request.Reason.Trim()}\nNew ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC\nEstimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}{NoteSuffix(request.Note)}");
+        var message = FormattableString.Invariant($"Backup route plan {plan.RoutePlanCode} is waiting for your decision.{incidentLine}\n{summary}\nReason: {request.Reason.Trim()}\nNew ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC\nEstimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}{NoteSuffix(request.Note)}");
         foreach (var manager in managers)
             Notify(manager, plan, "Emergency backup route needs approval", message, NotificationPriority.URGENT, now,
                 NotificationLinks.RoutePlan(EmployeeRole.LOGISTICS_MANAGER, plan.RoutePlanId, "change-decision"));
         await MailReviewAsync(plan, managers, MailService.EmailBodies.RouteReviewKind.EmergencyApproval,
-            FormattableString.Invariant($"{(incident is null ? "" : $"Incident {incident.IncidentCode}. ")}{request.Reason.Trim()} New ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC. Estimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}.{NoteSuffix(request.Note)}"),
+            FormattableString.Invariant($"{(incident is null ? "" : $"Incident {incident.IncidentCode}. ")}{summary} Reason: {request.Reason.Trim()} New ETA: {request.NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC. Estimated extra cost: {(request.EstimatedExtraCost.HasValue ? Pegaxus.Service.Common.Vnd.Format(request.EstimatedExtraCost.Value) : "not provided")}.{NoteSuffix(request.Note)}"),
             now, cancellationToken);
+        // The request has no table of its own; the route plan's log keeps it so the manager's review screen can show it.
+        db.CatalogAuditLogs.Add(new() { CatalogAuditLogId = Guid.NewGuid(), EntityType = "RoutePlan", EntityId = plan.RoutePlanId,
+            ActorAccountId = accountId, ActionType = BackupRequestedAction, Summary = request.Reason.Trim(), BeforeData = JsonDocument.Parse("{}"),
+            AfterData = JsonSerializer.SerializeToDocument(new RequestRecord(request.Reason.Trim(), request.NewEstimatedArrivalAt.ToUniversalTime(),
+                request.EstimatedExtraCost, Text.EmptyToNull(request.Note?.Trim()), incident?.IncidentReportId, incident?.IncidentCode, points)),
+            CreatedAt = now });
         await db.SaveChangesAsync(cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         await notifications.FlushAsync(cancellationToken);
         return new(routePlanId, "BACKUP", plan.Status.ToString(), AsUtc(now));
+    }
+
+    private const string BackupRequestedAction = "BACKUP_APPROVAL_REQUESTED";
+
+    private sealed record RequestRecord(string Reason, DateTimeOffset NewEstimatedArrivalAt, decimal? EstimatedExtraCost, string? Note,
+        Guid? IncidentReportId, string? IncidentCode, List<string> Impacts);
+
+    public async Task<Response.ChangeRequestView?> GetChangeRequestAsync(Guid routePlanId, Guid accountId, CancellationToken cancellationToken = default)
+    {
+        var actor = await ActorAsync(accountId, [EmployeeRole.LOGISTICS_MANAGER, EmployeeRole.FLEET_ROUTE_COORDINATOR], cancellationToken);
+        var plan = await db.RoutePlans.AsNoTracking().Include(x => x.TransportPlan)
+            .SingleOrDefaultAsync(x => x.RoutePlanId == routePlanId, cancellationToken)
+            ?? throw new NotFoundException("Route plan not found.", "ROUTE_PLAN_NOT_FOUND");
+        if (actor.Role == EmployeeRole.FLEET_ROUTE_COORDINATOR) await EnsureCoordinatorAsync(plan, actor, cancellationToken);
+        var log = await db.CatalogAuditLogs.AsNoTracking()
+            .Where(x => x.EntityType == "RoutePlan" && x.EntityId == routePlanId && x.ActionType == BackupRequestedAction)
+            .OrderByDescending(x => x.CreatedAt).FirstOrDefaultAsync(cancellationToken);
+        if (log is null) return null;
+        var record = log.AfterData.Deserialize<RequestRecord>()!;
+        var by = await db.Employees.AsNoTracking().Where(x => x.AccountId == log.ActorAccountId)
+            .Select(x => new Response.EmployeeBrief(x.EmployeeId, x.EmployeeCode, x.FullName, x.Role.ToString())).FirstOrDefaultAsync(cancellationToken);
+        return new(AsUtc(log.CreatedAt), by, record.Reason, record.NewEstimatedArrivalAt, record.EstimatedExtraCost, record.Note,
+            record.IncidentReportId, record.IncidentCode, record.Impacts, ChangeSummary(record.Impacts));
     }
 
     public async Task<Response.DecisionResult> DecideAsync(Guid routePlanId, Guid accountId, Request.DecisionRequest request, CancellationToken cancellationToken = default)

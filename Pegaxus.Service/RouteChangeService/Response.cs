@@ -33,6 +33,10 @@ public static class Response
         string AnchorMode, LocationBrief StartLocation, bool TurnsBack, LocationBrief? EndedAtLocation);
     /// <summary>SuggestedFromRoutePlanRouteId is the primary segment the crew came from; NeedsCrew marks an internal segment still missing someone.</summary>
     public sealed record CrewSegment(Segment Segment, Guid? SuggestedFromRoutePlanRouteId, bool NeedsCrew);
+    /// <summary>The Route Coordinator's latest request to activate a backup. Impacts lists each big part of the change in plain words (empty for a small change); Summary says it in one sentence.</summary>
+    public sealed record ChangeRequestView(DateTimeOffset RequestedAt, EmployeeBrief? RequestedBy, string Reason,
+        DateTimeOffset NewEstimatedArrivalAt, decimal? EstimatedExtraCost, string? Note, Guid? IncidentReportId, string? IncidentCode,
+        IReadOnlyList<string> Impacts, string Summary);
     public sealed record Comparison(decimal DistanceDeltaKm, decimal DelayMinutes, bool BcpChanged, bool Additional24hRest,
         LocationBrief? PreviousBcp, LocationBrief? NewBcp, DateTimeOffset PreviousEta, DateTimeOffset NewEta);
 }
