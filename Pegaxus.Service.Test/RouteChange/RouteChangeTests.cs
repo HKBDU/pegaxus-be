@@ -123,26 +123,47 @@ public class RouteChangeTests
     [InlineData(49.99, 59, false)]
     [InlineData(50, 0, true)]
     [InlineData(0, 60, true)]
-    public async Task BR036_UsesStrictExemptionBoundaries(decimal extraDistance, int delay, bool needsApproval)
+    public async Task BR036_EveryChangeIsSentAndTheBigOnesAreNamed(decimal extraDistance, int delay, bool big)
     {
         await using var db = TestSupport.CreateDb();
         var f = await Fixture.CreateAsync(db);
         f.Alternative.DistanceKm = 100 + extraDistance;
         var backup = await f.AlternateAsync();
-        if (needsApproval)
-        {
-            var result = await f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal(delay));
-            Assert.Equal(backup.RoutePlanId, result.RoutePlanId); Assert.Equal("CONFIRMED", result.Status);
-            var notification = Assert.Single(db.Notifications);
-            Assert.Equal(NotificationPriority.URGENT, notification.Priority); Assert.Equal("RoutePlan", notification.ReferenceType);
-            Assert.Equal(backup.RoutePlanId, notification.ReferenceId);
-            Assert.Contains("1,800 VND", notification.Message);
-            Assert.Contains(FormattableString.Invariant($"ETA: {f.Proposal(delay).NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC"), notification.Message);
-        }
-        else
-            Assert.Equal("APPROVAL_NOT_REQUIRED", (await Assert.ThrowsAsync<UnprocessableEntityException>(() =>
-                f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal(delay)))).ErrorCode);
+
+        var result = await f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal(delay));
+
+        Assert.Equal(backup.RoutePlanId, result.RoutePlanId); Assert.Equal("CONFIRMED", result.Status);
+        var notification = Assert.Single(db.Notifications);
+        Assert.Equal(NotificationPriority.URGENT, notification.Priority); Assert.Equal("RoutePlan", notification.ReferenceType);
+        Assert.Equal(backup.RoutePlanId, notification.ReferenceId);
+        Assert.Contains("1,800 VND", notification.Message);
+        Assert.Contains(FormattableString.Invariant($"ETA: {f.Proposal(delay).NewEstimatedArrivalAt.UtcDateTime:yyyy-MM-dd HH:mm} UTC"), notification.Message);
+        Assert.DoesNotContain("BR-036", notification.Message);
+        if (!big) Assert.Contains("This is a small change", notification.Message);
+        else if (extraDistance >= 50) Assert.Contains("the route is 50 km longer", notification.Message);
+        else Assert.Contains("arrival is 1 h later than planned", notification.Message);
         Assert.Empty(db.EmergencyCostRequests);
+    }
+
+    [Fact]
+    public async Task ChangeRequest_IsShownToTheManagerAfterTheCoordinatorSendsIt()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await Fixture.CreateAsync(db);
+        f.Alternative.DistanceKm = 160;
+        var backup = await f.AlternateAsync();
+        Assert.Null(await f.Service.GetChangeRequestAsync(backup.RoutePlanId, f.Manager.AccountId));
+        var proposal = f.Proposal(90); proposal.Note = "  Ferry booked  ";
+
+        await f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, proposal);
+        var view = await f.Service.GetChangeRequestAsync(backup.RoutePlanId, f.Manager.AccountId);
+
+        Assert.NotNull(view);
+        Assert.Equal(proposal.Reason.Trim(), view.Reason); Assert.Equal("Ferry booked", view.Note);
+        Assert.Equal(proposal.NewEstimatedArrivalAt, view.NewEstimatedArrivalAt); Assert.Equal(proposal.EstimatedExtraCost, view.EstimatedExtraCost);
+        Assert.Equal("FLEET_ROUTE_COORDINATOR", view.RequestedBy?.Role);
+        Assert.Equal(["the route is 60 km longer", "arrival is 1 h 30 min later than planned"], view.Impacts);
+        Assert.StartsWith("Please check:", view.Summary);
     }
 
     [Theory]

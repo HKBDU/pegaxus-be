@@ -182,6 +182,10 @@ public class InvoiceSuggestionTests
             var error = await Assert.ThrowsAsync<ConflictException>(() => Service(db)
                 .GetSuggestionAsync(account.AccountId, booking.BookingId, new() { Type = type }));
             Assert.Equal("INVALID_TRANSPORT_STATUS", error.ErrorCode);
+            Assert.Contains(transport.TransportCode, error.Message);
+            Assert.Contains(status.ToString(), JsonSerializer.Serialize(error.Value));
+            if (type == "FINAL" && status == TransportStatus.READY)
+                Assert.Equal($"A final invoice can be created only after the horses are delivered to the customer. Transport {transport.TransportCode} is ready but has not left yet.", error.Message);
             return;
         }
         var result = await Service(db).GetSuggestionAsync(account.AccountId, booking.BookingId, new() { Type = type });

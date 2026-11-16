@@ -20,6 +20,19 @@ public sealed class RouteChangeRequestsController(IRouteChangeService service) :
     public async Task<IActionResult> Create(Guid routePlanId, [FromBody] Request.CreateRequest request, CancellationToken cancellationToken) =>
         Success(await service.CreateAsync(routePlanId, AccountId, request, cancellationToken), "Route change request sent successfully");
 
+    /// <summary>Read the latest request to activate a BACKUP route.</summary>
+    /// <remarks>
+    /// What the Route Coordinator sent: who and when, reason, new ETA, estimated extra cost, note, linked incident, and how big the
+    /// change is in plain words. Data is null when no request was sent. The Logistics Manager, or the Route Coordinator assigned to
+    /// the transport plan.
+    /// </remarks>
+    /// <param name="routePlanId">The BACKUP route plan UUID.</param>
+    /// <param name="cancellationToken">The request cancellation token.</param>
+    /// <returns>200 OK with the latest request, or null data when there is none.</returns>
+    [HttpGet("/api/v1/route-plans/{routePlanId:guid}/change-request")]
+    public async Task<IActionResult> GetChangeRequest(Guid routePlanId, CancellationToken cancellationToken) =>
+        Success(await service.GetChangeRequestAsync(routePlanId, AccountId, cancellationToken), "Route change request retrieved successfully");
+
     /// <summary>Suggest the crew of a confirmed BACKUP route before it is approved.</summary>
     /// <remarks>
     /// Lists the backup segments from the branch point. Internal segments take the driver and escort of the untravelled PRIMARY
