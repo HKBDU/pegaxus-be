@@ -79,6 +79,10 @@ public static class Response
         public DateTimeOffset? PlannedDepartureAt { get; init; }
         public DateTimeOffset? PlannedArrivalAt { get; init; }
         public required IReadOnlyList<SegmentResponse> Segments { get; init; }
+        /// <summary>On an active PRIMARY: its segments a backup replaced before they were driven (not part of <see cref="Segments"/>).</summary>
+        public IReadOnlyList<SegmentResponse> ReplacedSegments { get; init; } = [];
+        /// <summary>The backup route plan that replaced <see cref="ReplacedSegments"/>.</summary>
+        public string? ReplacedByRoutePlanCode { get; init; }
         public bool IsPersonnelComplete { get; init; }
         public int? BranchSequenceNo { get; init; }
         public LocationResponse? BranchLocation { get; init; }
@@ -101,6 +105,8 @@ public static class Response
         public required RouteResponse Route { get; init; }
         public required LocationResponse FromLocation { get; init; }
         public required LocationResponse ToLocation { get; init; }
+        /// <summary>Where the segment stopped early, away from ToLocation (the convoy turned back at an incident); null otherwise.</summary>
+        public LocationResponse? EndedAtLocation { get; init; }
         public DateTimeOffset? PlannedDepartureAt { get; init; }
         public DateTimeOffset? PlannedArrivalAt { get; init; }
         public DateTimeOffset? ActualDepartureAt { get; init; }
@@ -113,6 +119,8 @@ public static class Response
         public EmployeeResponse? Driver { get; init; }
         public EmployeeResponse? Escort { get; init; }
         public string? Note { get; init; }
+        /// <summary>When a backup replaced this segment; null for a segment still on the route.</summary>
+        public DateTimeOffset? SupersededAt { get; init; }
     }
 
     public sealed class RouteResponse

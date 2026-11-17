@@ -48,20 +48,25 @@ public static class TransportItinerary
 
     /// <summary>
     /// Effective itinerary of a transport: the PRIMARY plan's segments that are not superseded or already departed.
-    /// An ACTIVE or COMPLETED BACKUP plan keeps the departed primary segments and continues with its own segments from
-    /// the first BACKUP segment onwards. An ACTIVE or COMPLETED RETURN plan keeps every departed segment and appends
+    /// An ACTIVE or COMPLETED BACKUP plan keeps the departed primary segments and those before its branch point, and
+    /// continues with its own segments from the first BACKUP segment onwards. An ACTIVE or COMPLETED RETURN plan keeps every departed segment and appends
     /// all of its own. Plans that are not yet active never contribute.
     /// </summary>
     public static IReadOnlyList<Segment> Effective(IEnumerable<RoutePlan> plans)
     {
         var all = plans.ToList();
-        var routes = Pick(all.Where(IsPrimaryPlan), RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED, RoutePlanStatus.CONFIRMED) is { } primary
-            ? Visible(primary).ToList()
-            : [];
+        var primary = Pick(all.Where(IsPrimaryPlan), RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED, RoutePlanStatus.CONFIRMED);
+        var routes = primary is null ? [] : Visible(primary).ToList();
 
         if (Pick(all.Where(IsBackupPlan), RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED) is { } backup &&
-            BranchSequenceNo(backup) is { } branch)
-            routes = Departed(routes).Concat(Visible(backup).Where(route => route.SequenceNo >= branch)).ToList();
+            Visible(backup).Where(route => route.RouteType == RouteType.BACKUP).Select(route => (int?)route.SequenceNo).Min() is { } branch)
+        {
+            // Activation supersedes exactly the primary segments the backup replaces (and the backup stretch before the branch
+            // point it took), so the untravelled primary segments still visible run before it. Without any superseded segment
+            // (data from before that rule) only the departed ones stay.
+            var kept = primary?.RoutePlanRoutes.Any(route => route.SupersededAt.HasValue) == true ? routes : Departed(routes).ToList();
+            routes = kept.Concat(Visible(backup).Where(route => route.SequenceNo >= branch)).ToList();
+        }
 
         if (Pick(all.Where(IsReturnPlan), RoutePlanStatus.ACTIVE, RoutePlanStatus.COMPLETED) is { } returning)
             routes = Departed(routes).Concat(Visible(returning)).ToList();

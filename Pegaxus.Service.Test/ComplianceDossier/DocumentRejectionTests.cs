@@ -52,6 +52,44 @@ public class DocumentRejectionTests
         Assert.Equal(request.Message, Assert.Single(overview.TripRequirements).OpenDocumentRequest!.Message);
     }
 
+    [Fact]
+    public async Task AfterAnAuthorityRejection_RevokingThenRejectingAnApprovedDocument_AsksTheCustomerToUploadItAgain()
+    {
+        await using var db = TestSupport.CreateDb();
+        var seed = await SeedAsync(db);
+        var service = CreateService(db, new CaptureMailService());
+        var approved = await service.ApproveDocumentAsync(seed.Specialist, seed.Dossier.ComplianceDossierId, seed.Requirement.DossierRequirementId,
+            seed.Version.DocumentVersionId, new Request.ApproveDocumentRequest
+            {
+                MetadataConfirmed = true, VersionUploadedAt = seed.Version.UploadedAt, DocumentUpdatedAt = seed.Version.ComplianceDocument.UpdatedAt
+            });
+        // A required authority rejected the submitted dossier, which is back in preparation.
+        // ...right after the specialist's approval, and before the revocation below.
+        var rejectedAt = seed.Requirement.UpdatedAt.AddTicks(1);
+        db.AuthoritySubmissions.Add(new AuthoritySubmission
+        {
+            AuthoritySubmissionId = Guid.NewGuid(), ComplianceDossierId = seed.Dossier.ComplianceDossierId, SubmittedByAccountId = seed.Specialist,
+            SubmissionNo = 1, AuthorityName = "DGAL", Status = AuthoritySubmissionStatus.REJECTED, IsRequired = true,
+            SubmittedAt = rejectedAt.AddMinutes(-5), ResponseReceivedAt = rejectedAt, CreatedAt = rejectedAt.AddMinutes(-5), UpdatedAt = rejectedAt
+        });
+        await db.SaveChangesAsync();
+        Assert.NotNull((await service.GetDossierAsync(seed.Specialist, seed.Dossier.ComplianceDossierId, new())).PendingAuthorityRevision);
+
+        await service.RevokeDocumentReviewAsync(seed.Specialist, seed.Dossier.ComplianceDossierId, seed.Requirement.DossierRequirementId,
+            seed.Version.DocumentVersionId, approved.Review.DocumentReviewId,
+            new Request.RevokeDocumentReviewRequest { Status = DossierRequirementStatus.PROVIDED, Reason = "The authority found the stamp unreadable" });
+        await service.RejectDocumentAsync(seed.Specialist, seed.Dossier.ComplianceDossierId, seed.Requirement.DossierRequirementId,
+            seed.Version.DocumentVersionId, RejectRequest(seed.Version));
+
+        var request = await db.DocumentRequests.SingleAsync();
+        Assert.Equal(DocumentRequestType.REUPLOAD, request.RequestType);
+        Assert.Equal(DossierRequirementStatus.REJECTED, seed.Requirement.Status);
+        // The revision is under way, but the dossier stays unready until the new document is approved.
+        Assert.Null((await service.GetDossierAsync(seed.Specialist, seed.Dossier.ComplianceDossierId, new())).PendingAuthorityRevision);
+        var blocked = await Assert.ThrowsAsync<ConflictException>(() => service.MarkReadyForSubmissionAsync(seed.Specialist, seed.Dossier.ComplianceDossierId));
+        Assert.NotEqual("AUTHORITY_REVISION_PENDING", blocked.ErrorCode);
+    }
+
     [Theory]
     [InlineData("")]
     [InlineData("short reason")]

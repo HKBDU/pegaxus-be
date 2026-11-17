@@ -329,8 +329,9 @@ public static class AppDbContextSeedData
         var today = DateOnly.FromDateTime(now);
         var seeds = new[]
         {
-            new BookingSeed("REQ-20261010-0001", "trinhnganquan@gmail.com", BookingStatus.DRAFT, Chantilly, Deauville, 30, 1,
-                "Hay net and water stop every four hours.", "Both horses are moving to the summer meeting at Deauville.", null,
+            // A same-country route is only accepted inside the United Kingdom, so the draft demo booking crosses to England.
+            new BookingSeed("REQ-20261010-0001", "trinhnganquan@gmail.com", BookingStatus.DRAFT, Chantilly, Newbury, 75, 1,
+                "Hay net and water stop every four hours.", "Both horses are moving to the summer meeting at Newbury.", null,
                 new[] { "HRS-20261010-0001", "HRS-20261010-0002" }),
             new BookingSeed("REQ-20261010-0002", "batquyquan@gmail.com", BookingStatus.PENDING, Grosbois, NationalStud, 90, 4,
                 "Temperature monitoring required throughout the journey.", "Two horses are going to a training yard for the autumn season.", null,
@@ -354,6 +355,17 @@ public static class AppDbContextSeedData
             var existing = await db.Bookings.SingleOrDefaultAsync(item => item.BookingCode == seed.BookingCode, cancellationToken);
             if (existing is not null)
             {
+                // Seed bookings written before country names were used hold ISO codes (and the draft one a domestic French
+                // route the booking rules reject); bring an editable one back in line so it can be saved from the UI.
+                if (existing.Status is BookingStatus.DRAFT or BookingStatus.PENDING &&
+                    (CountryUtils.CountryName(existing.OriginCountry) != existing.OriginCountry ||
+                     CountryUtils.CountryName(existing.DestinationCountry) != existing.DestinationCountry ||
+                     !CountryUtils.ValidateRoute(existing.OriginCountry, existing.DestinationCountry).IsValid))
+                {
+                    ApplyBookingDetails(existing, seed, today);
+                    existing.UpdatedAt = now;
+                    continue;
+                }
                 if (existing.Status == seed.Status &&
                     (existing.CustomerNote == LegacyDemoBookingNote || existing.CustomerNote == "Please confirm transport arrangements before departure."))
                 {
@@ -418,11 +430,11 @@ public static class AppDbContextSeedData
     private static void ApplyBookingDetails(Booking booking, BookingSeed seed, DateOnly today)
     {
         booking.OriginAddress = seed.Origin.Address;
-        booking.OriginCountry = seed.Origin.Country;
+        booking.OriginCountry = CountryUtils.CountryName(seed.Origin.Country) ?? seed.Origin.Country;
         booking.OriginLatitude = seed.Origin.Latitude;
         booking.OriginLongitude = seed.Origin.Longitude;
         booking.DestinationAddress = seed.Destination.Address;
-        booking.DestinationCountry = seed.Destination.Country;
+        booking.DestinationCountry = CountryUtils.CountryName(seed.Destination.Country) ?? seed.Destination.Country;
         booking.DestinationLatitude = seed.Destination.Latitude;
         booking.DestinationLongitude = seed.Destination.Longitude;
         booking.RequestedDepartureDate = today.AddDays(seed.DepartureInDays);
@@ -798,7 +810,6 @@ public static class AppDbContextSeedData
 
     // Real venues from the location catalogue, so the demo bookings point at places that exist on the map.
     private static readonly Place Chantilly = new("Centre d'Entraînement de Chantilly (France Galop), Avenue de la Plaine des Aigles, 60500 Chantilly", "FR", 49.1931m, 2.4722m);
-    private static readonly Place Deauville = new("Hippodrome de Deauville-La Touques Écuries, 45 Boulevard Mauger, 14800 Deauville", "FR", 49.3567m, 0.0767m);
     private static readonly Place Grosbois = new("Centre d'Entraînement de Grosbois, Domaine de Grosbois, 94440 Marolles-en-Brie", "FR", 48.7369m, 2.5422m);
     private static readonly Place Longchamp = new("Hippodrome de ParisLongchamp Écuries, 2 Route des Tribunes, 75016 Paris", "FR", 48.8578m, 2.2345m);
     private static readonly Place Quesnay = new("Haras du Quesnay, Route du Quesnay, 14800 Vauville", "FR", 49.3145m, 0.0512m);

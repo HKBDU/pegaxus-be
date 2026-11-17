@@ -65,6 +65,8 @@ public sealed partial class Service : IRoutePlanService
             .Include(item => item.RoutePlanRoutes).ThenInclude(item => item.TransportProvider)
             .Include(item => item.RoutePlanRoutes).ThenInclude(item => item.DriverEmployee)
             .Include(item => item.RoutePlanRoutes).ThenInclude(item => item.EscortEmployee)
+            .Include(item => item.RoutePlanRoutes).ThenInclude(item => item.EndedAtLocation)
+            .Include(item => item.TransportPlan).ThenInclude(item => item.RoutePlans).ThenInclude(item => item.RoutePlanRoutes).ThenInclude(item => item.EndedAtLocation)
             .SingleOrDefaultAsync(item => item.RoutePlanId == routePlanId, cancellationToken);
 
     private static void EnsureConcurrency(DateTime actual, DateTimeOffset expected)

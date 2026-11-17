@@ -82,9 +82,15 @@ public sealed partial class Service
             _ => null
         };
 
-    private static Response.SegmentBrief? ToBrief(SegmentData? item, List<SegmentData> segments) => item is null ? null :
+    /// <summary>
+    /// Brief of the current segment. <paramref name="crew"/> is the Driver or Escort asking (null in staff lists): it owns the segment
+    /// when it is the segment's driver (the rule GP2 applies to GPS) or, for an Escort, its escort.
+    /// </summary>
+    private static Response.SegmentBrief? ToBrief(SegmentData? item, List<SegmentData> segments, Actor? crew = null) => item is null ? null :
         new(item.Segment.RoutePlanRouteId, segments.IndexOf(item) + 1, item.Segment.FromLocation.LocationName,
-            item.Segment.ToLocation.LocationName, item.Segment.Status);
+            item.Segment.ToLocation.LocationName, item.Segment.Status,
+            crew is { EmployeeId: { } employeeId } && (crew.Role == EmployeeRole.DRIVER ? item.DriverEmployeeId == employeeId
+                : crew.Role == EmployeeRole.ESCORT && item.EscortEmployeeId == employeeId));
 
     private static List<Response.TrackingSegment> ToTrackingSegments(List<SegmentData> segments, TransportStatus status, Actor actor)
     {

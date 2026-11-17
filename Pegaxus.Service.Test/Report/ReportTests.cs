@@ -193,33 +193,53 @@ public class ReportTests
 
         Assert.Equal(new Reports.Response.Period(new(2026, 10, 1), new(2026, 10, 31), new(2026, 8, 31), new(2026, 9, 30)), report.Period);
         Assert.Equal(Now, report.GeneratedAt);
-        // 30, 60, 125, 180, 15 (arrival from the handover) and -120 minutes: six trips, four of them within 60.
+        // 30, 60, 125, 180, 15 (arrival from the handover) and -120 minutes: six trips, three within 60 either side, one early.
         Assert.Equal((6L, 2L, 4L), (report.Kpi.TotalTransports.Value, report.Kpi.TotalTransports.Previous, report.Kpi.TotalTransports.Change));
-        Assert.Equal((66.7m, 50.0m, 16.7m), (report.Kpi.OnTimeRate.Value, report.Kpi.OnTimeRate.Previous, report.Kpi.OnTimeRate.Change));
+        Assert.Equal((50.0m, 50.0m, 0.0m), (report.Kpi.OnTimeRate.Value, report.Kpi.OnTimeRate.Previous, report.Kpi.OnTimeRate.Change));
+        // The middle of -120, 15, 30, 60, 125, 180: one trip far off the plan does not drag it.
+        Assert.Equal(45.0m, report.Kpi.MedianDeviationMinutes.Value);
         Assert.Equal((48.3m, 55.0m, -6.7m), (report.Kpi.AvgDelayMinutes.Value, report.Kpi.AvgDelayMinutes.Previous, report.Kpi.AvgDelayMinutes.Change));
         Assert.Equal(92, report.Kpi.SlaTargetRate); Assert.False(report.Kpi.MeetsSla);
-        Assert.Equal(new[] { 4, 1, 1 }, report.Distribution.Values);
-        Assert.Equal(new[] { "ON_TIME", "MINOR_DELAY", "MAJOR_DELAY" }, report.Distribution.Keys);
+        Assert.Equal(new[] { 1, 3, 1, 1 }, report.Distribution.Values);
+        Assert.Equal(new[] { "EARLY", "ON_TIME", "MINOR_DELAY", "MAJOR_DELAY" }, report.Distribution.Keys);
         Assert.Equal(2, report.Excluded.Count);
         Assert.Equal((1, 1), (report.Excluded.Reasons["MISSING_PLANNED_END"], report.Excluded.Reasons["MISSING_ACTUAL_ARRIVAL"]));
 
         Assert.Equal(new[] { "2026-W40", "2026-W41", "2026-W42", "2026-W43", "2026-W44" }, report.Trend.Select(item => item.Label));
         Assert.Equal(new DateOnly(2026, 9, 28), report.Trend[0].From); Assert.Equal(new DateOnly(2026, 10, 4), report.Trend[0].To);
         Assert.Equal(new[] { 2, 0, 1, 3, 0 }, report.Trend.Select(item => item.Total));
-        Assert.Equal(new decimal?[] { 100.0m, null, 0.0m, 66.7m, null }, report.Trend.Select(item => item.OnTimeRate));
+        Assert.Equal(new decimal?[] { 100.0m, null, 0.0m, 33.3m, null }, report.Trend.Select(item => item.OnTimeRate));
 
         // A trip with a partner counts under that partner only; the rest are the internal fleet.
         Assert.Equal(("Eurotunnel", 1, 0.0m), (report.ByProvider[0].ProviderName, report.ByProvider[0].Total, report.ByProvider[0].OnTimeRate));
-        Assert.Equal((null, "Internal fleet", 5, 80.0m), (report.ByProvider[1].TransportProviderId, report.ByProvider[1].ProviderName, report.ByProvider[1].Total, report.ByProvider[1].OnTimeRate));
+        Assert.Equal((null, "Internal fleet", 5, 60.0m), (report.ByProvider[1].TransportProviderId, report.ByProvider[1].ProviderName, report.ByProvider[1].Total, report.ByProvider[1].OnTimeRate));
         // The cancelled critical incident of the major delay is ignored, so its cause is unknown.
         Assert.Equal(new[] { ("UNKNOWN", 1), ("VEHICLE_INCIDENT", 1) }, report.DelayCauses.Select(item => (item.Cause, item.Count)));
 
-        Assert.Equal(2, report.TotalItems); Assert.Equal(1, report.TotalPages);
-        Assert.Equal(new[] { s.Major.TransportCode, s.Minor.TransportCode }, report.Items.Select(item => item.TransportCode));
+        // Every trip outside on time is listed, the early one too, but only late trips get a cause.
+        Assert.Equal(3, report.TotalItems); Assert.Equal(1, report.TotalPages);
+        Assert.Equal(new[] { s.Major.TransportCode, s.Minor.TransportCode }, report.Items.Take(2).Select(item => item.TransportCode));
+        Assert.Equal((-120, "EARLY", (string?)null), (report.Items[2].DelayMinutes, report.Items[2].Bucket, report.Items[2].MainCause));
         var minor = report.Items[1];
         Assert.Equal((125, "MINOR_DELAY", "VEHICLE_INCIDENT"), (minor.DelayMinutes, minor.Bucket, minor.MainCause));
         Assert.Equal(new DateTimeOffset(2026, 10, 12, 12, 0, 0, TimeSpan.Zero), minor.PlannedEndAt);
         Assert.Equal(("France", "United Kingdom"), (minor.OriginCountry, minor.DestinationCountry));
+    }
+
+    [Fact]
+    public async Task OnTime_MeasuresAgainstTheConfirmedPrimaryRoute_NotThePlanningWindow()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        // The transport plan's end is a loose planning window two months out; the confirmed route arrives at 12:00.
+        var trip = f.AddTransport("2026-10-10 12:30", "2026-12-31 12:00", "2026-10-10 12:30", route: f.Route);
+        await db.SaveChangesAsync();
+        var segment = await db.RoutePlanRoutes.SingleAsync(x => x.RoutePlan.TransportPlan.TransportId == trip.TransportId);
+        segment.PlannedArrivalAt = new DateTime(2026, 10, 10, 12, 0, 0);
+        await db.SaveChangesAsync();
+
+        var report = await f.Service.GetOnTimeAsync(f.ManagerAccount.AccountId, OnTime());
+
+        Assert.Equal((30.0m, 100.0m), (report.Kpi.MedianDeviationMinutes.Value, report.Kpi.OnTimeRate.Value));
     }
 
     [Fact]
@@ -233,8 +253,8 @@ public class ReportTests
         request.PageIndex = 1; request.SortBy = "completedAt:asc";
         var oldest = await s.F.Service.GetOnTimeAsync(s.F.ManagerAccount.AccountId, request);
 
-        Assert.Equal((4, 2, 2), (first.TotalItems, first.TotalPages, first.Items.Count));
-        Assert.Equal(new[] { 60, 30 }, first.Items.Select(item => item.DelayMinutes)); Assert.Equal(new[] { 15, -120 }, second.Items.Select(item => item.DelayMinutes));
+        Assert.Equal((3, 2, 2), (first.TotalItems, first.TotalPages, first.Items.Count));
+        Assert.Equal(new[] { 60, 30 }, first.Items.Select(item => item.DelayMinutes)); Assert.Equal(new[] { 15 }, second.Items.Select(item => item.DelayMinutes));
         Assert.All(first.Items.Concat(second.Items), item => { Assert.Equal("ON_TIME", item.Bucket); Assert.Null(item.MainCause); });
         Assert.Equal(s.OnTime30.TransportCode, oldest.Items[0].TransportCode);
         Assert.Equal(6, first.Kpi.TotalTransports.Value); // the KPIs ignore the bucket filter
@@ -526,7 +546,7 @@ public class ReportTests
         Assert.Contains(cells, cell => cell.Text == "On-time delivery report");
         Assert.Contains(cells, cell => cell.Text == s.Minor.TransportCode);
         Assert.Contains(cells, cell => cell.IsNumber && cell.Number == 125);
-        Assert.Contains(cells, cell => cell.IsNumber && cell.Number == 66.7);
+        Assert.Contains(cells, cell => cell.IsNumber && cell.Number == 50);
     }
 
     [Fact]

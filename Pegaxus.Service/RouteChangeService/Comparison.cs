@@ -37,13 +37,31 @@ public sealed partial class Service
             proposed.SelectMany(x => new[] { x.FromLocation, x.ToLocation }).FirstOrDefault(x => x.LocationType == "BORDER_GATE"), current[^1].PlannedArrivalAt, eta);
     }
 
-    private static string[] ApprovalReasons(Response.Comparison comparison)
+    /// <summary>
+    /// Tells the manager, in plain words, how big the change is. Any change can be sent for a decision; a big one (new border
+    /// crossing, an extra rest day, 50 km or more off the planned distance, or an hour or more late) is named so it stands out.
+    /// </summary>
+    private static string ChangeSummary(IReadOnlyList<string> points) => points.Count == 0
+        ? "This is a small change: same border crossing, no extra rest day, less than 50 km difference and less than an hour late."
+        : $"Please check: {string.Join("; ", points)}.";
+
+    /// <summary>Each big part of the change in plain words; empty for a small change.</summary>
+    private static List<string> ChangePoints(Response.Comparison comparison)
     {
-        var reasons = new List<string>();
-        if (comparison.BcpChanged) reasons.Add("BCP_CHANGED");
-        if (comparison.Additional24hRest) reasons.Add("ADDITIONAL_24H_REST");
-        if (Math.Abs(comparison.DistanceDeltaKm) >= 50) reasons.Add("DEVIATION_OVER_50KM");
-        if (comparison.DelayMinutes >= 60) reasons.Add("DELAY_OVER_1H");
-        return reasons.ToArray();
+        var points = new List<string>();
+        if (comparison.BcpChanged)
+            points.Add(comparison.NewBcp is { } next ? $"the border crossing changes to {next.LocationName}" : "the border crossing changes");
+        if (comparison.Additional24hRest) points.Add("the horses need at least one more full day of rest on the way");
+        if (Math.Abs(comparison.DistanceDeltaKm) >= 50)
+            points.Add(FormattableString.Invariant($"the route is {Math.Abs(comparison.DistanceDeltaKm):0.#} km {(comparison.DistanceDeltaKm > 0 ? "longer" : "shorter")}"));
+        if (comparison.DelayMinutes >= 60) points.Add($"arrival is {Late(comparison.DelayMinutes)} later than planned");
+        return points;
+    }
+
+    private static string Late(decimal minutes)
+    {
+        var total = (int)minutes;
+        var (hours, rest) = (total / 60, total % 60);
+        return rest == 0 ? $"{hours} h" : $"{hours} h {rest} min";
     }
 }

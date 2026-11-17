@@ -72,6 +72,32 @@ public class JourneyProgressHttpTests
             await Error(await outsider.GetAsync(path + endpoint), HttpStatusCode.NotFound, "TRANSPORT_NOT_FOUND");
     }
 
+    [Fact]
+    public async Task Http_AssignedToMe_TellsEachCrewMemberWhetherTheyRunTheCurrentSegment_AndFlipsAfterTheHandover()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await JourneyProgressTests.Fixture.CreateAsync(db);
+        await using var host = await StartAsync(db, f.Clock);
+        using var driver = Client(host, f.Driver.AccountId, "Driver");
+        using var next = Client(host, f.OtherDriver.AccountId, "Driver");
+        using var escort = Client(host, f.Escort.AccountId, "Escort");
+        using var manager = Client(host, f.Manager.AccountId, "LogisticsManager");
+        async Task<bool> IsMine(HttpClient client, string path = "/api/v1/transports/assigned-to-me") =>
+            (await client.GetFromJsonAsync<JsonElement>(path)).GetProperty("value").GetProperty("items")[0]
+                .GetProperty("currentSegment").GetProperty("isMine").GetBoolean();
+
+        // Segment 2 is running with the first driver; the second driver only has segment 3. The escort is on both.
+        Assert.Equal((true, false, true), (await IsMine(driver), await IsMine(next), await IsMine(escort)));
+        // Staff lists carry the field too, always false.
+        Assert.False(await IsMine(manager, "/api/v1/transports/ongoing"));
+
+        // HO5 signs the boundary: segment 2 arrives and segment 3 departs at once.
+        f.Segments[1].ActualArrivalAt = f.Segments[2].ActualDepartureAt = f.Clock.GetUtcNow().UtcDateTime;
+        await db.SaveChangesAsync();
+
+        Assert.Equal((false, true, true), (await IsMine(driver), await IsMine(next), await IsMine(escort)));
+    }
+
     [Theory]
     [InlineData(EmployeeRole.LOGISTICS_MANAGER, 200, 403)]
     [InlineData(EmployeeRole.FLEET_ROUTE_COORDINATOR, 200, 403)]

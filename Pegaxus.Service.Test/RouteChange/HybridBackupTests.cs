@@ -354,7 +354,7 @@ public class HybridBackupTests
     }
 
     [Fact]
-    public async Task Ec1_FailsWhenEveryPrimarySegmentHasAlreadyDeparted()
+    public async Task Ec1_TurningBackOnTheLastSegment_NeedsTheIncidentWhereTheSegmentStops()
     {
         await using var db = TestSupport.CreateDb();
         var f = await CreateFixtureAsync(db);
@@ -362,9 +362,32 @@ public class HybridBackupTests
         await db.SaveChangesAsync();
         var backup = await f.AlternateAsync();
 
-        var error = await Assert.ThrowsAsync<ConflictException>(() => f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal()));
+        var error = await Assert.ThrowsAsync<UnprocessableEntityException>(() => f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, f.Proposal()));
 
-        Assert.Equal("SEGMENT_LOCKED", error.ErrorCode);
+        Assert.Equal("INCIDENT_LOCATION_REQUIRED", error.ErrorCode);
+    }
+
+    [Fact]
+    public async Task Ec1_TurningBackOnTheLastSegmentWithAnIncident_ComparesAgainstTheRunningSegment()
+    {
+        await using var db = TestSupport.CreateDb();
+        var f = await CreateFixtureAsync(db);
+        f.Current.ActualDepartureAt = f.Current.PlannedDepartureAt;
+        var incident = new IncidentReport { IncidentReportId = Guid.NewGuid(), TransportId = f.Transport.TransportId, IncidentCode = "INC-LAST",
+            EmployeeId = f.Driver.EmployeeId, LocationId = f.Start.LocationId, Category = IncidentCategory.VEHICLE, Severity = IncidentSeverity.HIGH,
+            Status = IncidentStatus.REPORTED, Title = "Engine failure", Description = "Engine failed on the last segment" };
+        db.Add(incident);
+        await db.SaveChangesAsync();
+        var backup = await f.AlternateAsync();
+        var request = f.Proposal();
+        request.IncidentReportId = incident.IncidentReportId;
+
+        var created = await f.Service.CreateAsync(backup.RoutePlanId, f.Coordinator.AccountId, request);
+
+        Assert.Equal(("BACKUP", "CONFIRMED"), (created.RouteType, created.Status));
+        var message = (await db.Notifications.ToListAsync()).Single(x => x.Title == "Emergency backup route needs approval").Message;
+        Assert.Contains("Incident: INC-LAST", message);
+        Assert.DoesNotContain("BR-036", message);
     }
 
     [Fact]

@@ -287,7 +287,8 @@ public sealed partial class Service
             {
                 item.BookingId, item.BookingCode, item.Status,
                 TransportId = item.Transport == null ? (Guid?)null : item.Transport.TransportId,
-                TransportStatus = item.Transport == null ? (TransportStatus?)null : item.Transport.Status
+                TransportStatus = item.Transport == null ? (TransportStatus?)null : item.Transport.Status,
+                TransportCode = item.Transport == null ? null : item.Transport.TransportCode
             }).SingleOrDefaultAsync(cancellationToken)
             ?? throw new NotFoundException("Booking not found", "BOOKING_NOT_FOUND");
         if (booking.Status != BookingStatus.APPROVED)
@@ -300,7 +301,7 @@ public sealed partial class Service
             _ => booking.TransportStatus != TransportStatus.CANCELLED
         };
         if (!validTransport)
-            throw new ConflictException("Transport status does not allow this invoice type", "INVALID_TRANSPORT_STATUS");
+            throw TransportStatusNotAllowed(type, booking.TransportCode, booking.TransportStatus);
 
         var invoices = await db.Invoices.AsNoTracking().Where(invoice => invoice.BookingId == bookingId)
             .OrderBy(invoice => invoice.CreatedAt).ThenBy(invoice => invoice.InvoiceId)
