@@ -92,22 +92,40 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         if (route.UpdatedAt.Ticks != version.UtcDateTime.Ticks)
             throw new ConflictException("The route plan changed. Reload it and try again.", "ROUTE_PLAN_MODIFIED");
         var plan = await db.TransportPlans.AsNoTracking().Include(x => x.Transport).SingleAsync(x => x.TransportPlanId == planId, cancellationToken);
-        if (plan.Status is TransportPlanStatus.IN_PROGRESS or TransportPlanStatus.COMPLETED or TransportPlanStatus.CANCELLED ||
-            plan.Transport.Status is TransportStatus.IN_TRANSIT or TransportStatus.COMPLETED or TransportStatus.CANCELLED)
+        // On the road the manager may still replace the crew of a segment that has not left yet (a driver held up elsewhere,
+        // a sick escort). The first assignment, and any change once the trip is over, stay closed.
+        var midTrip = reason is not null && plan.Transport.Status == TransportStatus.IN_TRANSIT && plan.Status != TransportPlanStatus.CANCELLED &&
+            plan.Status != TransportPlanStatus.COMPLETED;
+        if (!midTrip && (plan.Status is TransportPlanStatus.IN_PROGRESS or TransportPlanStatus.COMPLETED or TransportPlanStatus.CANCELLED ||
+            plan.Transport.Status is TransportStatus.IN_TRANSIT or TransportStatus.COMPLETED or TransportStatus.CANCELLED))
             throw new ConflictException("Cannot change personnel after departure or completion/cancellation.", "PLAN_LOCKED");
         var originals = await LoadSegmentsAsync(routePlanId, true, cancellationToken);
         var segments = originals.Select(x =>
         {
             var copy = (RoutePlanRoute)db.Entry(x).CurrentValues.ToObject();
             copy.DriverEmployee = x.DriverEmployee; copy.EscortEmployee = x.EscortEmployee;
-            copy.TransportProvider = x.TransportProvider; copy.Route = x.Route;
+            copy.TransportProvider = x.TransportProvider; copy.Route = x.Route; copy.RoutePlan = x.RoutePlan;
             return copy;
         }).ToList();
-        if (route.Status != RoutePlanStatus.CONFIRMED || segments.Count == 0 || segments.Any(x => x.RouteType != RouteType.PRIMARY))
+        if (midTrip)
+        {
+            // Any plan the convoy now follows: the primary, or a backup or return that took over.
+            if (route.Status != RoutePlanStatus.ACTIVE || segments.Count == 0)
+                throw new UnprocessableEntityException("Only the crew of the route the convoy is following can be changed during the trip.", "ROUTE_NOT_ACTIVE");
+        }
+        else if (route.Status != RoutePlanStatus.CONFIRMED || segments.Count == 0 || segments.Any(x => x.RouteType != RouteType.PRIMARY))
             throw new UnprocessableEntityException("Cannot assign Driver and Escort until the primary Route Plan is Confirmed.", "ROUTE_NOT_CONFIRMED");
         var before = Snapshot(segments);
         if (changes.Any(x => !segments.Any(s => s.RoutePlanRouteId == x.RoutePlanRouteId)))
             throw new NotFoundException("Segment not found in this route plan", "SEGMENT_NOT_FOUND");
+        if (midTrip)
+        {
+            var plans = await db.RoutePlans.AsNoTracking().Include(x => x.RoutePlanRoutes).Where(x => x.TransportPlanId == planId).ToListAsync(cancellationToken);
+            var journey = TransportItinerary.Effective(plans).Select(x => x.Route.RoutePlanRouteId).ToHashSet();
+            if (changes.Any(x => !journey.Contains(x.RoutePlanRouteId)))
+                throw new UnprocessableEntityException("This segment was replaced by another route and will not be driven, so its crew cannot be changed.",
+                    "SEGMENT_NOT_IN_ITINERARY");
+        }
         if (reason is null && segments.Any(x => !x.TransportProviderId.HasValue &&
                 (x.DriverEmployeeId.HasValue || x.EscortEmployeeId.HasValue)))
             throw new ConflictException("Personnel already assigned. Use PUT on the segment to change personnel.", "SEGMENT_ALREADY_ASSIGNED");
@@ -131,6 +149,13 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             var escort = change.EscortEmployeeId ?? (reason is not null ? segment.EscortEmployeeId : null);
             if (!driver.HasValue || !escort.HasValue || driver == escort)
                 throw new BadRequestException("Each internal segment requires a different Driver and Escort.");
+            // A handover record keeps the drivers it was opened with, so a new driver could not sign it.
+            if (segment.DriverEmployeeId != driver && await db.HandoverRecords.AsNoTracking()
+                    .Where(x => (x.FromRoutePlanRouteId == segment.RoutePlanRouteId || x.ToRoutePlanRouteId == segment.RoutePlanRouteId) &&
+                        (x.Status == HandoverStatus.PLANNED || x.Status == HandoverStatus.IN_PROGRESS))
+                    .Select(x => x.HandoverCode).FirstOrDefaultAsync(cancellationToken) is { } openHandover)
+                throw new ConflictException($"Handover {openHandover} of this segment is still open with the current driver. Cancel it first, then change the driver and open a new one.",
+                    "HANDOVER_OPEN");
             if (segment.DriverEmployeeId != driver || segment.EscortEmployeeId != escort) updated.Add(segment);
             segment.DriverEmployeeId = driver;
             segment.EscortEmployeeId = escort;
@@ -330,7 +355,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         var ids = TransportItinerary.Effective(plans).Select(x => x.Route).Where(x => x.RoutePlanId != primaryId)
             .Select(x => x.RoutePlanRouteId).ToList();
         if (ids.Count == 0) return [];
-        var rows = await db.RoutePlanRoutes.AsNoTracking().Include(x => x.DriverEmployee).ThenInclude(x => x!.Account)
+        var rows = await db.RoutePlanRoutes.AsNoTracking().Include(x => x.RoutePlan).Include(x => x.DriverEmployee).ThenInclude(x => x!.Account)
             .Include(x => x.EscortEmployee).ThenInclude(x => x!.Account).Include(x => x.TransportProvider)
             .Include(x => x.Route).ThenInclude(x => x.FromLocation).Include(x => x.Route).ThenInclude(x => x.ToLocation)
             .Where(x => ids.Contains(x.RoutePlanRouteId)).ToListAsync(cancellationToken);
@@ -347,7 +372,7 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
             foreach (var segmentId in segmentIds)
                 await db.LockRowsAsync(db.RoutePlanRoutes.Where(x => x.RoutePlanRouteId == segmentId), x => x.RoutePlanRouteId, cancellationToken);
         }
-        var query = db.RoutePlanRoutes.Include(x => x.DriverEmployee).ThenInclude(x => x!.Account)
+        var query = db.RoutePlanRoutes.Include(x => x.RoutePlan).Include(x => x.DriverEmployee).ThenInclude(x => x!.Account)
             .Include(x => x.EscortEmployee).ThenInclude(x => x!.Account).Include(x => x.TransportProvider)
             .Include(x => x.Route).ThenInclude(x => x.FromLocation).Include(x => x.Route).ThenInclude(x => x.ToLocation)
             .Where(x => x.RoutePlanId == id).OrderBy(x => x.SequenceNo);
@@ -413,7 +438,8 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
         AsUtc(x.PlannedDepartureAt), AsUtc(x.PlannedArrivalAt), Brief(x.DriverEmployee), Brief(x.EscortEmployee),
         x.TransportProvider is null ? null : new(x.TransportProvider.TransportProviderId, x.TransportProvider.ProviderCode, x.TransportProvider.ProviderName),
         x.TransportProviderId.HasValue ? !x.DriverEmployeeId.HasValue && !x.EscortEmployeeId.HasValue : x.DriverEmployeeId.HasValue && x.EscortEmployeeId.HasValue,
-        x.RouteType.ToString(), x.SupersededAt.HasValue, x.Route?.FromLocation?.LocationName, x.Route?.ToLocation?.LocationName, x.Route?.FromLocation?.Country);
+        x.RouteType.ToString(), x.SupersededAt.HasValue, x.Route?.FromLocation?.LocationName, x.Route?.ToLocation?.LocationName, x.Route?.FromLocation?.Country,
+        x.RoutePlanId, x.RoutePlan is null ? null : AsUtc(x.RoutePlan.UpdatedAt), x.ActualDepartureAt.HasValue);
     private static bool PersonnelComplete(IReadOnlyList<RoutePlanRoute> segments) => segments.Count > 0 && segments.All(x => Map(x).IsComplete);
     private static JsonDocument Snapshot(IReadOnlyList<RoutePlanRoute> segments) => JsonSerializer.SerializeToDocument(segments.Select(Map), new JsonSerializerOptions(JsonSerializerDefaults.Web));
     private DateTime Now() => new(clock.GetUtcNow().Ticks / 10 * 10, DateTimeKind.Unspecified);
