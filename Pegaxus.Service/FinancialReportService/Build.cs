@@ -30,7 +30,7 @@ public sealed partial class Service
     {
         var scanned = report.GeneratedAt;
         var invoices = db.Invoices.AsNoTracking().Where(item => item.BookingId == transport.BookingId &&
-            (item.Type == InvoiceType.FINAL || item.Type == InvoiceType.SUPPLEMENTARY));
+            (item.Type == InvoiceType.DEPOSIT || item.Type == InvoiceType.FINAL || item.Type == InvoiceType.SUPPLEMENTARY));
         return await invoices.AnyAsync(item => item.UpdatedAt > scanned, cancellationToken) ||
             await db.Receipts.AsNoTracking().AnyAsync(receipt => receipt.UpdatedAt > scanned && invoices.Any(invoice => invoice.InvoiceId == receipt.InvoiceId), cancellationToken) ||
             await db.EmergencyCostRequests.AsNoTracking().AnyAsync(item => item.UpdatedAt > scanned && item.IncidentReport.TransportId == transport.TransportId, cancellationToken);

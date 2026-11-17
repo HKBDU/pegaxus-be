@@ -207,7 +207,9 @@ public class HandoverDeliveryTests
         Invoice(db, booking.BookingId, f.Manager.EmployeeId, InvoiceType.SUPPLEMENTARY, InvoiceStatus.ISSUED, 200);
         Invoice(db, booking.BookingId, f.Manager.EmployeeId, InvoiceType.SUPPLEMENTARY, InvoiceStatus.CANCELLED, 5_000);
         Invoice(db, booking.BookingId, f.Manager.EmployeeId, InvoiceType.SUPPLEMENTARY, InvoiceStatus.DRAFT, 3_000); // not sent to the customer yet
-        Invoice(db, booking.BookingId, f.Manager.EmployeeId, InvoiceType.DEPOSIT, InvoiceStatus.PAID, 400);
+        var deposit = Invoice(db, booking.BookingId, f.Manager.EmployeeId, InvoiceType.DEPOSIT, InvoiceStatus.PAID, 400);
+        db.Receipts.Add(new Receipt { ReceiptId = Guid.NewGuid(), ReceiptCode = "RCP-0", InvoiceId = deposit.InvoiceId, Amount = 400, Currency = "VND", PaymentMethod = PaymentMethod.CASH,
+            Status = ReceiptStatus.CONFIRMED, CreatedAt = Fixture.Now, UpdatedAt = Fixture.Now });
         db.Receipts.Add(new Receipt { ReceiptId = Guid.NewGuid(), ReceiptCode = "RCP-1", InvoiceId = final.InvoiceId, Amount = 1_000, Currency = "VND", PaymentMethod = PaymentMethod.CASH,
             Status = ReceiptStatus.CONFIRMED, CreatedAt = Fixture.Now, UpdatedAt = Fixture.Now });
         db.Receipts.Add(new Receipt { ReceiptId = Guid.NewGuid(), ReceiptCode = "RCP-2", InvoiceId = final.InvoiceId, Amount = 77, Currency = "VND", PaymentMethod = PaymentMethod.CASH,
@@ -221,7 +223,7 @@ public class HandoverDeliveryTests
 
         var report = await db.FinancialReports.SingleAsync();
         Assert.Equal(f.TransportId, report.TransportId); Assert.Matches("^FR-[0-9]{8}-[0-9]{4}$", report.ReportCode); Assert.Equal("VND", report.Currency);
-        Assert.Equal(1_200, report.TotalInvoicedAmount); Assert.Equal(1_000, report.TotalPaidAmount); Assert.Equal(200, report.OutstandingAmount); Assert.Equal(500, report.TotalEmergencyCost);
+        Assert.Equal(1_600, report.TotalInvoicedAmount); Assert.Equal(1_400, report.TotalPaidAmount); Assert.Equal(200, report.OutstandingAmount); Assert.Equal(500, report.TotalEmergencyCost);
         Assert.Null(report.SummaryNote);
     }
 
