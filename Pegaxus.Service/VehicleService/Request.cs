@@ -16,6 +16,11 @@ public static class Request
         public int? MinCapacity { get; set; }
         public DateOnly? AvailableFrom { get; set; }
         public DateOnly? AvailableTo { get; set; }
+        /// <summary>
+        /// True for the vehicle pickers of a route plan: lists only vehicles that can be put on a trip (AVAILABLE, ASSIGNED or IN_USE),
+        /// even before the trip dates are known. The fleet catalog leaves it off to see every vehicle.
+        /// </summary>
+        public bool AssignableOnly { get; set; }
         public string? Search { get; set; }
         public string SortBy { get; set; } = "vehicleCode:asc";
     }

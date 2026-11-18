@@ -15,7 +15,11 @@ public static class Response
     public sealed record SegmentResponse(Guid RoutePlanRouteId, int SequenceNo, bool IsOutsourced,
         DateTimeOffset? PlannedDepartureAt, DateTimeOffset? PlannedArrivalAt,
         EmployeeBrief? Driver, EmployeeBrief? Escort, ProviderBrief? Provider, bool IsComplete,
-        string RouteType, bool IsSuperseded, string? FromLocationName, string? ToLocationName, string? FromCountry);
+        string RouteType, bool IsSuperseded, string? FromLocationName, string? ToLocationName, string? FromCountry,
+        // The plan the segment belongs to and its version: a backup or return that took over is changed through its own plan.
+        Guid RoutePlanId, DateTimeOffset? RoutePlanUpdatedAt,
+        // Departed segments keep their crew; only the ones still to leave can be changed.
+        bool HasDeparted);
     public sealed record Phase1Response(bool IsAssigned, bool IsLocked, EmployeeBrief? TransportSpecialist, EmployeeBrief? RouteCoordinator);
     public sealed record Phase2Response(bool Enabled, Guid? RoutePlanId, bool IsPersonnelComplete, IReadOnlyList<SegmentResponse> Segments);
     public sealed record AssignmentsResponse(Guid TransportPlanId, Phase1Response Phase1, Phase2Response Phase2,

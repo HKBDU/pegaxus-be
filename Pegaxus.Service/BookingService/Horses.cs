@@ -32,6 +32,7 @@ public sealed partial class Service
                 item.BookingId == bookingId && item.HorseId == request.HorseId,
                 cancellationToken))
             throw new ConflictException("Horse already belongs to this booking", "HORSE_ALREADY_IN_BOOKING");
+        await EnsureHorsesFreeAsync(bookingId, [request.HorseId], booking.RequestedDepartureDate, booking.RequestedArrivalDate, cancellationToken);
 
         var now = UtcNowTruncated();
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);

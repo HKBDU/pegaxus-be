@@ -89,6 +89,8 @@ public static class Response
         public DateOnly? RequestedArrivalDate { get; init; }
         public string? SpecialRequirements { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
+        /// <summary>Set on a return booking; such a booking has no departure lead time.</summary>
+        public Guid? ReturnOfTransportId { get; init; }
     }
 
     public sealed class TransportResponse

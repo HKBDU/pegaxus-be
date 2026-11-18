@@ -53,6 +53,9 @@ public sealed class Service(AppDbContext db, TimeProvider clock,
                 x.LicensePlate != null && x.LicensePlate.ToUpper().Contains(search) ||
                 x.VehicleName != null && x.VehicleName.ToUpper().Contains(search));
         }
+        // Maintenance, out-of-service, inactive and suspended vehicles never reach a picker, with or without trip dates.
+        if (request.AssignableOnly)
+            query = query.Where(x => x.Status == VehicleStatus.AVAILABLE || x.Status == VehicleStatus.ASSIGNED || x.Status == VehicleStatus.IN_USE);
         if (request.AvailableFrom.HasValue)
         {
             var start = request.AvailableFrom.Value.ToDateTime(TimeOnly.MinValue);
