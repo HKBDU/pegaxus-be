@@ -1,3 +1,4 @@
+using Pegaxus.Service.Common;
 
 namespace Pegaxus.Service.BookingService;
 
@@ -54,9 +55,13 @@ public class Request
     public class CreateBookingRequest
     {
         public string OriginAddress { get; set; } = string.Empty;
-        public string OriginCountry { get; set; } = string.Empty;
+        /// <summary>A name or a 2-letter ISO code of an EU member country or the United Kingdom; stored and returned as the name.</summary>
+        public string OriginCountry { get => _originCountry; set => _originCountry = CountryUtils.BookingCountry(value)!; }
         public string DestinationAddress { get; set; } = string.Empty;
-        public string DestinationCountry { get; set; } = string.Empty;
+        /// <summary>A name or a 2-letter ISO code of an EU member country or the United Kingdom; stored and returned as the name.</summary>
+        public string DestinationCountry { get => _destinationCountry; set => _destinationCountry = CountryUtils.BookingCountry(value)!; }
+        private string _originCountry = string.Empty;
+        private string _destinationCountry = string.Empty;
         public decimal? OriginLatitude { get; set; }
         public decimal? OriginLongitude { get; set; }
         public decimal? DestinationLatitude { get; set; }
@@ -80,9 +85,13 @@ public class Request
     {
         public DateTimeOffset LastUpdatedAt { get; set; }
         public string? OriginAddress { get; set; }
-        public string? OriginCountry { get; set; }
+        /// <summary>A name or a 2-letter ISO code of an EU member country or the United Kingdom; stored and returned as the name.</summary>
+        public string? OriginCountry { get => _originCountry; set => _originCountry = CountryUtils.BookingCountry(value); }
         public string? DestinationAddress { get; set; }
-        public string? DestinationCountry { get; set; }
+        /// <summary>A name or a 2-letter ISO code of an EU member country or the United Kingdom; stored and returned as the name.</summary>
+        public string? DestinationCountry { get => _destinationCountry; set => _destinationCountry = CountryUtils.BookingCountry(value); }
+        private string? _originCountry;
+        private string? _destinationCountry;
         public decimal? OriginLatitude { get; set; }
         public decimal? OriginLongitude { get; set; }
         public decimal? DestinationLatitude { get; set; }
