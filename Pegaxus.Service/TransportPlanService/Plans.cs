@@ -194,7 +194,8 @@ public sealed partial class Service
                 RequestedDepartureDate = booking.RequestedDepartureDate,
                 RequestedArrivalDate = booking.RequestedArrivalDate,
                 SpecialRequirements = booking.SpecialRequirements,
-                CreatedAt = AsUtc(booking.CreatedAt)
+                CreatedAt = AsUtc(booking.CreatedAt),
+                ReturnOfTransportId = booking.ReturnOfTransportId
             },
             Transport = new Response.TransportResponse
             {
@@ -339,11 +340,15 @@ public sealed partial class Service
         };
     }
 
-    /// <summary>The start cannot be in the past or earlier than the booking's own lead time, counted from the day the booking was made.</summary>
+    /// <summary>
+    /// The start cannot be in the past or earlier than the booking's own lead time, counted from the day the booking was made.
+    /// A return booking has no lead time: the horse is already waiting at the stop where it was left behind.
+    /// </summary>
     private static void ValidatePlannedStart(DateTimeOffset plannedStartAt, Booking booking)
     {
         if (plannedStartAt.UtcDateTime < UtcNow())
             throw new BadRequestException("plannedStartAt cannot be in the past", "PLANNED_START_IN_PAST");
+        if (booking.ReturnOfTransportId.HasValue) return;
         var domestic = string.Equals(booking.OriginCountry?.Trim(), booking.DestinationCountry?.Trim(), StringComparison.OrdinalIgnoreCase);
         var earliest = DepartureLeadTime.Earliest(DateOnly.FromDateTime(booking.CreatedAt), domestic);
         if (DateOnly.FromDateTime(plannedStartAt.UtcDateTime) < earliest)

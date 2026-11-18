@@ -42,6 +42,9 @@ public sealed partial class Service
             throw new UnprocessableEntityException(
                 "The booking has no horse and cannot be submitted",
                 "BOOKING_HAS_NO_HORSE");
+        if (targetStatus == BookingStatus.PENDING)
+            await EnsureHorsesFreeAsync(bookingId, await BookingHorseIdsAsync(bookingId, cancellationToken),
+                booking.RequestedDepartureDate, booking.RequestedArrivalDate, cancellationToken);
 
         var now = UtcNowTruncated();
         await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
@@ -102,6 +105,7 @@ public sealed partial class Service
             if (!isRouteValid)
                 throw new BadRequestException(routeErrorMessage);
         }
+        await EnsureHorsesFreeAsync(null, horseIds, request.RequestedDepartureDate, request.RequestedArrivalDate, cancellationToken);
 
         var now = UtcNowTruncated();
         var booking = new BookingEntity
@@ -169,11 +173,17 @@ public sealed partial class Service
         var arrivalDate = request.RequestedArrivalDate ?? booking.RequestedArrivalDate;
         var targetOrigin = request.OriginCountry?.Trim() ?? booking.OriginCountry;
         var targetDestination = request.DestinationCountry?.Trim() ?? booking.DestinationCountry;
-        ValidateDates(departureDate, arrivalDate, targetOrigin, targetDestination);
-
-        var (isUpdatedRouteValid, updatedRouteErrorMessage) = CountryUtils.ValidateRoute(targetOrigin, targetDestination);
-        if (!isUpdatedRouteValid)
-            throw new BadRequestException(updatedRouteErrorMessage);
+        // A return booking keeps the date rules it was created with (ValidateReturnBookingAsync) and reverses a route already served.
+        if (booking.ReturnOfTransportId.HasValue)
+            ValidateReturnDates(departureDate, arrivalDate);
+        else
+        {
+            ValidateDates(departureDate, arrivalDate, targetOrigin, targetDestination);
+            var (isUpdatedRouteValid, updatedRouteErrorMessage) = CountryUtils.ValidateRoute(targetOrigin, targetDestination);
+            if (!isUpdatedRouteValid)
+                throw new BadRequestException(updatedRouteErrorMessage);
+        }
+        await EnsureHorsesFreeAsync(bookingId, await BookingHorseIdsAsync(bookingId, cancellationToken), departureDate, arrivalDate, cancellationToken);
 
         var changedFields = new List<string>();
         Set(request.OriginAddress, value => booking.OriginAddress = value, "originAddress", changedFields);
@@ -264,6 +274,9 @@ public sealed partial class Service
             throw new UnprocessableEntityException(
                 "The booking has no horse and cannot be approved",
                 "BOOKING_HAS_NO_HORSE");
+        // Two bookings may wait for review with the same horse on the same days; the second approval is refused.
+        await EnsureHorsesFreeAsync(bookingId, await BookingHorseIdsAsync(bookingId, cancellationToken),
+            booking.RequestedDepartureDate, booking.RequestedArrivalDate, cancellationToken, approvedOnly: true);
 
         var now = UtcNowTruncated();
         var transport = reused ?? new Transport

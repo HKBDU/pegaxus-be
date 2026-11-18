@@ -54,9 +54,15 @@ public sealed partial class Service
         await DetachedHorseAsync(customer.CustomerId, transportId, horseId, cancellationToken);
         if (await LiveReturnBookingIdAsync(transportId, horseId, cancellationToken) is not null)
             throw new ConflictException("This horse already has a return booking", "RETURN_BOOKING_EXISTS");
-        if (request.RequestedDepartureDate < DateOnly.FromDateTime(DateTime.UtcNow))
+        ValidateReturnDates(request.RequestedDepartureDate, request.RequestedArrivalDate);
+    }
+
+    /// <summary>A return booking only needs a departure that is not in the past; there is no lead time.</summary>
+    private static void ValidateReturnDates(DateOnly departureDate, DateOnly? arrivalDate)
+    {
+        if (departureDate < DateOnly.FromDateTime(DateTime.UtcNow))
             throw new BadRequestException("The departure date cannot be in the past", "DEPARTURE_DATE_OUT_OF_RANGE");
-        if (request.RequestedArrivalDate.HasValue && request.RequestedArrivalDate.Value < request.RequestedDepartureDate)
+        if (arrivalDate.HasValue && arrivalDate.Value < departureDate)
             throw new BadRequestException("The arrival date cannot be before the departure date", "ARRIVAL_DATE_INVALID");
     }
 

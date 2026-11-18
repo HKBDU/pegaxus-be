@@ -275,6 +275,28 @@ public class VehicleServiceTests
     }
 
     [Theory]
+    [InlineData(VehicleStatus.AVAILABLE, true)]
+    [InlineData(VehicleStatus.ASSIGNED, true)]
+    [InlineData(VehicleStatus.IN_USE, true)]
+    [InlineData(VehicleStatus.MAINTENANCE, false)]
+    [InlineData(VehicleStatus.OUT_OF_SERVICE, false)]
+    [InlineData(VehicleStatus.INACTIVE, false)]
+    [InlineData(VehicleStatus.SUSPENDED, false)]
+    public async Task List_AssignableOnlyHidesVehiclesThatCannotTakeATrip_EvenWithoutDates(VehicleStatus status, bool listed)
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, _) = await TestSupport.AddLogisticsManagerAsync(db);
+        var service = CreateService(db);
+        await service.CreateAsync(ValidRequest(), account.AccountId);
+        (await db.Vehicles.SingleAsync()).Status = status;
+        await db.SaveChangesAsync();
+
+        Assert.Equal(listed ? 1 : 0, (await service.GetListAsync(new() { AssignableOnly = true }, account.AccountId)).TotalItems);
+        // The fleet catalog still sees every vehicle.
+        Assert.Equal(1, (await service.GetListAsync(new(), account.AccountId)).TotalItems);
+    }
+
+    [Theory]
     [InlineData("ASSIGNED")]
     [InlineData("IN_USE")]
     [InlineData("IN_TRANSIT")]

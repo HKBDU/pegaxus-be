@@ -109,7 +109,8 @@ public class FinancialReportTests
         await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
         var final = f.AddInvoice(InvoiceType.FINAL, InvoiceStatus.PAID, 1_000); f.AddReceipt(final, 1_000);
         f.AddInvoice(InvoiceType.SUPPLEMENTARY, InvoiceStatus.ISSUED, 200);
-        f.AddInvoice(InvoiceType.DEPOSIT, InvoiceStatus.PAID, 400); f.AddInvoice(InvoiceType.FINAL, InvoiceStatus.CANCELLED, 9_000);
+        var deposit = f.AddInvoice(InvoiceType.DEPOSIT, InvoiceStatus.PAID, 400); f.AddReceipt(deposit, 400);
+        f.AddInvoice(InvoiceType.FINAL, InvoiceStatus.CANCELLED, 9_000);
         f.AddEmergencyCost("INC-20261016-0001", 500); f.AddEmergencyCost("INC-20261016-0002", 300, EmergencyCostStatus.REJECTED);
         await db.SaveChangesAsync();
 
@@ -119,10 +120,30 @@ public class FinancialReportTests
 
         Assert.False(first.IsProvisional); Assert.Matches("^FR-20261020-[0-9]{4}$", first.ReportCode); Assert.Equal(first.FinancialReportId, second.FinancialReportId);
         Assert.Equal(Now, first.GeneratedAt); Assert.Equal(Now, second.GeneratedAt); Assert.Single(db.FinancialReports);
-        Assert.Equal((1_200L, 1_000L, 500L, 200L), (first.TotalInvoicedAmount, first.TotalPaidAmount, first.TotalEmergencyCost, first.OutstandingAmount));
+        Assert.Equal((1_600L, 1_400L, 500L, 200L), (first.TotalInvoicedAmount, first.TotalPaidAmount, first.TotalEmergencyCost, first.OutstandingAmount));
         Assert.Equal("VND", first.Currency); Assert.Empty(first.Warnings); Assert.Null(first.SummaryNote); Assert.False(first.IsStale);
         Assert.Equal(f.Transport.TransportCode, first.Transport.TransportCode); Assert.Equal(f.Booking.BookingCode, first.Booking.BookingCode);
         Assert.Equal(first.CreatedAt, first.UpdatedAt);
+    }
+
+    [Fact]
+    public async Task Totals_CountThePaidDepositBeforeAndAfterTheFinalThatDeductsIt()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Fixture.CreateAsync(db);
+        var deposit = f.AddInvoice(InvoiceType.DEPOSIT, InvoiceStatus.PAID, 2_342); f.AddReceipt(deposit, 2_342);
+        await db.SaveChangesAsync();
+
+        var before = await f.Service.GetAsync(f.ManagerAccount.AccountId, f.Transport.TransportId, false);
+        Assert.Equal((2_342L, 2_342L, 0L), (before.TotalInvoicedAmount, before.TotalPaidAmount, before.OutstandingAmount));
+
+        // The FINAL holds the whole quotation minus the paid deposit: 5,856 - 2,342.
+        var final = f.AddInvoice(InvoiceType.FINAL, InvoiceStatus.PAID, 3_514, Now.AddHours(1)); f.AddReceipt(final, 3_514, updatedAt: Now.AddHours(1));
+        await db.SaveChangesAsync();
+        f.Clock.Value = Now.AddHours(2);
+        Assert.True((await f.Service.GetAsync(f.ManagerAccount.AccountId, f.Transport.TransportId, false)).IsStale);
+
+        var after = await f.Service.RefreshAsync(f.ManagerAccount.AccountId, f.Transport.TransportId);
+        Assert.Equal((5_856L, 5_856L, 0L), (after.TotalInvoicedAmount, after.TotalPaidAmount, after.OutstandingAmount));
     }
 
     [Fact]

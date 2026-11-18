@@ -77,6 +77,43 @@ public class TransportPlanPlannedStartTests
     }
 
     [Fact]
+    public async Task Create_AReturnBookingHasNoLeadTime_ButCannotStartInThePast()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (manager, booking) = await ApprovedBookingAsync(db, "FR", "DE");
+        booking.ReturnOfTransportId = Guid.NewGuid();
+        await db.SaveChangesAsync();
+
+        Assert.Equal("PLANNED_START_IN_PAST", await CreateErrorCodeAsync(db, manager, booking, DateTimeOffset.UtcNow.AddDays(-1)));
+        Assert.Null(await CreateErrorCodeAsync(db, manager, booking, DateTimeOffset.UtcNow.AddDays(1)));
+        var plan = await new Plans.Service(db, TestSupport.CreateNotifications(db)).GetByIdAsync(manager.AccountId, (await db.TransportPlans.SingleAsync()).TransportPlanId);
+        Assert.Equal(booking.ReturnOfTransportId, plan.Booking.ReturnOfTransportId);
+    }
+
+    [Fact]
+    public async Task UpdateBooking_AReturnDraftKeepsItsOwnDateRules()
+    {
+        await using var db = TestSupport.CreateDb();
+        var (account, customer) = await TestSupport.AddCustomerAsync(db);
+        var (booking, _) = await TestSupport.AddPendingBookingAsync(db, customer);
+        booking.Status = BookingStatus.DRAFT;
+        booking.OriginCountry = "FR"; booking.DestinationCountry = "DE";
+        booking.ReturnOfTransportId = Guid.NewGuid();
+        booking.UpdatedAt = Pegaxus.Service.Common.DbTime.Truncate(booking.UpdatedAt);
+        await db.SaveChangesAsync();
+        var bookings = new Pegaxus.Service.BookingService.Service(db, TestSupport.CreateMailService(), TestSupport.CreateNotifications(db));
+        var tomorrow = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1);
+
+        await bookings.UpdateAsync(account.AccountId, booking.BookingId,
+            new() { LastUpdatedAt = Pegaxus.Service.Common.DbTime.AsUtc(booking.UpdatedAt), RequestedDepartureDate = tomorrow });
+        var past = await Assert.ThrowsAsync<BadRequestException>(() => bookings.UpdateAsync(account.AccountId, booking.BookingId,
+            new() { LastUpdatedAt = Pegaxus.Service.Common.DbTime.AsUtc(booking.UpdatedAt), RequestedDepartureDate = tomorrow.AddDays(-2) }));
+
+        Assert.Equal(tomorrow, (await db.Bookings.SingleAsync()).RequestedDepartureDate);
+        Assert.Equal("DEPARTURE_DATE_OUT_OF_RANGE", past.ErrorCode);
+    }
+
+    [Fact]
     public async Task Update_ChecksOnlyAStartThatChanges()
     {
         await using var db = TestSupport.CreateDb();
