@@ -14,20 +14,30 @@ namespace Pegaxus.Service.FinancialReportService;
 
 public sealed partial class Service(AppDbContext db, TimeProvider clock) : IFinancialReportService
 {
+    private const int EnsureAttempts = 5;
+
     public async Task EnsureAsync(Guid transportId, CancellationToken cancellationToken = default)
     {
-        if (await db.FinancialReports.AsNoTracking().AnyAsync(item => item.TransportId == transportId, cancellationToken)) return;
-        try
+        for (var attempt = 1; ; attempt++)
         {
-            await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
-            if (await db.FinancialReports.AnyAsync(item => item.TransportId == transportId, cancellationToken)) return;
-            await CreateAsync(transportId, cancellationToken);
-            await transaction.CommitAsync(cancellationToken);
-        }
-        catch (Exception ex) when (IsWriteConflict(ex))
-        {
-            // Someone else created the report at the same moment; the goal (a report exists) is met.
-            db.ChangeTracker.Clear();
+            if (await db.FinancialReports.AsNoTracking().AnyAsync(item => item.TransportId == transportId, cancellationToken)) return;
+            try
+            {
+                await using var transaction = await db.Database.BeginSerializableAsync(cancellationToken);
+                if (await db.FinancialReports.AnyAsync(item => item.TransportId == transportId, cancellationToken)) return;
+                await CreateAsync(transportId, cancellationToken);
+                await transaction.CommitAsync(cancellationToken);
+                return;
+            }
+            catch (Exception ex) when (IsWriteConflict(ex))
+            {
+                // Another request is creating the same report. A serialization failure can come before that request commits,
+                // so the report may not be visible yet: wait a moment and look again instead of assuming it is there.
+                db.ChangeTracker.Clear();
+                if (attempt == EnsureAttempts) throw Modified();
+                // Real time on purpose: the injected clock may be frozen in tests, and this only waits for another transaction.
+                await Task.Delay(TimeSpan.FromMilliseconds(25 * attempt), cancellationToken);
+            }
         }
     }
 
