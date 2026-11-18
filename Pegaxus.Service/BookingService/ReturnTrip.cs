@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Pegaxus.Repository.Entities;
 using Pegaxus.Repository.Enum;
+using Pegaxus.Service.Common;
 using Pegaxus.Service.Exceptions;
 
 using static Pegaxus.Service.Common.DbTime;
@@ -30,7 +31,8 @@ public sealed partial class Service
             HorseName = link.Horse.HorseName,
             OriginAddress = location is null ? string.Empty : string.Join(", ", new[] { location.LocationName, location.Address, location.City }
                 .Where(part => !string.IsNullOrWhiteSpace(part)).Distinct()),
-            OriginCountry = location?.Country ?? string.Empty,
+            // A location holds an ISO code; the booking form shows and stores the country name.
+            OriginCountry = CountryUtils.BookingCountry(location?.Country) ?? string.Empty,
             OriginLatitude = location?.Latitude,
             OriginLongitude = location?.Longitude,
             DestinationAddress = link.Booking.OriginAddress,

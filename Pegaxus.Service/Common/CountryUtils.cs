@@ -69,6 +69,14 @@ public static class CountryUtils
     public static string? CountryName(string? country) =>
         IsoCode(country) is { } code ? IsoByName.First(pair => pair.Value == code).Key : null;
 
+    /// <summary>
+    /// The country a booking request carries, in the stored name format: an accepted 2-letter ISO code ("FR", "gb") becomes its name
+    /// ("France", "United Kingdom"); a name or any other value is kept as sent, so the validators still reject an unknown country.
+    /// Locations hold ISO codes, so a return booking from a detach stop arrives with a code.
+    /// </summary>
+    public static string? BookingCountry(string? country) =>
+        country?.Trim() is { Length: 2 } code && CountryName(code) is { } name ? name : country;
+
     /// <summary>The codes a requirement country can use to apply to this country: its own ISO code, plus EU for a member state.</summary>
     public static IReadOnlyList<string> RegulatoryCodes(string? country) =>
         IsoCode(country) is { } code ? (EuIsoCodes.Contains(code) ? [code, "EU"] : [code]) : [];

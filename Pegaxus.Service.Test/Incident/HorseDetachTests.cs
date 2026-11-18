@@ -109,6 +109,28 @@ public class HorseDetachTests
     }
 
     [Fact]
+    public async Task ReturnBooking_FromAStopStoredWithAnIsoCode_IsAccepted_AndStoresTheCountryName()
+    {
+        await using var db = TestSupport.CreateDb(); var f = await Scenario.CreateAsync(db);
+        f.Segment.Route.ToLocation.Country = "FR";
+        await db.SaveChangesAsync();
+        var incident = await SeedHorseIncidentAsync(db, f, f.Horse.HorseId);
+        await f.Service.DetachHorseAsync(incident.IncidentReportId, f.Horse.HorseId, Request(incident, f.Segment.Route.ToLocationId), f.Manager.AccountId);
+        var bookings = new Bookings.Service(db, TestSupport.CreateMailService(), TestSupport.CreateNotifications(db));
+
+        var draft = await bookings.GetReturnDraftAsync(f.CustomerAccountId, f.Transport.TransportId, f.Horse.HorseId);
+        Assert.Equal("France", draft.OriginCountry);
+
+        // An older client may still send the stop's code as it is stored on the location.
+        var request = ReturnRequest(f, draft, f.Horse.HorseId);
+        request.OriginCountry = "FR"; request.DestinationCountry = draft.DestinationCountry;
+        Assert.Equal("France", request.OriginCountry);
+        Assert.True((await new CreateBookingRequestValidator().ValidateAsync(request)).IsValid);
+        var created = await bookings.CreateAsync(f.CustomerAccountId, request);
+        Assert.Equal("France", (await db.Bookings.AsNoTracking().SingleAsync(item => item.BookingId == created.BookingId)).OriginCountry);
+    }
+
+    [Fact]
     public async Task ReturnRouteTemplate_ReversesLegsDrivenUpToTheStop()
     {
         await using var db = TestSupport.CreateDb(); var f = await Scenario.CreateAsync(db);
