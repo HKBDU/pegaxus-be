@@ -21,6 +21,24 @@ public class BookingValidationTests
         Assert.Contains(result.Errors, error => error.PropertyName == "Horses[0].HorseId");
     }
 
+    [Theory]
+    [InlineData("FR", "France", true)]
+    [InlineData(" fr ", "France", true)]
+    [InlineData("GB", "United Kingdom", true)]
+    [InlineData("France", "France", true)]
+    [InlineData("Czechia", "Czechia", true)]
+    [InlineData("XX", "XX", false)]
+    [InlineData("US", "US", false)]
+    public void Booking_TakesAnAcceptedIsoCodeAsTheCountryName_AndStillRejectsOtherCountries(string sent, string stored, bool valid)
+    {
+        var create = new BookingRequest.CreateBookingRequest { OriginCountry = sent, DestinationCountry = "Germany" };
+        var update = new BookingRequest.UpdateBookingRequest { LastUpdatedAt = DateTimeOffset.UtcNow, OriginCountry = sent };
+
+        Assert.Equal(stored, create.OriginCountry); Assert.Equal(stored, update.OriginCountry);
+        Assert.Equal(valid, !new CreateBookingRequestValidator().Validate(create).Errors.Any(error => error.PropertyName == "OriginCountry"));
+        Assert.Equal(valid, !new UpdateBookingRequestValidator().Validate(update).Errors.Any(error => error.PropertyName == "OriginCountry"));
+    }
+
     [Fact]
     public void CreateBooking_RequiresAllFourCoordinates()
     {
